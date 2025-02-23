@@ -11,33 +11,37 @@ function setChartData() {
     const documentStyle = getComputedStyle(document.documentElement);
 
     return {
-        labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+        labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
         datasets: [
             {
                 type: 'bar',
-                label: 'Subscriptions',
-                backgroundColor: documentStyle.getPropertyValue('--p-primary-400'),
-                data: [4000, 10000, 15000, 4000],
+                label: 'Absent',
+                backgroundColor: documentStyle.getPropertyValue('--p-red-400'),
+                data: [15, 5, 11, 10, 15, 10, 15, 10, 15, 10, 15, 10],
                 barThickness: 32
             },
             {
                 type: 'bar',
-                label: 'Advertising',
-                backgroundColor: documentStyle.getPropertyValue('--p-primary-300'),
-                data: [2100, 8400, 2400, 7500],
-                barThickness: 32
+                label: 'Tardy',
+                backgroundColor: documentStyle.getPropertyValue('--p-orange-400'),
+                data: [15, 5, 15, 10, 14, 10, 15, 10, 15, 10, 1, 10],
+                barThickness: 32,
+                borderRadius: {
+                    topLeft: 8,
+                    topRight: 8
+                }
             },
             {
                 type: 'bar',
-                label: 'Affiliate',
-                backgroundColor: documentStyle.getPropertyValue('--p-primary-200'),
-                data: [4100, 5200, 3400, 7400],
+                label: 'Present',
+                backgroundColor: documentStyle.getPropertyValue('--p-green-400'),
+                data: [15, 12, 15, 10, 15, 10, 15, 10, 15, 10, 15, 10],
                 borderRadius: {
                     topLeft: 8,
                     topRight: 8
                 },
                 borderSkipped: true,
-                barThickness: 32
+                barThickness: 20
             }
         ]
     };
@@ -90,7 +94,7 @@ onMounted(() => {
 
 <template>
     <div class="card">
-        <div class="font-semibold text-xl mb-4">Revenue Stream</div>
+        <div class="font-semibold text-xl mb-4">Attendance Analytical Chart</div>
         <Chart type="bar" :data="chartData" :options="chartOptions" class="h-80" />
     </div>
 </template>
