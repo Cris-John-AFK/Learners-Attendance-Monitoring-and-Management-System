@@ -1,3 +1,5 @@
-Sakai is an application template for Vue based on the [create-vue](https://github.com/vuejs/create-vue), the recommended way to start a Vite-powered Vue projects.
+HEAD
+Your version of the README file
 
-Visit the [documentation](https://sakai.primevue.org/documentation) to get started.
+The version from the remote repository
+FETCH_HEAD
