@@ -13,7 +13,7 @@ const { toggleMenu } = useLayout();
             <router-link to="/" class="layout-topbar-logo">
                 <img src="/demo/images/logo.svg" alt="Logo" />
 
-                <span>NCS</span>
+                <span>NCS- for Teachers</span>
             </router-link>
         </div>
 

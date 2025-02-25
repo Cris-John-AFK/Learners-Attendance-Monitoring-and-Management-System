@@ -10,7 +10,7 @@
                     <i class="pi pi-user-minus text-red-500 !text-xl"></i>
                 </div>
             </div>
-            <span class="text-primary font-medium">as of today</span>
+            <span class="text-primary font-medium">as of {{ formattedDate }}</span>
             <span class="text-muted-color"></span>
         </div>
     </div>
@@ -26,7 +26,7 @@
                     <i class="pi pi-user-plus text-green-500 !text-xl"></i>
                 </div>
             </div>
-            <span class="text-primary font-medium">as of today</span>
+            <span class="text-primary font-medium">as of {{ formattedDate }}</span>
             <span class="text-muted-color"> </span>
         </div>
     </div>
@@ -47,7 +47,6 @@
         </div>
     </div>
 
-    <!-- New Card for Total Staff -->
     <div class="col-span-12 lg:col-span-6 xl:col-span-3">
         <div class="card mb-0">
             <div class="flex justify-between mb-4">
@@ -64,3 +63,17 @@
         </div>
     </div>
 </template>
+
+<script>
+export default {
+    computed: {
+        formattedDate() {
+            const today = new Date();
+            const month = today.getMonth() + 1; // Months are 0-based
+            const day = today.getDate();
+            const year = today.getFullYear();
+            return `${month}/${day}/${year}`;
+        }
+    }
+};
+</script>
