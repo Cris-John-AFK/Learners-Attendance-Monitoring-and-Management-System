@@ -20,6 +20,33 @@ const model = ref([
             }
         ]
     },
+    {
+        separator: true
+    },
+    {
+        label: '',
+        icon: 'pi pi-fw pi-briefcase',
+        to: '/pages',
+        items:[
+            {
+                label: 'Settings',
+                icon: 'pi pi-fw pi-cog',
+                to: '/pages/settings'
+            }
+        ]
+    },
+    {
+        label: 'Manage',
+        icon: 'pi pi-fw pi-briefcase',
+        to: '/pages',
+        items:[
+            {
+                label: 'Section',
+                icon: 'pi pi-fw pi-users',
+                to: '/pages/section'
+            }
+        ]
+    },
 ]);
 </script>
 

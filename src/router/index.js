@@ -95,6 +95,16 @@ const router = createRouter({
                     component: () => import('@/views/pages/Attendance.vue')
                 },
                 {
+                    path: '/pages/settings',
+                    name: 'settings',
+                    component: () => import('@/views/pages/Settings.vue')
+                },
+                {
+                    path: '/pages/section',
+                    name: 'section',
+                    component: () => import('@/views/pages/Section.vue')
+                },
+                {
                     path: '/pages/crud',
                     name: 'crud',
                     component: () => import('@/views/pages/Crud.vue')
