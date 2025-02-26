@@ -16,7 +16,7 @@ const model = ref([
             {
                 label: 'Attendance Record',
                 icon: 'pi pi-fw pi-book',
-                to: '/pages/empty'
+                to: '/pages/attendance'
             }
         ]
     },
