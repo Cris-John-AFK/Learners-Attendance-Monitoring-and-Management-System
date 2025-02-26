@@ -52,7 +52,7 @@ function confirmAttendance() {
 
 <template>
     <div class="card relative">
-        <div class="font-semibold text-xl mb-4">Filtering</div>
+        <div class="font-semibold text-xl mb-4">Attendance Table</div>
         <div class="flex justify-between mb-2">
             <div class="flex items-center gap-2">
                 <Checkbox v-model="allPresent" @change="markAllPresent" />
