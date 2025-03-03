@@ -1,248 +1,161 @@
 <script setup>
-import { CountryService } from '@/service/CountryService';
-import { NodeService } from '@/service/NodeService';
+import { ProductService } from '@/service/ProductService';
+import { useToast } from 'primevue/usetoast';
 import { onMounted, ref } from 'vue';
 
-const floatValue = ref(null);
-const autoValue = ref(null);
-const selectedAutoValue = ref(null);
-const autoFilteredValue = ref([]);
-const calendarValue = ref(null);
-const inputNumberValue = ref(null);
-const sliderValue = ref(50);
-const ratingValue = ref(null);
-const colorValue = ref('#1976D2');
-const radioValue = ref(null);
-const checkboxValue = ref([]);
-const switchValue = ref(false);
-const listboxValues = ref([
-    { name: 'New York', code: 'NY' },
-    { name: 'Rome', code: 'RM' },
-    { name: 'London', code: 'LDN' },
-    { name: 'Istanbul', code: 'IST' },
-    { name: 'Paris', code: 'PRS' }
-]);
-const listboxValue = ref(null);
-const dropdownValues = ref([
-    { name: 'New York', code: 'NY' },
-    { name: 'Rome', code: 'RM' },
-    { name: 'London', code: 'LDN' },
-    { name: 'Istanbul', code: 'IST' },
-    { name: 'Paris', code: 'PRS' }
-]);
-const dropdownValue = ref(null);
-const multiselectValues = ref([
-    { name: 'Australia', code: 'AU' },
-    { name: 'Brazil', code: 'BR' },
-    { name: 'China', code: 'CN' },
-    { name: 'Egypt', code: 'EG' },
-    { name: 'France', code: 'FR' },
-    { name: 'Germany', code: 'DE' },
-    { name: 'India', code: 'IN' },
-    { name: 'Japan', code: 'JP' },
-    { name: 'Spain', code: 'ES' },
-    { name: 'United States', code: 'US' }
-]);
-
-const multiselectValue = ref(null);
-const toggleValue = ref(false);
-const selectButtonValue = ref(null);
-const selectButtonValues = ref([{ name: 'Option 1' }, { name: 'Option 2' }, { name: 'Option 3' }]);
-const knobValue = ref(50);
-const inputGroupValue = ref(false);
-const treeSelectNodes = ref(null);
-const selectedNode = ref(null);
-
 onMounted(() => {
-    CountryService.getCountries().then((data) => (autoValue.value = data));
-    NodeService.getTreeNodes().then((data) => (treeSelectNodes.value = data));
+    ProductService.getProducts().then((data) => (products.value = data));
 });
 
-function searchCountry(event) {
-    setTimeout(() => {
-        if (!event.query.trim().length) {
-            autoFilteredValue.value = [...autoValue.value];
+const toast = useToast();
+const dt = ref();
+const products = ref();
+const productDialog = ref(false);
+const deleteProductDialog = ref(false);
+const deleteProductsDialog = ref(false);
+const product = ref({});
+const selectedProducts = ref();
+const submitted = ref(false);
+
+function openNew() {
+    product.value = {};
+    submitted.value = false;
+    productDialog.value = true;
+}
+
+function hideDialog() {
+    productDialog.value = false;
+    submitted.value = false;
+}
+
+function saveProduct() {
+    submitted.value = true;
+    if (product?.value.name?.trim()) {
+        if (product.value.id) {
+            products.value[findIndexById(product.value.id)] = product.value;
+            toast.add({ severity: 'success', summary: 'Successful', detail: 'Product Updated', life: 3000 });
         } else {
-            autoFilteredValue.value = autoValue.value.filter((country) => {
-                return country.name.toLowerCase().startsWith(event.query.toLowerCase());
-            });
+            product.value.id = createId();
+            products.value.push(product.value);
+            toast.add({ severity: 'success', summary: 'Successful', detail: 'Product Created', life: 3000 });
         }
-    }, 250);
+        productDialog.value = false;
+        product.value = {};
+    }
+}
+
+function editProduct(prod) {
+    product.value = { ...prod };
+    productDialog.value = true;
+}
+
+function confirmDeleteProduct(prod) {
+    product.value = prod;
+    deleteProductDialog.value = true;
+}
+
+function deleteProduct() {
+    products.value = products.value.filter((val) => val.id !== product.value.id);
+    deleteProductDialog.value = false;
+    product.value = {};
+    toast.add({ severity: 'success', summary: 'Successful', detail: 'Product Deleted', life: 3000 });
+}
+
+function findIndexById(id) {
+    return products.value.findIndex((val) => val.id === id);
+}
+
+function createId() {
+    return Math.random().toString(36).substr(2, 9);
+}
+
+function confirmDeleteSelected() {
+    deleteProductsDialog.value = true;
+}
+
+function deleteSelectedProducts() {
+    products.value = products.value.filter((val) => !selectedProducts.value.includes(val));
+    deleteProductsDialog.value = false;
+    selectedProducts.value = null;
+    toast.add({ severity: 'success', summary: 'Successful', detail: 'Products Deleted', life: 3000 });
 }
 </script>
 
 <template>
-    <Fluid class="flex flex-col md:flex-row gap-8">
-        <div class="md:w-1/2">
-            <div class="card flex flex-col gap-4">
-                <div class="font-semibold text-xl">InputText</div>
-                <div class="flex flex-col md:flex-row gap-4">
-                    <InputText type="text" placeholder="Default" />
-                    <InputText type="text" placeholder="Disabled" :disabled="true" />
-                    <InputText type="text" placeholder="Invalid" invalid />
-                </div>
+    <div>
+        <div class="card">
+            <Toolbar class="mb-6">
+                <template #start>
+                    <h4 class="m-0">Schedules</h4>
+                </template>
+                <template #end>
+                    <Button label="New" icon="pi pi-plus" severity="secondary" class="mr-2" @click="openNew" />
+                    <Button label="Delete" icon="pi pi-trash" severity="secondary" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" />
+                </template>
+            </Toolbar>
 
-                <div class="font-semibold text-xl">Icons</div>
-                <IconField>
-                    <InputIcon class="pi pi-user" />
-                    <InputText type="text" placeholder="Username" />
-                </IconField>
-                <IconField iconPosition="left">
-                    <InputText type="text" placeholder="Search" />
-                    <InputIcon class="pi pi-search" />
-                </IconField>
-
-                <div class="font-semibold text-xl">Float Label</div>
-                <FloatLabel>
-                    <InputText id="username" type="text" v-model="floatValue" />
-                    <label for="username">Username</label>
-                </FloatLabel>
-
-                <div class="font-semibold text-xl">Textarea</div>
-                <Textarea placeholder="Your Message" :autoResize="true" rows="3" cols="30" />
-
-                <div class="font-semibold text-xl">AutoComplete</div>
-                <AutoComplete v-model="selectedAutoValue" :suggestions="autoFilteredValue" optionLabel="name" placeholder="Search" dropdown multiple display="chip" @complete="searchCountry($event)" />
-
-                <div class="font-semibold text-xl">DatePicker</div>
-                <DatePicker :showIcon="true" :showButtonBar="true" v-model="calendarValue"></DatePicker>
-
-                <div class="font-semibold text-xl">InputNumber</div>
-                <InputNumber v-model="inputNumberValue" showButtons mode="decimal"></InputNumber>
-            </div>
-
-            <div class="card flex flex-col gap-4">
-                <div class="font-semibold text-xl">Slider</div>
-                <InputText v-model.number="sliderValue" />
-                <Slider v-model="sliderValue" />
-
-                <div class="flex flex-row mt-6">
-                    <div class="flex flex-col gap-4 w-1/2">
-                        <div class="font-semibold text-xl">Rating</div>
-                        <Rating v-model="ratingValue" />
-                    </div>
-                    <div class="flex flex-col gap-4 w-1/2">
-                        <div class="font-semibold text-xl">ColorPicker</div>
-                        <ColorPicker style="width: 2rem" v-model="colorValue" />
-                    </div>
-                </div>
-
-                <div class="font-semibold text-xl">Knob</div>
-                <Knob v-model="knobValue" :step="10" :min="-50" :max="50" valueTemplate="{value}%" />
-            </div>
+            <DataTable ref="dt" v-model:selection="selectedProducts" :value="products" dataKey="id" :paginator="true" :rows="10">
+                <Column selectionMode="multiple" style="width: 3rem" :exportable="false"></Column>
+                <Column field="name" header="Name" sortable></Column>
+                <Column field="setTime" header="Set Time" sortable>
+                    <template #body="slotProps">
+                        {{ slotProps.data.setTime }}
+                    </template>
+                </Column>
+                <Column :exportable="false">
+                    <template #body="slotProps">
+                        <Button icon="pi pi-pencil" outlined rounded class="mr-2" @click="editProduct(slotProps.data)" />
+                        <Button icon="pi pi-trash" outlined rounded severity="danger" @click="confirmDeleteProduct(slotProps.data)" />
+                    </template>
+                </Column>
+            </DataTable>
         </div>
-        <div class="md:w-1/2">
-            <div class="card flex flex-col gap-4">
-                <div class="font-semibold text-xl">RadioButton</div>
-                <div class="flex flex-col md:flex-row gap-4">
-                    <div class="flex items-center">
-                        <RadioButton id="option1" name="option" value="Chicago" v-model="radioValue" />
-                        <label for="option1" class="leading-none ml-2">Chicago</label>
-                    </div>
-                    <div class="flex items-center">
-                        <RadioButton id="option2" name="option" value="Los Angeles" v-model="radioValue" />
-                        <label for="option2" class="leading-none ml-2">Los Angeles</label>
-                    </div>
-                    <div class="flex items-center">
-                        <RadioButton id="option3" name="option" value="New York" v-model="radioValue" />
-                        <label for="option3" class="leading-none ml-2">New York</label>
-                    </div>
+
+        <Dialog v-model:visible="productDialog" :style="{ width: '450px' }" header="Product Details" :modal="true">
+            <div class="flex flex-col gap-6">
+                <div>
+                    <label for="name" class="block font-bold mb-3">Name</label>
+                    <InputText id="name" v-model.trim="product.name" required autofocus />
                 </div>
-
-                <div class="font-semibold text-xl">Checkbox</div>
-                <div class="flex flex-col md:flex-row gap-4">
-                    <div class="flex items-center">
-                        <Checkbox id="checkOption1" name="option" value="Chicago" v-model="checkboxValue" />
-                        <label for="checkOption1" class="ml-2">Chicago</label>
-                    </div>
-                    <div class="flex items-center">
-                        <Checkbox id="checkOption2" name="option" value="Los Angeles" v-model="checkboxValue" />
-                        <label for="checkOption2" class="ml-2">Los Angeles</label>
-                    </div>
-                    <div class="flex items-center">
-                        <Checkbox id="checkOption3" name="option" value="New York" v-model="checkboxValue" />
-                        <label for="checkOption3" class="ml-2">New York</label>
-                    </div>
-                </div>
-
-                <div class="font-semibold text-xl">ToggleSwitch</div>
-                <ToggleSwitch v-model="switchValue" />
-            </div>
-
-            <div class="card flex flex-col gap-4">
-                <div class="font-semibold text-xl">Listbox</div>
-                <Listbox v-model="listboxValue" :options="listboxValues" optionLabel="name" :filter="true" />
-
-                <div class="font-semibold text-xl">Select</div>
-                <Select v-model="dropdownValue" :options="dropdownValues" optionLabel="name" placeholder="Select" />
-
-                <div class="font-semibold text-xl">MultiSelect</div>
-                <MultiSelect v-model="multiselectValue" :options="multiselectValues" optionLabel="name" placeholder="Select Countries" :filter="true">
-                    <template #value="slotProps">
-                        <div class="inline-flex items-center py-1 px-2 bg-primary text-primary-contrast rounded-border mr-2" v-for="option of slotProps.value" :key="option.code">
-                            <span :class="'mr-2 flag flag-' + option.code.toLowerCase()" style="width: 18px; height: 12px" />
-                            <div>{{ option.name }}</div>
-                        </div>
-                        <template v-if="!slotProps.value || slotProps.value.length === 0">
-                            <div class="p-1">Select Countries</div>
+                <div>
+                    <label for="setTime" class="block font-bold mb-3">Set Time</label>
+                    <Calendar v-model="product.setTime" showIcon iconDisplay="input" timeOnly>
+                        <template #inputicon="{ clickCallback }">
+                            <InputIcon class="pi pi-clock cursor-pointer" @click="clickCallback" />
                         </template>
-                    </template>
-                    <template #option="slotProps">
-                        <div class="flex items-center">
-                            <span :class="'mr-2 flag flag-' + slotProps.option.code.toLowerCase()" style="width: 18px; height: 12px" />
-                            <div>{{ slotProps.option.name }}</div>
-                        </div>
-                    </template>
-                </MultiSelect>
-
-                <div class="font-semibold text-xl">TreeSelect</div>
-                <TreeSelect v-model="selectedNode" :options="treeSelectNodes" placeholder="Select Item"></TreeSelect>
+                    </Calendar>
+                </div>
             </div>
 
-            <div class="card flex flex-col gap-4">
-                <div class="font-semibold text-xl">ToggleButton</div>
-                <ToggleButton v-model="toggleValue" onLabel="Yes" offLabel="No" :style="{ width: '10em' }" />
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" text @click="hideDialog" />
+                <Button label="Save" icon="pi pi-check" @click="saveProduct" />
+            </template>
+        </Dialog>
 
-                <div class="font-semibold text-xl">SelectButton</div>
-                <SelectButton v-model="selectButtonValue" :options="selectButtonValues" optionLabel="name" />
+        <Dialog v-model:visible="deleteProductDialog" :style="{ width: '450px' }" header="Confirm" :modal="true">
+            <div class="flex items-center gap-4">
+                <i class="pi pi-exclamation-triangle !text-3xl" />
+                <span v-if="product"
+                    >Are you sure you want to delete <b>{{ product.name }}</b> with set time <b>{{ product.setTime }}</b
+                    >?</span
+                >
             </div>
-        </div>
-    </Fluid>
+            <template #footer>
+                <Button label="No" icon="pi pi-times" text @click="deleteProductDialog = false" />
+                <Button label="Yes" icon="pi pi-check" @click="deleteProduct" />
+            </template>
+        </Dialog>
 
-    <Fluid class="flex mt-8">
-        <div class="card flex flex-col gap-4 w-full">
-            <div class="font-semibold text-xl">InputGroup</div>
-            <div class="flex flex-col md:flex-row gap-4">
-                <InputGroup>
-                    <InputGroupAddon>
-                        <i class="pi pi-user"></i>
-                    </InputGroupAddon>
-                    <InputText placeholder="Username" />
-                </InputGroup>
-                <InputGroup>
-                    <InputGroupAddon>
-                        <i class="pi pi-clock"></i>
-                    </InputGroupAddon>
-                    <InputGroupAddon>
-                        <i class="pi pi-star-fill"></i>
-                    </InputGroupAddon>
-                    <InputNumber placeholder="Price" />
-                    <InputGroupAddon>$</InputGroupAddon>
-                    <InputGroupAddon>.00</InputGroupAddon>
-                </InputGroup>
+        <Dialog v-model:visible="deleteProductsDialog" :style="{ width: '450px' }" header="Confirm" :modal="true">
+            <div class="flex items-center gap-4">
+                <i class="pi pi-exclamation-triangle !text-3xl" />
+                <span>Are you sure you want to delete the selected schedules?</span>
             </div>
-            <div class="flex flex-col md:flex-row gap-4">
-                <InputGroup>
-                    <Button label="Search" />
-                    <InputText placeholder="Keyword" />
-                </InputGroup>
-                <InputGroup>
-                    <InputGroupAddon>
-                        <Checkbox v-model="inputGroupValue" :binary="true" />
-                    </InputGroupAddon>
-                    <InputText placeholder="Confirm" />
-                </InputGroup>
-            </div>
-        </div>
-    </Fluid>
+            <template #footer>
+                <Button label="No" icon="pi pi-times" text @click="deleteProductsDialog = false" />
+                <Button label="Yes" icon="pi pi-check" @click="deleteSelectedProducts" />
+            </template>
+        </Dialog>
+    </div>
 </template>
