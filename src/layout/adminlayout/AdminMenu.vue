@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
-import AdminMenuItem from './AdminMenuItem.vue';
 
+import AdminMenuItem from './AdminMenuItem.vue';
 const model = ref([
     {
         label: 'Analyze Graph',
@@ -10,23 +10,23 @@ const model = ref([
     {
         label: 'Management',
         items: [
-            { label: 'Attendance', icon: 'pi pi-fw pi-calendar', to: '/admin' },
+            { label: 'Attendance', icon: 'pi pi-fw pi-calendar', to: '/admin-manage' },
         ]
     },
     {
         label: 'Settings',
         items: [
-            { label: 'System', icon: 'pi pi-fw pi-cog', to: '/admin' },
+            { label: 'System', icon: 'pi pi-fw pi-cog', to: '/admin-settings' },
         ]
     }
 ]);
 </script>
 
 <template>
-    <ul class="admin-menu">
+    <ul class="layout-menu">
         <template v-for="(item, i) in model" :key="i">
             <admin-menu-item v-if="!item.separator" :item="item" :index="i"></admin-menu-item>
-            <li v-if="item.separator" class="admin-menu-separator"></li>
+            <li v-if="item.separator" class="menu-separator"></li>
         </template>
     </ul>
 </template>
