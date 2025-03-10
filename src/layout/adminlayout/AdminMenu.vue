@@ -7,13 +7,13 @@ const model = ref([
         label: 'Home',
         items: [
             { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/admin' },
-            { label: 'Analyze Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin-graph' },
         ]
     },
     {
         label: 'Management',
         items: [
             { label: 'Attendance', icon: 'pi pi-fw pi-calendar', to: '/admin-manage' },
+            { label: 'Analyze Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin-graph' },
         ]
     },
     {
