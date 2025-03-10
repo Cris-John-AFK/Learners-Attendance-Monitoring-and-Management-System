@@ -5,7 +5,7 @@ import AdminMenuItem from './AdminMenuItem.vue';
 const model = ref([
     {
         label: 'Analyze Graph',
-        items: [{ label: 'Analyze Graph', icon: 'pi pi-fw pi-home', to: '/admin' }]
+        items: [{ label: 'Analyze Graph', icon: 'pi pi-fw pi-home', to: '/admin-graph' }]
     },
     {
         label: 'Management',
