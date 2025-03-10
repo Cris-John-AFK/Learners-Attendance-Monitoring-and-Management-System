@@ -1,7 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { computed, ref, watch } from 'vue';
-import AdminFooter from './AdminFooter.vue';
 import AdminSidebar from './AdminSidebar.vue';
 import AdminTopbar from './AdminTopbar.vue';
 
@@ -63,7 +62,6 @@ function isOutsideClicked(event) {
             <div class="layout-main">
                 <router-view></router-view>
             </div>
-            <admin-footer></admin-footer>
         </div>
         <div class="layout-mask animate-fadein"></div>
     </div>

@@ -10,16 +10,17 @@ const model = ref([
         ]
     },
     {
-        label: 'Management',
+        label: 'Manage',
         items: [
-            { label: 'Attendance', icon: 'pi pi-fw pi-calendar', to: '/admin-manage' },
             { label: 'Analyze Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin-graph' },
+            { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
+            { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
+            { label: 'Section', icon: 'pi pi-fw pi-home', to: '/admin-section' },
         ]
     },
     {
-        label: 'Settings',
         items: [
-            { label: 'System', icon: 'pi pi-fw pi-cog', to: '/admin-settings' },
+            { label: 'Settings', icon: 'pi pi-fw pi-cog', to: '/admin-settings' },
         ]
     }
 ]);

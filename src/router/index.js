@@ -21,14 +21,19 @@ const router = createRouter({
                     component: () => import('@/views/pages/Attendance.vue')
                 },
                 {
-                    path: '/pages/settings',
-                    name: 'settings',
-                    component: () => import('@/views/pages/Settings.vue')
+                    path: '/pages/report',
+                    name: 'report',
+                    component: () => import('@/views/pages/Report.vue')
                 },
                 {
                     path: '/pages/section',
                     name: 'section',
                     component: () => import('@/views/pages/Section.vue')
+                },
+                {
+                    path: '/pages/settings',
+                    name: 'settings',
+                    component: () => import('@/views/pages/Settings.vue')
                 }
             ]
         },
@@ -45,6 +50,26 @@ const router = createRouter({
                     path: '/admin-graph',
                     name: 'admin-graph',
                     component: () => import('@/views/pages/Admin/Admin-Graph.vue')
+                },
+                {
+                    path: '/admin-teacher',
+                    name: 'admin-teacher',
+                    component: () => import('@/views/pages/Admin/Admin-Teacher.vue')
+                },
+                {
+                    path: '/admin-student',
+                    name: 'admin-student',
+                    component: () => import('@/views/pages/Admin/Admin-Student.vue')
+                },
+                {
+                    path: '/admin-section',
+                    name: 'admin-section',
+                    component: () => import('@/views/pages/Admin/Admin-Section.vue')
+                },
+                {
+                    path: '/admin-settings',
+                    name: 'admin-settings',
+                    component: () => import('@/views/pages/Admin/Admin-Settings.vue')
                 }
             ],
         }

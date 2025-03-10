@@ -17,23 +17,16 @@ const model = ref([
                 label: 'Attendance Record',
                 icon: 'pi pi-fw pi-book',
                 to: '/pages/attendance'
+            },
+            {
+                label: 'Submit Report',
+                icon: 'pi pi-fw pi-file-export',
+                to: '/pages/report'
             }
         ]
     },
     {
         separator: true
-    },
-    {
-        label: '',
-        icon: 'pi pi-fw pi-briefcase',
-        to: '/pages',
-        items:[
-            {
-                label: 'Settings',
-                icon: 'pi pi-fw pi-cog',
-                to: '/pages/settings'
-            }
-        ]
     },
     {
         label: 'Manage',
@@ -44,6 +37,11 @@ const model = ref([
                 label: 'Section',
                 icon: 'pi pi-fw pi-users',
                 to: '/pages/section'
+            },
+            {
+                label: 'Settings',
+                icon: 'pi pi-fw pi-cog',
+                to: '/pages/settings'
             }
         ]
     },
