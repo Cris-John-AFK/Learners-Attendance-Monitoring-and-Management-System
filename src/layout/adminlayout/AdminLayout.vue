@@ -1,16 +1,13 @@
 <script setup>
 import AdminTopbar from '@/views/admin/AdminTopbar.vue';
-import AdminSidebar from '@/views/admin/AdminSidebar.vue';
-import { ref } from 'vue';
 
-const isSidebarActive = ref(true);
+
 </script>
 
 <template>
     <div class="admin-layout">
         <AdminTopbar />
         <div class="layout-content">
-            <AdminSidebar v-if="isSidebarActive" />
             <main class="layout-main">
                 <router-view></router-view>
             </main>
