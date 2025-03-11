@@ -67,7 +67,7 @@ const getGradeColor = (index) => ({
 .card-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 90px;
 }
 
 .custom-card {
