@@ -1,3 +1,55 @@
+<script setup>
+import { onBeforeMount, ref } from 'vue';
+
+// Attendance Sessions
+const sessions = ref([
+    { id: 'SES001', title: 'Math Class - Section A', date: '2025-03-10' },
+    { id: 'SES002', title: 'Science Class - Section B', date: '2025-03-11' },
+    { id: 'SES003', title: 'History Class - Section C', date: '2025-03-12' }
+]);
+
+// Attendance Table Data
+const showAttendance = ref(false);
+const selectedSession = ref(null);
+const students = ref([
+    { id: 'S001', name: 'John Doe', status: 'Present', date: new Date(), remarks: '' },
+    { id: 'S002', name: 'Jane Smith', status: 'Absent', date: new Date(), remarks: '' },
+    { id: 'S003', name: 'Mike Johnson', status: 'Late', date: new Date(), remarks: '' },
+    { id: 'S004', name: 'Emily Davis', status: 'Present', date: new Date(), remarks: '' }
+]);
+
+const attendanceRecords = ref({});
+const allPresent = ref(false);
+const showSuccess = ref(false);
+
+onBeforeMount(() => {
+    students.value.forEach((student) => {
+        attendanceRecords.value[student.id] = 'present';
+    });
+});
+
+// Functions
+function openAttendance(session) {
+    selectedSession.value = session;
+    showAttendance.value = true;
+}
+
+function markAllPresent() {
+    students.value.forEach((student) => {
+        attendanceRecords.value[student.id] = allPresent.value ? 'present' : '';
+    });
+}
+
+function confirmAttendance() {
+    showSuccess.value = true;
+    setTimeout(() => (showSuccess.value = false), 2000);
+}
+
+function goBack() {
+    showAttendance.value = false;
+}
+</script>
+
 <template>
     <div>
         <!-- Attendance Sessions List -->
@@ -62,55 +114,3 @@
         </div>
     </div>
 </template>
-
-<script setup>
-import { onBeforeMount, ref } from 'vue';
-
-// Attendance Sessions
-const sessions = ref([
-    { id: 'SES001', title: 'Math Class - Section A', date: '2025-03-10' },
-    { id: 'SES002', title: 'Science Class - Section B', date: '2025-03-11' },
-    { id: 'SES003', title: 'History Class - Section C', date: '2025-03-12' }
-]);
-
-// Attendance Table Data
-const showAttendance = ref(false);
-const selectedSession = ref(null);
-const students = ref([
-    { id: 'S001', name: 'John Doe', status: 'Present', date: new Date(), remarks: '' },
-    { id: 'S002', name: 'Jane Smith', status: 'Absent', date: new Date(), remarks: '' },
-    { id: 'S003', name: 'Mike Johnson', status: 'Late', date: new Date(), remarks: '' },
-    { id: 'S004', name: 'Emily Davis', status: 'Present', date: new Date(), remarks: '' }
-]);
-
-const attendanceRecords = ref({});
-const allPresent = ref(false);
-const showSuccess = ref(false);
-
-onBeforeMount(() => {
-    students.value.forEach((student) => {
-        attendanceRecords.value[student.id] = 'present';
-    });
-});
-
-// Functions
-function openAttendance(session) {
-    selectedSession.value = session;
-    showAttendance.value = true;
-}
-
-function markAllPresent() {
-    students.value.forEach((student) => {
-        attendanceRecords.value[student.id] = allPresent.value ? 'present' : '';
-    });
-}
-
-function confirmAttendance() {
-    showSuccess.value = true;
-    setTimeout(() => (showSuccess.value = false), 2000);
-}
-
-function goBack() {
-    showAttendance.value = false;
-}
-</script>
