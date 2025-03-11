@@ -6,15 +6,15 @@ const chartOptions = ref({
   series: [
     {
       name: 'Present',
-      data: [44, 55, 41, 37, 22, 43, 21]
+      data: [44, 55, 41, 37, 22, 43, 21, 12, 13 , 25, 18, 26]
     },
     {
       name: 'Absent',
-      data: [53, 32, 33, 52, 13, 43, 32]
+      data: [53, 32, 33, 52, 13, 43, 32, 30 , 21 , 12, 8 , 10]
     },
     {
       name: 'Late',
-      data: [12, 17, 11, 9, 15, 11, 20]
+      data: [12, 17, 11, 9, 15, 11, 20, 10, 8, 7, 15, 2]
     },
   ],
   chart: {
@@ -43,11 +43,11 @@ const chartOptions = ref({
     text: 'Attendance History'
   },
   xaxis: {
-    categories: ['Math', 'Science', 'History', 'English', 'PE', 'Art', 'Music']
+    categories: ['1', '2', '3', '4', '5', '6', '7', '8', '9' , '10' , '11' , '12' ,]
   },
   yaxis: {
     title: {
-      text: 'Subjects'
+      text: 'Grade Level'
     }
   },
   tooltip: {

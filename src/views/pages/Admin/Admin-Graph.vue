@@ -230,7 +230,6 @@ watch(
 
 <template>
     <div class="card">
-        <h2 class="text-xl font-bold mb-4">Attendance Overview</h2>
         <AttendanceChart />
     </div>
 </template>
