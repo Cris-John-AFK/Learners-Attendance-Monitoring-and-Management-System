@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onBeforeMount } from 'vue';
-import { ProductService } from '@/service/ProductService';
+import { ProductService } from '@/router/service/ProductService';
+import { onBeforeMount, ref } from 'vue';
 
 const products = ref(null);
 const expandedRows = ref([]);
