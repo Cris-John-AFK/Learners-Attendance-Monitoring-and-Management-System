@@ -1,7 +1,7 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
+import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-
 
 const router = createRouter({
     history: createWebHistory(),
@@ -71,7 +71,28 @@ const router = createRouter({
                     name: 'admin-settings',
                     component: () => import('@/views/pages/Admin/Admin-Settings.vue')
                 }
-            ],
+            ]
+        },
+        {
+            path: '/guest',
+            component: GuestLayout,
+            children: [
+                {
+                    path: '/guest',
+                    name: 'guest-dashboard',
+                    component: () => import('@/views/guest/GuestDashboard.vue')
+                },
+                {
+                    path: '/guest/student-search',
+                    name: 'student-search',
+                    component: () => import('@/components/dashboard/SearchStudentId.vue')
+                },
+                {
+                    path: '/guest/student/:id',
+                    name: 'student-details',
+                    component: () => import('@/views/guest/StudentDetails.vue')
+                }
+            ]
         }
     ]
 });
