@@ -56,16 +56,10 @@ function goBack() {
         <div v-if="!showAttendance" class="card">
             <h2 class="text-2xl font-bold mb-4">Attendance Sessions</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div
-                    v-for="session in sessions"
-                    :key="session.id"
-                    class="border p-4 rounded-lg shadow transition-transform transform hover:scale-105 duration-300 ease-in-out"
-                >
+                <div v-for="session in sessions" :key="session.id" class="border p-4 rounded-lg shadow transition-transform transform hover:scale-105 duration-300 ease-in-out">
                     <h3 class="text-lg font-semibold">{{ session.title }}</h3>
                     <p class="text-gray-600">Date: {{ session.date }}</p>
-                    <button @click="openAttendance(session)" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">
-                        View Attendance
-                    </button>
+                    <button @click="openAttendance(session)" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">View Attendance</button>
                 </div>
             </div>
         </div>
@@ -96,16 +90,14 @@ function goBack() {
                             </select>
                         </td>
                         <td class="border p-2">
-                            <input v-model="student.remarks" type="text" placeholder="Add remarks" class="border p-1 w-full">
+                            <input v-model="student.remarks" type="text" placeholder="Add remarks" class="border p-1 w-full" />
                         </td>
                     </tr>
                 </tbody>
             </table>
 
             <div class="mt-4">
-                <label>
-                    <input type="checkbox" v-model="allPresent" @change="markAllPresent"> Mark All as Present
-                </label>
+                <label> <input type="checkbox" v-model="allPresent" @change="markAllPresent" /> Mark All as Present </label>
             </div>
 
             <button @click="confirmAttendance" class="mt-4 bg-green-500 text-white px-4 py-2 rounded">Confirm Attendance</button>
