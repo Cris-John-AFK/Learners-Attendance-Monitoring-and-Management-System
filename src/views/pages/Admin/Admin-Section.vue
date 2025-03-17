@@ -1,161 +1,172 @@
 <script setup>
-import { ref } from 'vue';
+import SakaiCard from '@/components/SakaiCard.vue';
 import { useToast } from 'primevue/usetoast';
+import { computed, ref } from 'vue';
 
-const grades = ref(Array.from({ length: 12 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
-const selectedGrade = ref(null);
-const showSections = (grade) => {
-    selectedGrade.value = grade;
+const deleteSection = (index) => {
+    confirmDelete(index);
 };
-const showAttendance = () => {
-    selectedGrade.value = 'attendance';
+
+const confirmDelete = (index) => {
+    if (confirm('Are you sure you want to delete this section?')) {
+        gradeSections.value[selectedGrade.value].splice(index, 1);
+    }
 };
-const goBack = () => {
-    selectedGrade.value = null;
+
+const getRandomGradient = () => {
+    const colors = [
+        '#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee',
+        '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2',
+        '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'
+    ];
+
+    const color1 = colors[Math.floor(Math.random() * colors.length)];
+    const color2 = colors[Math.floor(Math.random() * colors.length)];
+
+    return `linear-gradient(135deg, ${color1}, ${color2})`;
 };
-const gradeColors = [
-    'linear-gradient(135deg, #ff7eb3, #ff758c)',
-    'linear-gradient(135deg, #ff9a8b, #ff6a88)',
-    'linear-gradient(135deg, #ff758c, #ff7eb3)',
-    'linear-gradient(135deg, #6a11cb, #2575fc)',
-    'linear-gradient(135deg, #36d1dc, #5b86e5)',
-    'linear-gradient(135deg, #ff512f, #dd2476)',
-    'linear-gradient(135deg, #1fa2ff, #12d8fa)',
-    'linear-gradient(135deg, #ff6a00, #ee0979)',
-    'linear-gradient(135deg, #00c6ff, #0072ff)',
-    'linear-gradient(135deg, #f4c4f3, #fc67fa)',
-    'linear-gradient(135deg, #ff0844, #ffb199)',
-    'linear-gradient(135deg, #a18cd1, #fbc2eb)'
-];
-const getGradeColor = (index) => ({
-    backgroundImage: gradeColors[index % gradeColors.length]
+
+const cardStyles = computed(() =>
+    grades.value.map(() => ({
+        background: getRandomGradient()
+    }))
+);
+
+const grades = ref(Array.from({ length: 7 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
+const gradeSections = ref({
+    'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 4': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 5': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 7': [{ name: 'Section A' }, { name: 'Section B' }],
 });
 
+const sectionStudents = ref({
+    'Section A': [
+        { id: 'S001', name: 'John Doe' },
+        { id: 'S002', name: 'Jane Smith' }
+    ],
+    'Section B': [
+        { id: 'S003', name: 'Alice Brown' },
+        { id: 'S004', name: 'Bob White' }
+    ]
+});
+
+const selectedGrade = ref(null);
+const selectedSection = ref(null);
+const showModal = ref(false);
+const showCreateForm = ref(false);
+const newSection = ref({ name: '', students: '' });
 const toast = useToast();
-const expandedRows = ref([]);
-const sessions = ref([
-    {
-        id: 'SES001',
-        title: 'Math Class - Section A',
-        date: '2025-03-10',
-        students: [
-            { id: 'S001', name: 'John Doe', status: 'Present', remarks: '' },
-            { id: 'S002', name: 'Jane Smith', status: 'Absent', remarks: '' }
-        ]
+
+const openSectionsModal = (grade) => {
+    selectedGrade.value = grade;
+    showModal.value = true;
+    selectedSection.value = null;
+};
+
+const selectSection = (section) => {
+    selectedSection.value = section;
+    if (!sectionStudents.value[selectedSection.value]) {
+        sectionStudents.value[selectedSection.value] = []; // Initialize if missing
     }
-]);
-
-const studentDialog = ref(false);
-const newStudent = ref({ id: '', name: '', status: 'Present', remarks: '' });
-const selectedStudent = ref(null);
-
-const openNew = () => {
-    newStudent.value = { id: '', name: '', status: 'Present', remarks: '' };
-    studentDialog.value = true;
 };
 
-const addStudent = () => {
-    if (selectedStudent.value) {
-        Object.assign(selectedStudent.value, newStudent.value);
-        toast.add({ severity: 'success', summary: 'Student Updated', detail: 'Student details updated.', life: 3000 });
-    } else {
-        sessions.value[0].students.push({ ...newStudent.value });
-        toast.add({ severity: 'success', summary: 'Student Added', detail: 'New student has been added.', life: 3000 });
-    }
-    studentDialog.value = false;
-    selectedStudent.value = null;
+const openCreateForm = () => {
+    showCreateForm.value = true;
+    newSection.value = { name: '', students: '' };
 };
 
-const editStudent = (student) => {
-    newStudent.value = { ...student };
-    selectedStudent.value = student;
-    studentDialog.value = true;
+const createSection = () => {
+    if (!newSection.value.name) return;
+    gradeSections.value[selectedGrade.value] = [
+        ...(gradeSections.value[selectedGrade.value] || []),
+        { name: newSection.value.name }
+    ];
+    sectionStudents.value[newSection.value.name] = newSection.value.students
+        ? newSection.value.students.split(',').map(name => ({ id: `S${Math.floor(Math.random() * 1000)}`, name: name.trim() }))
+        : [];
+    toast.add({ severity: 'success', summary: 'Section Added', detail: 'New section created.', life: 3000 });
+    showCreateForm.value = false;
 };
-
-const deleteStudent = (studentId) => {
-    sessions.value[0].students = sessions.value[0].students.filter((student) => student.id !== studentId);
-    toast.add({ severity: 'warn', summary: 'Student Removed', detail: 'Student has been deleted.', life: 3000 });
-};
-
-function getStatusSeverity(status) {
-    switch (status) {
-        case 'Present':
-            return 'success';
-        case 'Absent':
-            return 'danger';
-        case 'Late':
-            return 'warn';
-        default:
-            return null;
-    }
-}
 </script>
 
 <template>
-    <div v-if="selectedGrade !== 'attendance'" class="card-container">
-        <sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" @click="showSections(grade.grade)">
-            <div class="card-header" :style="getGradeColor(index)">
+    <div class="card-container">
+        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.grade)">
+            <div class="card-header">
                 <h1 class="grade-name">{{ grade.grade }}</h1>
             </div>
-            <div class="card-body"></div>
-            <div class="card-footer">
-                <i class="pi pi-id-card hover-icon" @click.stop="showAttendance"></i>
-                <i class="pi pi-folder"></i>
+        </Sakai-card>
+    </div>
+
+    <Dialog v-model:visible="showModal" :style="{ width: '500px' }" header="Sections" :modal="true">
+        <div v-if="!selectedSection">
+            <div class="flex justify-between items-center">
+                <h3>Sections in {{ selectedGrade }}</h3>
+                <Button label="Create" icon="pi pi-plus" @click="openCreateForm" />
             </div>
-        </sakai-card>
-    </div>
-    <div v-else>
-        <div class="card">
-            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded">Back</button>
-            <Toolbar class="mb-6">
-                <template #start>
-                    <Button label="New" icon="pi pi-plus" severity="secondary" class="mr-2" @click="openNew" />
-                </template>
-            </Toolbar>
-            <div class="font-semibold text-xl mb-4">Attendance History</div>
-            <DataTable v-model:expandedRows="expandedRows" :value="sessions" dataKey="id" tableStyle="min-width: 60rem">
-                <Column expander style="width: 5rem" />
-                <Column field="title" header="Session Title"></Column>
-                <Column field="date" header="Date"></Column>
-                <template #expansion="slotProps">
-                    <div class="p-4">
-                        <h5>Attendance for {{ slotProps.data.title }}</h5>
-                        <DataTable :value="slotProps.data.students">
-                            <Column field="id" header="ID" sortable></Column>
-                            <Column field="name" header="Name" sortable></Column>
-                            <Column field="status" header="Status" sortable>
-                                <template #body="student">
-                                    <Tag :value="student.data.status" :severity="getStatusSeverity(student.data.status)" />
-                                </template>
-                            </Column>
-                            <Column field="remarks" header="Remarks" sortable></Column>
-                            <Column>
-                                <template #body="student">
-                                    <Button icon="pi pi-pencil" class="p-button-warning mr-2" @click="editStudent(student.data)" />
-                                    <Button icon="pi pi-trash" class="p-button-danger" @click="deleteStudent(student.data.id)" />
-                                </template>
-                            </Column>
-                        </DataTable>
+            <ul class="section-list">
+                <li v-for="(section, index) in gradeSections[selectedGrade]"
+                    :key="index"
+                    class="section-item"
+                >
+                    <span class="section-name" @click="selectSection(section.name)">{{ section.name }}</span>
+                    <div class="section-buttons">
+                        <Button label="View" icon="pi pi-eye" class="p-button-text p-button-sm" @click="selectSection(section.name)" />
+                        <Button label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" />
+                        <Button label="Delete" icon="pi pi-trash" class="p-button-danger p-button-sm" @click="deleteSection(index)" />
                     </div>
-                </template>
-            </DataTable>
+                </li>
+            </ul>
         </div>
-    </div>
-    <Dialog v-model:visible="studentDialog" :style="{ width: '450px' }" header="Manage Student" :modal="true">
-        <div class="flex flex-col gap-4">
-            <InputText v-model="newStudent.id" placeholder="Student ID" />
-            <InputText v-model="newStudent.name" placeholder="Student Name" />
-            <Dropdown v-model="newStudent.status" :options="['Present', 'Absent', 'Late']" placeholder="Select Status" />
-            <Textarea v-model="newStudent.remarks" placeholder="Remarks" rows="3" />
+        <div v-else>
+            <h3>Students in {{ selectedSection }}</h3>
+            <ul v-if="sectionStudents[selectedSection]?.length" class="student-list">
+                <li v-for="student in sectionStudents[selectedSection]" :key="student.id" class="student-item">
+                    <i class="pi pi-user student-icon"></i>
+                    <span class="student-name">{{ student.name }}</span>
+                </li>
+            </ul>
+            <p v-else>No students in this section.</p>
+
+            <Button label="Back" icon="pi pi-arrow-left" @click="selectedSection = null" />
         </div>
-        <template #footer>
-            <Button label="Cancel" text @click="studentDialog = false" />
-            <Button label="Save" icon="pi pi-check" @click="addStudent" />
-        </template>
     </Dialog>
 </template>
 
+
 <style scoped>
+.student-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 10px;
+}
+
+.student-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: background 0.3s, transform 0.2s;
+}
+
+.student-icon {
+    font-size: 18px;
+    color: #007ad9;
+}
+
+.student-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
 .card-container {
     display: flex;
     flex-wrap: wrap;
@@ -168,41 +179,64 @@ function getStatusSeverity(status) {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
     cursor: pointer;
-}
-.custom-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
-}
-.card-header {
-    color: white;
-    padding: 15px;
     text-align: center;
+    background: #f0f0f0;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
-.grade-name {
-    font-size: 18px;
-    margin: 0;
+
+.custom-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 02);
 }
-.card-body {
-    flex-grow: 1;
-    background: white;
+
+.section-item {
+    padding: 10px;
+    cursor: pointer;
+    background: #eee;
+    margin: 5px 0;
 }
-.card-footer {
+.section-item:hover {
+    background: #ddd;
+}
+
+.section-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 10px;
+}
+
+.section-item {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 10px;
-    border-top: 1px solid #ddd;
-    background: white;
-}
-.card-footer i {
-    font-size: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: background 0.3s, transform 0.2s;
     cursor: pointer;
-    transition: color 0.3s ease;
 }
-.card-footer i.hover-icon:hover {
-    color: #ff5722;
+
+.section-item:hover {
+    background: #e0f7fa;
+    transform: scale(1.02);
 }
+
+.section-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.section-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.custom-card {
+    color: white;  /* Ensures text is readable on gradient */
+    font-weight: bold;
+}
+
 </style>
