@@ -244,7 +244,10 @@ onBeforeMount(() => {
 
             <Column field="category" header="Room No."></Column>
             <Column field="rating" header="No. Subjects" class="text-center custom-column">
-                <template #body="slotProps"> 4 </template>
+                <template #body="slotProps">
+                    <!-- eslint-disable-next-line vue/no-unused-vars -->
+                    4
+                </template>
             </Column>
 
             <Column header="Status">

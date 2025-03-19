@@ -1,112 +1,107 @@
-<script setup>
+<template>
+    <div class="attendance-container">
+      <h2 class="title">Attendance Overview</h2>
+      <AttendanceChart />
+    </div>
+
+    <div class="card-container">
+        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="showSections(grade.grade)">
+            <div class="card-header">
+                <h1 class="grade-name">{{ grade.grade }}</h1>
+            </div>
+        </Sakai-card>
+    </div>
+  </template>
+
+  <script setup>
+  import SakaiCard from '@/components/SakaiCard.vue';
 import AttendanceChart from "@/views/uikit/AttendanceChart.vue";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
-const grades = ref(
-  Array.from({ length: 12 }, (_, i) => ({ grade: `Grade ${i + 1}` }))
-);
-
-const selectedGrade = ref(null);
-
-const showSections = (grade) => {
-  selectedGrade.value = grade;
-  alert(`Showing sections for ${grade}`);
-};
-
-// Define gradient colors for each grade
-const gradeColors = [
-  "linear-gradient(135deg, #ff7eb3, #ff758c)", // Grade 1
-  "linear-gradient(135deg, #ff9a8b, #ff6a88)", // Grade 2
-  "linear-gradient(135deg, #ff758c, #ff7eb3)", // Grade 3
-  "linear-gradient(135deg, #6a11cb, #2575fc)", // Grade 4
-  "linear-gradient(135deg, #36d1dc, #5b86e5)", // Grade 5
-  "linear-gradient(135deg, #ff512f, #dd2476)", // Grade 6
-  "linear-gradient(135deg, #1fa2ff, #12d8fa)", // Grade 7
-  "linear-gradient(135deg, #ff6a00, #ee0979)", // Grade 8
-  "linear-gradient(135deg, #00c6ff, #0072ff)", // Grade 9
-  "linear-gradient(135deg, #f4c4f3, #fc67fa)", // Grade 10
-  "linear-gradient(135deg, #ff0844, #ffb199)", // Grade 11
-  "linear-gradient(135deg, #a18cd1, #fbc2eb)", // Grade 12
-];
-
-// Get the background style for each grade
-const getGradeColor = (index) => ({
-  backgroundImage: gradeColors[index % gradeColors.length], // Use backgroundImage instead of background
+const grades = ref(Array.from({ length: 7 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
+const gradeSections = ref({
+    'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 4': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 5': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 7': [{ name: 'Section A' }, { name: 'Section B' }],
 });
+  const selectedGrade = ref(null);
+
+  const showSections = (grade) => {
+    selectedGrade.value = grade;
+    alert(`Showing sections for ${grade}`);
+  };
+  const getRandomGradient = () => {
+    const colors = [
+        '#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee',
+        '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2',
+        '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'
+    ];
+
+    const color1 = colors[Math.floor(Math.random() * colors.length)];
+    const color2 = colors[Math.floor(Math.random() * colors.length)];
+
+    return `linear-gradient(135deg, ${color1}, ${color2})`;
+};
+  // Style for each grade
+  const getGradeColor = (index) => ({
+    background: gradeColors[index % gradeColors.length],
+  });
+
+  const cardStyles = computed(() =>
+    grades.value.map(() => ({
+        background: getRandomGradient()
+    }))
+);
 </script>
 
-<template>
-  <div class="card">
-    <h2 class="text-xl font-bold mb-4">Attendance Overview</h2>
-    <AttendanceChart />
-  </div>
+  <style scoped>
+  .attendance-container {
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+  }
 
-  <div class="card-container">
-    <sakai-card
-      v-for="(grade, index) in grades"
-      :key="index"
-      class="custom-card"
-      @click="showSections(grade.grade)"
-    >
-      <div class="card-header" :style="getGradeColor(index)">
-        <div class="header-content">
-          <h1 class="grade-name">{{ grade.grade }}</h1>
-        </div>
-        <img
-          class="profile-icon"
-          src="https://via.placeholder.com/50"
-          alt="Profile Icon"
-        />
-      </div>
-      <div class="card-body"></div>
-    </sakai-card>
-  </div>
-</template>
-
-<style scoped>
-.card-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 90px;
+  .card-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
 }
-
-.custom-card {
-  width: 250px;
-  height: 280px;
-  border-radius: 10px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  cursor: pointer;
+  .custom-card {
+    width: 200px;
+    height: 250px;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    text-align: center;
+    background: #f0f0f0;
+    transition: transform 0.2s, box-shadow 0.2s;
+    color: white;
+    font-weight: bold;
 }
 
 .custom-card:hover {
-  transform: scale(1.05);
-  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 02);
 }
 
-.card-header {
-  color: white;
-  padding: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+  .card-header {
+    color: white;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+  }
 
-.grade-name {
-  font-size: 18px;
-  margin: 0;
-}
-
-.profile-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-}
-
-.card-body {
-  flex-grow: 1;
-  background: white;
-}
-</style>
+  .profile-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+  }
+  </style>
