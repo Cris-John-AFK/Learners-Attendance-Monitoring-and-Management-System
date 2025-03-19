@@ -35,6 +35,9 @@ const newOrder = ref({
     status: 'PENDING'
 });
 
+const editSubjectDialog = ref(false);
+const editingSubject = ref(null);
+
 function expandAll() {
     expandedRows.value = products.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
 }
@@ -185,6 +188,25 @@ function onEditImageUpload(event) {
 // Optional: Add ref for image preview if needed
 // const imagePreview = ref('');
 
+function openEditSubject(subject) {
+    editingSubject.value = { ...subject };
+    editSubjectDialog.value = true;
+}
+
+function saveEditSubject() {
+    if (selectedProduct.value) {
+        const product = products.value.find((p) => p.id === selectedProduct.value.id);
+        if (product && product.orders) {
+            const index = product.orders.findIndex((order) => order.id === editingSubject.value.id);
+            if (index !== -1) {
+                product.orders[index] = { ...editingSubject.value };
+            }
+        }
+    }
+    editSubjectDialog.value = false;
+    editingSubject.value = null;
+}
+
 onBeforeMount(() => {
     ProductService.getProductsWithOrdersSmall().then((data) => (products.value = data));
 });
@@ -238,7 +260,10 @@ onBeforeMount(() => {
             </Column>
             <Column header="Actions">
                 <template #body="slotProps">
-                    <Button icon="pi pi-pencil" @click="openEdit(slotProps.data)" />
+                    <div class="flex gap-2">
+                        <Button icon="pi pi-search" class="p-button-rounded p-button-text" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="openEdit(slotProps.data)" />
+                    </div>
                 </template>
             </Column>
 
@@ -260,8 +285,11 @@ onBeforeMount(() => {
                             </template>
                         </Column>
                         <Column headerStyle="width:4rem">
-                            <template #body>
-                                <Button icon="pi pi-search" />
+                            <template #body="slotProps">
+                                <div class="flex gap-2">
+                                    <Button icon="pi pi-search" class="p-button-rounded p-button-text" />
+                                    <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="openEditSubject(slotProps.data)" />
+                                </div>
                             </template>
                         </Column>
                     </DataTable>
@@ -356,6 +384,32 @@ onBeforeMount(() => {
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" @click="activityDialog = false" text />
                 <Button label="Save" icon="pi pi-check" @click="saveNewActivity" autofocus />
+            </template>
+        </Dialog>
+
+        <!-- Add Dialog for editing subject -->
+        <Dialog v-model:visible="editSubjectDialog" modal header="Edit Subject" :style="{ width: '450px' }">
+            <div class="p-fluid" v-if="editingSubject">
+                <div class="field">
+                    <label for="edit-subject-name">Subject Name</label>
+                    <InputText id="edit-subject-name" v-model="editingSubject.customer" />
+                </div>
+                <div class="field">
+                    <label for="edit-subject-date">Date</label>
+                    <Calendar id="edit-subject-date" v-model="editingSubject.date" dateFormat="yy-mm-dd" />
+                </div>
+                <div class="field">
+                    <label for="edit-students">Number of Students</label>
+                    <InputNumber id="edit-students" v-model="editingSubject.amount" />
+                </div>
+                <div class="field">
+                    <label for="edit-subject-status">Status</label>
+                    <Dropdown id="edit-subject-status" v-model="editingSubject.status" :options="['PENDING', 'DELIVERED', 'CANCELLED', 'RETURNED']" placeholder="Select Status" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" @click="editSubjectDialog = false" text />
+                <Button label="Save" icon="pi pi-check" @click="saveEditSubject" autofocus />
             </template>
         </Dialog>
     </div>
