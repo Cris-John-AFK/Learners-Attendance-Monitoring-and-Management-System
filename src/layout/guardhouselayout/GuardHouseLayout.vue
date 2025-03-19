@@ -1,4 +1,5 @@
 <script setup>
+import QRScanner from '@/components/dashboard/QRScanner.vue';
 import AppFooter from '@/layout/AppFooter.vue';
 import { useLayout } from '@/layout/composables/layout';
 import GuestTopbar from '@/layout/guestlayout/GuestTopbar.vue';
@@ -47,7 +48,8 @@ function isOutsideClicked(event) {
         <guest-topbar></guest-topbar>
         <div class="layout-main-container">
             <div class="layout-main">
-                <!-- Search bar component -->
+                <!-- QR Scanner Component -->
+                <QRScanner />
                 <router-view></router-view>
             </div>
             <app-footer></app-footer>
