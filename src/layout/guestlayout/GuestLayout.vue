@@ -2,7 +2,7 @@
 import { useLayout } from '@/layout/composables/layout';
 import GuestFooter from '@/layout/guestlayout/GuestFooter.vue';
 import GuestTopbar from '@/layout/guestlayout/GuestTopbar.vue';
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 const { layoutConfig, layoutState, isSidebarActive } = useLayout();
 
 const outsideClickListener = ref(null);
@@ -15,15 +15,15 @@ watch(isSidebarActive, (newVal) => {
     }
 });
 
-const containerClass = computed(() => {
-    return {
-        'layout-overlay': layoutConfig.menuMode === 'overlay',
-        'layout-static': layoutConfig.menuMode === 'static',
-        'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
-        'layout-overlay-active': layoutState.overlayMenuActive,
-        'layout-mobile-active': layoutState.staticMenuMobileActive
-    };
-});
+// const containerClass = computed(() => {
+//     return {
+//         'layout-overlay': layoutConfig.menuMode === 'overlay',
+//         'layout-static': layoutConfig.menuMode === 'static',
+//         'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
+//         'layout-overlay-active': layoutState.overlayMenuActive,
+//         'layout-mobile-active': layoutState.staticMenuMobileActive
+//     };
+// });
 
 function bindOutsideClickListener() {
     if (!outsideClickListener.value) {
