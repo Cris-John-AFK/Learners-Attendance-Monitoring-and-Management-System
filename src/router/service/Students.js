@@ -2,13 +2,6 @@ export const AttendanceService = {
     getData() {
         return [
             {
-                id: 1000,
-                name: 'Juan Dela Cruz',
-                date: '2025-03-19',
-                timeIn: '07:15 AM',
-                timeOut: '04:30 PM'
-            },
-            {
                 id: 1001,
                 name: 'Maria Clara Santos',
                 date: '2025-03-19',
@@ -70,6 +63,13 @@ export const AttendanceService = {
                 date: '2025-03-19',
                 timeIn: '07:30 AM',
                 timeOut: '04:15 PM'
+            },
+            {
+                id: 1010,
+                name: 'Juan Dela Cruz',
+                date: '2025-03-19',
+                timeIn: '07:15 AM',
+                timeOut: '04:30 PM'
             }
         ];
     }

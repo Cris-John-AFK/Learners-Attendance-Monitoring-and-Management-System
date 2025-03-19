@@ -63,11 +63,16 @@ export const StudentAttendanceService = {
         ];
 
         return [
-            { id: 1001, firstName: 'John', lastName: 'Doe', gender: 'Male', gradeLevel: 3, section: 'A', photo: photos[0]?.itemImageSrc || '', attendance: sharedAttendance },
-            { id: 1002, firstName: 'Jane', lastName: 'Smith', gender: 'Female', gradeLevel: 4, section: 'B', photo: photos[1]?.itemImageSrc || '', attendance: sharedAttendance },
-            { id: 1003, firstName: 'Michael', lastName: 'Johnson', gender: 'Male', gradeLevel: 5, section: 'C', photo: photos[2]?.itemImageSrc || '', attendance: sharedAttendance },
-            { id: 1004, firstName: 'Emily', lastName: 'Williams', gender: 'Female', gradeLevel: 6, section: 'D', photo: photos[3]?.itemImageSrc || '', attendance: sharedAttendance },
-            { id: 1005, firstName: 'Chris', lastName: 'Brown', gender: 'Male', gradeLevel: 2, section: 'E', photo: photos[4]?.itemImageSrc || '', attendance: sharedAttendance }
+            { id: 1001, firstName: 'Maria', middleName: 'Clara', lastName: 'Santos', gender: 'Female', gradeLevel: 3, section: 'A', photo: photos[0]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1002, firstName: 'Jose', middleName: 'Andres', lastName: 'Reyes', gender: 'Male', gradeLevel: 4, section: 'B', photo: photos[1]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1003, firstName: 'Rizalina', middleName: '', lastName: 'Bautista', gender: 'Female', gradeLevel: 5, section: 'C', photo: photos[2]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1004, firstName: 'Emilio', middleName: 'Aguinaldo', lastName: 'Cruz', gender: 'Male', gradeLevel: 6, section: 'D', photo: photos[3]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1005, firstName: 'Gabriela', middleName: 'Silang', lastName: 'Rivera', gender: 'Female', gradeLevel: 2, section: 'E', photo: photos[4]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1006, firstName: 'Diego', middleName: 'Silang', lastName: 'Mendoza', gender: 'Male', gradeLevel: 3, section: 'A', photo: photos[5]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1007, firstName: 'Melchora', middleName: 'Aquino', lastName: 'Pascual', gender: 'Female', gradeLevel: 4, section: 'B', photo: photos[6]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1008, firstName: 'Andres', middleName: 'Bonifacio', lastName: 'Torres', gender: 'Male', gradeLevel: 5, section: 'C', photo: photos[7]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1009, firstName: 'Antonio', middleName: 'Luna', lastName: 'Gomez', gender: 'Male', gradeLevel: 6, section: 'D', photo: photos[8]?.itemImageSrc || '', attendance: sharedAttendance },
+            { id: 1010, firstName: 'Juan', middleName: '', lastName: 'Dela Cruz', gender: 'Male', gradeLevel: 2, section: 'E', photo: photos[9]?.itemImageSrc || '', attendance: sharedAttendance }
         ];
     },
 

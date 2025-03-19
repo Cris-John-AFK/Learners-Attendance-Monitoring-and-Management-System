@@ -5,13 +5,15 @@ import GuardHouseTopbar from '@/layout/guardhouselayout/GuardHouseTopbar.vue';
 import { AttendanceService } from '@/router/service/Students';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 
 const { layoutState, isSidebarActive } = useLayout();
 const outsideClickListener = ref(null);
 const scanning = ref(false);
 const attendanceRecords = ref([]);
+const searchQuery = ref('');
+const selectedStudent = ref(null);
 
 watch(isSidebarActive, (newVal) => {
     if (newVal) {
@@ -48,6 +50,10 @@ function isOutsideClicked(event) {
 
 const onDetect = (detectedCodes) => {
     console.log('QR Code Detected:', detectedCodes);
+    if (detectedCodes.length > 0) {
+        const studentId = detectedCodes[0].rawValue;
+        fetchStudentDetails(studentId);
+    }
 };
 
 const startScan = () => {
@@ -56,9 +62,24 @@ const startScan = () => {
 };
 
 const addStudentRecord = () => {
-    const newRecord = AttendanceService.getData()[0];
-    attendanceRecords.value.push(newRecord);
+    const students = AttendanceService.getData();
+    if (students.length > attendanceRecords.value.length) {
+        const newRecord = students[attendanceRecords.value.length];
+        attendanceRecords.value.push(newRecord);
+        selectedStudent.value = newRecord; // Show details of last added student
+    }
 };
+
+const fetchStudentDetails = (studentId) => {
+    const student = attendanceRecords.value.find((s) => s.id.toString() === studentId);
+    if (student) {
+        selectedStudent.value = student;
+    }
+};
+
+const filteredRecords = computed(() => {
+    return attendanceRecords.value.filter((student) => student.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || student.id.toString().includes(searchQuery.value));
+});
 </script>
 
 <template>
@@ -71,13 +92,22 @@ const addStudentRecord = () => {
                     <button @click="startScan" class="scan-button">Start Scan</button>
                 </div>
                 <div class="table-container">
-                    <DataTable :value="attendanceRecords" paginator :rows="5" class="p-datatable-striped">
+                    <input v-model="searchQuery" type="text" placeholder="Search records..." class="search-input" />
+                    <DataTable :value="filteredRecords" paginator :rows="5" class="p-datatable-striped">
                         <Column field="id" header="ID Number"></Column>
                         <Column field="name" header="Name"></Column>
                         <Column field="date" header="Date"></Column>
                         <Column field="timeIn" header="Time In"></Column>
                         <Column field="timeOut" header="Time Out"></Column>
                     </DataTable>
+                </div>
+                <div class="student-details" v-if="selectedStudent">
+                    <h2>Student Attendance Details</h2>
+                    <img :src="selectedStudent.photo" alt="Student Photo" class="student-photo" />
+                    <p><strong>Name:</strong> {{ selectedStudent.name }}</p>
+                    <p><strong>Gender:</strong> {{ selectedStudent.gender }}</p>
+                    <p><strong>Grade Level:</strong> {{ selectedStudent.gradeLevel }}</p>
+                    <p><strong>Section:</strong> {{ selectedStudent.section }}</p>
                 </div>
             </div>
         </div>
@@ -89,8 +119,8 @@ const addStudentRecord = () => {
 <style lang="scss" scoped>
 .content-wrapper {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
     padding: 20px;
 }
 
@@ -142,8 +172,34 @@ const addStudentRecord = () => {
     transform: scale(1.05);
 }
 
+.student-details {
+    margin-top: 20px;
+    padding: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+    width: 80%;
+    text-align: center;
+}
+
+.student-photo {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+}
+
 .table-container {
-    flex-grow: 1;
-    padding-left: 20px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
 }
 </style>
