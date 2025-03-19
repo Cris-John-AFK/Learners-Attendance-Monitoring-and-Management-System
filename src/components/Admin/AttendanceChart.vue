@@ -10,14 +10,14 @@ const chartOptions = ref({
       color: '#28a745' // Green for Present
     },
     {
-      name: 'Absent',
-      data: [5, 4, 8, 10, 7, 12, 15],
-      color: '#dc3545' // Red for Absent
-    },
-    {
       name: 'Late',
       data: [7, 5, 6, 5, 6, 4, 7],
       color: '#fd7e14' // Orange for Late
+    },
+    {
+      name: 'Absent',
+      data: [5, 4, 8, 10, 7, 12, 15],
+      color: '#dc3545' // Red for Absent
     },
   ],
   chart: {

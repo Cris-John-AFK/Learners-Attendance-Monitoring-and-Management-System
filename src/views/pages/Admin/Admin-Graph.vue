@@ -125,12 +125,20 @@ const cardStyles = computed(() =>
     width: 100%;
     padding: 10px;
     box-sizing: border-box;
+    justify-content: center;
+    align-items: center;
+    display: grid;
 }
 
 .card-container {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 900px; /* Set a max width to limit stretching */
+    margin: 0 auto; /* Center the grid */
 }
 
 .custom-card {
