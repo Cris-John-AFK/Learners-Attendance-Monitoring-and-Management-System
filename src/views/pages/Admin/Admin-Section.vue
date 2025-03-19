@@ -74,21 +74,34 @@ const selectSection = (section) => {
     }
 };
 
+// Close the Sections modal and open the Create Section modal
 const openCreateForm = () => {
-    showCreateForm.value = true;
+    showModal.value = false; // Close the Sections modal
+    showCreateForm.value = true; // Open the Create Section modal
     newSection.value = { name: '', students: '' };
 };
 
 const createSection = () => {
     if (!newSection.value.name) return;
+
+    // Add the new section to the selected grade
     gradeSections.value[selectedGrade.value] = [
         ...(gradeSections.value[selectedGrade.value] || []),
         { name: newSection.value.name }
     ];
+
+    // Assign students to the new section
     sectionStudents.value[newSection.value.name] = newSection.value.students
-        ? newSection.value.students.split(',').map(name => ({ id: `S${Math.floor(Math.random() * 1000)}`, name: name.trim() }))
+        ? newSection.value.students.split(',').map(name => ({
+            id: `S${Math.floor(Math.random() * 1000)}`,
+            name: name.trim()
+        }))
         : [];
+
+    // Show success notification
     toast.add({ severity: 'success', summary: 'Section Added', detail: 'New section created.', life: 3000 });
+
+    // Close the Create Section modal
     showCreateForm.value = false;
 };
 </script>
@@ -102,11 +115,12 @@ const createSection = () => {
         </Sakai-card>
     </div>
 
+    <!-- Sections Modal -->
     <Dialog v-model:visible="showModal" :style="{ width: '500px' }" header="Sections" :modal="true">
         <div v-if="!selectedSection">
             <div class="flex justify-between items-center">
                 <h3>Sections in {{ selectedGrade }}</h3>
-                <Button label="Create" icon="pi pi-plus" @click="openCreateForm" />
+                <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
             </div>
             <ul class="section-list">
                 <li v-for="(section, index) in gradeSections[selectedGrade]"
@@ -135,8 +149,18 @@ const createSection = () => {
             <Button label="Back" icon="pi pi-arrow-left" @click="selectedSection = null" />
         </div>
     </Dialog>
-</template>
 
+    <!-- Create Section Modal -->
+    <Dialog v-model:visible="showCreateForm" :style="{ width: '500px' }" header="Create New Section" :modal="true">
+        <h3>Create New Section</h3>
+        <InputText v-model="newSection.name" placeholder="Enter section name" class="w-full mb-2" />
+        <Textarea v-model="newSection.students" placeholder="Enter student names (comma-separated)" class="w-full mb-2" />
+        <div class="flex justify-end gap-2">
+            <Button label="Cancel" class="p-button-text" @click="showCreateForm = false" />
+            <Button label="Save" class="p-button-success" @click="createSection" />
+        </div>
+    </Dialog>
+</template>
 
 <style scoped>
 .student-list {
@@ -166,7 +190,6 @@ const createSection = () => {
     font-weight: 600;
     color: #333;
 }
-
 .card-container {
     display: flex;
     flex-wrap: wrap;
@@ -206,23 +229,6 @@ const createSection = () => {
     margin-top: 10px;
 }
 
-.section-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: #f9f9f9;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    transition: background 0.3s, transform 0.2s;
-    cursor: pointer;
-}
-
-.section-item:hover {
-    background: #e0f7fa;
-    transform: scale(1.02);
-}
-
 .section-name {
     font-size: 16px;
     font-weight: 600;
@@ -235,8 +241,7 @@ const createSection = () => {
 }
 
 .custom-card {
-    color: white;  /* Ensures text is readable on gradient */
+    color: white;
     font-weight: bold;
 }
-
 </style>
