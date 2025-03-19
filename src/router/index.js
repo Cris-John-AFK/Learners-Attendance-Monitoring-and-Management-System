@@ -76,7 +76,7 @@ const router = createRouter({
                     path: '/archive',
                     name: 'archive',
                     component: () => import('@/views/pages/Admin/Archive.vue')
-                },
+                }
             ]
         },
         {
