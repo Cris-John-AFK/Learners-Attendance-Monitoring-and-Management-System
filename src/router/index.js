@@ -1,5 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
+import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
@@ -96,6 +97,22 @@ const router = createRouter({
                     path: '/guest/student/:id',
                     name: 'student-details',
                     component: () => import('@/views/guest/StudentDetails.vue')
+                }
+            ]
+        },
+        {
+            path: '/guardhouse',
+            component: GuardHouseLayout,
+            children: [
+                {
+                    path: '/guardhouse',
+                    name: 'guardhouse',
+                    component: () => import('@/views/guardhouse/GuardHouse.vue')
+                },
+                {
+                    path: '/qr-scanner',
+                    name: 'QrScanner',
+                    component: () => import('@/components/dashboard/QRScanner.vue')
                 }
             ]
         }

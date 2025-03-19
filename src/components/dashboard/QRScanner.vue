@@ -2,19 +2,17 @@
 import { ref } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 
-const scannedResult = ref(null);
-const onDecode = (result) => {
-    scannedResult.value = result;
+const result = ref('');
+const onDecode = (decodedText) => {
+    result.value = decodedText;
+    alert(`QR Code Scanned: ${decodedText}`);
 };
 </script>
 
 <template>
     <div class="scanner-container">
         <qrcode-stream @decode="onDecode"></qrcode-stream>
-        <div v-if="scannedResult" class="result">
-            <p>Scanned QR Code:</p>
-            <strong>{{ scannedResult }}</strong>
-        </div>
+        <p v-if="result">Scanned Result: {{ result }}</p>
     </div>
 </template>
 
@@ -26,15 +24,6 @@ const onDecode = (result) => {
     justify-content: center;
     width: 100%;
     max-width: 500px;
-    margin: 0 auto;
-}
-
-.result {
-    margin-top: 20px;
-    text-align: center;
-    font-size: 1.2rem;
-    background: #e0f7fa;
-    padding: 10px;
-    border-radius: 5px;
+    margin: auto;
 }
 </style>
