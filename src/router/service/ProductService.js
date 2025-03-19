@@ -369,11 +369,11 @@ export const ProductService = {
             {
                 id: '1000',
                 code: 'f230fh0g3',
-                name: 'Bamboo Watch',
+                name: 'Boy Abunda',
                 description: 'Product Description',
                 image: 'bamboo-watch.jpg',
                 price: 65,
-                category: 'Accessories',
+                category: 'DIT 101',
                 quantity: 24,
                 inventoryStatus: 'INSTOCK',
                 rating: 5,
@@ -384,7 +384,7 @@ export const ProductService = {
                         date: '2020-09-13',
                         amount: 65,
                         quantity: 1,
-                        customer: 'David James',
+                        customer: 'Araling Panlipunan',
                         status: 'PENDING'
                     },
                     {
@@ -393,7 +393,7 @@ export const ProductService = {
                         date: '2020-05-14',
                         amount: 130,
                         quantity: 2,
-                        customer: 'Leon Rodrigues',
+                        customer: 'Mathematics',
                         status: 'DELIVERED'
                     },
                     {
@@ -402,16 +402,17 @@ export const ProductService = {
                         date: '2019-01-04',
                         amount: 65,
                         quantity: 1,
-                        customer: 'Juan Alejandro',
+                        customer: 'Science',
                         status: 'RETURNED'
                     },
+
                     {
                         id: '1000-3',
                         productCode: 'f230fh0g3',
                         date: '2020-09-13',
                         amount: 195,
                         quantity: 3,
-                        customer: 'Claire Morrow',
+                        customer: 'Filipino',
                         status: 'CANCELLED'
                     }
                 ]
@@ -419,11 +420,11 @@ export const ProductService = {
             {
                 id: '1001',
                 code: 'nvklal433',
-                name: 'Black Watch',
+                name: 'Toni Gunzaga',
                 description: 'Product Description',
                 image: 'black-watch.jpg',
                 price: 72,
-                category: 'Accessories',
+                category: 'DIT 102',
                 quantity: 61,
                 inventoryStatus: 'INSTOCK',
                 rating: 4,
@@ -434,7 +435,7 @@ export const ProductService = {
                         date: '2020-05-14',
                         amount: 72,
                         quantity: 1,
-                        customer: 'Maisha Jefferson',
+                        customer: 'Edukasyon sa Pagpapakatao (EsP)',
                         status: 'DELIVERED'
                     },
                     {
@@ -443,7 +444,7 @@ export const ProductService = {
                         date: '2020-02-28',
                         amount: 144,
                         quantity: 2,
-                        customer: 'Octavia Murillo',
+                        customer: 'Music',
                         status: 'PENDING'
                     }
                 ]
@@ -451,11 +452,11 @@ export const ProductService = {
             {
                 id: '1002',
                 code: 'zz21cz3c1',
-                name: 'Blue Band',
+                name: 'John Balde',
                 description: 'Product Description',
                 image: 'blue-band.jpg',
                 price: 79,
-                category: 'Fitness',
+                category: 'DIT 103',
                 quantity: 2,
                 inventoryStatus: 'LOWSTOCK',
                 rating: 3,
@@ -466,7 +467,7 @@ export const ProductService = {
                         date: '2020-07-05',
                         amount: 79,
                         quantity: 1,
-                        customer: 'Stacey Leja',
+                        customer: 'Arts',
                         status: 'DELIVERED'
                     },
                     {
@@ -475,7 +476,7 @@ export const ProductService = {
                         date: '2020-02-06',
                         amount: 79,
                         quantity: 1,
-                        customer: 'Ashley Wickens',
+                        customer: 'Physical Education',
                         status: 'DELIVERED'
                     }
                 ]
@@ -483,11 +484,11 @@ export const ProductService = {
             {
                 id: '1003',
                 code: '244wgerg2',
-                name: 'Blue T-Shirt',
+                name: 'Cris Duterte',
                 description: 'Product Description',
                 image: 'blue-t-shirt.jpg',
                 price: 29,
-                category: 'Clothing',
+                category: 'TSAC 101',
                 quantity: 25,
                 inventoryStatus: 'INSTOCK',
                 rating: 5,
@@ -496,11 +497,11 @@ export const ProductService = {
             {
                 id: '1004',
                 code: 'h456wer53',
-                name: 'Bracelet',
+                name: 'Jesseca Duterte',
                 description: 'Product Description',
                 image: 'bracelet.jpg',
                 price: 15,
-                category: 'Accessories',
+                category: 'TSAC 102',
                 quantity: 73,
                 inventoryStatus: 'INSTOCK',
                 rating: 4,
@@ -511,7 +512,7 @@ export const ProductService = {
                         date: '2020-09-05',
                         amount: 60,
                         quantity: 4,
-                        customer: 'Mayumi Misaki',
+                        customer: 'Health',
                         status: 'PENDING'
                     },
                     {
@@ -520,7 +521,7 @@ export const ProductService = {
                         date: '2019-04-16',
                         amount: 2,
                         quantity: 30,
-                        customer: 'Francesco Salvatore',
+                        customer: 'Edukasyong Pantahanan at Pangkabuhayan (EPP)',
                         status: 'DELIVERED'
                     }
                 ]
@@ -528,11 +529,11 @@ export const ProductService = {
             {
                 id: '1005',
                 code: 'av2231fwg',
-                name: 'Brown Purse',
+                name: 'Hari Potter',
                 description: 'Product Description',
                 image: 'brown-purse.jpg',
                 price: 120,
-                category: 'Accessories',
+                category: 'TSAC 103',
                 quantity: 0,
                 inventoryStatus: 'OUTOFSTOCK',
                 rating: 4,
@@ -543,7 +544,7 @@ export const ProductService = {
                         date: '2020-01-25',
                         amount: 120,
                         quantity: 1,
-                        customer: 'Isabel Sinclair',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'RETURNED'
                     },
                     {
@@ -552,7 +553,7 @@ export const ProductService = {
                         date: '2019-03-12',
                         amount: 240,
                         quantity: 2,
-                        customer: 'Lionel Clifford',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     },
                     {
@@ -561,7 +562,7 @@ export const ProductService = {
                         date: '2019-05-05',
                         amount: 120,
                         quantity: 1,
-                        customer: 'Cody Chavez',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     }
                 ]
@@ -569,11 +570,11 @@ export const ProductService = {
             {
                 id: '1006',
                 code: 'bib36pfvm',
-                name: 'Chakra Bracelet',
+                name: 'Angelow Duterte',
                 description: 'Product Description',
                 image: 'chakra-bracelet.jpg',
                 price: 32,
-                category: 'Accessories',
+                category: 'TSAC 104',
                 quantity: 5,
                 inventoryStatus: 'LOWSTOCK',
                 rating: 3,
@@ -584,7 +585,7 @@ export const ProductService = {
                         date: '2020-02-24',
                         amount: 32,
                         quantity: 1,
-                        customer: 'Arvin Darci',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     },
                     {
@@ -593,7 +594,7 @@ export const ProductService = {
                         date: '2020-01-14',
                         amount: 64,
                         quantity: 2,
-                        customer: 'Izzy Jones',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'PENDING'
                     }
                 ]
@@ -601,11 +602,11 @@ export const ProductService = {
             {
                 id: '1007',
                 code: 'mbvjkgip5',
-                name: 'Galaxy Earrings',
+                name: 'Jonny Seen',
                 description: 'Product Description',
                 image: 'galaxy-earrings.jpg',
                 price: 34,
-                category: 'Accessories',
+                category: 'TSAC 200',
                 quantity: 23,
                 inventoryStatus: 'INSTOCK',
                 rating: 5,
@@ -616,7 +617,7 @@ export const ProductService = {
                         date: '2020-06-19',
                         amount: 34,
                         quantity: 1,
-                        customer: 'Jennifer Smith',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     }
                 ]
@@ -624,11 +625,11 @@ export const ProductService = {
             {
                 id: '1008',
                 code: 'vbb124btr',
-                name: 'Game Controller',
+                name: 'Mai Califa',
                 description: 'Product Description',
                 image: 'game-controller.jpg',
                 price: 99,
-                category: 'Electronics',
+                category: 'TSAC 999',
                 quantity: 2,
                 inventoryStatus: 'LOWSTOCK',
                 rating: 4,
@@ -639,7 +640,7 @@ export const ProductService = {
                         date: '2020-01-05',
                         amount: 99,
                         quantity: 1,
-                        customer: 'Jeanfrancois David',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     },
                     {
@@ -648,7 +649,7 @@ export const ProductService = {
                         date: '2020-01-19',
                         amount: 198,
                         quantity: 2,
-                        customer: 'Ivar Greenwood',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'RETURNED'
                     }
                 ]
@@ -656,11 +657,11 @@ export const ProductService = {
             {
                 id: '1009',
                 code: 'cm230f032',
-                name: 'Gaming Set',
+                name: 'Lexe Lor',
                 description: 'Product Description',
                 image: 'gaming-set.jpg',
                 price: 299,
-                category: 'Electronics',
+                category: 'TSAC 6',
                 quantity: 63,
                 inventoryStatus: 'INSTOCK',
                 rating: 3,
@@ -671,7 +672,7 @@ export const ProductService = {
                         date: '2020-06-24',
                         amount: 299,
                         quantity: 1,
-                        customer: 'Kadeem Mujtaba',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'PENDING'
                     },
                     {
@@ -680,7 +681,7 @@ export const ProductService = {
                         date: '2020-05-11',
                         amount: 299,
                         quantity: 1,
-                        customer: 'Ashley Wickens',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     },
                     {
@@ -689,7 +690,7 @@ export const ProductService = {
                         date: '2019-02-07',
                         amount: 299,
                         quantity: 1,
-                        customer: 'Julie Johnson',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'DELIVERED'
                     },
                     {
@@ -698,7 +699,7 @@ export const ProductService = {
                         date: '2020-04-26',
                         amount: 299,
                         quantity: 1,
-                        customer: 'Tony Costa',
+                        customer: 'Technology and Livelihood Education (TLE)',
                         status: 'CANCELLED'
                     }
                 ]

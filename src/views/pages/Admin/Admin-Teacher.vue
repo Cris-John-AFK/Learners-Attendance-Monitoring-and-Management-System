@@ -1,13 +1,13 @@
 <script setup>
 import { ProductService } from '@/router/service/ProductService';
-import { onBeforeMount, ref, computed } from 'vue';
-import InputText from 'primevue/inputtext';
-import InputNumber from 'primevue/inputnumber';
+import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import Rating from 'primevue/rating';
-import Calendar from 'primevue/calendar';
 import FileUpload from 'primevue/fileupload';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Rating from 'primevue/rating';
+import { computed, onBeforeMount, ref } from 'vue';
 
 const products = ref(null);
 const expandedRows = ref([]);
@@ -242,12 +242,14 @@ onBeforeMount(() => {
                 </template>
             </Column>
 
-            <Column field="category" header="Category"></Column>
-            <Column field="rating" header="No. Subjects">
+            <Column field="category" header="Room No."></Column>
+            <Column field="rating" header="No. Subjects" class="text-center custom-column">
                 <template #body="slotProps">
-                    <Rating :modelValue="slotProps.data.rating" readonly />
+                    <!-- eslint-disable-next-line vue/no-unused-vars -->
+                    4
                 </template>
             </Column>
+
             <Column header="Status">
                 <template #body="slotProps">
                     <Tag :value="slotProps.data.inventoryStatus" :severity="getStockSeverity(slotProps.data)" />
