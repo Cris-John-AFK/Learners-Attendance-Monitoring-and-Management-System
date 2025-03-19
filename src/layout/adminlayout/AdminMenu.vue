@@ -12,7 +12,7 @@ const model = ref([
     {
         label: 'Manage',
         items: [
-            { label: 'Analyze Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin-graph' },
+            { label: 'Analytical Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin-graph' },
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
             { label: 'Section', icon: 'pi pi-fw pi-home', to: '/admin-section' },

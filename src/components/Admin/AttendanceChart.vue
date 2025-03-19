@@ -6,15 +6,18 @@ const chartOptions = ref({
   series: [
     {
       name: 'Present',
-      data: [44, 55, 41, 37, 22, 43, 21, 12, 13 , 25, 18, 26]
+      data: [45, 48, 42, 40, 43, 38, 35],
+      color: '#28a745' // Green for Present
     },
     {
       name: 'Absent',
-      data: [53, 32, 33, 52, 13, 43, 32, 30 , 21 , 12, 8 , 10]
+      data: [5, 4, 8, 10, 7, 12, 15],
+      color: '#dc3545' // Red for Absent
     },
     {
       name: 'Late',
-      data: [12, 17, 11, 9, 15, 11, 20, 10, 8, 7, 15, 2]
+      data: [7, 5, 6, 5, 6, 4, 7],
+      color: '#fd7e14' // Orange for Late
     },
   ],
   chart: {
@@ -34,18 +37,15 @@ const chartOptions = ref({
     }
   },
   dataLabels: {
-    enabled: false
+    enabled: false,
   },
   stroke: {
     width: 2,
   },
   xaxis: {
-    categories: ['1', '2', '3', '4', '5', '6', '7', '8', '9' , '10' , '11' , '12' ,]
+    categories: ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'],
   },
   yaxis: {
-    title: {
-      text: 'Grade Level'
-    }
   },
   tooltip: {
     shared: false,

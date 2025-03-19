@@ -11,30 +11,96 @@
             </div>
         </Sakai-card>
     </div>
-  </template>
 
-  <script setup>
-  import SakaiCard from '@/components/SakaiCard.vue';
-import AttendanceChart from "@/views/uikit/AttendanceChart.vue";
+    <Dialog v-model:visible="showModal" modal header="Section Attendance Overview" :style="{ width: '50vw' }">
+      <AttendanceChart v-if="selectedGradeData" :chartData="selectedGradeData" />
+    </Dialog>
+</template>
+
+<script setup>
+import AttendanceChart from "@/components/Admin/AttendanceChart.vue";
+import SakaiCard from '@/components/SakaiCard.vue';
+import Dialog from 'primevue/dialog';
 import { computed, ref } from "vue";
 
-const grades = ref(Array.from({ length: 7 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
-const gradeSections = ref({
-    'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 4': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 5': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 7': [{ name: 'Section A' }, { name: 'Section B' }],
-});
-  const selectedGrade = ref(null);
+const grades = ref([
+    { grade: 'Kinder' },
+    { grade: 'Grade 1' },
+    { grade: 'Grade 2' },
+    { grade: 'Grade 3' },
+    { grade: 'Grade 4' },
+    { grade: 'Grade 5' },
+    { grade: 'Grade 6' }
+]);
 
-  const showSections = (grade) => {
-    selectedGrade.value = grade;
-    alert(`Showing sections for ${grade}`);
-  };
-  const getRandomGradient = () => {
+const gradeSectionsData = ref({
+    'Kinder': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [90, 85, 88, 80] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [5, 8, 7, 10] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 7, 5, 10] }
+        ]
+    },
+    'Grade 1': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [85, 88, 80, 75] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [8, 7, 10, 12] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [7, 5, 10, 13] }
+        ]
+    },
+    'Grade 2': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 5, 9, 6] }
+        ]
+    },
+    'Grade 3': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [80, 85, 82, 88] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [10, 7, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [10, 8, 9, 7] }
+        ]
+    },
+    'Grade 4': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [85, 80, 88, 90] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [7, 10, 6, 5] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [8, 10, 6, 5] }
+        ]
+    },
+    'Grade 5': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [80, 88, 85, 87] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [10, 5, 7, 6] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [10, 7, 8, 7] }
+        ]
+    },
+    'Grade 6': {
+        labels: ['Section A', 'Section B', 'Section C', 'Section D'],
+        datasets: [
+            { label: 'Present', backgroundColor: '#42A5F5', data: [90, 88, 85, 83] },
+            { label: 'Absent', backgroundColor: '#FF6384', data: [5, 7, 10, 8] },
+            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 5, 5, 9] }
+        ]
+    }
+});
+
+const showModal = ref(false);
+const selectedGradeData = ref(null);
+
+const showSections = (grade) => {
+    selectedGradeData.value = gradeSectionsData.value[grade];
+    showModal.value = true;
+};
+
+const getRandomGradient = () => {
     const colors = [
         '#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee',
         '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2',
@@ -46,31 +112,28 @@ const gradeSections = ref({
 
     return `linear-gradient(135deg, ${color1}, ${color2})`;
 };
-  // Style for each grade
-  const getGradeColor = (index) => ({
-    background: gradeColors[index % gradeColors.length],
-  });
 
-  const cardStyles = computed(() =>
+const cardStyles = computed(() =>
     grades.value.map(() => ({
         background: getRandomGradient()
     }))
 );
 </script>
 
-  <style scoped>
-  .attendance-container {
+<style scoped>
+.attendance-container {
     width: 100%;
     padding: 10px;
     box-sizing: border-box;
-  }
+}
 
-  .card-container {
+.card-container {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
 }
-  .custom-card {
+
+.custom-card {
     width: 200px;
     height: 250px;
     border-radius: 10px;
@@ -87,21 +150,15 @@ const gradeSections = ref({
 
 .custom-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-  .card-header {
+.card-header {
     color: white;
     padding: 12px 15px;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     font-weight: bold;
-  }
-
-  .profile-icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-  }
-  </style>
+}
+</style>
