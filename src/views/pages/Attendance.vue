@@ -20,7 +20,8 @@ const students = ref([
 
 const attendanceRecords = ref({});
 const allPresent = ref(false);
-const showSuccess = ref(false);
+const showConfirmModal = ref(false);
+const showSuccessModal = ref(false);
 
 onBeforeMount(() => {
     students.value.forEach((student) => {
@@ -41,8 +42,19 @@ function markAllPresent() {
 }
 
 function confirmAttendance() {
-    showSuccess.value = true;
-    setTimeout(() => (showSuccess.value = false), 2000);
+    showConfirmModal.value = true;
+}
+
+function finalizeAttendance() {
+    showConfirmModal.value = false;
+    showSuccessModal.value = true;
+
+    // Reset after confirming
+    setTimeout(() => {
+        showSuccessModal.value = false;
+        showAttendance.value = false;
+        selectedSession.value = null;
+    }, 2000);
 }
 
 function goBack() {
@@ -56,10 +68,13 @@ function goBack() {
         <div v-if="!showAttendance" class="card">
             <h2 class="text-2xl font-bold mb-4">Attendance Sessions</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div v-for="session in sessions" :key="session.id" class="border p-4 rounded-lg shadow transition-transform transform hover:scale-105 duration-300 ease-in-out">
+                <div v-for="session in sessions" :key="session.id"
+                    class="border p-4 rounded-lg shadow transition-transform transform hover:scale-105 duration-300 ease-in-out">
                     <h3 class="text-lg font-semibold">{{ session.title }}</h3>
                     <p class="text-gray-600">Date: {{ session.date }}</p>
-                    <button @click="openAttendance(session)" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">View Attendance</button>
+                    <button @click="openAttendance(session)" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">
+                        View Attendance
+                    </button>
                 </div>
             </div>
         </div>
@@ -83,14 +98,32 @@ function goBack() {
                         <td class="border p-2">{{ student.id }}</td>
                         <td class="border p-2">{{ student.name }}</td>
                         <td class="border p-2">
-                            <select v-model="attendanceRecords[student.id]" class="border p-1">
-                                <option value="present">Present</option>
-                                <option value="absent">Absent</option>
-                                <option value="late">Late</option>
-                            </select>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" v-model="attendanceRecords[student.id]" value="present"
+                                        class="hidden peer" />
+                                    <span class="w-4 h-4 rounded-full border border-gray-400 peer-checked:bg-green-500"></span>
+                                    <span>Present</span>
+                                </label>
+
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" v-model="attendanceRecords[student.id]" value="absent"
+                                        class="hidden peer" />
+                                    <span class="w-4 h-4 rounded-full border border-gray-400 peer-checked:bg-red-500"></span>
+                                    <span>Absent</span>
+                                </label>
+
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" v-model="attendanceRecords[student.id]" value="late"
+                                        class="hidden peer" />
+                                    <span class="w-4 h-4 rounded-full border border-gray-400 peer-checked:bg-orange-500"></span>
+                                    <span>Late</span>
+                                </label>
+                            </div>
                         </td>
                         <td class="border p-2">
-                            <input v-model="student.remarks" type="text" placeholder="Add remarks" class="border p-1 w-full" />
+                            <input v-model="student.remarks" type="text" placeholder="Add remarks"
+                                class="border p-1 w-full" />
                         </td>
                     </tr>
                 </tbody>
@@ -100,9 +133,47 @@ function goBack() {
                 <label> <input type="checkbox" v-model="allPresent" @change="markAllPresent" /> Mark All as Present </label>
             </div>
 
-            <button @click="confirmAttendance" class="mt-4 bg-green-500 text-white px-4 py-2 rounded">Confirm Attendance</button>
+            <button @click="confirmAttendance" class="mt-4 bg-green-500 text-white px-4 py-2 rounded">
+                Confirm Attendance
+            </button>
+        </div>
 
-            <p v-if="showSuccess" class="text-green-500 mt-2">Attendance confirmed successfully!</p>
+        <!-- Confirmation Modal -->
+        <div v-if="showConfirmModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center">
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+                <h2 class="text-xl font-bold mb-4">Confirm Attendance</h2>
+                <p>Please double-check the attendance records before confirming.</p>
+                <ul class="mt-4">
+                    <li v-for="student in students" :key="student.id" class="border-b py-2">
+                        <strong>{{ student.name }}:</strong>
+                        <span :class="{
+                            'text-green-500': attendanceRecords[student.id] === 'present',
+                            'text-red-500': attendanceRecords[student.id] === 'absent',
+                            'text-orange-500': attendanceRecords[student.id] === 'late'
+                        }">
+                            {{ attendanceRecords[student.id] }}
+                        </span>
+                        <p v-if="student.remarks" class="text-gray-600">Remarks: {{ student.remarks }}</p>
+                    </li>
+                </ul>
+
+                <div class="mt-4 flex justify-end space-x-2">
+                    <button @click="showConfirmModal = false" class="bg-gray-500 text-white px-4 py-2 rounded">
+                        Cancel
+                    </button>
+                    <button @click="finalizeAttendance" class="bg-green-500 text-white px-4 py-2 rounded">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Message Modal -->
+        <div v-if="showSuccessModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center">
+            <div class="bg-white p-6 rounded-lg shadow-lg w-80 text-center">
+                <h2 class="text-green-500 text-xl font-bold">✔ Success!</h2>
+                <p class="mt-2 text-gray-700">Attendance has been successfully recorded.</p>
+            </div>
         </div>
     </div>
 </template>
