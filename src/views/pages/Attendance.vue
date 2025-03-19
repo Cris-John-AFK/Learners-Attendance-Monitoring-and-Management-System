@@ -54,6 +54,7 @@ function finalizeAttendance() {
         showSuccessModal.value = false;
         showAttendance.value = false;
         selectedSession.value = null;
+        window.location.reload();
     }, 2000);
 }
 
