@@ -17,6 +17,16 @@ const product = ref({});
 const selectedProducts = ref();
 const submitted = ref(false);
 
+function formatTime(date) {
+    if (!date) return '';
+    const time = new Date(date);
+    return time.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+}
+
 function openNew() {
     product.value = {};
     submitted.value = false;
@@ -99,7 +109,7 @@ function deleteSelectedProducts() {
                 <Column field="name" header="Name" sortable></Column>
                 <Column field="setTime" header="Set Time" sortable>
                     <template #body="slotProps">
-                        {{ slotProps.data.setTime }}
+                        {{ formatTime(slotProps.data.setTime) }}
                     </template>
                 </Column>
                 <Column :exportable="false">
@@ -111,14 +121,14 @@ function deleteSelectedProducts() {
             </DataTable>
         </div>
 
-        <Dialog v-model:visible="productDialog" :style="{ width: '450px' }" header="Product Details" :modal="true">
-            <div class="flex flex-col gap-6">
-                <div>
-                    <label for="name" class="block font-bold mb-3">Name</label>
-                    <InputText id="name" v-model.trim="product.name" required autofocus />
+        <Dialog v-model:visible="productDialog" :style="{ width: '450px' }" header="Add New Schedule" :modal="true">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="name">Name</label>
+                    <InputText id="name" v-model="product.name" required autofocus />
                 </div>
-                <div>
-                    <label for="setTime" class="block font-bold mb-3">Set Time</label>
+                <div class="field">
+                    <label for="setTime">Set Time</label>
                     <Calendar v-model="product.setTime" showIcon iconDisplay="input" timeOnly>
                         <template #inputicon="{ clickCallback }">
                             <InputIcon class="pi pi-clock cursor-pointer" @click="clickCallback" />
@@ -129,7 +139,7 @@ function deleteSelectedProducts() {
 
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" text @click="hideDialog" />
-                <Button label="Save" icon="pi pi-check" @click="saveProduct" />
+                <Button label="Save" icon="pi pi-check" @click="saveProduct" autofocus />
             </template>
         </Dialog>
 
