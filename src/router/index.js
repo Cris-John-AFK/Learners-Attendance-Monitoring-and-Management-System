@@ -70,7 +70,12 @@ const router = createRouter({
                     path: '/admin-settings',
                     name: 'admin-settings',
                     component: () => import('@/views/pages/Admin/Admin-Settings.vue')
-                }
+                },
+                {
+                    path: '/archive',
+                    name: 'archive',
+                    component: () => import('@/views/pages/Admin/Archive.vue')
+                },
             ]
         },
         {
