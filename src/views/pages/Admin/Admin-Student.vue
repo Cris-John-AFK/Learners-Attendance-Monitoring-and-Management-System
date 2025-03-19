@@ -1,16 +1,15 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const students = ref([
     { id: 1, name: 'John Doe', qrId: 'QR123456', gradeLevel: 'Grade 3', age: 9, birthdate: '2015-04-12' },
-    { id: 2, name: 'Jane Smith', qrId: 'QR654321', gradeLevel: 'Grade 5', age: 11, birthdate: '2013-07-08' },
-    { id: 3, name: 'Alice Johnson', qrId: 'QR987654', gradeLevel: 'Grade 1', age: 7, birthdate: '2017-09-21' },
-    { id: 4, name: 'Bob Williams', qrId: 'QR456789', gradeLevel: 'Kinder', age: 6, birthdate: '2018-12-05' }
+    { id: 2, name: 'Jane Smith', qrId: 'QR654321', gradeLevel: 'Grade 5', age: 11, birthdate: '2013-07-08' }
 ]);
 
-const expandedRows = ref([]);
 const gradeLevels = ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
 const showModal = ref(false);
+const searchQuery = ref('');
+const expandedRows = ref([]);
 
 const newStudent = ref({
     name: '',
@@ -20,13 +19,35 @@ const newStudent = ref({
     birthdate: ''
 });
 
-const expandAll = () => {
-    expandedRows.value = students.value.reduce((acc, s) => (acc[s.id] = true) && acc, {});
-};
+watch(() => newStudent.value.birthdate, (newBirthdate) => {
+    if (newBirthdate) {
+        const birthDate = new Date(newBirthdate);
+        const today = new Date();
 
-const collapseAll = () => {
-    expandedRows.value = null;
-};
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const hasBirthdayPassed =
+            today.getMonth() > birthDate.getMonth() ||
+            (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
+
+        if (!hasBirthdayPassed) {
+            age -= 1;
+        }
+
+        newStudent.value.age = age;
+    } else {
+        newStudent.value.age = '';
+    }
+});
+
+const filteredStudents = computed(() => {
+    return students.value.filter(student => {
+        return (
+            student.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+            student.qrId.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+            student.gradeLevel.toLowerCase().includes(searchQuery.value.toLowerCase())
+        );
+    });
+});
 
 const openCreateForm = () => {
     showModal.value = true;
@@ -38,13 +59,19 @@ const closeCreateForm = () => {
 
 const addStudent = () => {
     if (newStudent.value.name && newStudent.value.gradeLevel) {
+        let formattedBirthdate = '';
+        if (newStudent.value.birthdate) {
+            const birthDate = new Date(newStudent.value.birthdate);
+            formattedBirthdate = birthDate.toISOString().split('T')[0];
+        }
+
         students.value.push({
             id: students.value.length + 1,
             name: newStudent.value.name,
             qrId: `QR${100000 + students.value.length}`,
             gradeLevel: newStudent.value.gradeLevel,
             age: newStudent.value.age,
-            birthdate: newStudent.value.birthdate
+            birthdate: formattedBirthdate
         });
 
         newStudent.value = { name: '', qrId: '', gradeLevel: '', age: '', birthdate: '' };
@@ -59,13 +86,10 @@ const addStudent = () => {
 
         <div class="flex justify-between items-center mb-4">
             <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
-            <div class="flex gap-2">
-                <Button text icon="pi pi-plus" label="Expand All" @click="expandAll" />
-                <Button text icon="pi pi-minus" label="Collapse All" @click="collapseAll" />
-            </div>
+            <InputText v-model="searchQuery" placeholder="Search students..." class="p-inputtext-lg w-1/3" />
         </div>
 
-        <DataTable v-model:expandedRows="expandedRows" :value="students" dataKey="id" class="p-datatable-striped">
+        <DataTable v-model:expandedRows="expandedRows" :value="filteredStudents" dataKey="id" class="p-datatable-striped">
             <Column expander style="width: 3rem" />
             <Column field="name" header="Name" sortable />
             <Column field="qrId" header="QR ID" sortable />
@@ -84,35 +108,28 @@ const addStudent = () => {
             </template>
         </DataTable>
 
-        <!-- Modal -->
         <Dialog v-model:visible="showModal" modal header="Create Student" class="max-w-md w-full rounded-lg">
-            <div class="p-4 space-y-4">
-                <!-- Student Name -->
+            <div class="p-4 space-y-4 left-2 ">
                 <div>
                     <label for="name" class="block text-gray-700 font-medium">Student Name</label>
-                    <InputText id="name" v-model="newStudent.name" placeholder="Enter Student Name" class="w-full p-inputtext-lg" />
+                    <InputText id="name" v-model="newStudent.name" placeholder="Enter Student Name" class="w-full" />
                 </div>
-
-                <!-- Grade Level -->
                 <div>
-                    <label for="gradeLevel" class="block text-gray-700 font-medium">Grade Level</label>
-                    <Dropdown id="gradeLevel" v-model="newStudent.gradeLevel" :options="gradeLevels" placeholder="Select Grade Level" class="w-full p-inputtext-lg" />
+                    <label for="gradeLevel" class="block font-medium">Grade Level</label>
+                    <Select id="gradeLevel" v-model="newStudent.gradeLevel" :options="gradeLevels" placeholder="Select Grade Level" class="w-full" />
                 </div>
-
-                <!-- Age & Birthdate (Side by Side) -->
-                <div class="flex gap-4">
-                    <div class="flex-1">
-                        <label for="age" class="block text-gray-700 font-medium">Age</label>
-                        <InputText id="age" v-model="newStudent.age" type="number" placeholder="Enter Age" class="w-full p-inputtext-lg" />
-                    </div>
-
+                <div class="flex gap-4 items-center">
                     <div class="flex-1">
                         <label for="birthdate" class="block text-gray-700 font-medium">Birthdate</label>
-                        <Calendar id="birthdate" v-model="newStudent.birthdate" placeholder="Select Birthdate" class="w-full p-inputtext-lg" />
+                        <DatePicker id="birthdate" v-model="newStudent.birthdate" placeholder="Select Birthdate"
+                            class="w-full h-[30px] !p-0" showIcon dateFormat="yy-mm-dd"/>
+                    </div>
+                    <div class="flex-1">
+                        <label for="age" class="block text-gray-700 font-medium">Age</label>
+                        <InputText id="age" v-model="newStudent.age" type="number"
+                            class="w-full h-[30px] flex items-center !p-3" disabled />
                     </div>
                 </div>
-
-                <!-- Buttons -->
                 <div class="flex justify-end space-x-2 mt-4">
                     <Button label="Cancel" class="p-button-text" @click="closeCreateForm" />
                     <Button label="Add Student" icon="pi pi-user-plus" class="p-button-success" @click="addStudent" />
@@ -121,6 +138,7 @@ const addStudent = () => {
         </Dialog>
     </div>
 </template>
+
 
 <style scoped>
 :deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
