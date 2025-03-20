@@ -1,8 +1,17 @@
 <script setup>
+import SakaiCard from '@/components/SakaiCard.vue';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-const grades = ref(Array.from({ length: 12 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
+const grades = ref([
+    { grade: 'Kinder' },
+    { grade: 'Grade 1' },
+    { grade: 'Grade 2' },
+    { grade: 'Grade 3' },
+    { grade: 'Grade 4' },
+    { grade: 'Grade 5' },
+    { grade: 'Grade 6' }
+]);
 const selectedGrade = ref(null);
 const showSections = (grade) => {
     selectedGrade.value = grade;
@@ -14,24 +23,27 @@ const goBack = () => {
     selectedGrade.value = null;
 };
 
-const gradeColors = [
-    'linear-gradient(135deg, #ff7eb3, #ff758c)',
-    'linear-gradient(135deg, #ff9a8b, #ff6a88)',
-    'linear-gradient(135deg, #ff758c, #ff7eb3)',
-    'linear-gradient(135deg, #6a11cb, #2575fc)',
-    'linear-gradient(135deg, #36d1dc, #5b86e5)',
-    'linear-gradient(135deg, #ff512f, #dd2476)',
-    'linear-gradient(135deg, #1fa2ff, #12d8fa)',
-    'linear-gradient(135deg, #ff6a00, #ee0979)',
-    'linear-gradient(135deg, #00c6ff, #0072ff)',
-    'linear-gradient(135deg, #f4c4f3, #fc67fa)',
-    'linear-gradient(135deg, #ff0844, #ffb199)',
-    'linear-gradient(135deg, #a18cd1, #fbc2eb)'
-];
+const getRandomGradient = () => {
+    const colors = [
+        '#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee',
+        '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2',
+        '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'
+    ];
 
+    const color1 = colors[Math.floor(Math.random() * colors.length)];
+    const color2 = colors[Math.floor(Math.random() * colors.length)];
+
+    return `linear-gradient(135deg, ${color1}, ${color2})`;
+};
 const getGradeColor = (index) => ({
     backgroundImage: gradeColors[index % gradeColors.length]
 });
+
+const cardStyles = computed(() =>
+    grades.value.map(() => ({
+        background: getRandomGradient()
+    }))
+);
 
 const toast = useToast();
 const expandedRows = ref([]);
@@ -108,18 +120,63 @@ function getStatusSeverity(status) {
 </script>
 
 <template>
-    <div v-if="selectedGrade !== 'attendance'" class="card-container">
-        <sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" @click="showSections(grade.grade)">
-            <div class="card-header" :style="getGradeColor(index)">
+    <!-- Show grade selection if no grade is selected -->
+    <div v-if="!selectedGrade" class="card-container">
+        <Sakai-card
+            v-for="(grade, index) in grades"
+            :key="index"
+            class="custom-card"
+            :style="cardStyles[index]"
+            @click="showSections(grade.grade)"
+        >
+            <div class="card-header">
                 <h1 class="grade-name">{{ grade.grade }}</h1>
             </div>
-            <div class="card-body"></div>
-            <div class="card-footer">
-                <i class="pi pi-id-card hover-icon" @click.stop="showAttendance"></i>
-                <i class="pi pi-folder"></i>
-            </div>
-        </sakai-card>
+        </Sakai-card>
     </div>
+
+    <!-- Show sections for the selected grade -->
+    <div v-else-if="selectedGrade !== 'attendance'">
+        <div class="card">
+            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded">Back</button>
+            <div class="font-semibold text-xl mb-4">Sections for {{ selectedGrade }}</div>
+
+            <DataTable v-model:expandedRows="expandedRows" :value="sections" dataKey="id" tableStyle="min-width: 60rem">
+                <Column expander style="width: 5rem" />
+                <Column field="title" header="Section Name"></Column>
+
+                <Column field="date" header="Date">
+                    <template #body="slotProps">
+                        <Calendar v-model="slotProps.data.date" dateFormat="yy-mm-dd" showIcon @update:modelValue="updateAllDates(slotProps.data.date)" />
+                    </template>
+                </Column>
+
+                <template #expansion="slotProps">
+                    <div class="p-4">
+                        <h5>Attendance for {{ slotProps.data.title }}</h5>
+                        <DataTable :value="filteredStudents(slotProps.data.students)">
+                            <Column field="id" header="ID" sortable></Column>
+                            <Column field="name" header="Name" sortable></Column>
+                            <Column field="status" header="Status" sortable>
+                                <template #body="student">
+                                    <Tag :value="student.data.status" :severity="getStatusSeverity(student.data.status)" />
+                                </template>
+                            </Column>
+                            <Column field="remarks" header="Remarks" sortable></Column>
+                            <Column>
+                                <template #body="student">
+                                    <Button icon="pi pi-pencil" class="p-button-warning mr-2" @click="editStudent(student.data)" />
+                                    <Button icon="pi pi-trash" class="p-button-danger" @click="deleteStudent(student.data.id)" />
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
+                </template>
+            </DataTable>
+        </div>
+    </div>
+
+    <!-- Show attendance view -->
     <div v-else>
         <div class="card">
             <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded">Back</button>
@@ -168,11 +225,17 @@ function getStatusSeverity(status) {
     </div>
 </template>
 
+
 <style scoped>
 .card-container {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 900px; /* Set a max width to limit stretching */
+    margin: 0 auto; /* Center the grid */
 }
 .custom-card {
     width: 200px;
@@ -181,24 +244,27 @@ function getStatusSeverity(status) {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
     cursor: pointer;
+    text-align: center;
+    background: #f0f0f0;
+    transition: transform 0.2s, box-shadow 0.2s;
+    color: white;
+    font-weight: bold;
 }
 .custom-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
+
 .card-header {
     color: white;
-    padding: 15px;
-    text-align: center;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
 }
-.grade-name {
-    font-size: 18px;
-    margin: 0;
-}
+
 .card-body {
     flex-grow: 1;
     background: white;

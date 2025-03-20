@@ -60,7 +60,6 @@ const filteredRecords = computed(() => {
 const goBack = () => {
     router.go(-1);
 };
-
 onMounted(fetchStudent);
 </script>
 
@@ -73,9 +72,8 @@ onMounted(fetchStudent);
 
         <div v-if="student" class="mt-4 flex gap-4">
             <img v-if="student.photo" :src="student.photo" alt="Student Photo" class="w-32 h-32 object-cover rounded-lg border" />
-
             <div>
-                <p><strong>Name:</strong> {{ student.firstName }} {{ student.lastName }}</p>
+                <p><strong>Name:</strong> {{ student.firstName }} {{ student.middleName ? student.middleName + ' ' : '' }}{{ student.lastName }}</p>
                 <p><strong>Gender:</strong> {{ student.gender }}</p>
                 <p><strong>Grade Level:</strong> {{ student.gradeLevel }}</p>
                 <p><strong>Section:</strong> {{ student.section }}</p>

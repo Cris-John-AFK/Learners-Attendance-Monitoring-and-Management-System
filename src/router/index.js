@@ -44,11 +44,6 @@ const router = createRouter({
             children: [
                 {
                     path: '/admin',
-                    name: 'admin-dashboard',
-                    component: () => import('@/views/admin/AdminDashboard.vue')
-                },
-                {
-                    path: '/admin-graph',
                     name: 'admin-graph',
                     component: () => import('@/views/pages/Admin/Admin-Graph.vue')
                 },
@@ -76,7 +71,7 @@ const router = createRouter({
                     path: '/archive',
                     name: 'archive',
                     component: () => import('@/views/pages/Admin/Archive.vue')
-                },
+                }
             ]
         },
         {
