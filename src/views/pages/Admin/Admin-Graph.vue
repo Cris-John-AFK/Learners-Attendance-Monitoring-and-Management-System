@@ -1,18 +1,23 @@
 <template>
     <div class="attendance-container">
       <h2 class="title">Attendance Overview</h2>
-      <AttendanceChart />
+      <AttendanceChart :chartData="defaultGradeChartData" />
     </div>
 
     <div class="card-container">
-        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="showSections(grade.grade)">
+        <Sakai-card
+            v-for="(grade, index) in grades"
+            :key="index"
+            class="custom-card"
+            :style="cardStyles[index]"
+            @click="showSections(grade.grade)">
             <div class="card-header">
                 <h1 class="grade-name">{{ grade.grade }}</h1>
             </div>
         </Sakai-card>
     </div>
 
-    <Dialog v-model:visible="showModal" modal header="Section Attendance Overview" :style="{ width: '50vw' }">
+    <Dialog v-model:visible="showModal" modal header="Section Attendance Overview" :style="{ width: '80vw' }">
       <AttendanceChart v-if="selectedGradeData" :chartData="selectedGradeData" />
     </Dialog>
 </template>
@@ -33,61 +38,73 @@ const grades = ref([
     { grade: 'Grade 6' }
 ]);
 
+// Default chart data for grade-level attendance
+const defaultGradeChartData = ref({
+    labels: ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'],
+    datasets: [
+        { label: 'Present', backgroundColor: '#90EE90', data: [45, 48, 42, 40, 43, 38, 35] },
+        { label: 'Absent', backgroundColor: '#FFB6C1', data: [5, 4, 8, 10, 7, 12, 15] },
+        { label: 'Late', backgroundColor: '#FFD580', data: [7, 5, 6, 5, 6, 4, 7] }
+    ]
+});
+
+
+// Section-wise attendance data
 const gradeSectionsData = ref({
     'Kinder': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [90, 85, 88, 80] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [5, 8, 7, 10] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 7, 5, 10] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [90, 85, 88, 80] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [5, 8, 7, 10] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [5, 7, 5, 10] }
         ]
     },
     'Grade 1': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [85, 88, 80, 75] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [8, 7, 10, 12] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [7, 5, 10, 13] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [85, 88, 80, 75] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [8, 7, 10, 12] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [7, 5, 10, 13] }
         ]
     },
     'Grade 2': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [88, 85, 82, 89] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [7, 10, 9, 5] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 5, 9, 6] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [5, 5, 9, 6] }
         ]
     },
     'Grade 3': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [80, 85, 82, 88] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [10, 7, 9, 5] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [10, 8, 9, 7] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [5, 5, 9, 6] }
         ]
     },
     'Grade 4': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [85, 80, 88, 90] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [7, 10, 6, 5] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [8, 10, 6, 5] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [5, 5, 9, 6] }
         ]
     },
     'Grade 5': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [80, 88, 85, 87] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [10, 5, 7, 6] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [10, 7, 8, 7] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFD580', data: [5, 5, 9, 6] }
         ]
     },
     'Grade 6': {
         labels: ['Section A', 'Section B', 'Section C', 'Section D'],
         datasets: [
-            { label: 'Present', backgroundColor: '#42A5F5', data: [90, 88, 85, 83] },
-            { label: 'Absent', backgroundColor: '#FF6384', data: [5, 7, 10, 8] },
-            { label: 'Late', backgroundColor: '#FFCE56', data: [5, 5, 5, 9] }
+            { label: 'Present', backgroundColor: '#90EE90', data: [88, 85, 82, 89] },
+            { label: 'Absent', backgroundColor: '#FFB6C1', data: [7, 10, 9, 5] },
+            { label: 'Late', backgroundColor: '#FFD580  ', data: [5, 5, 9, 6] }
         ]
     }
 });
@@ -96,7 +113,7 @@ const showModal = ref(false);
 const selectedGradeData = ref(null);
 
 const showSections = (grade) => {
-    selectedGradeData.value = gradeSectionsData.value[grade];
+    selectedGradeData.value = gradeSectionsData.value[grade] || null;
     showModal.value = true;
 };
 
@@ -137,8 +154,8 @@ const cardStyles = computed(() =>
     justify-content: center;
     align-items: center;
     width: 100%;
-    max-width: 900px; /* Set a max width to limit stretching */
-    margin: 0 auto; /* Center the grid */
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 .custom-card {
@@ -150,7 +167,6 @@ const cardStyles = computed(() =>
     flex-direction: column;
     cursor: pointer;
     text-align: center;
-    background: #f0f0f0;
     transition: transform 0.2s, box-shadow 0.2s;
     color: white;
     font-weight: bold;
