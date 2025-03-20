@@ -74,6 +74,6 @@ const chartOptions = ref({
 
 <template>
   <div>
-    <VueApexCharts type="bar" height="350" :options="chartOptions" :series="chartOptions.series" />
+    <VueApexCharts type="bar" height="350" width="900" :options="chartOptions" :series="chartOptions.series" />
   </div>
 </template>
