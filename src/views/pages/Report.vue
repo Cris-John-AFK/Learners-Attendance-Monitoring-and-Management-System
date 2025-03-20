@@ -1,6 +1,6 @@
 <template>
     <div class="card">
-        <div class="font-semibold text-xl mb-4">Attendance History</div>
+        <div class="font-semibold text-xl mb-4">Attendance Report</div>
         <DataTable v-model:expandedRows="expandedRows" :value="sessions" dataKey="id" tableStyle="min-width: 60rem">
             <template #header>
                 <div class="flex flex-wrap justify-end gap-2">
