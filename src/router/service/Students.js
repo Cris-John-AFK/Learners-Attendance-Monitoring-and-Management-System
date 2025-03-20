@@ -11,6 +11,8 @@ export const AttendanceService = {
                 timeIn: '07:20 AM',
                 timeOut: '04:25 PM',
                 gender: 'Female',
+                gradeLevel: 3,
+                section: 'A',
                 photo: photos[0]?.itemImageSrc
             },
             {
@@ -20,6 +22,8 @@ export const AttendanceService = {
                 timeIn: '07:10 AM',
                 timeOut: '04:35 PM',
                 gender: 'Male',
+                gradeLevel: 4,
+                section: 'B',
                 photo: photos[1]?.itemImageSrc
             },
             {
@@ -29,6 +33,8 @@ export const AttendanceService = {
                 timeIn: '07:25 AM',
                 timeOut: '04:40 PM',
                 gender: 'Female',
+                gradeLevel: 5,
+                section: 'C',
                 photo: photos[2]?.itemImageSrc
             },
             {
@@ -38,6 +44,8 @@ export const AttendanceService = {
                 timeIn: '07:05 AM',
                 timeOut: '04:20 PM',
                 gender: 'Male',
+                gradeLevel: 6,
+                section: 'D',
                 photo: photos[3]?.itemImageSrc
             },
             {
@@ -47,6 +55,8 @@ export const AttendanceService = {
                 timeIn: '07:18 AM',
                 timeOut: '04:45 PM',
                 gender: 'Female',
+                gradeLevel: 2,
+                section: 'E',
                 photo: photos[4]?.itemImageSrc
             },
             {
@@ -56,6 +66,8 @@ export const AttendanceService = {
                 timeIn: '07:22 AM',
                 timeOut: '04:38 PM',
                 gender: 'Male',
+                gradeLevel: 3,
+                section: 'A',
                 photo: photos[5]?.itemImageSrc
             },
             {
@@ -65,6 +77,8 @@ export const AttendanceService = {
                 timeIn: '07:08 AM',
                 timeOut: '04:28 PM',
                 gender: 'Female',
+                gradeLevel: 4,
+                section: 'B',
                 photo: photos[6]?.itemImageSrc
             },
             {
@@ -74,6 +88,8 @@ export const AttendanceService = {
                 timeIn: '07:12 AM',
                 timeOut: '04:50 PM',
                 gender: 'Male',
+                gradeLevel: 5,
+                section: 'C',
                 photo: photos[7]?.itemImageSrc
             },
             {
@@ -83,6 +99,8 @@ export const AttendanceService = {
                 timeIn: '07:30 AM',
                 timeOut: '04:15 PM',
                 gender: 'Male',
+                gradeLevel: 6,
+                section: 'D',
                 photo: photos[8]?.itemImageSrc
             },
             {
@@ -92,6 +110,8 @@ export const AttendanceService = {
                 timeIn: '07:15 AM',
                 timeOut: '04:30 PM',
                 gender: 'Male',
+                gradeLevel: 2,
+                section: 'E',
                 photo: photos[9]?.itemImageSrc
             }
         ];
