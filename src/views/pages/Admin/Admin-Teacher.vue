@@ -6,7 +6,6 @@ import Dropdown from 'primevue/dropdown';
 import FileUpload from 'primevue/fileupload';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import Rating from 'primevue/rating';
 import { computed, onBeforeMount, ref } from 'vue';
 
 const products = ref(null);
@@ -37,6 +36,15 @@ const newOrder = ref({
 
 const editSubjectDialog = ref(false);
 const editingSubject = ref(null);
+const searchDialog = ref(false);
+const selectedTeacher = ref(null);
+const sectionsDialog = ref(false);
+const selectedSubject = ref(null);
+const createSectionDialog = ref(false);
+const newSection = ref({
+    name: '',
+    students: 0
+});
 
 function expandAll() {
     expandedRows.value = products.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
@@ -207,6 +215,47 @@ function saveEditSubject() {
     editingSubject.value = null;
 }
 
+function openSearchDialog(teacher) {
+    selectedTeacher.value = teacher;
+    searchDialog.value = true;
+}
+
+function openSectionsDialog(subject) {
+    selectedSubject.value = subject;
+    sectionsDialog.value = true;
+}
+
+function openCreateSectionDialog() {
+    newSection.value = {
+        name: '',
+        students: 0
+    };
+    createSectionDialog.value = true;
+}
+
+function saveNewSection() {
+    // Create a new section object
+    const section = {
+        id: Date.now(),
+        name: newSection.value.name,
+        students: newSection.value.students
+    };
+
+    // Find the subject in the products data
+    if (selectedSubject.value) {
+        // Initialize sections array if it doesn't exist
+        if (!selectedSubject.value.sections) {
+            selectedSubject.value.sections = [];
+        }
+
+        // Add the new section to the subject's sections array
+        selectedSubject.value.sections.push(section);
+    }
+
+    // Close the dialog
+    createSectionDialog.value = false;
+}
+
 onBeforeMount(() => {
     ProductService.getProductsWithOrdersSmall().then((data) => (products.value = data));
 });
@@ -245,8 +294,7 @@ onBeforeMount(() => {
             <Column field="category" header="Room No."></Column>
             <Column field="rating" header="No. Subjects" class="text-center custom-column">
                 <template #body="slotProps">
-                    <!-- eslint-disable-next-line vue/no-unused-vars -->
-                    4
+                    {{ slotProps.data.rating }}
                 </template>
             </Column>
 
@@ -263,7 +311,7 @@ onBeforeMount(() => {
             <Column header="Actions">
                 <template #body="slotProps">
                     <div class="flex gap-2">
-                        <Button icon="pi pi-search" class="p-button-rounded p-button-text" />
+                        <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="openSearchDialog(slotProps.data)" />
                         <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="openEdit(slotProps.data)" />
                     </div>
                 </template>
@@ -276,9 +324,9 @@ onBeforeMount(() => {
                         <Column field="id" header="Id" sortable></Column>
                         <Column field="customer" header="Subjects" sortable></Column>
                         <Column field="date" header="Date" sortable></Column>
-                        <Column field="amount" header="No. Students" sortable>
+                        <Column field="amount" header="No. Sections" sortable>
                             <template #body="slotProps">
-                                {{ formatCurrency(slotProps.data.amount) }}
+                                <div class="flex items-center gap-2">{{ slotProps.data.amount }} / 6</div>
                             </template>
                         </Column>
                         <Column field="status" header="Status" sortable>
@@ -286,10 +334,11 @@ onBeforeMount(() => {
                                 <Tag :value="slotProps.data.status.toLowerCase()" :severity="getOrderSeverity(slotProps.data)" />
                             </template>
                         </Column>
-                        <Column headerStyle="width:4rem">
+
+                        <Column field="Actions" header="Actions" sortable headerStyle="width:4rem">
                             <template #body="slotProps">
                                 <div class="flex gap-2">
-                                    <Button icon="pi pi-search" class="p-button-rounded p-button-text" />
+                                    <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="openSectionsDialog(slotProps.data)" />
                                     <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="openEditSubject(slotProps.data)" />
                                 </div>
                             </template>
@@ -324,7 +373,7 @@ onBeforeMount(() => {
                 </div>
                 <div class="field">
                     <label for="edit-rating">No. Subjects</label>
-                    <Rating id="edit-rating" v-model="editingProduct.rating" />
+                    <InputNumber id="edit-rating" v-model="editingProduct.rating" :min="0" />
                 </div>
             </div>
             <template #footer>
@@ -353,8 +402,8 @@ onBeforeMount(() => {
                     <Dropdown id="new-status" v-model="newProduct.inventoryStatus" :options="['INSTOCK', 'LOWSTOCK', 'OUTOFSTOCK']" placeholder="Select Status" />
                 </div>
                 <div class="field">
-                    <label for="new-rating">Rating</label>
-                    <Rating id="new-rating" v-model="newProduct.rating" />
+                    <label for="new-rating">No. Subjects</label>
+                    <InputNumber id="new-rating" v-model="newProduct.rating" :min="0" />
                 </div>
             </div>
             <template #footer>
@@ -414,6 +463,116 @@ onBeforeMount(() => {
                 <Button label="Save" icon="pi pi-check" @click="saveEditSubject" autofocus />
             </template>
         </Dialog>
+
+        <!-- Search Dialog -->
+        <Dialog v-model:visible="searchDialog" modal header="Teacher Details" :style="{ width: '450px' }">
+            <div class="p-fluid" v-if="selectedTeacher">
+                <div class="field">
+                    <label>Teacher Name</label>
+                    <div class="p-inputtext">{{ selectedTeacher.name }}</div>
+                </div>
+                <div class="field">
+                    <label>Room No.</label>
+                    <div class="p-inputtext">{{ selectedTeacher.category }}</div>
+                </div>
+                <div class="field">
+                    <label>No. Subjects</label>
+                    <div class="p-inputtext">{{ selectedTeacher.rating }}</div>
+                </div>
+                <div class="field">
+                    <label>Status</label>
+                    <div class="p-inputtext">
+                        <Tag :value="selectedTeacher.inventoryStatus" :severity="getStockSeverity(selectedTeacher)" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Subjects</label>
+                    <DataTable :value="selectedTeacher.orders" scrollable scrollHeight="200px">
+                        <Column field="customer" header="Subject Name"></Column>
+                        <Column field="date" header="Date"></Column>
+                        <Column field="amount" header="No. Sections"></Column>
+                        <Column field="status" header="Status">
+                            <template #body="slotProps">
+                                <Tag :value="slotProps.data.status.toLowerCase()" :severity="getOrderSeverity(slotProps.data)" />
+                            </template>
+                        </Column>
+                    </DataTable>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" @click="searchDialog = false" text />
+            </template>
+        </Dialog>
+
+        <!-- Sections Dialog -->
+        <Dialog v-model:visible="sectionsDialog" modal header="Sections" :style="{ width: '500px' }">
+            <div data-v-f484c513="">
+                <div data-v-f484c513="" class="flex justify-between items-center">
+                    <h3 data-v-f484c513="">Sections in {{ selectedSubject?.customer }}</h3>
+                    <Button data-v-f484c513="" class="p-button-success" type="button" aria-label="Create" @click="openCreateSectionDialog">
+                        <span class="p-button-icon p-button-icon-left pi pi-plus"></span>
+                        <span class="p-button-label">Create</span>
+                    </Button>
+                </div>
+                <ul data-v-f484c513="" class="section-list">
+                    <li data-v-f484c513="" class="section-item">
+                        <span data-v-f484c513="" class="section-name">Section A</span>
+                        <div data-v-f484c513="" class="section-buttons">
+                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="View">
+                                <span class="p-button-icon p-button-icon-left pi pi-eye"></span>
+                                <span class="p-button-label">View</span>
+                            </Button>
+                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="Edit">
+                                <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
+                                <span class="p-button-label">Edit</span>
+                            </Button>
+                            <Button data-v-f484c513="" class="p-button-danger p-button-sm" type="button" aria-label="Delete">
+                                <span class="p-button-icon p-button-icon-left pi pi-trash"></span>
+                                <span class="p-button-label">Delete</span>
+                            </Button>
+                        </div>
+                    </li>
+                    <li data-v-f484c513="" class="section-item">
+                        <span data-v-f484c513="" class="section-name">Section B</span>
+                        <div data-v-f484c513="" class="section-buttons">
+                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="View">
+                                <span class="p-button-icon p-button-icon-left pi pi-eye"></span>
+                                <span class="p-button-label">View</span>
+                            </Button>
+                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="Edit">
+                                <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
+                                <span class="p-button-label">Edit</span>
+                            </Button>
+                            <Button data-v-f484c513="" class="p-button-danger p-button-sm" type="button" aria-label="Delete">
+                                <span class="p-button-icon p-button-icon-left pi pi-trash"></span>
+                                <span class="p-button-label">Delete</span>
+                            </Button>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" @click="sectionsDialog = false" text />
+            </template>
+        </Dialog>
+
+        <!-- Create Section Dialog -->
+        <Dialog v-model:visible="createSectionDialog" modal header="Create New Section" :style="{ width: '400px' }">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="section-name">Section Name</label>
+                    <InputText id="section-name" v-model="newSection.name" />
+                </div>
+                <div class="field">
+                    <label for="section-students">Number of Students</label>
+                    <InputNumber id="section-students" v-model="newSection.students" :min="0" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" @click="createSectionDialog = false" text />
+                <Button label="Save" icon="pi pi-check" @click="saveNewSection" autofocus />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -424,5 +583,41 @@ onBeforeMount(() => {
 
 :deep(.p-datatable-scrollable .p-frozen-column) {
     font-weight: bold;
+}
+
+.section-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.section-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.section-item:last-child {
+    border-bottom: none;
+}
+
+.section-name {
+    font-weight: 500;
+}
+
+.section-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+:deep(.p-button-sm) {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+:deep(.p-button-icon-left) {
+    margin-right: 0.25rem;
 }
 </style>
