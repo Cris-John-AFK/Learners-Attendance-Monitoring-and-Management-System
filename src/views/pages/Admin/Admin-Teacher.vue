@@ -274,9 +274,7 @@ onBeforeMount(() => {
                         <Column field="customer" header="Subjects" sortable></Column>
                         <Column field="date" header="Date" sortable></Column>
                         <Column field="amount" header="No. Students" sortable>
-                            <template #body="slotProps">
-                                {{ formatCurrency(slotProps.data.amount) }}
-                            </template>
+                            <template #body="slotProps"> 60/ 60 </template>
                         </Column>
                         <Column field="status" header="Status" sortable>
                             <template #body="slotProps">

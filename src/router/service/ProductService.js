@@ -382,8 +382,8 @@ export const ProductService = {
                         id: '1000-0',
                         productCode: 'f230fh0g3',
                         date: '2020-09-13',
-                        amount: 65,
-                        quantity: 1,
+                        amount: 60 / 60,
+                        quantity: 70 / 60,
                         customer: 'Araling Panlipunan',
                         status: 'PENDING'
                     },
