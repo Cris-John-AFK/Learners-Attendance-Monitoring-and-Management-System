@@ -176,7 +176,7 @@ onMounted(() => {
 <template>
     <div class="card">
         <div class="flex justify-between items-center mb-4">
-            <div class="font-semibold text-xl">Attendance Analytics</div>
+            <div class="font-semibold text-xl">Attendance Analytics Carrot Chart</div>
             <div class="flex gap-2">
                 <select v-model="selectedView" class="border rounded px-2 py-1">
                     <option value="daily">Daily</option>
