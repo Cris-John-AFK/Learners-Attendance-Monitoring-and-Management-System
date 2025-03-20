@@ -14,6 +14,7 @@ const scanning = ref(false);
 const attendanceRecords = ref([]);
 const searchQuery = ref('');
 const selectedStudent = ref(null);
+const allStudents = AttendanceService.getData();
 
 watch(isSidebarActive, (newVal) => {
     if (newVal) {
@@ -62,16 +63,15 @@ const startScan = () => {
 };
 
 const addStudentRecord = () => {
-    const students = AttendanceService.getData();
-    if (students.length > attendanceRecords.value.length) {
-        const newRecord = students[attendanceRecords.value.length];
+    if (attendanceRecords.value.length < allStudents.length) {
+        const newRecord = allStudents[attendanceRecords.value.length];
         attendanceRecords.value.push(newRecord);
         selectedStudent.value = newRecord; // Show details of last added student
     }
 };
 
 const fetchStudentDetails = (studentId) => {
-    const student = attendanceRecords.value.find((s) => s.id.toString() === studentId);
+    const student = allStudents.find((s) => s.id.toString() === studentId);
     if (student) {
         selectedStudent.value = student;
     }
@@ -104,6 +104,7 @@ const filteredRecords = computed(() => {
                 <div class="student-details" v-if="selectedStudent">
                     <h2>Student Attendance Details</h2>
                     <img :src="selectedStudent.photo" alt="Student Photo" class="student-photo" />
+                    <p><strong>ID:</strong> {{ selectedStudent.id }}</p>
                     <p><strong>Name:</strong> {{ selectedStudent.name }}</p>
                     <p><strong>Gender:</strong> {{ selectedStudent.gender }}</p>
                     <p><strong>Grade Level:</strong> {{ selectedStudent.gradeLevel }}</p>
