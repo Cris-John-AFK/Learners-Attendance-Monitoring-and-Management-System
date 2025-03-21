@@ -1,6 +1,5 @@
 <script setup>
 import SakaiCard from '@/components/SakaiCard.vue';
-import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 const deleteSection = (index) => {
@@ -32,15 +31,24 @@ const cardStyles = computed(() =>
     }))
 );
 
-const grades = ref(Array.from({ length: 7 }, (_, i) => ({ grade: `Grade ${i + 1}` })));
+const grades = ref([
+    { grade: 'Kinder' },
+    { grade: 'Grade 1' },
+    { grade: 'Grade 2' },
+    { grade: 'Grade 3' },
+    { grade: 'Grade 4' },
+    { grade: 'Grade 5' },
+    { grade: 'Grade 6' }
+]);
+
 const gradeSections = ref({
+    'Kinder': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 4': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 5': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 7': [{ name: 'Section A' }, { name: 'Section B' }],
+    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }]
 });
 
 const sectionStudents = ref({
@@ -54,13 +62,17 @@ const sectionStudents = ref({
     ]
 });
 
+// State Variables
 const selectedGrade = ref(null);
 const selectedSection = ref(null);
 const showModal = ref(false);
 const showCreateForm = ref(false);
-const newSection = ref({ name: '', students: '' });
-const toast = useToast();
+const showEditForm = ref(false);
 
+const newSection = ref({ name: '', students: '' });
+const editedSection = ref({ name: '', students: [], index: null });
+
+// Open Sections Modal
 const openSectionsModal = (grade) => {
     selectedGrade.value = grade;
     showModal.value = true;
@@ -74,23 +86,20 @@ const selectSection = (section) => {
     }
 };
 
-// Close the Sections modal and open the Create Section modal
 const openCreateForm = () => {
-    showModal.value = false; // Close the Sections modal
-    showCreateForm.value = true; // Open the Create Section modal
+    showModal.value = false;
+    showCreateForm.value = true;
     newSection.value = { name: '', students: '' };
 };
 
 const createSection = () => {
     if (!newSection.value.name) return;
 
-    // Add the new section to the selected grade
     gradeSections.value[selectedGrade.value] = [
         ...(gradeSections.value[selectedGrade.value] || []),
         { name: newSection.value.name }
     ];
 
-    // Assign students to the new section
     sectionStudents.value[newSection.value.name] = newSection.value.students
         ? newSection.value.students.split(',').map(name => ({
             id: `S${Math.floor(Math.random() * 1000)}`,
@@ -98,17 +107,55 @@ const createSection = () => {
         }))
         : [];
 
-    // Show success notification
     toast.add({ severity: 'success', summary: 'Section Added', detail: 'New section created.', life: 3000 });
 
-    // Close the Create Section modal
     showCreateForm.value = false;
+};
+
+// Open Edit Section Form
+const openEditForm = (section, index) => {
+    editedSection.value = {
+        name: section.name,
+        index,
+        students: sectionStudents.value[section.name] || []
+    };
+    showEditForm.value = true;
+};
+
+// Update Section
+const updateSection = () => {
+    if (!editedSection.value.name) return;
+
+    // Update section name
+    const oldSectionName = gradeSections.value[selectedGrade.value][editedSection.value.index].name;
+    const newSectionName = editedSection.value.name;
+
+    gradeSections.value[selectedGrade.value][editedSection.value.index].name = newSectionName;
+
+    // Update students list
+    sectionStudents.value[newSectionName] = [...editedSection.value.students];
+
+    // Remove old section students if name changed
+    if (oldSectionName !== newSectionName) {
+        delete sectionStudents.value[oldSectionName];
+    }
+
+    toast.add({ severity: 'success', summary: 'Section Updated', detail: 'Section details updated.', life: 3000 });
+
+    showEditForm.value = false;
 };
 </script>
 
+
 <template>
     <div class="card-container">
-        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.grade)">
+        <Sakai-card
+            v-for="(grade, index) in grades"
+            :key="index"
+            class="custom-card"
+            :style="cardStyles[index]"
+            @click="openSectionsModal(grade.grade)"
+        >
             <div class="card-header">
                 <h1 class="grade-name">{{ grade.grade }}</h1>
             </div>
@@ -123,14 +170,15 @@ const createSection = () => {
                 <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
             </div>
             <ul class="section-list">
-                <li v-for="(section, index) in gradeSections[selectedGrade]"
+                <li
+                    v-for="(section, index) in gradeSections[selectedGrade]"
                     :key="index"
                     class="section-item"
                 >
                     <span class="section-name" @click="selectSection(section.name)">{{ section.name }}</span>
                     <div class="section-buttons">
                         <Button label="View" icon="pi pi-eye" class="p-button-text p-button-sm" @click="selectSection(section.name)" />
-                        <Button label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" />
+                        <Button label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" @click="openEditForm(section, index)" />
                         <Button label="Delete" icon="pi pi-trash" class="p-button-danger p-button-sm" @click="deleteSection(index)" />
                     </div>
                 </li>
@@ -149,6 +197,23 @@ const createSection = () => {
             <Button label="Back" icon="pi pi-arrow-left" @click="selectedSection = null" />
         </div>
     </Dialog>
+    <Dialog v-model:visible="showEditForm" :style="{ width: '500px' }" header="Edit Section" :modal="true">
+        <h3 class="mb-2">Edit Section</h3>
+
+        <label class="font-bold">Section Name</label>
+        <InputText v-model="editedSection.name" placeholder="Enter section name" class="w-full mb-3" />
+
+        <label class="font-bold">Students</label>
+        <MultiSelect v-model="editedSection.students" :options="allStudents" optionLabel="name" placeholder="Select students"
+            class="w-full mb-3" />
+
+        <div class="flex justify-end gap-2">
+            <Button label="Cancel" class="p-button-text" @click="showEditForm = false" />
+            <Button label="Save" class="p-button-success" @click="updateSection" />
+        </div>
+    </Dialog>
+
+
 
     <!-- Create Section Modal -->
     <Dialog v-model:visible="showCreateForm" :style="{ width: '500px' }" header="Create New Section" :modal="true">
