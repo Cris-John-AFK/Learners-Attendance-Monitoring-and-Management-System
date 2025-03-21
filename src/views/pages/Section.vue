@@ -54,7 +54,7 @@ const sections = ref([
         date: '2025-03-10',
         students: [
             { id: 'S001', name: 'John Doe', status: 'Present', remarks: '' },
-            { id: 'S002', name: 'Jane Smith', status: 'Absent', remarks: '' }
+            { id: 'S002', name: 'Jane Smith', status: 'Absent', remarks: 'Schedule for Checkup' }
         ]
     }
 ]);
@@ -81,12 +81,6 @@ const editStudent = (student) => {
     selectedStudent.value = student;
     studentDialog.value = true;
 };
-
-const deleteStudent = (studentId) => {
-    sections.value[0].students = sections.value[0].students.filter((student) => student.id !== studentId);
-    toast.add({ severity: 'warn', summary: 'Student Removed', detail: 'Student has been deleted.', life: 3000 });
-};
-
 const updateAllDates = (newDate) => {
     sections.value.forEach((section) => {
         section.date = newDate;
@@ -165,8 +159,7 @@ function getStatusSeverity(status) {
                             <Column field="remarks" header="Remarks" sortable></Column>
                             <Column>
                                 <template #body="student">
-                                    <Button icon="pi pi-pencil" class="p-button-warning mr-2" @click="editStudent(student.data)" />
-                                    <Button icon="pi pi-trash" class="p-button-danger" @click="deleteStudent(student.data.id)" />
+                                    <Button icon="pi pi-pencil" class="p-button-warning mr-2" @click="editStudent(student.data)" title="Edit"/>
                                 </template>
                             </Column>
                         </DataTable>

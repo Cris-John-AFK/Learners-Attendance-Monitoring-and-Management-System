@@ -53,7 +53,7 @@
             class="card fixed-size-card cursor-pointer transition-transform transform hover:scale-105 hover:bg-gray-100 dark:hover:bg-gray-800 shadow-lg"
             @click="showModal = true"
         >
-            <div class="flex justify-between mb-4">
+            <div class="flex justify-between mb-1">
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Most Absences</span>
                     <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">
