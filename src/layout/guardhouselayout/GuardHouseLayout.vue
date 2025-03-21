@@ -120,23 +120,26 @@ const filteredRecords = computed(() => {
 <style lang="scss" scoped>
 .content-wrapper {
     display: flex;
-    flex-direction: column;
-    align-items: center;
+    justify-content: center;
     padding: 20px;
 }
 
+.layout-grid {
+    display: flex;
+    width: 100%;
+}
+
 .scanner-container {
+    width: 50%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 500px;
     padding: 1.5rem;
     background: #f8f9fa;
     border-radius: 10px;
     box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
 }
-
 .qr-scanner {
     width: 500px;
     height: 500px;
@@ -173,13 +176,23 @@ const filteredRecords = computed(() => {
     transform: scale(1.05);
 }
 
+.right-container {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.table-container {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
 .student-details {
-    margin-top: 20px;
     padding: 20px;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-    width: 80%;
     text-align: center;
 }
 
@@ -188,11 +201,6 @@ const filteredRecords = computed(() => {
     height: 150px;
     border-radius: 50%;
     margin-bottom: 10px;
-}
-
-.table-container {
-    width: 100%;
-    margin-top: 20px;
 }
 
 .search-input {
