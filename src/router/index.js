@@ -1,5 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
+import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
@@ -108,6 +109,37 @@ const router = createRouter({
                     path: '/qr-scanner',
                     name: 'QrScanner',
                     component: () => import('@/components/dashboard/QRScanner.vue')
+                }
+            ]
+        },
+        {
+            path: '/enrollment',
+            component: EnrollmentLayout,
+            children: [
+                {
+                    path: '', // Instead of '', now it's '/enrollment/page'
+                    name: 'EnrollmentPage',
+                    component: () => import('@/layout/enrollmentlayout/EnrollmentPage.vue')
+                },
+                {
+                    path: 'landing',  // ✅ Changed from '/enrollment-landing' to 'landing'
+                    name: 'EnrollmentLanding',
+                    component: () => import('@/views/Enrollment/EnrollmentLanding.vue')
+                },
+                {
+                    path: 'old-student',
+                    name: 'OldStudent',
+                    component: () => import('@/views/Enrollment/OldStudentForm.vue')
+                },
+                {
+                    path: 'new-student',
+                    name: 'NewStudent',
+                    component: () => import('@/views/Enrollment/NewStudentForm.vue')
+                },
+                {
+                    path: 'transfer-student',
+                    name: 'TransferStudent',
+                    component: () => import('@/views/Enrollment/TransferStudentForm.vue')
                 }
             ]
         }
