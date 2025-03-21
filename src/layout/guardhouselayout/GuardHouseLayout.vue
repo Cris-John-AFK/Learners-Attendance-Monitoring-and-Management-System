@@ -122,11 +122,13 @@ const filteredRecords = computed(() => {
     display: flex;
     justify-content: center;
     padding: 20px;
+    gap: 20px;
 }
 
 .layout-grid {
     display: flex;
     width: 100%;
+    gap: 20px;
 }
 
 .scanner-container {
@@ -181,6 +183,7 @@ const filteredRecords = computed(() => {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    gap: 20px;
 }
 
 .table-container {
