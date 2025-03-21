@@ -1,5 +1,5 @@
 <script setup>
-import { ProductService } from '@/router/service/ProductService';
+import { TeacherService } from '@/router/service/TeacherService';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -8,193 +8,159 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, onBeforeMount, ref } from 'vue';
 
-const products = ref(null);
+const teachers = ref(null);
 const expandedRows = ref([]);
 const searchQuery = ref('');
 const editDialog = ref(false);
-const editingProduct = ref(null);
+const editingTeacher = ref(null);
 const createDialog = ref(false);
-const newProduct = ref({
+const newTeacher = ref({
     name: '',
-    price: 0,
-    category: '',
-    inventoryStatus: 'INSTOCK',
-    rating: 0,
-    image: '' // Default image or leave empty
+    department: '',
+    roomNumber: '',
+    status: 'ACTIVE',
+    subjectsCount: 0,
+    image: ''
 });
 
-// Add new refs for activity dialog
-const activityDialog = ref(false);
-const selectedProduct = ref(null);
-const newOrder = ref({
+// Add new refs for subject dialog
+const subjectDialog = ref(false);
+const selectedTeacher = ref(null);
+const newSubject = ref({
     id: null,
-    customer: '', // For subject name
-    date: new Date().toISOString().split('T')[0],
-    amount: 0, // For number of students
-    status: 'PENDING'
+    name: '',
+    startDate: new Date().toISOString().split('T')[0],
+    sectionsCount: 0,
+    status: 'ACTIVE'
 });
 
 const editSubjectDialog = ref(false);
 const editingSubject = ref(null);
-const searchDialog = ref(false);
-const selectedTeacher = ref(null);
+const teacherDetailsDialog = ref(false);
 const sectionsDialog = ref(false);
 const selectedSubject = ref(null);
 const createSectionDialog = ref(false);
 const newSection = ref({
     name: '',
-    students: 0
+    studentsCount: 0
 });
 
 function expandAll() {
-    expandedRows.value = products.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
+    expandedRows.value = teachers.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
 }
 
 function collapseAll() {
     expandedRows.value = null;
 }
 
-function formatCurrency(value) {
-    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
-
-function getStockSeverity(product) {
-    switch (product.inventoryStatus) {
-        case 'INSTOCK':
+function getTeacherStatusSeverity(teacher) {
+    switch (teacher.status) {
+        case 'ACTIVE':
             return 'success';
-        case 'LOWSTOCK':
+        case 'ON_LEAVE':
             return 'warn';
-        case 'OUTOFSTOCK':
+        case 'INACTIVE':
             return 'danger';
         default:
             return null;
     }
 }
 
-function getOrderSeverity(order) {
-    switch (order.status) {
-        case 'DELIVERED':
+function getSubjectStatusSeverity(subject) {
+    switch (subject.status) {
+        case 'ACTIVE':
             return 'success';
+        case 'COMPLETED':
+            return 'info';
         case 'CANCELLED':
             return 'danger';
-        case 'PENDING':
+        case 'SCHEDULED':
             return 'warn';
-        case 'RETURNED':
-            return 'info';
         default:
             return null;
     }
 }
 
-function filterProducts(products, query) {
-    if (!query || !products) return products;
-
-    return products.filter((product) => product.name.toLowerCase().includes(query.toLowerCase()));
+function filterTeachers(teachers, query) {
+    if (!query || !teachers) return teachers;
+    return teachers.filter((teacher) => teacher.name.toLowerCase().includes(query.toLowerCase()));
 }
 
-const filteredProducts = computed(() => {
-    return filterProducts(products.value, searchQuery.value);
+const filteredTeachers = computed(() => {
+    return filterTeachers(teachers.value, searchQuery.value);
 });
 
-function openEdit(product) {
-    editingProduct.value = { ...product };
+function openEdit(teacher) {
+    editingTeacher.value = { ...teacher };
     editDialog.value = true;
 }
 
 function saveEdit() {
-    const index = products.value.findIndex((p) => p.id === editingProduct.value.id);
-    if (index !== -1) {
-        products.value[index] = { ...editingProduct.value };
+    if (editingTeacher.value) {
+        TeacherService.updateTeacher(editingTeacher.value.id, editingTeacher.value);
+        loadTeachers(); // Refresh data
+        editDialog.value = false;
+        editingTeacher.value = null;
     }
-    editDialog.value = false;
-    editingProduct.value = null;
 }
 
 function openCreateForm() {
-    newProduct.value = {
+    newTeacher.value = {
         name: '',
-        price: 0,
-        category: '',
-        inventoryStatus: 'INSTOCK',
-        rating: 0,
-        image: '',
-        orders: [] // Initialize empty orders array
+        department: '',
+        roomNumber: '',
+        status: 'ACTIVE',
+        subjectsCount: 0,
+        image: ''
     };
     createDialog.value = true;
 }
 
-function saveNewProduct() {
-    // Add ID (normally this would come from the backend)
-    newProduct.value.id = Date.now(); // Temporary ID generation
-
-    // Add to products array
-    products.value = [...products.value, { ...newProduct.value }];
-
-    // Close dialog and reset form
+function saveNewTeacher() {
+    TeacherService.createTeacher(newTeacher.value);
+    loadTeachers(); // Refresh data
     createDialog.value = false;
-    newProduct.value = {
+    newTeacher.value = {
         name: '',
-        price: 0,
-        category: '',
-        inventoryStatus: 'INSTOCK',
-        rating: 0,
+        department: '',
+        roomNumber: '',
+        status: 'ACTIVE',
+        subjectsCount: 0,
         image: ''
     };
 }
 
-// Add activity functions
-function openActivityDialog(product) {
-    selectedProduct.value = product;
-    newOrder.value = {
-        id: Date.now(),
-        customer: '',
-        date: new Date().toISOString().split('T')[0],
-        amount: 0,
-        status: 'PENDING'
+// Add subject functions
+function openSubjectDialog(teacher) {
+    selectedTeacher.value = teacher;
+    newSubject.value = {
+        name: '',
+        startDate: new Date().toISOString().split('T')[0],
+        sectionsCount: 0,
+        status: 'SCHEDULED'
     };
-    activityDialog.value = true;
+    subjectDialog.value = true;
 }
 
-function saveNewActivity() {
-    if (selectedProduct.value) {
-        // Find the product and add new order
-        const product = products.value.find((p) => p.id === selectedProduct.value.id);
-        if (product) {
-            if (!product.orders) product.orders = [];
-            product.orders.push({ ...newOrder.value });
-        }
+function saveNewSubject() {
+    if (selectedTeacher.value) {
+        TeacherService.addSubject(selectedTeacher.value.id, newSubject.value);
+        loadTeachers(); // Refresh data
     }
-    activityDialog.value = false;
+    subjectDialog.value = false;
 }
 
 // Add function for image handling
 function onImageUpload(event) {
     const file = event.files[0];
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-        newProduct.value.image = file.name; // Save filename
-        // Optional: Preview the image
-        // imagePreview.value = e.target.result;
-    };
-
-    reader.readAsDataURL(file);
+    newTeacher.value.image = file.name; // Save filename
 }
 
 // Add function for edit image handling
 function onEditImageUpload(event) {
     const file = event.files[0];
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-        editingProduct.value.image = file.name; // Save filename
-    };
-
-    reader.readAsDataURL(file);
+    editingTeacher.value.image = file.name; // Save filename
 }
-
-// Optional: Add ref for image preview if needed
-// const imagePreview = ref('');
 
 function openEditSubject(subject) {
     editingSubject.value = { ...subject };
@@ -202,22 +168,21 @@ function openEditSubject(subject) {
 }
 
 function saveEditSubject() {
-    if (selectedProduct.value) {
-        const product = products.value.find((p) => p.id === selectedProduct.value.id);
-        if (product && product.orders) {
-            const index = product.orders.findIndex((order) => order.id === editingSubject.value.id);
-            if (index !== -1) {
-                product.orders[index] = { ...editingSubject.value };
-            }
-        }
+    if (selectedTeacher.value && editingSubject.value) {
+        TeacherService.updateSubject(
+            selectedTeacher.value.id,
+            editingSubject.value.id,
+            editingSubject.value
+        );
+        loadTeachers(); // Refresh data
     }
     editSubjectDialog.value = false;
     editingSubject.value = null;
 }
 
-function openSearchDialog(teacher) {
-    selectedTeacher.value = teacher;
-    searchDialog.value = true;
+function openTeacherDetailsDialog(teacher) {
+    selectedTeacher.value = TeacherService.getTeacherById(teacher.id);
+    teacherDetailsDialog.value = true;
 }
 
 function openSectionsDialog(subject) {
@@ -228,53 +193,51 @@ function openSectionsDialog(subject) {
 function openCreateSectionDialog() {
     newSection.value = {
         name: '',
-        students: 0
+        studentsCount: 0
     };
     createSectionDialog.value = true;
 }
 
 function saveNewSection() {
-    // Create a new section object
-    const section = {
-        id: Date.now(),
-        name: newSection.value.name,
-        students: newSection.value.students
-    };
+    if (selectedTeacher.value && selectedSubject.value) {
+        TeacherService.addSection(
+            selectedTeacher.value.id,
+            selectedSubject.value.id,
+            newSection.value
+        );
+        // Update the selected subject with fresh data
+        const teacher = TeacherService.getTeacherById(selectedTeacher.value.id);
+        selectedTeacher.value = teacher;
+        selectedSubject.value = teacher.subjects.find(s => s.id === selectedSubject.value.id);
 
-    // Find the subject in the products data
-    if (selectedSubject.value) {
-        // Initialize sections array if it doesn't exist
-        if (!selectedSubject.value.sections) {
-            selectedSubject.value.sections = [];
-        }
-
-        // Add the new section to the subject's sections array
-        selectedSubject.value.sections.push(section);
+        loadTeachers(); // Refresh all data
     }
-
-    // Close the dialog
     createSectionDialog.value = false;
 }
 
+function loadTeachers() {
+    teachers.value = TeacherService.getTeachers();
+}
+
 onBeforeMount(() => {
-    ProductService.getProductsWithOrdersSmall().then((data) => (products.value = data));
+    loadTeachers();
 });
 </script>
 
 <template>
     <div class="card">
         <div class="flex justify-between items-center">
-            <h3>Teacher</h3>
-            <Button label="Register" icon="pi pi-plus" @click="openCreateForm" />
+            <h3>Teacher Management</h3>
+            <Button label="Register Teacher" icon="pi pi-plus" @click="openCreateForm" />
         </div>
 
         <div class="font-semibold text-xl mb-4"></div>
-        <DataTable v-model:expandedRows="expandedRows" :value="filteredProducts" dataKey="id" tableStyle="min-width: 60rem">
+        <DataTable v-model:expandedRows="expandedRows" :value="filteredTeachers" dataKey="id" tableStyle="min-width: 60rem">
             <template #header>
                 <div class="flex justify-between align-items-center">
                     <span class="p-input-icon-left">
-                        <i class="pi pi-search" />
-                        <InputText v-model="searchQuery" placeholder="Search Product..." />
+                        <i class="pi pi-search" :style="{ padding : '10px'}"/>
+                        <InputText v-model="searchQuery" placeholder="Search Teachers..." />
                     </span>
                     <div class="flex flex-wrap justify-end gap-2">
                         <Button text icon="pi pi-plus" label="Expand All" @click="expandAll" />
@@ -285,33 +248,30 @@ onBeforeMount(() => {
 
             <Column expander style="width: 5rem" />
             <Column field="name" header="Teacher Name"></Column>
-            <Column header="Image">
+            <Column header="Photo">
                 <template #body="slotProps">
-                    <img :src="`https://primefaces.org/cdn/primevue/images/product/${slotProps.data.image}`" :alt="slotProps.data.image" class="shadow-lg" width="64" />
+                    <img :src="`https://primefaces.org/cdn/primevue/images/avatar/${slotProps.data.image}`" :alt="slotProps.data.name" class="shadow-lg rounded-full" width="64" />
                 </template>
             </Column>
 
-            <Column field="category" header="Room No."></Column>
-            <Column field="rating" header="No. Subjects" class="text-center custom-column">
-                <template #body="slotProps">
-                    {{ slotProps.data.rating }}
-                </template>
-            </Column>
+            <Column field="department" header="Department"></Column>
+            <Column field="roomNumber" header="Room No."></Column>
+            <Column field="subjectsCount" header="Subjects" class="text-center custom-column"></Column>
 
             <Column header="Status">
                 <template #body="slotProps">
-                    <Tag :value="slotProps.data.inventoryStatus" :severity="getStockSeverity(slotProps.data)" />
+                    <Tag :value="slotProps.data.status" :severity="getTeacherStatusSeverity(slotProps.data)" />
                 </template>
             </Column>
-            <Column header="Activity">
+            <Column header="Add Subject">
                 <template #body="slotProps">
-                    <Button icon="pi pi-plus" @click="openActivityDialog(slotProps.data)" />
+                    <Button icon="pi pi-plus" @click="openSubjectDialog(slotProps.data)" />
                 </template>
             </Column>
             <Column header="Actions">
                 <template #body="slotProps">
                     <div class="flex gap-2">
-                        <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="openSearchDialog(slotProps.data)" />
+                        <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="openTeacherDetailsDialog(slotProps.data)" />
                         <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="openEdit(slotProps.data)" />
                     </div>
                 </template>
@@ -319,23 +279,23 @@ onBeforeMount(() => {
 
             <template #expansion="slotProps">
                 <div class="p-4">
-                    <h5>Subject for {{ slotProps.data.name }}</h5>
-                    <DataTable :value="slotProps.data.orders">
+                    <h5>Subjects taught by {{ slotProps.data.name }}</h5>
+                    <DataTable :value="slotProps.data.subjects">
                         <Column field="id" header="Id" sortable></Column>
-                        <Column field="customer" header="Subjects" sortable></Column>
-                        <Column field="date" header="Date" sortable></Column>
-                        <Column field="amount" header="No. Sections" sortable>
+                        <Column field="name" header="Subject Name" sortable></Column>
+                        <Column field="startDate" header="Start Date" sortable></Column>
+                        <Column field="sectionsCount" header="Sections" sortable>
                             <template #body="slotProps">
-                                <div class="flex items-center gap-2">{{ slotProps.data.amount }} / 6</div>
+                                <div class="flex items-center gap-2">{{ slotProps.data.sectionsCount }} / 6</div>
                             </template>
                         </Column>
                         <Column field="status" header="Status" sortable>
                             <template #body="slotProps">
-                                <Tag :value="slotProps.data.status.toLowerCase()" :severity="getOrderSeverity(slotProps.data)" />
+                                <Tag :value="slotProps.data.status" :severity="getSubjectStatusSeverity(slotProps.data)" />
                             </template>
                         </Column>
 
-                        <Column field="Actions" header="Actions" sortable headerStyle="width:4rem">
+                        <Column header="Actions" sortable headerStyle="width:4rem">
                             <template #body="slotProps">
                                 <div class="flex gap-2">
                                     <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="openSectionsDialog(slotProps.data)" />
@@ -348,206 +308,346 @@ onBeforeMount(() => {
             </template>
         </DataTable>
 
-        <Dialog v-model:visible="editDialog" modal header="Edit Product" :style="{ width: '450px' }">
-            <div class="p-fluid" v-if="editingProduct">
-                <div class="field">
-                    <label for="name">Name</label>
-                    <InputText id="name" v-model="editingProduct.name" />
+        <Dialog
+            v-model:visible="editDialog"
+            modal
+            header="Edit Teacher"
+            :style="{ width: '450px' }"
+        >
+            <div class="p-fluid" v-if="editingTeacher">
+                <!-- Teacher Name -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="name" class="font-medium">Teacher Name</label>
+                    <InputText id="name" v-model="editingTeacher.name" class="w-full" />
                 </div>
-                <div class="field">
-                    <label>Current Image</label>
-                    <div class="mb-2">
-                        <img :src="`https://primefaces.org/cdn/primevue/images/product/${editingProduct.image}`" :alt="editingProduct.image" class="shadow-lg" width="100" />
+
+                <!-- Photo Section -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label class="font-medium">Current Photo</label>
+                    <div class="flex align-items-center gap-2 mb-3">
+                        <img
+                            :src="`https://primefaces.org/cdn/primevue/images/avatar/${editingTeacher.image}`"
+                            :alt="editingTeacher.name"
+                            class="shadow-lg rounded-full border border-gray-300 p-1"
+                            width="80"
+                        />
                     </div>
-                    <label>Change Image</label>
-                    <FileUpload mode="basic" accept="image/*" :maxFileSize="1000000" @upload="onEditImageUpload" :auto="true" chooseLabel="Choose New Image" />
+
+                    <label class="font-medium" >Change Photo</label>
+                    <FileUpload
+                        mode="basic"
+                        accept="image/*"
+                        :maxFileSize="1000000"
+                        @upload="onEditImageUpload"
+                        :auto="true"
+                        chooseLabel="Choose New Photo"
+                        class="w-full"
+                    />
                 </div>
 
-                <div class="field">
-                    <label for="category">Category</label>
-                    <InputText id="category" v-model="editingProduct.category" />
+                <!-- Department -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="department" class="font-medium">Department</label>
+                    <InputText id="department" v-model="editingTeacher.department" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="edit-status">Status</label>
-                    <Dropdown id="edit-status" v-model="editingProduct.inventoryStatus" :options="['INSTOCK', 'LOWSTOCK', 'OUTOFSTOCK']" placeholder="Select Status" />
+
+                <!-- Room Number -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="roomNumber" class="font-medium">Room Number</label>
+                    <InputText id="roomNumber" v-model="editingTeacher.roomNumber" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="edit-rating">No. Subjects</label>
-                    <InputNumber id="edit-rating" v-model="editingProduct.rating" :min="0" />
+
+                <!-- Status Dropdown -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="edit-status" class="font-medium">Status</label>
+                    <Dropdown
+                        id="edit-status"
+                        v-model="editingTeacher.status"
+                        :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']"
+                        placeholder="Select Status"
+                        class="w-full"
+                    />
                 </div>
             </div>
+
+            <!-- Footer Buttons -->
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="editDialog = false" text />
-                <Button label="Save" icon="pi pi-check" @click="saveEdit" autofocus />
+                <div class="flex justify-content-between w-full">
+                    <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        @click="editDialog = false"
+                        class="p-button-text"
+                    />
+                    <Button
+                        label="Save"
+                        icon="pi pi-check"
+                        @click="saveEdit"
+                        class="p-button-success"
+                        autofocus
+                    />
+                </div>
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="createDialog" modal header="Add New Product" :style="{ width: '450px' }">
+        <Dialog
+            v-model:visible="createDialog"
+            modal
+            header="Register New Teacher"
+            :style="{ width: '450px' }"
+        >
             <div class="p-fluid">
-                <div class="field">
-                    <label for="new-name">Name</label>
-                    <InputText id="new-name" v-model="newProduct.name" />
-                </div>
-                <div class="field">
-                    <label>Image</label>
-                    <FileUpload mode="basic" accept="image/*" :maxFileSize="1000000" @upload="onImageUpload" :auto="true" chooseLabel="Choose Image" />
+                <!-- Teacher Name -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="new-name" class="font-medium">Teacher Name</label>
+                    <InputText id="new-name" v-model="newTeacher.name" class="w-full" />
                 </div>
 
-                <div class="field">
-                    <label for="new-category">Category</label>
-                    <InputText id="new-category" v-model="newProduct.category" />
+                <!-- Photo Upload -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label class="font-medium">Photo</label>
+                    <FileUpload
+                        mode="basic"
+                        accept="image/*"
+                        :maxFileSize="1000000"
+                        @upload="onImageUpload"
+                        :auto="true"
+                        chooseLabel="Choose Photo"
+                        class="w-full"
+                    />
                 </div>
-                <div class="field">
-                    <label for="new-status">Status</label>
-                    <Dropdown id="new-status" v-model="newProduct.inventoryStatus" :options="['INSTOCK', 'LOWSTOCK', 'OUTOFSTOCK']" placeholder="Select Status" />
+
+                <!-- Department -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="new-department" class="font-medium">Department</label>
+                    <InputText id="new-department" v-model="newTeacher.department" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="new-rating">No. Subjects</label>
-                    <InputNumber id="new-rating" v-model="newProduct.rating" :min="0" />
+
+                <!-- Room Number -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="new-roomNumber" class="font-medium">Room Number</label>
+                    <InputText id="new-roomNumber" v-model="newTeacher.roomNumber" class="w-full" />
+                </div>
+
+                <!-- Status -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="new-status" class="font-medium">Status</label>
+                    <Dropdown
+                        id="new-status"
+                        v-model="newTeacher.status"
+                        :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']"
+                        placeholder="Select Status"
+                        class="w-full"
+                    />
                 </div>
             </div>
+
+            <!-- Footer Buttons -->
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="createDialog = false" text />
-                <Button label="Save" icon="pi pi-check" @click="saveNewProduct" autofocus />
+                <div class="flex justify-content-between w-full">
+                    <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        @click="createDialog = false"
+                        class="p-button-text"
+                    />
+                    <Button
+                        label="Save"
+                        icon="pi pi-check"
+                        @click="saveNewTeacher"
+                        class="p-button-success"
+                        autofocus
+                    />
+                </div>
             </template>
         </Dialog>
 
-        <!-- Add Dialog for new activity -->
-        <Dialog v-model:visible="activityDialog" modal header="Add New Subject" :style="{ width: '450px' }">
-            <div class="p-fluid">
-                <div class="field">
-                    <label for="subject-name">Subject Name</label>
-                    <InputText id="subject-name" v-model="newOrder.customer" />
+        <!-- Dialog for new subject -->
+        <Dialog
+            v-model:visible="subjectDialog"
+            modal
+            header="Add New Subject"
+            :style="{ width: '450px' }"
+        >
+            <div class="p-fluid" :style="{ padding : '10px'}">
+                <!-- Subject Name -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="subject-name" class="font-medium">Subject Name</label>
+                    <InputText id="subject-name" v-model="newSubject.name" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="subject-date">Date</label>
-                    <Calendar id="subject-date" v-model="newOrder.date" dateFormat="yy-mm-dd" />
+
+                <!-- Start Date -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="subject-date" class="font-medium">Start Date</label>
+                    <Calendar id="subject-date" v-model="newSubject.startDate" dateFormat="yy-mm-dd" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="students">Number of Students</label>
-                    <InputNumber id="students" v-model="newOrder.amount" />
+
+                <!-- Initial Sections Count -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="sections" class="font-medium">Initial Sections Count</label>
+                    <InputNumber id="sections" v-model="newSubject.sectionsCount" :min="0" :max="6" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="status">Status</label>
-                    <Dropdown id="status" v-model="newOrder.status" :options="['PENDING', 'DELIVERED', 'CANCELLED', 'RETURNED']" placeholder="Select Status" />
+
+                <!-- Status Dropdown -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="status" class="font-medium">Status</label>
+                    <Dropdown
+                        id="status"
+                        v-model="newSubject.status"
+                        :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']"
+                        placeholder="Select Status"
+                        class="w-full"
+                    />
                 </div>
             </div>
+
+            <!-- Footer Buttons -->
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="activityDialog = false" text />
-                <Button label="Save" icon="pi pi-check" @click="saveNewActivity" autofocus />
+                <div class="flex justify-content-between w-full">
+                    <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        @click="subjectDialog = false"
+                        class="p-button-text"
+                    />
+                    <Button
+                        label="Save"
+                        icon="pi pi-check"
+                        @click="saveNewSubject"
+                        class="p-button-success"
+                        autofocus
+                    />
+                </div>
             </template>
         </Dialog>
 
-        <!-- Add Dialog for editing subject -->
-        <Dialog v-model:visible="editSubjectDialog" modal header="Edit Subject" :style="{ width: '450px' }">
+        <!-- Dialog for editing subject -->
+        <Dialog
+            v-model:visible="editSubjectDialog"
+            modal
+            header="Edit Subject"
+            :style="{ width: '450px' }"
+        >
             <div class="p-fluid" v-if="editingSubject">
-                <div class="field">
-                    <label for="edit-subject-name">Subject Name</label>
-                    <InputText id="edit-subject-name" v-model="editingSubject.customer" />
+                <!-- Subject Name -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="edit-subject-name" class="font-medium">Subject Name</label>
+                    <InputText id="edit-subject-name" v-model="editingSubject.name" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="edit-subject-date">Date</label>
-                    <Calendar id="edit-subject-date" v-model="editingSubject.date" dateFormat="yy-mm-dd" />
+
+                <!-- Start Date -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="edit-subject-date" class="font-medium">Start Date</label>
+                    <Calendar id="edit-subject-date" v-model="editingSubject.startDate" dateFormat="yy-mm-dd" class="w-full" />
                 </div>
-                <div class="field">
-                    <label for="edit-students">Number of Students</label>
-                    <InputNumber id="edit-students" v-model="editingSubject.amount" />
+
+                <!-- Sections Count (Disabled) -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="edit-sections" class="font-medium">Sections Count</label>
+                    <InputNumber id="edit-sections" v-model="editingSubject.sectionsCount" :min="0" :max="6" disabled class="w-full opacity-70" />
                 </div>
-                <div class="field">
-                    <label for="edit-subject-status">Status</label>
-                    <Dropdown id="edit-subject-status" v-model="editingSubject.status" :options="['PENDING', 'DELIVERED', 'CANCELLED', 'RETURNED']" placeholder="Select Status" />
+
+                <!-- Status Dropdown -->
+                <div class="field" :style="{ padding : '10px'}">
+                    <label for="edit-subject-status" class="font-medium">Status</label>
+                    <Dropdown
+                        id="edit-subject-status"
+                        v-model="editingSubject.status"
+                        :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']"
+                        placeholder="Select Status"
+                        class="w-full"
+                    />
                 </div>
             </div>
+
+            <!-- Footer Buttons -->
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="editSubjectDialog = false" text />
-                <Button label="Save" icon="pi pi-check" @click="saveEditSubject" autofocus />
+                <div class="flex justify-content-between w-full">
+                    <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        @click="editSubjectDialog = false"
+                        class="p-button-text"
+                    />
+                    <Button
+                        label="Save"
+                        icon="pi pi-check"
+                        @click="saveEditSubject"
+                        class="p-button-success"
+                        autofocus
+                    />
+                </div>
             </template>
         </Dialog>
 
-        <!-- Search Dialog -->
-        <Dialog v-model:visible="searchDialog" modal header="Teacher Details" :style="{ width: '450px' }">
+        <!-- Teacher Details Dialog -->
+        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '450px' }">
             <div class="p-fluid" v-if="selectedTeacher">
-                <div class="field">
+                <div class="field" :style="{ padding : '10px'}">
                     <label>Teacher Name</label>
                     <div class="p-inputtext">{{ selectedTeacher.name }}</div>
                 </div>
-                <div class="field">
-                    <label>Room No.</label>
-                    <div class="p-inputtext">{{ selectedTeacher.category }}</div>
+                <div class="field" :style="{ padding : '10px'}">
+                    <label>Department</label>
+                    <div class="p-inputtext">{{ selectedTeacher.department }}</div>
                 </div>
-                <div class="field">
-                    <label>No. Subjects</label>
-                    <div class="p-inputtext">{{ selectedTeacher.rating }}</div>
+                <div class="field" :style="{ padding : '10px'}">
+                    <label>Room Number</label>
+                    <div class="p-inputtext">{{ selectedTeacher.roomNumber }}</div>
                 </div>
-                <div class="field">
+                <div class="field" :style="{ padding : '10px'}">
                     <label>Status</label>
                     <div class="p-inputtext">
-                        <Tag :value="selectedTeacher.inventoryStatus" :severity="getStockSeverity(selectedTeacher)" />
+                        <Tag :value="selectedTeacher.status" :severity="getTeacherStatusSeverity(selectedTeacher)" />
                     </div>
                 </div>
-                <div class="field">
+                <div class="field" :style="{ padding : '10px'}">
                     <label>Subjects</label>
-                    <DataTable :value="selectedTeacher.orders" scrollable scrollHeight="200px">
-                        <Column field="customer" header="Subject Name"></Column>
-                        <Column field="date" header="Date"></Column>
-                        <Column field="amount" header="No. Sections"></Column>
+                    <DataTable :value="selectedTeacher.subjects" scrollable scrollHeight="200px">
+                        <Column field="name" header="Subject Name"></Column>
+                        <Column field="startDate" header="Start Date"></Column>
+                        <Column field="sectionsCount" header="Sections"></Column>
                         <Column field="status" header="Status">
                             <template #body="slotProps">
-                                <Tag :value="slotProps.data.status.toLowerCase()" :severity="getOrderSeverity(slotProps.data)" />
+                                <Tag :value="slotProps.data.status" :severity="getSubjectStatusSeverity(slotProps.data)" />
                             </template>
                         </Column>
                     </DataTable>
                 </div>
             </div>
             <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="searchDialog = false" text />
+                <Button label="Close" icon="pi pi-times" @click="teacherDetailsDialog = false" text />
             </template>
         </Dialog>
 
         <!-- Sections Dialog -->
         <Dialog v-model:visible="sectionsDialog" modal header="Sections" :style="{ width: '500px' }">
-            <div data-v-f484c513="">
-                <div data-v-f484c513="" class="flex justify-between items-center">
-                    <h3 data-v-f484c513="">Sections in {{ selectedSubject?.customer }}</h3>
-                    <Button data-v-f484c513="" class="p-button-success" type="button" aria-label="Create" @click="openCreateSectionDialog">
+            <div>
+                <div class="flex justify-between items-center">
+                    <h3>Sections in {{ selectedSubject?.name }}</h3>
+                    <Button class="p-button-success" type="button" aria-label="Create" @click="openCreateSectionDialog">
                         <span class="p-button-icon p-button-icon-left pi pi-plus"></span>
                         <span class="p-button-label">Create</span>
                     </Button>
                 </div>
-                <ul data-v-f484c513="" class="section-list">
-                    <li data-v-f484c513="" class="section-item">
-                        <span data-v-f484c513="" class="section-name">Section A</span>
-                        <div data-v-f484c513="" class="section-buttons">
-                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="View">
+                <ul class="section-list">
+                    <li v-for="section in selectedSubject?.sections" :key="section.id" class="section-item">
+                        <span class="section-name">{{ section.name }} ({{ section.studentsCount }} students)</span>
+                        <div class="section-buttons">
+                            <Button class="p-button-text p-button-sm" type="button" aria-label="View">
                                 <span class="p-button-icon p-button-icon-left pi pi-eye"></span>
                                 <span class="p-button-label">View</span>
                             </Button>
-                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="Edit">
+                            <Button class="p-button-text p-button-sm" type="button" aria-label="Edit">
+                                <Button class="p-button-text p-button-sm" type="button" aria-label="Edit">
                                 <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
                                 <span class="p-button-label">Edit</span>
-                            </Button>
-                            <Button data-v-f484c513="" class="p-button-danger p-button-sm" type="button" aria-label="Delete">
-                                <span class="p-button-icon p-button-icon-left pi pi-trash"></span>
-                                <span class="p-button-label">Delete</span>
-                            </Button>
+                                </Button>
+                                </Button>
                         </div>
                     </li>
-                    <li data-v-f484c513="" class="section-item">
-                        <span data-v-f484c513="" class="section-name">Section B</span>
-                        <div data-v-f484c513="" class="section-buttons">
-                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="View">
-                                <span class="p-button-icon p-button-icon-left pi pi-eye"></span>
-                                <span class="p-button-label">View</span>
-                            </Button>
-                            <Button data-v-f484c513="" class="p-button-text p-button-sm" type="button" aria-label="Edit">
-                                <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
-                                <span class="p-button-label">Edit</span>
-                            </Button>
-                            <Button data-v-f484c513="" class="p-button-danger p-button-sm" type="button" aria-label="Delete">
-                                <span class="p-button-icon p-button-icon-left pi pi-trash"></span>
-                                <span class="p-button-label">Delete</span>
-                            </Button>
-                        </div>
+                    <li v-if="!selectedSubject?.sections || selectedSubject.sections.length === 0" class="no-sections">
+                        No sections found for this subject
                     </li>
                 </ul>
             </div>
@@ -557,15 +657,15 @@ onBeforeMount(() => {
         </Dialog>
 
         <!-- Create Section Dialog -->
-        <Dialog v-model:visible="createSectionDialog" modal header="Create New Section" :style="{ width: '400px' }">
+        <Dialog v-model:visible="createSectionDialog" modal header="Create New Section" :style="{ width: '450px' }">
             <div class="p-fluid">
                 <div class="field">
                     <label for="section-name">Section Name</label>
                     <InputText id="section-name" v-model="newSection.name" />
                 </div>
                 <div class="field">
-                    <label for="section-students">Number of Students</label>
-                    <InputNumber id="section-students" v-model="newSection.students" :min="0" />
+                    <label for="students-count">Initial Students Count</label>
+                    <InputNumber id="students-count" v-model="newSection.studentsCount" :min="0" :max="50" />
                 </div>
             </div>
             <template #footer>
@@ -576,15 +676,7 @@ onBeforeMount(() => {
     </div>
 </template>
 
-<style scoped lang="scss">
-:deep(.p-datatable-frozen-tbody) {
-    font-weight: bold;
-}
-
-:deep(.p-datatable-scrollable .p-frozen-column) {
-    font-weight: bold;
-}
-
+<style scoped>
 .section-list {
     list-style: none;
     padding: 0;
@@ -595,8 +687,8 @@ onBeforeMount(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem;
-    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem;
+    border-bottom: 1px solid #efefef;
 }
 
 .section-item:last-child {
@@ -612,12 +704,14 @@ onBeforeMount(() => {
     gap: 0.5rem;
 }
 
-:deep(.p-button-sm) {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
+.no-sections {
+    padding: 1rem;
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
 }
 
-:deep(.p-button-icon-left) {
-    margin-right: 0.25rem;
+.custom-column {
+    text-align: center;
 }
 </style>
