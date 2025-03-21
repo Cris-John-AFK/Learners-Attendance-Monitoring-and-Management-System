@@ -67,6 +67,7 @@ function isOutsideClicked(event) {
     align-items: center;
     width: 100%;
     margin-bottom: 2rem;
+    padding-top: 10%;
 }
 
 .profile-picture {
@@ -97,7 +98,6 @@ function isOutsideClicked(event) {
     justify-content: center;
     width: 100vw;
     height: 100vh;
-    overflow: hidden;
 }
 
 .layout-main-container {
@@ -115,7 +115,6 @@ function isOutsideClicked(event) {
     align-items: center;
     padding: 2rem;
     background-color: #f8f9fa;
-    max-width: 800px;
     min-height: 400px;
     width: 100%;
     box-sizing: border-box;

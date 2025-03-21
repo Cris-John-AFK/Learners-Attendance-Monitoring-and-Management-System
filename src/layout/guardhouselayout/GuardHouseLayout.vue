@@ -211,4 +211,5 @@ const filteredRecords = computed(() => {
     border-radius: 5px;
     font-size: 16px;
 }
+
 </style>
