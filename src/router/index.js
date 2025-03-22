@@ -1,4 +1,5 @@
 import AppLayout from '@/layout/AppLayout.vue';
+import LoginLayout from '@/layout/LoginLayout/LoginLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
 import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
@@ -10,10 +11,22 @@ const router = createRouter({
     routes: [
         {
             path: '/',
+            component: LoginLayout,
+            children: [
+
+                {
+                    path: '',
+                    name: 'login-page',
+                    component: () => import('@/views/pages/Login/LoginPage.vue')
+                }
+            ]
+        },
+        {
+            path: '/teacher',
             component: AppLayout,
             children: [
                 {
-                    path: '/',
+                    path: '/teacher',
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
