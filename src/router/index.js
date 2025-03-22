@@ -72,6 +72,11 @@ const router = createRouter({
                     path: '/archive',
                     name: 'archive',
                     component: () => import('@/views/pages/Admin/Archive.vue')
+                },
+                {
+                    path: '/curriculum',
+                    name: 'curriculum',
+                    component: () => import('@/views/pages/Admin/Curriculum.vue')
                 }
             ]
         },
@@ -122,7 +127,7 @@ const router = createRouter({
                     component: () => import('@/layout/enrollmentlayout/EnrollmentPage.vue')
                 },
                 {
-                    path: 'landing',  // ✅ Changed from '/enrollment-landing' to 'landing'
+                    path: 'landing', // ✅ Changed from '/enrollment-landing' to 'landing'
                     name: 'EnrollmentLanding',
                     component: () => import('@/views/Enrollment/EnrollmentLanding.vue')
                 },
