@@ -12,14 +12,15 @@ const model = ref([
         items: [
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
-            { label: 'Section', icon: 'pi pi-fw pi-home', to: '/admin-section' }
+            { label: 'Section', icon: 'pi pi-fw pi-home', to: '/admin-section' },
+            { label: 'Subject', icon: 'pi pi-fw pi-book', to: '/admin-subject' }
         ]
     },
     {
         items: [{ label: 'Settings', icon: 'pi pi-fw pi-cog', to: '/admin-settings' }]
     },
     {
-        items: [{ label: 'Archive', icon: 'pi pi-fw pi-briefcase', to: '/archive' }]
+        items: [{ label: 'Archive', icon: 'pi pi-fw pi-undo', to: '/archive' }]
     },
     {
         items: [{ label: 'Curriculum', icon: 'pi pi-fw pi-briefcase', to: '/curriculum' }]

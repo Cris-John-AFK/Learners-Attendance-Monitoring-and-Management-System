@@ -13,7 +13,6 @@ const router = createRouter({
             path: '/',
             component: LoginLayout,
             children: [
-
                 {
                     path: '',
                     name: 'login-page',
@@ -75,6 +74,11 @@ const router = createRouter({
                     path: '/admin-section',
                     name: 'admin-section',
                     component: () => import('@/views/pages/Admin/Admin-Section.vue')
+                },
+                {
+                    path: '/admin-subject',
+                    name: 'admin-subject',
+                    component: () => import('@/views/pages/Admin/Admin-Subject.vue')
                 },
                 {
                     path: '/admin-settings',

@@ -19,33 +19,30 @@ const newStudent = ref({
     birthdate: ''
 });
 
-watch(() => newStudent.value.birthdate, (newBirthdate) => {
-    if (newBirthdate) {
-        const birthDate = new Date(newBirthdate);
-        const today = new Date();
+watch(
+    () => newStudent.value.birthdate,
+    (newBirthdate) => {
+        if (newBirthdate) {
+            const birthDate = new Date(newBirthdate);
+            const today = new Date();
 
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const hasBirthdayPassed =
-            today.getMonth() > birthDate.getMonth() ||
-            (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const hasBirthdayPassed = today.getMonth() > birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
 
-        if (!hasBirthdayPassed) {
-            age -= 1;
+            if (!hasBirthdayPassed) {
+                age -= 1;
+            }
+
+            newStudent.value.age = age;
+        } else {
+            newStudent.value.age = '';
         }
-
-        newStudent.value.age = age;
-    } else {
-        newStudent.value.age = '';
     }
-});
+);
 
 const filteredStudents = computed(() => {
-    return students.value.filter(student => {
-        return (
-            student.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-            student.qrId.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-            student.gradeLevel.toLowerCase().includes(searchQuery.value.toLowerCase())
-        );
+    return students.value.filter((student) => {
+        return student.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || student.qrId.toLowerCase().includes(searchQuery.value.toLowerCase()) || student.gradeLevel.toLowerCase().includes(searchQuery.value.toLowerCase());
     });
 });
 
@@ -109,7 +106,7 @@ const addStudent = () => {
         </DataTable>
 
         <Dialog v-model:visible="showModal" modal header="Create Student" class="max-w-md w-full rounded-lg">
-            <div class="p-4 space-y-4 left-2 ">
+            <div class="p-4 space-y-4 left-2">
                 <div>
                     <label for="name" class="block text-gray-700 font-medium">Student Name</label>
                     <InputText id="name" v-model="newStudent.name" placeholder="Enter Student Name" class="w-full" />
@@ -121,13 +118,11 @@ const addStudent = () => {
                 <div class="flex gap-4 items-center">
                     <div class="flex-1">
                         <label for="birthdate" class="block text-gray-700 font-medium">Birthdate</label>
-                        <DatePicker id="birthdate" v-model="newStudent.birthdate" placeholder="Select Birthdate"
-                            class="w-full h-[30px] !p-0" showIcon dateFormat="yy-mm-dd"/>
+                        <DatePicker id="birthdate" v-model="newStudent.birthdate" placeholder="Select Birthdate" class="w-full h-[30px] !p-0" showIcon dateFormat="yy-mm-dd" />
                     </div>
                     <div class="flex-1">
                         <label for="age" class="block text-gray-700 font-medium">Age</label>
-                        <InputText id="age" v-model="newStudent.age" type="number"
-                            class="w-full h-[30px] flex items-center !p-3" disabled />
+                        <InputText id="age" v-model="newStudent.age" type="number" class="w-full h-[30px] flex items-center !p-3" disabled />
                     </div>
                 </div>
                 <div class="flex justify-end space-x-2 mt-4">
@@ -138,7 +133,6 @@ const addStudent = () => {
         </Dialog>
     </div>
 </template>
-
 
 <style scoped>
 :deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
