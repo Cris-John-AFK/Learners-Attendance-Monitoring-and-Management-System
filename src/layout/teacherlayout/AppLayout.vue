@@ -1,6 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
@@ -17,17 +17,18 @@ watch(isSidebarActive, (newVal) => {
     }
 });
 
-const containerClass = computed(() => {
-    return {
-        'layout-overlay': layoutConfig.menuMode === 'overlay',
-        'layout-static': layoutConfig.menuMode === 'static',
-        'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
-        'layout-overlay-active': layoutState.overlayMenuActive,
-        'layout-mobile-active': layoutState.staticMenuMobileActive
-    };
+const containerClass = ref({
+    'layout-theme-light': true,
+    'layout-overlay': layoutConfig.menuMode === 'overlay',
+    'layout-static': layoutConfig.menuMode === 'static',
+    'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
+    'layout-overlay-active': layoutState.overlayMenuActive,
+    'layout-mobile-active': layoutState.staticMenuMobileActive,
+    'p-input-filled': layoutConfig.inputStyle === 'filled',
+    'p-ripple-disabled': !layoutConfig.ripple
 });
 
-function bindOutsideClickListener() {
+const bindOutsideClickListener = () => {
     if (!outsideClickListener.value) {
         outsideClickListener.value = (event) => {
             if (isOutsideClicked(event)) {
@@ -38,34 +39,36 @@ function bindOutsideClickListener() {
         };
         document.addEventListener('click', outsideClickListener.value);
     }
-}
+};
 
-function unbindOutsideClickListener() {
+const unbindOutsideClickListener = () => {
     if (outsideClickListener.value) {
-        document.removeEventListener('click', outsideClickListener);
+        document.removeEventListener('click', outsideClickListener.value);
         outsideClickListener.value = null;
     }
-}
+};
 
-function isOutsideClicked(event) {
+const isOutsideClicked = (event) => {
     const sidebarEl = document.querySelector('.layout-sidebar');
-    const topbarEl = document.querySelector('.layout-menu-button');
-
+    const topbarEl = document.querySelector('.layout-topbar');
     return !(sidebarEl.isSameNode(event.target) || sidebarEl.contains(event.target) || topbarEl.isSameNode(event.target) || topbarEl.contains(event.target));
-}
+};
 </script>
 
 <template>
     <div class="layout-wrapper" :class="containerClass">
-        <app-topbar></app-topbar>
-        <app-sidebar></app-sidebar>
+        <AppTopbar />
+        <AppSidebar />
         <div class="layout-main-container">
             <div class="layout-main">
                 <router-view></router-view>
             </div>
-            <app-footer></app-footer>
+            <AppFooter />
         </div>
-        <div class="layout-mask animate-fadein"></div>
+        <div class="layout-mask"></div>
     </div>
-    <Toast />
 </template>
+
+<style lang="scss">
+@import '@/assets/layout/layout.scss';
+</style>

@@ -6,6 +6,9 @@
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Total Absentees</span>
                     <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">3</div>
+                    <span class="text-green-500 font-medium flex items-center" v-if="improvementFromYesterday">
+                        <i class="pi pi-arrow-up mr-1"></i> 5%
+                    </span>
                 </div>
                 <div class="flex items-center justify-center icon-container bg-orange-100 dark:bg-blue-400/10">
                     <i class="pi pi-user-minus text-red-500"></i>
@@ -89,32 +92,28 @@
     </Dialog>
 </template>
 
-<script>
-import Dialog from 'primevue/dialog'; // Import Dialog component
+<script setup>
+import Dialog from 'primevue/dialog';
+import { computed, ref } from 'vue';
 
-export default {
-    components: { Dialog }, // Register Dialog
-    data() {
-        return {
-            showModal: false, // Controls the visibility of the modal
-            students: [
-                { name: "Cris John Canales", section: "A", absences: 20 },
-                { name: "Jane Doe", section: "B", absences: 15 },
-                { name: "John Smith", section: "C", absences: 10 },
-                { name: "Emily Johnson", section: "D", absences: 8 }
-            ]
-        };
-    },
-    computed: {
-        formattedDate() {
-            const today = new Date();
-            return `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-        },
-        mostAbsentStudent() {
-            return this.students.reduce((max, student) => (student.absences > max.absences ? student : max), this.students[0]);
-        }
-    }
-};
+const showModal = ref(false);
+const improvementFromYesterday = ref(true);
+
+const students = ref([
+    { name: "Cris John Canales", section: "A", absences: 20 },
+    { name: "Jane Doe", section: "B", absences: 15 },
+    { name: "John Smith", section: "C", absences: 10 },
+    { name: "Emily Johnson", section: "D", absences: 8 }
+]);
+
+const formattedDate = computed(() => {
+    const today = new Date();
+    return `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
+});
+
+const mostAbsentStudent = computed(() => {
+    return students.value.reduce((max, student) => (student.absences > max.absences ? student : max), students.value[0]);
+});
 </script>
 
 <style scoped>

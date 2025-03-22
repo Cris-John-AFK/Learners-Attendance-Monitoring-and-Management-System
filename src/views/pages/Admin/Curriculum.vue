@@ -1,5 +1,6 @@
 <script setup>
 import { TeacherService } from '@/router/service/TeacherService';
+import { CurriculumService } from '@/router/service/CurriculumService';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -34,6 +35,7 @@ const newSubject = ref({
 const editSubjectDialog = ref(false);
 const editingSubject = ref(null);
 const teacherDetailsDialog = ref(false);
+const subjectDetailsDialog = ref(false);
 const sectionsDialog = ref(false);
 const selectedSubject = ref(null);
 const createSectionDialog = ref(false);
@@ -44,6 +46,32 @@ const newSection = ref({
 
 // Add router at the top of your setup script
 const router = useRouter();
+
+// Add a direct click handler for subjects
+function handleSubjectClick(subject) {
+    console.log('Direct click on subject:', subject);
+
+    // If the subject ID is 101, show a specific dialog instead of navigating
+    if (subject.id === 101) {
+        // Set selected subject for use in the dialog
+        selectedSubject.value = subject;
+        // Open a new dialog to show curriculum content for this subject
+        subjectDetailsDialog.value = true;
+    } else {
+        // For other subjects, use the original navigation
+        selectedTeacher.value && navigateToSubjectModule({ data: subject });
+    }
+}
+
+// Load subjects from CurriculumService
+const availableSubjects = ref([]);
+
+// Get curriculum subjects data
+function loadSubjects() {
+    CurriculumService.getSubjects().then((data) => {
+        availableSubjects.value = data;
+    });
+}
 
 function expandAll() {
     expandedRows.value = teachers.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
@@ -215,14 +243,9 @@ function navigateToSubjectModule(event) {
     }
 }
 
-// Add a direct click handler for subjects
-function handleSubjectClick(subject) {
-    console.log('Direct click on subject:', subject);
-    selectedTeacher.value && navigateToSubjectModule({ data: subject });
-}
-
 onBeforeMount(() => {
     loadTeachers();
+    loadSubjects();
 });
 </script>
 
@@ -514,6 +537,124 @@ onBeforeMount(() => {
                 <Button label="Save" icon="pi pi-check" @click="saveNewSection" autofocus />
             </template>
         </Dialog>
+
+        <!-- Subject Details Dialog that shows curriculum information -->
+        <Dialog v-model:visible="subjectDetailsDialog" modal header="Subject Details" :style="{ width: '650px' }">
+            <div v-if="selectedSubject">
+                <h3>{{ selectedSubject.name }} - Curriculum Information</h3>
+
+                <!-- Show special content only when the subject ID is 101 (Algebra II) -->
+                <div v-if="selectedSubject.id === 101" class="algebra-curriculum">
+                    <h4>Algebra II Curriculum - SY 2023-2024</h4>
+
+                    <div class="curriculum-table">
+                        <table class="w-full">
+                            <thead>
+                                <tr>
+                                    <th class="text-left p-2">Course Code</th>
+                                    <th class="text-left p-2">Descriptive Title</th>
+                                    <th class="text-left p-2">Units</th>
+                                    <th class="text-left p-2">Hours per Week</th>
+                                    <th class="text-left p-2">Pre-requisite</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="p-2">MATH 101</td>
+                                    <td class="p-2">Algebra II</td>
+                                    <td class="p-2">3</td>
+                                    <td class="p-2">3</td>
+                                    <td class="p-2">MATH 100</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Course Description</h5>
+                        <p>This course introduces advanced algebraic concepts, including equations, inequalities, functions, polynomials, rational expressions, and applications.</p>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Learning Outcomes</h5>
+                        <ul class="pl-4">
+                            <li>Solve and graph linear equations and inequalities</li>
+                            <li>Perform operations with polynomial expressions</li>
+                            <li>Factor polynomial expressions</li>
+                            <li>Solve and graph quadratic equations</li>
+                            <li>Solve rational equations</li>
+                        </ul>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Course Schedule</h5>
+                        <div class="grid">
+                            <div class="col-6">
+                                <div><strong>Start Date:</strong> 2025-01-15</div>
+                                <div><strong>End Date:</strong> 2025-05-30</div>
+                            </div>
+                            <div class="col-6">
+                                <div><strong>Schedule:</strong> MWF 9:00-10:30 AM</div>
+                                <div><strong>Classroom:</strong> Room 101</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Show default content for other subjects -->
+                <div v-else class="my-4">
+                    <h4>Available Subject Types</h4>
+                    <DataTable :value="availableSubjects" class="p-datatable-sm">
+                        <Column field="name" header="Subject Name"></Column>
+                        <Column field="applicableLevels" header="Applicable Levels">
+                            <template #body="slotProps">
+                                <div class="flex flex-wrap gap-1">
+                                    <Tag v-for="level in slotProps.data.applicableLevels" :key="level" :value="level" severity="info" class="mr-1" />
+                                </div>
+                            </template>
+                        </Column>
+                        <Column headerStyle="width:8rem">
+                            <template #body>
+                                <Button icon="pi pi-plus" label="Apply" class="p-button-sm p-button-outlined" @click="subjectDetailsDialog = false" />
+                            </template>
+                        </Column>
+                    </DataTable>
+                </div>
+
+                <div class="curriculum-details mt-4">
+                    <h4>Subject Details</h4>
+                    <div class="grid">
+                        <div class="col-6">
+                            <div class="detail-item">
+                                <label>Subject ID:</label>
+                                <span>{{ selectedSubject.id }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Name:</label>
+                                <span>{{ selectedSubject.name }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Start Date:</label>
+                                <span>{{ selectedSubject.startDate }}</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="detail-item">
+                                <label>Section Count:</label>
+                                <span>{{ selectedSubject.sectionsCount }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Status:</label>
+                                <Tag :value="selectedSubject.status" :severity="getSubjectStatusSeverity(selectedSubject)" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" @click="subjectDetailsDialog = false" text />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -595,5 +736,39 @@ onBeforeMount(() => {
 .subject-table tbody tr {
     border-left: 2px solid transparent;
     border-bottom: 1px solid #f0f0f0;
+}
+
+.curriculum-details .detail-item {
+    margin-bottom: 1rem;
+}
+
+.curriculum-details .detail-item label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #555;
+}
+
+.curriculum-details .detail-item span {
+    display: block;
+}
+
+.algebra-curriculum table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.algebra-curriculum th,
+.algebra-curriculum td {
+    border: 1px solid #ddd;
+}
+
+.algebra-curriculum th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.algebra-curriculum ul {
+    list-style-type: disc;
 }
 </style>
