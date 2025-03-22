@@ -43,7 +43,7 @@ const router = useRouter();
 /* Page Styling */
 .landing-container {
     text-align: center;
-    padding: 50px;
+    padding: 5px;
 }
 
 h1 {
@@ -68,7 +68,7 @@ h1 {
 
 .enrollment-card {
     width: 100%;
-    height: 180px;
+    height: 140px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -81,7 +81,7 @@ h1 {
     cursor: pointer;
     transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
     box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2);
-    padding: 20px;
+    padding-top: 20px;
 }
 
 /* Text & Icon Styling */
