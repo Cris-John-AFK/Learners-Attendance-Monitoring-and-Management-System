@@ -11,8 +11,7 @@
                   responsiveLayout="scroll" stripedRows class="p-datatable-sm">
             <Column field="name" header="Student Name"></Column>
             <Column field="section" header="Section"></Column>
-            <Column field="absences" header="Absences"
-                   :sortable="true">
+            <Column field="absences" header="Absences" :sortable="true">
                 <template #body="slotProps">
                     <span :class="getAbsenceClass(slotProps.data.absences)">
                         {{ slotProps.data.absences }}
@@ -27,22 +26,37 @@
                 </template>
             </Column>
             <Column header="Actions">
-                <template #body>
-                    <div class="flex gap-2">
-                        <Button icon="pi pi-envelope" class="p-button-text p-button-rounded" />
+                <template #body="slotProps">
+                    <div>
                         <Button icon="pi pi-user" class="p-button-text p-button-rounded" />
-                        <Button icon="pi pi-pencil" class="p-button-text p-button-rounded" />
+                        <Button icon="pi pi-pencil" class="p-button-text p-button-rounded"
+                                @click="openEditDialog(slotProps.data)" />
                     </div>
                 </template>
             </Column>
         </DataTable>
+
+        <!-- Edit Contact Status Dialog -->
+        <Dialog v-model:visible="editDialogVisible" header="Edit Contact Status" :modal="true" :closable="false">
+            <div class="p-fluid">
+                <label for="contactStatus" class="font-semibold">Contact Status</label>
+                <Dropdown v-model="selectedStudent.contactStatus" :options="statusOptions"
+                          placeholder="Select Status" class="w-full" />
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="editDialogVisible = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveChanges" />
+            </template>
+        </Dialog>
     </div>
 </template>
 
 <script>
 import Button from 'primevue/button';
-import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import Tag from 'primevue/tag';
 
 export default {
@@ -50,7 +64,9 @@ export default {
         Button,
         DataTable,
         Column,
-        Tag
+        Tag,
+        Dialog,
+        Dropdown
     },
     data() {
         return {
@@ -62,7 +78,10 @@ export default {
                 { name: "Michael Brown", section: "Section B", absences: 7, lastAbsent: "Mar 17, 2025", contactStatus: "Contacted" },
                 { name: "Sarah Davis", section: "Section A", absences: 6, lastAbsent: "Mar 15, 2025", contactStatus: "Resolved" },
                 { name: "David Wilson", section: "Section C", absences: 5, lastAbsent: "Mar 14, 2025", contactStatus: "Not Contacted" }
-            ]
+            ],
+            editDialogVisible: false,
+            selectedStudent: null,
+            statusOptions: ["Not Contacted", "Contacted", "Pending", "Resolved"]
         };
     },
     methods: {
@@ -80,6 +99,18 @@ export default {
             if (absences >= 10) return 'text-orange-500 font-bold';
             if (absences >= 5) return 'text-yellow-600';
             return '';
+        },
+        openEditDialog(student) {
+            this.selectedStudent = { ...student };  // Clone the object
+            this.editDialogVisible = true;
+        },
+        saveChanges() {
+            // Find the student and update the contact status
+            const studentIndex = this.students.findIndex(s => s.name === this.selectedStudent.name);
+            if (studentIndex !== -1) {
+                this.students[studentIndex].contactStatus = this.selectedStudent.contactStatus;
+            }
+            this.editDialogVisible = false;
         }
     }
 };
