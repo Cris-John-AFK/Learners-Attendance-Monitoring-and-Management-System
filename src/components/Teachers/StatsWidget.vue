@@ -6,6 +6,9 @@
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Total Absentees</span>
                     <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">3</div>
+                    <span class="text-green-500 font-medium flex items-center" v-if="improvementFromYesterday">
+                        <i class="pi pi-arrow-up mr-1"></i> 5%
+                    </span>
                 </div>
                 <div class="flex items-center justify-center icon-container bg-orange-100 dark:bg-blue-400/10">
                     <i class="pi pi-user-minus text-red-500"></i>

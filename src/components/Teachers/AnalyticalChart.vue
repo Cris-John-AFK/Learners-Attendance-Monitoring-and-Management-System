@@ -1,6 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch, computed } from 'vue';
 
 const { getPrimary, getSurface, isDarkTheme } = useLayout();
 const chartData = ref(null);
@@ -8,6 +8,29 @@ const chartOptions = ref(null);
 const selectedView = ref('monthly'); // 'daily', 'weekly', 'monthly'
 const selectedDate = ref(new Date().toISOString().slice(0, 10));
 const selectedMonth = ref('2025-03'); // Default to March 2025
+
+// Add insight metrics
+const insightMetrics = computed(() => {
+    if (selectedView.value === 'monthly') {
+        return [
+            { label: 'Highest Absence Month', value: 'February', icon: 'pi pi-calendar', trend: 'up', trendValue: '4%' },
+            { label: 'Average Attendance Rate', value: '92%', icon: 'pi pi-percentage', trend: 'up', trendValue: '2%' },
+            { label: 'Most Common Absence Day', value: 'Monday', icon: 'pi pi-clock', trend: 'neutral', trendValue: '-' }
+        ];
+    } else if (selectedView.value === 'weekly') {
+        return [
+            { label: 'Highest Absence Day', value: 'Friday', icon: 'pi pi-calendar', trend: 'up', trendValue: '5%' },
+            { label: 'Students Improving', value: '7', icon: 'pi pi-arrow-up', trend: 'up', trendValue: '2' },
+            { label: 'Weekly Trend', value: 'Improving', icon: 'pi pi-chart-line', trend: 'up', trendValue: '3%' }
+        ];
+    } else {
+        return [
+            { label: 'Absences Today', value: selectedDate.value === '2025-03-22' ? '0' : '3', icon: 'pi pi-users', trend: 'down', trendValue: '2' },
+            { label: 'On-time Rate', value: '95%', icon: 'pi pi-clock', trend: 'up', trendValue: '3%' },
+            { label: 'Daily Trend', value: 'Improving', icon: 'pi pi-chart-line', trend: 'up', trendValue: '2%' }
+        ];
+    }
+});
 
 const staticData = {
     daily: {
@@ -187,6 +210,33 @@ onMounted(() => {
                 <input v-if="selectedView === 'weekly'" type="month" v-model="selectedMonth" class="border rounded px-2 py-1" />
             </div>
         </div>
+
+        <!-- Insights Row -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div v-for="(metric, index) in insightMetrics" :key="index"
+                 class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex items-center">
+                <div class="mr-3 w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900">
+                    <i :class="metric.icon" class="text-blue-500"></i>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">{{ metric.label }}</div>
+                    <div class="font-semibold">{{ metric.value }}</div>
+                    <div class="flex items-center mt-1 text-xs">
+                        <span :class="{
+                            'text-green-500': metric.trend === 'up',
+                            'text-red-500': metric.trend === 'down',
+                            'text-gray-500': metric.trend === 'neutral'
+                        }">
+                            <i :class="metric.trend === 'up' ? 'pi pi-arrow-up' :
+                                     metric.trend === 'down' ? 'pi pi-arrow-down' : ''"
+                               class="mr-1"></i>
+                            {{ metric.trendValue }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <Chart type="bar" :data="chartData" :options="chartOptions" class="h-80" />
     </div>
 </template>
