@@ -1,8 +1,8 @@
 <script setup>
-import AppFooter from '@/layout/AppFooter.vue';
 import { useLayout } from '@/layout/composables/layout';
 import GuestTopbar from '@/layout/guestlayout/GuestTopbar.vue';
 import { ref, watch } from 'vue';
+import AppFooter from './AppFooter.vue';
 const { layoutState, isSidebarActive } = useLayout();
 
 const outsideClickListener = ref(null);
