@@ -9,10 +9,55 @@ const model = ref([
         items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/teacher' }]
     },
     {
+        label: 'Subjects',
+        icon: 'pi pi-fw pi-briefcase',
+        to: '/pages',
+        items: [
+            {
+                label: 'Homeroom',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/homeroom'
+            },
+            {
+                label: 'Mother Tounge',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/mother-tongue'
+            },
+            {
+                label: 'English',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/english'
+            },
+            {
+                label: 'Filipino',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/filipino'
+            },
+            {
+                label: 'Mathematics',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/mathematics'
+            }
+        ]
+    },
+    {
+        separator: true
+    },
+    {
+        label: 'Other Subjects',
+        items: [
+            {
+                label: 'MAPEH',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/mapeh'
+            }
+        ]
+    },
+    {
         label: 'Attendance',
         icon: 'pi pi-fw pi-briefcase',
         to: '/pages',
-        items:[
+        items: [
             {
                 label: 'Attendance Record',
                 icon: 'pi pi-fw pi-book',
@@ -32,7 +77,7 @@ const model = ref([
         label: 'Manage',
         icon: 'pi pi-fw pi-briefcase',
         to: '/pages',
-        items:[
+        items: [
             {
                 label: 'Section',
                 icon: 'pi pi-fw pi-users',
@@ -44,7 +89,7 @@ const model = ref([
                 to: '/pages/settings'
             }
         ]
-    },
+    }
 ]);
 </script>
 
