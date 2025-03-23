@@ -4,6 +4,7 @@ import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
+import SubjectAttendance from '@/views/pages/SubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 const router = createRouter({
@@ -48,6 +49,11 @@ const router = createRouter({
                     path: '/pages/settings',
                     name: 'settings',
                     component: () => import('@/views/pages/Settings.vue')
+                },
+                {
+                    path: '/subject/:subject',
+                    name: 'subject-attendance',
+                    component: SubjectAttendance
                 }
             ]
         },
