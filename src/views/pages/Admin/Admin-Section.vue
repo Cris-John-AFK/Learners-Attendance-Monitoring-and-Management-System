@@ -13,11 +13,7 @@ const confirmDelete = (index) => {
 };
 
 const getRandomGradient = () => {
-    const colors = [
-        '#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee',
-        '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2',
-        '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'
-    ];
+    const colors = ['#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
 
     const color1 = colors[Math.floor(Math.random() * colors.length)];
     const color2 = colors[Math.floor(Math.random() * colors.length)];
@@ -31,18 +27,10 @@ const cardStyles = computed(() =>
     }))
 );
 
-const grades = ref([
-    { grade: 'Kinder' },
-    { grade: 'Grade 1' },
-    { grade: 'Grade 2' },
-    { grade: 'Grade 3' },
-    { grade: 'Grade 4' },
-    { grade: 'Grade 5' },
-    { grade: 'Grade 6' }
-]);
+const grades = ref([{ grade: 'Kinder' }, { grade: 'Grade 1' }, { grade: 'Grade 2' }, { grade: 'Grade 3' }, { grade: 'Grade 4' }, { grade: 'Grade 5' }, { grade: 'Grade 6' }]);
 
 const gradeSections = ref({
-    'Kinder': [{ name: 'Section A' }, { name: 'Section B' }],
+    Kinder: [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
     'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
@@ -95,16 +83,13 @@ const openCreateForm = () => {
 const createSection = () => {
     if (!newSection.value.name) return;
 
-    gradeSections.value[selectedGrade.value] = [
-        ...(gradeSections.value[selectedGrade.value] || []),
-        { name: newSection.value.name }
-    ];
+    gradeSections.value[selectedGrade.value] = [...(gradeSections.value[selectedGrade.value] || []), { name: newSection.value.name }];
 
     sectionStudents.value[newSection.value.name] = newSection.value.students
-        ? newSection.value.students.split(',').map(name => ({
-            id: `S${Math.floor(Math.random() * 1000)}`,
-            name: name.trim()
-        }))
+        ? newSection.value.students.split(',').map((name) => ({
+              id: `S${Math.floor(Math.random() * 1000)}`,
+              name: name.trim()
+          }))
         : [];
 
     toast.add({ severity: 'success', summary: 'Section Added', detail: 'New section created.', life: 3000 });
@@ -146,16 +131,9 @@ const updateSection = () => {
 };
 </script>
 
-
 <template>
     <div class="card-container">
-        <Sakai-card
-            v-for="(grade, index) in grades"
-            :key="index"
-            class="custom-card"
-            :style="cardStyles[index]"
-            @click="openSectionsModal(grade.grade)"
-        >
+        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.grade)">
             <div class="card-header">
                 <h1 class="grade-name">{{ grade.grade }}</h1>
             </div>
@@ -170,11 +148,7 @@ const updateSection = () => {
                 <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
             </div>
             <ul class="section-list">
-                <li
-                    v-for="(section, index) in gradeSections[selectedGrade]"
-                    :key="index"
-                    class="section-item"
-                >
+                <li v-for="(section, index) in gradeSections[selectedGrade]" :key="index" class="section-item">
                     <span class="section-name" @click="selectSection(section.name)">{{ section.name }}</span>
                     <div class="section-buttons">
                         <Button label="View" icon="pi pi-eye" class="p-button-text p-button-sm" @click="selectSection(section.name)" />
@@ -204,16 +178,13 @@ const updateSection = () => {
         <InputText v-model="editedSection.name" placeholder="Enter section name" class="w-full mb-3" />
 
         <label class="font-bold">Students</label>
-        <MultiSelect v-model="editedSection.students" :options="allStudents" optionLabel="name" placeholder="Select students"
-            class="w-full mb-3" />
+        <MultiSelect v-model="editedSection.students" :options="allStudents" optionLabel="name" placeholder="Select students" class="w-full mb-3" />
 
         <div class="flex justify-end gap-2">
             <Button label="Cancel" class="p-button-text" @click="showEditForm = false" />
             <Button label="Save" class="p-button-success" @click="updateSection" />
         </div>
     </Dialog>
-
-
 
     <!-- Create Section Modal -->
     <Dialog v-model:visible="showCreateForm" :style="{ width: '500px' }" header="Create New Section" :modal="true">
@@ -242,7 +213,9 @@ const updateSection = () => {
     background: #f9f9f9;
     border-radius: 8px;
     margin-bottom: 8px;
-    transition: background 0.3s, transform 0.2s;
+    transition:
+        background 0.3s,
+        transform 0.2s;
 }
 
 .student-icon {
@@ -270,7 +243,9 @@ const updateSection = () => {
     cursor: pointer;
     text-align: center;
     background: #f0f0f0;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+        transform 0.2s,
+        box-shadow 0.2s;
 }
 
 .custom-card:hover {
