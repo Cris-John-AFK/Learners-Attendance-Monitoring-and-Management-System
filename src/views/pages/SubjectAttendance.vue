@@ -9,7 +9,11 @@
 
                 <!-- Attendance Table -->
                 <DataTable :value="attendanceData" class="p-datatable-sm" :paginator="true" :rows="10" responsiveLayout="scroll">
-                    <Column field="date" header="Date"></Column>
+                    <Column field="date" header="Date">
+                        <template #body="slotProps">
+                            {{ formatDate(slotProps.data.date) }}
+                        </template>
+                    </Column>
                     <Column field="studentName" header="Student Name"></Column>
                     <Column field="studentId" header="Student ID"></Column>
                     <Column field="status" header="Status">
@@ -85,13 +89,15 @@
 
 
     <!-- Single Student Roll Call Modal -->
-    <Dialog v-model:visible="showRollCall" modal :header="'Mark Attendance - ' + currentStudent?.name" :style="{ width: '50vw' }">
+    <Dialog v-model:visible="showRollCall" modal :header="'Mark Attendance - ' + (currentStudent?.name || 'Unknown')" :style="{ width: '50vw' }">
         <div class="card">
             <div class="flex flex-column align-items-center p-4">
+
                 <div class="student-info mb-4">
-                    <h3 class="text-xl font-semibold">{{ currentStudent?.name }}</h3>
-                    <p class="text-gray-600">ID: {{ currentStudent?.id }}</p>
+                    <h3 class="text-xl font-semibold">{{ currentStudent?.name || 'No Name' }}</h3>
+                    <p class="text-gray-600">ID: {{ currentStudent?.id || 'No ID' }}</p>
                 </div>
+
                 <div class="grid w-full">
                     <div class="col-12 md:col-6 p-2">
                         <Button label="Present" icon="pi pi-check" class="p-button-success w-full" @click="markAttendance('Present')" />
@@ -128,19 +134,20 @@
 </template>
 
 <script setup>
-import { StudentAttendanceService } from '@/router/service/StudentAttendanceService';
+import { AttendanceService } from '@/router/service/Students';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import Button from 'primevue/button';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 
 const route = useRoute();
-const subjectName = ref(route.params.subject || 'Subject');
+const subjectName = ref('Subject');
+
 
 // Modal states
 const showAttendanceModal = ref(true); // Show immediately when page loads
@@ -164,15 +171,16 @@ let codeReader = null;
 
 const startScanning = async () => {
   try {
-    const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoElement);
-    console.log('QR Code detected:', result.text);
-    alert(`Scanned: ${result.text}`);
+    const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoElement.value);
+    if (result) {
+      processScannedData(result.text);
+      codeReader.reset(); // Stop scanner after successful scan
+    }
   } catch (error) {
-    console.warn('No QR code detected. Retrying...');
-  } finally {
-    startScanning(); // Restart scanning after a failed attempt
+    console.warn('No QR code detected.');
   }
 };
+
 
 // Open Scanner
 const startQRAttendance = () => {
@@ -189,6 +197,10 @@ const startQRAttendance = () => {
     });
 };
 
+const formatDate = (dateString) => {
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString('en-US', options);
+};
 
 const initializeCamera = async () => {
     if (!codeReader) {
@@ -235,6 +247,24 @@ const processScannedData = (scannedText) => {
     }
 };
 
+watch(() => route.fullPath, () => {
+    // Extract the subject name from the route
+    const matchedSubject = route.params.subject;
+
+    if (matchedSubject) {
+        subjectName.value = formatSubjectName(matchedSubject);
+    } else {
+        subjectName.value = 'Subject'; // Default
+    }
+});
+
+// Function to format subject names
+const formatSubjectName = (subject) => {
+    // Convert kebab-case or lowercase to title case
+    return subject
+        .replace(/-/g, ' ')  // Replace dashes with spaces
+        .replace(/\b\w/g, char => char.toUpperCase()); // Capitalize words
+};
 
 const closeScanner = () => {
     if (codeReader) {
@@ -271,9 +301,16 @@ onUnmounted(() => {
 const startRollCall = () => {
     showAttendanceModal.value = false;
     showRollCall.value = true;
-    currentStudentIndex.value = 0;
-    currentStudent.value = students.value[0];
+
+    // Check if students exist before assigning
+    if (students.value.length > 0) {
+        currentStudentIndex.value = 0;
+        currentStudent.value = students.value[0];
+    } else {
+        console.error("No students found!");
+    }
 };
+
 
 const markAttendance = (status) => {
     if (!currentStudent.value) return;
@@ -281,7 +318,7 @@ const markAttendance = (status) => {
     // Add to attendance records
     attendanceData.value.push({
         date: new Date().toISOString().split('T')[0],
-        studentName: currentStudent.value.name,
+        studentName: currentStudent.value.name, // Ensure this is correctly set
         studentId: currentStudent.value.id,
         status: status,
         time: new Date().toLocaleTimeString(),
@@ -337,10 +374,18 @@ const getStatusClass = (status) => {
 
 // Initialize data
 onMounted(async () => {
-    // Get students data from service
-    const studentsData = await StudentAttendanceService.getStudentsLarge();
-    students.value = studentsData;
+    // Fetch students
+    const studentsData = await AttendanceService.getData(() => {
+        students.value = data;
+    });
+
+    if (studentsData && studentsData.length > 0) {
+        students.value = studentsData;
+    } else {
+        console.error("No students found in the database!");
+    }
 });
+
 </script>
 
 <style scoped>/* Camera Card */

@@ -1,8 +1,8 @@
 import { PhotoService } from '@/router/service/PhotoService';
 
 export const AttendanceService = {
-    getData() {
-        const photos = PhotoService.getData(); // Get photo data
+    async getData() {
+        const photos = await PhotoService.getData(); // Get photo data
         return [
             {
                 id: 1001,
