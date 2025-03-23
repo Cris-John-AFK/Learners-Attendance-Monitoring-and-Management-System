@@ -169,11 +169,7 @@ function openEditSubject(subject) {
 
 function saveEditSubject() {
     if (selectedTeacher.value && editingSubject.value) {
-        TeacherService.updateSubject(
-            selectedTeacher.value.id,
-            editingSubject.value.id,
-            editingSubject.value
-        );
+        TeacherService.updateSubject(selectedTeacher.value.id, editingSubject.value.id, editingSubject.value);
         loadTeachers(); // Refresh data
     }
     editSubjectDialog.value = false;
@@ -200,15 +196,11 @@ function openCreateSectionDialog() {
 
 function saveNewSection() {
     if (selectedTeacher.value && selectedSubject.value) {
-        TeacherService.addSection(
-            selectedTeacher.value.id,
-            selectedSubject.value.id,
-            newSection.value
-        );
+        TeacherService.addSection(selectedTeacher.value.id, selectedSubject.value.id, newSection.value);
         // Update the selected subject with fresh data
         const teacher = TeacherService.getTeacherById(selectedTeacher.value.id);
         selectedTeacher.value = teacher;
-        selectedSubject.value = teacher.subjects.find(s => s.id === selectedSubject.value.id);
+        selectedSubject.value = teacher.subjects.find((s) => s.id === selectedSubject.value.id);
 
         loadTeachers(); // Refresh all data
     }
@@ -236,7 +228,7 @@ onBeforeMount(() => {
             <template #header>
                 <div class="flex justify-between align-items-center">
                     <span class="p-input-icon-left">
-                        <i class="pi pi-search" :style="{ padding : '10px'}"/>
+                        <i class="pi pi-search" :style="{ padding: '10px' }" />
                         <InputText v-model="searchQuery" placeholder="Search Teachers..." />
                     </span>
                     <div class="flex flex-wrap justify-end gap-2">
@@ -308,274 +300,165 @@ onBeforeMount(() => {
             </template>
         </DataTable>
 
-        <Dialog
-            v-model:visible="editDialog"
-            modal
-            header="Edit Teacher"
-            :style="{ width: '450px' }"
-        >
+        <Dialog v-model:visible="editDialog" modal header="Edit Teacher" :style="{ width: '450px' }">
             <div class="p-fluid" v-if="editingTeacher">
                 <!-- Teacher Name -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="name" class="font-medium">Teacher Name</label>
                     <InputText id="name" v-model="editingTeacher.name" class="w-full" />
                 </div>
 
                 <!-- Photo Section -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label class="font-medium">Current Photo</label>
                     <div class="flex align-items-center gap-2 mb-3">
-                        <img
-                            :src="`https://primefaces.org/cdn/primevue/images/avatar/${editingTeacher.image}`"
-                            :alt="editingTeacher.name"
-                            class="shadow-lg rounded-full border border-gray-300 p-1"
-                            width="80"
-                        />
+                        <img :src="`https://primefaces.org/cdn/primevue/images/avatar/${editingTeacher.image}`" :alt="editingTeacher.name" class="shadow-lg rounded-full border border-gray-300 p-1" width="80" />
                     </div>
 
-                    <label class="font-medium" >Change Photo</label>
-                    <FileUpload
-                        mode="basic"
-                        accept="image/*"
-                        :maxFileSize="1000000"
-                        @upload="onEditImageUpload"
-                        :auto="true"
-                        chooseLabel="Choose New Photo"
-                        class="w-full"
-                    />
+                    <label class="font-medium">Change Photo</label>
+                    <FileUpload mode="basic" accept="image/*" :maxFileSize="1000000" @upload="onEditImageUpload" :auto="true" chooseLabel="Choose New Photo" class="w-full" />
                 </div>
 
                 <!-- Department -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="department" class="font-medium">Department</label>
                     <InputText id="department" v-model="editingTeacher.department" class="w-full" />
                 </div>
 
                 <!-- Room Number -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="roomNumber" class="font-medium">Room Number</label>
                     <InputText id="roomNumber" v-model="editingTeacher.roomNumber" class="w-full" />
                 </div>
 
                 <!-- Status Dropdown -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="edit-status" class="font-medium">Status</label>
-                    <Dropdown
-                        id="edit-status"
-                        v-model="editingTeacher.status"
-                        :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']"
-                        placeholder="Select Status"
-                        class="w-full"
-                    />
+                    <Dropdown id="edit-status" v-model="editingTeacher.status" :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']" placeholder="Select Status" class="w-full" />
                 </div>
             </div>
 
             <!-- Footer Buttons -->
             <template #footer>
                 <div class="flex justify-content-between w-full">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        @click="editDialog = false"
-                        class="p-button-text"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        @click="saveEdit"
-                        class="p-button-success"
-                        autofocus
-                    />
+                    <Button label="Cancel" icon="pi pi-times" @click="editDialog = false" class="p-button-text" />
+                    <Button label="Save" icon="pi pi-check" @click="saveEdit" class="p-button-success" autofocus />
                 </div>
             </template>
         </Dialog>
 
-        <Dialog
-            v-model:visible="createDialog"
-            modal
-            header="Register New Teacher"
-            :style="{ width: '450px' }"
-        >
+        <Dialog v-model:visible="createDialog" modal header="Register New Teacher" :style="{ width: '450px' }">
             <div class="p-fluid">
                 <!-- Teacher Name -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="new-name" class="font-medium">Teacher Name</label>
                     <InputText id="new-name" v-model="newTeacher.name" class="w-full" />
                 </div>
 
                 <!-- Photo Upload -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label class="font-medium">Photo</label>
-                    <FileUpload
-                        mode="basic"
-                        accept="image/*"
-                        :maxFileSize="1000000"
-                        @upload="onImageUpload"
-                        :auto="true"
-                        chooseLabel="Choose Photo"
-                        class="w-full"
-                    />
+                    <FileUpload mode="basic" accept="image/*" :maxFileSize="1000000" @upload="onImageUpload" :auto="true" chooseLabel="Choose Photo" class="w-full" />
                 </div>
 
                 <!-- Department -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="new-department" class="font-medium">Department</label>
                     <InputText id="new-department" v-model="newTeacher.department" class="w-full" />
                 </div>
 
                 <!-- Room Number -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="new-roomNumber" class="font-medium">Room Number</label>
                     <InputText id="new-roomNumber" v-model="newTeacher.roomNumber" class="w-full" />
                 </div>
 
                 <!-- Status -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="new-status" class="font-medium">Status</label>
-                    <Dropdown
-                        id="new-status"
-                        v-model="newTeacher.status"
-                        :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']"
-                        placeholder="Select Status"
-                        class="w-full"
-                    />
+                    <Dropdown id="new-status" v-model="newTeacher.status" :options="['ACTIVE', 'ON_LEAVE', 'INACTIVE']" placeholder="Select Status" class="w-full" />
                 </div>
             </div>
 
             <!-- Footer Buttons -->
             <template #footer>
                 <div class="flex justify-content-between w-full">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        @click="createDialog = false"
-                        class="p-button-text"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        @click="saveNewTeacher"
-                        class="p-button-success"
-                        autofocus
-                    />
+                    <Button label="Cancel" icon="pi pi-times" @click="createDialog = false" class="p-button-text" />
+                    <Button label="Save" icon="pi pi-check" @click="saveNewTeacher" class="p-button-success" autofocus />
                 </div>
             </template>
         </Dialog>
 
         <!-- Dialog for new subject -->
-        <Dialog
-            v-model:visible="subjectDialog"
-            modal
-            header="Add New Subject"
-            :style="{ width: '450px' }"
-        >
-            <div class="p-fluid" :style="{ padding : '10px'}">
+        <Dialog v-model:visible="subjectDialog" modal header="Add New Subject" :style="{ width: '450px' }">
+            <div class="p-fluid" :style="{ padding: '10px' }">
                 <!-- Subject Name -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="subject-name" class="font-medium">Subject Name</label>
                     <InputText id="subject-name" v-model="newSubject.name" class="w-full" />
                 </div>
 
                 <!-- Start Date -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="subject-date" class="font-medium">Start Date</label>
                     <Calendar id="subject-date" v-model="newSubject.startDate" dateFormat="yy-mm-dd" class="w-full" />
                 </div>
 
                 <!-- Initial Sections Count -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="sections" class="font-medium">Initial Sections Count</label>
                     <InputNumber id="sections" v-model="newSubject.sectionsCount" :min="0" :max="6" class="w-full" />
                 </div>
 
                 <!-- Status Dropdown -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="status" class="font-medium">Status</label>
-                    <Dropdown
-                        id="status"
-                        v-model="newSubject.status"
-                        :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']"
-                        placeholder="Select Status"
-                        class="w-full"
-                    />
+                    <Dropdown id="status" v-model="newSubject.status" :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']" placeholder="Select Status" class="w-full" />
                 </div>
             </div>
 
             <!-- Footer Buttons -->
             <template #footer>
                 <div class="flex justify-content-between w-full">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        @click="subjectDialog = false"
-                        class="p-button-text"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        @click="saveNewSubject"
-                        class="p-button-success"
-                        autofocus
-                    />
+                    <Button label="Cancel" icon="pi pi-times" @click="subjectDialog = false" class="p-button-text" />
+                    <Button label="Save" icon="pi pi-check" @click="saveNewSubject" class="p-button-success" autofocus />
                 </div>
             </template>
         </Dialog>
 
         <!-- Dialog for editing subject -->
-        <Dialog
-            v-model:visible="editSubjectDialog"
-            modal
-            header="Edit Subject"
-            :style="{ width: '450px' }"
-        >
+        <Dialog v-model:visible="editSubjectDialog" modal header="Edit Subject" :style="{ width: '450px' }">
             <div class="p-fluid" v-if="editingSubject">
                 <!-- Subject Name -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="edit-subject-name" class="font-medium">Subject Name</label>
                     <InputText id="edit-subject-name" v-model="editingSubject.name" class="w-full" />
                 </div>
 
                 <!-- Start Date -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="edit-subject-date" class="font-medium">Start Date</label>
                     <Calendar id="edit-subject-date" v-model="editingSubject.startDate" dateFormat="yy-mm-dd" class="w-full" />
                 </div>
 
                 <!-- Sections Count (Disabled) -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="edit-sections" class="font-medium">Sections Count</label>
                     <InputNumber id="edit-sections" v-model="editingSubject.sectionsCount" :min="0" :max="6" disabled class="w-full opacity-70" />
                 </div>
 
                 <!-- Status Dropdown -->
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label for="edit-subject-status" class="font-medium">Status</label>
-                    <Dropdown
-                        id="edit-subject-status"
-                        v-model="editingSubject.status"
-                        :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']"
-                        placeholder="Select Status"
-                        class="w-full"
-                    />
+                    <Dropdown id="edit-subject-status" v-model="editingSubject.status" :options="['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']" placeholder="Select Status" class="w-full" />
                 </div>
             </div>
 
             <!-- Footer Buttons -->
             <template #footer>
                 <div class="flex justify-content-between w-full">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        @click="editSubjectDialog = false"
-                        class="p-button-text"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        @click="saveEditSubject"
-                        class="p-button-success"
-                        autofocus
-                    />
+                    <Button label="Cancel" icon="pi pi-times" @click="editSubjectDialog = false" class="p-button-text" />
+                    <Button label="Save" icon="pi pi-check" @click="saveEditSubject" class="p-button-success" autofocus />
                 </div>
             </template>
         </Dialog>
@@ -583,25 +466,25 @@ onBeforeMount(() => {
         <!-- Teacher Details Dialog -->
         <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '450px' }">
             <div class="p-fluid" v-if="selectedTeacher">
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label>Teacher Name</label>
                     <div class="p-inputtext">{{ selectedTeacher.name }}</div>
                 </div>
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label>Department</label>
                     <div class="p-inputtext">{{ selectedTeacher.department }}</div>
                 </div>
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label>Room Number</label>
                     <div class="p-inputtext">{{ selectedTeacher.roomNumber }}</div>
                 </div>
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label>Status</label>
                     <div class="p-inputtext">
                         <Tag :value="selectedTeacher.status" :severity="getTeacherStatusSeverity(selectedTeacher)" />
                     </div>
                 </div>
-                <div class="field" :style="{ padding : '10px'}">
+                <div class="field" :style="{ padding: '10px' }">
                     <label>Subjects</label>
                     <DataTable :value="selectedTeacher.subjects" scrollable scrollHeight="200px">
                         <Column field="name" header="Subject Name"></Column>
@@ -640,15 +523,13 @@ onBeforeMount(() => {
                             </Button>
                             <Button class="p-button-text p-button-sm" type="button" aria-label="Edit">
                                 <Button class="p-button-text p-button-sm" type="button" aria-label="Edit">
-                                <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
-                                <span class="p-button-label">Edit</span>
+                                    <span class="p-button-icon p-button-icon-left pi pi-pencil"></span>
+                                    <span class="p-button-label">Edit</span>
                                 </Button>
-                                </Button>
+                            </Button>
                         </div>
                     </li>
-                    <li v-if="!selectedSubject?.sections || selectedSubject.sections.length === 0" class="no-sections">
-                        No sections found for this subject
-                    </li>
+                    <li v-if="!selectedSubject?.sections || selectedSubject.sections.length === 0" class="no-sections">No sections found for this subject</li>
                 </ul>
             </div>
             <template #footer>

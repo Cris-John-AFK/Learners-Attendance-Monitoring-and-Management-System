@@ -1,9 +1,9 @@
-import AppLayout from '@/layout/AppLayout.vue';
 import LoginLayout from '@/layout/LoginLayout/LoginLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
 import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
+import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 const router = createRouter({
@@ -13,7 +13,6 @@ const router = createRouter({
             path: '/',
             component: LoginLayout,
             children: [
-
                 {
                     path: '',
                     name: 'login-page',
@@ -75,6 +74,11 @@ const router = createRouter({
                     path: '/admin-section',
                     name: 'admin-section',
                     component: () => import('@/views/pages/Admin/Admin-Section.vue')
+                },
+                {
+                    path: '/admin-subject',
+                    name: 'admin-subject',
+                    component: () => import('@/views/pages/Admin/Admin-Subject.vue')
                 },
                 {
                     path: '/admin-settings',

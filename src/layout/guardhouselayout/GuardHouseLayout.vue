@@ -1,5 +1,4 @@
 <script setup>
-import AppFooter from '@/layout/AppFooter.vue';
 import { useLayout } from '@/layout/composables/layout';
 import GuardHouseTopbar from '@/layout/guardhouselayout/GuardHouseTopbar.vue';
 import { AttendanceService } from '@/router/service/Students';
@@ -7,6 +6,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
+import AppFooter from './AppFooter.vue';
 
 const { layoutState, isSidebarActive } = useLayout();
 const outsideClickListener = ref(null);
