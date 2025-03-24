@@ -1,12 +1,15 @@
 <script setup>
 import SakaiCard from '@/components/SakaiCard.vue';
+import { GradeService } from '@/router/service/Grades';
 import { AttendanceService } from '@/router/service/Students';
 import { SubjectService } from '@/router/service/Subjects';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 
-const grades = ref([{ grade: 'Kinder' }, { grade: 'Grade 1' }, { grade: 'Grade 2' }, { grade: 'Grade 3' }, { grade: 'Grade 4' }, { grade: 'Grade 5' }, { grade: 'Grade 6' }]);
+// Replace the hardcoded grades with data from GradeService
+const grades = ref([]);
 const selectedGrade = ref(null);
+
 const showSections = (grade) => {
     selectedGrade.value = grade;
     fetchSections(grade);
@@ -43,16 +46,22 @@ const newStudent = ref({ id: '', name: '', status: 'Present', remarks: '' });
 const selectedStudent = ref(null);
 const studentSearch = ref('');
 
-// Fetch sections for the selected grade
+// Fetch sections for the selected grade - modified to use GradeService
 const fetchSections = async (grade) => {
     try {
-        // First get the sections from the SubjectService
+        // Extract the grade ID from the grade name
+        const gradeId = grade === 'Kinder' ? 'K' : grade.replace('Grade ', '');
+
+        // Use the GradeService to get grade details including sections and students
+        const gradeDetails = await GradeService.getGradeDetails(gradeId);
+
+        // Get section data from SubjectService with the grade name
         const sectionsData = await SubjectService.getSectionsByGrade(grade);
 
-        // Now for each section, fetch the students using the enhanced relationship
+        // Now for each section, fetch the students
         sections.value = await Promise.all(
             sectionsData.map(async (section) => {
-                // Get students for this section with optimized filtering
+                // Get students for this section
                 const sectionStudents = await SubjectService.getStudentsBySection(section.id);
 
                 return {
@@ -211,20 +220,27 @@ function getStatusSeverity(status) {
     }
 }
 
-// Enhanced initialization - load both student and section data
+// Enhanced initialization - load grades, students and section data
 onMounted(async () => {
     try {
+        // Fetch all grades
+        const gradesData = await GradeService.getGrades();
+        grades.value = gradesData.map((grade) => ({ grade: grade.name }));
+
         // Fetch all students for reference
         const studentsData = await AttendanceService.getData();
         students.value = studentsData;
 
-        console.log('Loaded student data:', students.value.length, 'students');
+        console.log('Loaded data:', {
+            grades: grades.value.length,
+            students: students.value.length
+        });
     } catch (error) {
-        console.error('Error loading student data:', error);
+        console.error('Error loading data:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load student data. Please try again.',
+            detail: 'Failed to load initial data. Please try again.',
             life: 3000
         });
     }

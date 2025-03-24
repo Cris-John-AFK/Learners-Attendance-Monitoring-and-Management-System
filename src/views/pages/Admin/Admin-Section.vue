@@ -1,19 +1,107 @@
 <script setup>
 import SakaiCard from '@/components/SakaiCard.vue';
-import { computed, ref } from 'vue';
+import { GradeService } from '@/router/service/Grades';
+import { AttendanceService } from '@/router/service/Students';
+import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, ref } from 'vue';
+const toast = useToast();
+const grades = ref([]);
+const selectedGrade = ref(null);
+const selectedGradeId = ref(null);
+const sections = ref([]);
+const sectionDialog = ref(false);
+const deleteSectionDialog = ref(false);
+const section = ref({
+    name: '',
+    capacity: 40,
+    adviser: '',
+    room: ''
+});
+const submitted = ref(false);
+const loading = ref(false);
+const showModal = ref(false);
+const showCreateForm = ref(false);
+const showEditForm = ref(false);
+const selectedSection = ref(null);
+const studentsInSection = ref([]);
 
-const deleteSection = (index) => {
-    confirmDelete(index);
+// Load grades from centralized service
+const loadGrades = async () => {
+    try {
+        loading.value = true;
+        const gradesData = await GradeService.getGrades();
+        grades.value = gradesData;
+        loading.value = false;
+        console.log('Loaded grades:', grades.value);
+    } catch (error) {
+        console.error('Error loading grades:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load grade data',
+            life: 3000
+        });
+        loading.value = false;
+    }
 };
 
-const confirmDelete = (index) => {
-    if (confirm('Are you sure you want to delete this section?')) {
-        gradeSections.value[selectedGrade.value].splice(index, 1);
+// Load sections for a specific grade using centralized service
+const loadSections = async (gradeId) => {
+    if (!gradeId) return;
+
+    try {
+        loading.value = true;
+        console.log('Loading sections for grade ID:', gradeId);
+        const sectionsData = await GradeService.getSectionsByGrade(gradeId);
+        sections.value = sectionsData;
+        loading.value = false;
+        console.log('Loaded sections:', sections.value);
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load section data',
+            life: 3000
+        });
+        loading.value = false;
+    }
+};
+
+// Load students for a specific section
+const loadStudentsForSection = async (sectionName) => {
+    if (!selectedGradeId.value || !sectionName) return;
+
+    try {
+        loading.value = true;
+        console.log('Fetching students for grade:', selectedGradeId.value, 'section:', sectionName);
+
+        // Convert selected grade ID to a number for proper filtering
+        let gradeLevel;
+        if (selectedGradeId.value === 'K') {
+            gradeLevel = 0; // Kinder is usually represented as 0
+        } else {
+            gradeLevel = parseInt(selectedGradeId.value);
+        }
+
+        // Get all students from AttendanceService directly
+        const allStudents = await AttendanceService.getData();
+        console.log('All students from AttendanceService:', allStudents);
+
+        // Filter students by grade level and section
+        studentsInSection.value = allStudents.filter((student) => student.gradeLevel === gradeLevel && student.section === sectionName);
+
+        console.log('Filtered students:', studentsInSection.value);
+        loading.value = false;
+    } catch (error) {
+        console.error('Error loading students:', error);
+        studentsInSection.value = [];
+        loading.value = false;
     }
 };
 
 const getRandomGradient = () => {
-    const colors = ['#ff9a9e', '#fad0c4', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
+    const colors = ['#ff9a9e', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
 
     const color1 = colors[Math.floor(Math.random() * colors.length)];
     const color2 = colors[Math.floor(Math.random() * colors.length)];
@@ -27,115 +115,132 @@ const cardStyles = computed(() =>
     }))
 );
 
-const grades = ref([{ grade: 'Kinder' }, { grade: 'Grade 1' }, { grade: 'Grade 2' }, { grade: 'Grade 3' }, { grade: 'Grade 4' }, { grade: 'Grade 5' }, { grade: 'Grade 6' }]);
+// Open Sections Modal for a selected grade
+const openSectionsModal = async (grade) => {
+    try {
+        const gradeObj = grades.value.find((g) => g.name === grade);
 
-const gradeSections = ref({
-    Kinder: [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 1': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 2': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 3': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 4': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 5': [{ name: 'Section A' }, { name: 'Section B' }],
-    'Grade 6': [{ name: 'Section A' }, { name: 'Section B' }]
-});
+        if (gradeObj) {
+            selectedGrade.value = gradeObj.name;
+            selectedGradeId.value = gradeObj.id;
 
-const sectionStudents = ref({
-    'Section A': [
-        { id: 'S001', name: 'John Doe' },
-        { id: 'S002', name: 'Jane Smith' }
-    ],
-    'Section B': [
-        { id: 'S003', name: 'Alice Brown' },
-        { id: 'S004', name: 'Bob White' }
-    ]
-});
+            await loadSections(gradeObj.id);
 
-// State Variables
-const selectedGrade = ref(null);
-const selectedSection = ref(null);
-const showModal = ref(false);
-const showCreateForm = ref(false);
-const showEditForm = ref(false);
-
-const newSection = ref({ name: '', students: '' });
-const editedSection = ref({ name: '', students: [], index: null });
-
-// Open Sections Modal
-const openSectionsModal = (grade) => {
-    selectedGrade.value = grade;
-    showModal.value = true;
-    selectedSection.value = null;
-};
-
-const selectSection = (section) => {
-    selectedSection.value = section;
-    if (!sectionStudents.value[selectedSection.value]) {
-        sectionStudents.value[selectedSection.value] = []; // Initialize if missing
+            showModal.value = true;
+            selectedSection.value = null;
+        } else {
+            console.error('Grade not found:', grade);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Grade not found',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error opening sections modal:', error);
     }
 };
 
+// Select a section to view its students
+const selectSection = async (sectionName) => {
+    selectedSection.value = sectionName;
+    await loadStudentsForSection(sectionName);
+};
+
+// Create a new section
+const createSection = async () => {
+    if (!section.value.name || !selectedGradeId.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Please enter a section name',
+            life: 3000
+        });
+        return;
+    }
+
+    // Add basic validation for section names
+    if (section.value.name.length < 3) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Section name should be at least 3 characters long',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        await GradeService.createSection(selectedGradeId.value, section.value);
+        await loadSections(selectedGradeId.value);
+
+        showCreateForm.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section Created',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error creating section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to create section',
+            life: 3000
+        });
+    }
+};
+
+// Open form to create a new section
 const openCreateForm = () => {
-    showModal.value = false;
-    showCreateForm.value = true;
-    newSection.value = { name: '', students: '' };
-};
-
-const createSection = () => {
-    if (!newSection.value.name) return;
-
-    gradeSections.value[selectedGrade.value] = [...(gradeSections.value[selectedGrade.value] || []), { name: newSection.value.name }];
-
-    sectionStudents.value[newSection.value.name] = newSection.value.students
-        ? newSection.value.students.split(',').map((name) => ({
-              id: `S${Math.floor(Math.random() * 1000)}`,
-              name: name.trim()
-          }))
-        : [];
-
-    toast.add({ severity: 'success', summary: 'Section Added', detail: 'New section created.', life: 3000 });
-
-    showCreateForm.value = false;
-};
-
-// Open Edit Section Form
-const openEditForm = (section, index) => {
-    editedSection.value = {
-        name: section.name,
-        index,
-        students: sectionStudents.value[section.name] || []
+    section.value = {
+        name: '',
+        capacity: 40,
+        adviser: '',
+        room: ''
     };
-    showEditForm.value = true;
+    showCreateForm.value = true;
 };
 
-// Update Section
-const updateSection = () => {
-    if (!editedSection.value.name) return;
+// Delete a section
+const deleteSectionById = async (sectionName) => {
+    if (!selectedGradeId.value || !sectionName) return;
 
-    // Update section name
-    const oldSectionName = gradeSections.value[selectedGrade.value][editedSection.value.index].name;
-    const newSectionName = editedSection.value.name;
+    try {
+        await GradeService.deleteSection(selectedGradeId.value, sectionName);
 
-    gradeSections.value[selectedGrade.value][editedSection.value.index].name = newSectionName;
+        await loadSections(selectedGradeId.value);
 
-    // Update students list
-    sectionStudents.value[newSectionName] = [...editedSection.value.students];
-
-    // Remove old section students if name changed
-    if (oldSectionName !== newSectionName) {
-        delete sectionStudents.value[oldSectionName];
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section Deleted',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error deleting section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to delete section',
+            life: 3000
+        });
     }
-
-    toast.add({ severity: 'success', summary: 'Section Updated', detail: 'Section details updated.', life: 3000 });
-
-    showEditForm.value = false;
 };
+
+// Initialize component
+onMounted(async () => {
+    await loadGrades();
+});
 </script>
 
 <template>
     <div class="card-container">
-        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.grade)">
+        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.name)">
             <div class="card-header">
-                <h1 class="grade-name">{{ grade.grade }}</h1>
+                <h1 class="grade-name">{{ grade.name }}</h1>
             </div>
         </Sakai-card>
     </div>
@@ -147,53 +252,75 @@ const updateSection = () => {
                 <h3>Sections in {{ selectedGrade }}</h3>
                 <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
             </div>
-            <ul class="section-list">
-                <li v-for="(section, index) in gradeSections[selectedGrade]" :key="index" class="section-item">
+            <div v-if="loading" class="text-center py-4">
+                <i class="pi pi-spin pi-spinner text-3xl"></i>
+                <p>Loading sections...</p>
+            </div>
+            <div v-else-if="sections.length === 0" class="text-center py-4">
+                <p>No sections found. Create a new section to get started.</p>
+            </div>
+            <ul v-else class="section-list">
+                <li v-for="(section, index) in sections" :key="index" class="section-item">
                     <span class="section-name" @click="selectSection(section.name)">{{ section.name }}</span>
                     <div class="section-buttons">
                         <Button label="View" icon="pi pi-eye" class="p-button-text p-button-sm" @click="selectSection(section.name)" />
-                        <Button label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" @click="openEditForm(section, index)" />
-                        <Button label="Delete" icon="pi pi-trash" class="p-button-danger p-button-sm" @click="deleteSection(index)" />
+                        <Button label="Delete" icon="pi pi-trash" class="p-button-danger p-button-sm" @click="deleteSectionById(section.name)" />
                     </div>
                 </li>
             </ul>
         </div>
         <div v-else>
             <h3>Students in {{ selectedSection }}</h3>
-            <ul v-if="sectionStudents[selectedSection]?.length" class="student-list">
-                <li v-for="student in sectionStudents[selectedSection]" :key="student.id" class="student-item">
+            <div v-if="loading" class="text-center py-4">
+                <i class="pi pi-spin pi-spinner text-3xl"></i>
+                <p>Loading students...</p>
+            </div>
+            <div v-else-if="studentsInSection.length === 0" class="text-center py-4 mt-3">
+                <i class="pi pi-info-circle text-3xl text-blue-500 mb-2"></i>
+                <p>No students in this section.</p>
+                <p class="text-sm text-gray-500 mt-2">
+                    Students that have Grade Level {{ selectedGrade }} and Section {{ selectedSection }}
+                    will appear here.
+                </p>
+            </div>
+            <ul v-else class="student-list">
+                <li v-for="student in studentsInSection" :key="student.id" class="student-item">
                     <i class="pi pi-user student-icon"></i>
                     <span class="student-name">{{ student.name }}</span>
                 </li>
             </ul>
-            <p v-else>No students in this section.</p>
 
-            <Button label="Back" icon="pi pi-arrow-left" @click="selectedSection = null" />
-        </div>
-    </Dialog>
-    <Dialog v-model:visible="showEditForm" :style="{ width: '500px' }" header="Edit Section" :modal="true">
-        <h3 class="mb-2">Edit Section</h3>
-
-        <label class="font-bold">Section Name</label>
-        <InputText v-model="editedSection.name" placeholder="Enter section name" class="w-full mb-3" />
-
-        <label class="font-bold">Students</label>
-        <MultiSelect v-model="editedSection.students" :options="allStudents" optionLabel="name" placeholder="Select students" class="w-full mb-3" />
-
-        <div class="flex justify-end gap-2">
-            <Button label="Cancel" class="p-button-text" @click="showEditForm = false" />
-            <Button label="Save" class="p-button-success" @click="updateSection" />
+            <Button label="Back" icon="pi pi-arrow-left" class="mt-4" @click="selectedSection = null" />
         </div>
     </Dialog>
 
     <!-- Create Section Modal -->
     <Dialog v-model:visible="showCreateForm" :style="{ width: '500px' }" header="Create New Section" :modal="true">
-        <h3>Create New Section</h3>
-        <InputText v-model="newSection.name" placeholder="Enter section name" class="w-full mb-2" />
-        <Textarea v-model="newSection.students" placeholder="Enter student names (comma-separated)" class="w-full mb-2" />
-        <div class="flex justify-end gap-2">
-            <Button label="Cancel" class="p-button-text" @click="showCreateForm = false" />
-            <Button label="Save" class="p-button-success" @click="createSection" />
+        <div class="p-fluid">
+            <div class="field">
+                <label for="sectionName">Section Name</label>
+                <InputText id="sectionName" v-model="section.name" required />
+            </div>
+
+            <div class="field">
+                <label for="capacity">Capacity</label>
+                <InputNumber id="capacity" v-model="section.capacity" min="1" />
+            </div>
+
+            <div class="field">
+                <label for="adviser">Adviser</label>
+                <InputText id="adviser" v-model="section.adviser" />
+            </div>
+
+            <div class="field">
+                <label for="room">Room</label>
+                <InputText id="room" v-model="section.room" />
+            </div>
+
+            <div class="flex justify-content-end">
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text mr-2" @click="showCreateForm = false" />
+                <Button label="Save" icon="pi pi-check" @click="createSection" />
+            </div>
         </div>
     </Dialog>
 </template>
