@@ -275,5 +275,28 @@ export const SubjectService = {
         }
 
         return uniqueSubjects;
+    },
+
+    // Add this method to your SubjectService if it doesn't exist
+    async getSubjectsByGrade(gradeId) {
+        try {
+            const allSubjects = await this.getSubjects();
+
+            // Filter subjects by grade
+            // Assuming your subject objects have a grade or gradeId property
+            return allSubjects.filter((subject) => {
+                // Handle different formats of grade property
+                const subjectGrade = subject.grade || subject.gradeId;
+
+                // It could be "Grade 3" or just "3" or the ID
+                if (subjectGrade === gradeId) return true;
+                if (subjectGrade === `Grade ${gradeId}`) return true;
+
+                return false;
+            });
+        } catch (error) {
+            console.error('Error getting subjects by grade:', error);
+            return [];
+        }
     }
 };
