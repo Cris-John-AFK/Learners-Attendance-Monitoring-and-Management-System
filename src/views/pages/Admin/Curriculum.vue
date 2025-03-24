@@ -26,11 +26,17 @@ const newSectionData = ref({
     id: '',
     subjectName: '',
     teacherName: '',
-    startTime: '',
-    endTime: '',
+    startTime: null,
+    endTime: null,
     startYear: '',
-    endYear: ''
+    endYear: '',
+    section: null
 });
+const sectionDetails = ref([]);
+const subjects = ref(['Mathematics', 'Science', 'English', 'History', 'Physics', 'Chemistry']);
+const teachers = ref(['Mr. Smith', 'Mrs. Johnson', 'Dr. Williams', 'Ms. Brown']);
+const isEditMode = ref(false);
+const editingSectionDetail = ref(null);
 
 function openCreateForm() {
     showCreateDialog.value = true;
@@ -79,23 +85,98 @@ function openSectionDetails(section) {
 }
 
 function openAddSectionDialog() {
+    isEditMode.value = false;
+    editingSectionDetail.value = null;
+    newSectionData.value = {
+        id: generateId(),
+        subjectName: '',
+        teacherName: '',
+        startTime: null,
+        endTime: null,
+        startYear: '',
+        endYear: '',
+        section: selectedSectionDetails.value
+    };
     showAddSectionDialog.value = true;
 }
 
-function addNewSection() {
-    sections.value.push({ ...newSectionData.value });
+function generateId() {
+    return 'SEC-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
 
+function addNewSection() {
+    if (validateSectionData()) {
+        if (isEditMode.value) {
+            const index = sectionDetails.value.findIndex((d) => d.id === editingSectionDetail.value.id);
+            if (index !== -1) {
+                sectionDetails.value[index] = {
+                    ...newSectionData.value,
+                    startTime: formatTime(newSectionData.value.startTime),
+                    endTime: formatTime(newSectionData.value.endTime)
+                };
+            }
+        } else {
+            sectionDetails.value.push({
+                ...newSectionData.value,
+                startTime: formatTime(newSectionData.value.startTime),
+                endTime: formatTime(newSectionData.value.endTime)
+            });
+        }
+        closeAddSectionDialog();
+    }
+}
+
+function validateSectionData() {
+    return newSectionData.value.subjectName && newSectionData.value.teacherName && newSectionData.value.startTime && newSectionData.value.endTime;
+}
+
+function formatTime(date) {
+    if (!date) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function deleteSectionDetail(detail) {
+    const index = sectionDetails.value.findIndex((d) => d.id === detail.id);
+    if (index !== -1) {
+        sectionDetails.value.splice(index, 1);
+    }
+}
+
+function editSectionDetail(detail) {
+    isEditMode.value = true;
+    editingSectionDetail.value = { ...detail };
     newSectionData.value = {
-        id: '',
+        ...detail,
+        startTime: parseTime(detail.startTime),
+        endTime: parseTime(detail.endTime),
+        section: selectedSectionDetails.value
+    };
+    showAddSectionDialog.value = true;
+}
+
+function parseTime(timeString) {
+    if (!timeString) return null;
+    const [hours, minutes] = timeString.split(':');
+    const date = new Date();
+    date.setHours(parseInt(hours));
+    date.setMinutes(parseInt(minutes));
+    return date;
+}
+
+function closeAddSectionDialog() {
+    showAddSectionDialog.value = false;
+    isEditMode.value = false;
+    editingSectionDetail.value = null;
+    newSectionData.value = {
+        id: generateId(),
         subjectName: '',
         teacherName: '',
-        startTime: '',
-        endTime: '',
+        startTime: null,
+        endTime: null,
         startYear: '',
-        endYear: ''
+        endYear: '',
+        section: selectedSectionDetails.value
     };
-
-    showAddSectionDialog.value = false;
 }
 </script>
 
@@ -174,55 +255,84 @@ function addNewSection() {
     </Dialog>
 
     <!-- Section Details Dialog -->
-    <Dialog v-model:visible="showSectionDetailsDialog" header="Section Details" modal class="max-w-md w-full rounded-lg">
+    <Dialog v-model:visible="showSectionDetailsDialog" :header="`Section Details - ${selectedSectionDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
         <div class="p-4 space-y-4">
-            <h3 class="text-lg font-semibold">Sections for {{ selectedGrade?.name }}</h3>
-
-            <!-- Table to display sections -->
-            <DataTable :value="sections.filter((section) => section.gradeLevel === selectedGrade?.name)" class="p-datatable-striped">
-                <Column field="id" header="ID" sortable />
-                <Column field="subjectName" header="Subject Name" sortable />
-                <Column field="teacherName" header="Teacher Name" sortable />
-                <Column field="startTime" header="Start Time" sortable />
-                <Column field="endTime" header="End Time" sortable />
-                <Column field="startYear" header="Start Year" sortable />
-                <Column field="endYear" header="End Year" sortable />
-            </DataTable>
-
-            <div class="flex justify-end gap-2 mt-4">
-                <Button label="Add Details" class="p-button-success" @click="openAddSectionDialog" />
-                <Button label="Close" class="p-button-secondary" @click="showSectionDetailsDialog = false" />
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Schedule Details</h3>
+                <Button label="Add Schedule" icon="pi pi-plus" class="p-button-success" @click="openAddSectionDialog" />
             </div>
+
+            <!-- Updated Table -->
+            <DataTable
+                :value="sectionDetails.filter((d) => d.section?.name === selectedSectionDetails?.name)"
+                class="p-datatable-striped"
+                responsiveLayout="stack"
+                :rows="10"
+                :rowsPerPageOptions="[5, 10, 20, 50]"
+                paginator
+                paginatorTemplate="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+                currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
+                :resizableColumns="true"
+                columnResizeMode="fit"
+                showGridlines
+                :scrollable="true"
+                scrollHeight="400px"
+            >
+                <Column field="id" header="ID" sortable style="min-width: 100px" />
+                <Column field="subjectName" header="Subject" sortable style="min-width: 150px" />
+                <Column field="teacherName" header="Teacher" sortable style="min-width: 150px" />
+                <Column field="startTime" header="Start Time" sortable style="min-width: 120px" />
+                <Column field="endTime" header="End Time" sortable style="min-width: 120px" />
+                <Column field="startYear" header="Start Year" sortable style="min-width: 120px" />
+                <Column field="endYear" header="End Year" sortable style="min-width: 120px" />
+                <Column header="Actions" style="min-width: 100px">
+                    <template #body="slotProps">
+                        <div class="flex gap-2">
+                            <Button icon="pi pi-pencil" class="p-button-text p-button-warning" @click="editSectionDetail(slotProps.data)" tooltip="Edit Schedule" />
+                            <Button icon="pi pi-trash" class="p-button-text p-button-danger" @click="deleteSectionDetail(slotProps.data)" tooltip="Delete Schedule" />
+                        </div>
+                    </template>
+                </Column>
+            </DataTable>
         </div>
     </Dialog>
 
     <!-- Add Section Dialog -->
-    <Dialog v-model:visible="showAddSectionDialog" header="Add Section" modal class="max-w-md w-full rounded-lg">
+    <Dialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
-            <label class="block text-gray-700 font-medium">ID</label>
-            <InputText v-model="newSectionData.id" placeholder="Enter ID" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">Subject</label>
+                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" />
+            </div>
 
-            <label class="block text-gray-700 font-medium">Subject Name</label>
-            <InputText v-model="newSectionData.subjectName" placeholder="Enter Subject Name" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">Teacher</label>
+                <Dropdown v-model="newSectionData.teacherName" :options="teachers" placeholder="Select Teacher" class="w-full" />
+            </div>
 
-            <label class="block text-gray-700 font-medium">Teacher Name</label>
-            <InputText v-model="newSectionData.teacherName" placeholder="Enter Teacher Name" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">Start Time</label>
+                <Calendar v-model="newSectionData.startTime" timeOnly placeholder="Select Start Time" class="w-full" />
+            </div>
 
-            <label class="block text-gray-700 font-medium">Start Time</label>
-            <InputText v-model="newSectionData.startTime" placeholder="Enter Start Time" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">End Time</label>
+                <Calendar v-model="newSectionData.endTime" timeOnly placeholder="Select End Time" class="w-full" />
+            </div>
 
-            <label class="block text-gray-700 font-medium">End Time</label>
-            <InputText v-model="newSectionData.endTime" placeholder="Enter End Time" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">Start Year</label>
+                <InputText v-model="newSectionData.startYear" placeholder="Enter Start Year" class="w-full" />
+            </div>
 
-            <label class="block text-gray-700 font-medium">Start Year</label>
-            <InputText v-model="newSectionData.startYear" placeholder="Enter Start Year" class="w-full" />
-
-            <label class="block text-gray-700 font-medium">End Year</label>
-            <InputText v-model="newSectionData.endYear" placeholder="Enter End Year" class="w-full" />
+            <div class="field">
+                <label class="block text-gray-700 font-medium">End Year</label>
+                <InputText v-model="newSectionData.endYear" placeholder="Enter End Year" class="w-full" />
+            </div>
 
             <div class="flex justify-end gap-2 mt-4">
-                <Button label="Cancel" class="p-button-secondary" @click="showAddSectionDialog = false" />
-                <Button label="Save" class="p-button-success" @click="addNewSection" />
+                <Button label="Cancel" class="p-button-secondary" @click="closeAddSectionDialog" />
+                <Button :label="isEditMode ? 'Update' : 'Save'" class="p-button-success" @click="addNewSection" :disabled="!validateSectionData()" />
             </div>
         </div>
     </Dialog>
@@ -245,5 +355,51 @@ function addNewSection() {
 }
 :deep(.p-button-success:hover) {
     background-color: #16a34a;
+}
+
+:deep(.p-datatable) {
+    font-size: 0.95rem;
+}
+
+:deep(.p-datatable .p-datatable-header) {
+    background-color: #f8fafc;
+    padding: 1rem;
+}
+
+:deep(.p-datatable .p-datatable-thead > tr > th) {
+    background-color: #f1f5f9;
+    color: #334155;
+    padding: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr) {
+    background-color: #ffffff;
+    transition: background-color 0.2s;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr:hover) {
+    background-color: #f1f5f9;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr > td) {
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+}
+
+:deep(.p-paginator) {
+    padding: 1rem;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+:deep(.p-dialog.w-11\/12) {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+:deep(.p-dialog-content) {
+    padding: 0 !important;
 }
 </style>
