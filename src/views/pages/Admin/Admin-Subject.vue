@@ -191,47 +191,66 @@ onMounted(async () => {
             </SakaiCard>
         </div>
 
-        <Dialog v-model:visible="subjectDialog" :style="{ width: '450px' }" header="Subject Details" :modal="true" class="p-fluid">
-            <div class="field">
-                <label for="name">Subject Name</label>
-                <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" />
+        <Dialog v-model:visible="subjectDialog" :style="{ width: '500px' }" header="Subject Details" :modal="true" class="p-fluid subject-dialog">
+            <div class="field mb-4">
+                <label for="name" class="font-medium mb-2 block">Subject Name</label>
+                <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" placeholder="Enter subject name" class="w-full p-inputtext-lg" />
                 <small class="p-error" v-if="submitted && !subject.name">Subject name is required.</small>
             </div>
 
-            <div class="field">
-                <label for="grade">Grade Level</label>
-                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select Grade" required :class="{ 'p-invalid': submitted && !subject.grade }" />
+            <div class="field mb-4">
+                <label for="grade" class="font-medium mb-2 block">Grade Level</label>
+                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select Grade" required :class="{ 'p-invalid': submitted && !subject.grade }" class="w-full p-inputtext-lg" />
                 <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
             </div>
 
-            <div class="field">
-                <label for="description">Description</label>
-                <Textarea id="description" v-model="subject.description" rows="3" />
+            <div class="field mb-4">
+                <label for="description" class="font-medium mb-2 block">Description</label>
+                <Textarea id="description" v-model="subject.description" rows="3" placeholder="Brief description of the subject" class="w-full" />
             </div>
 
-            <div class="field">
-                <label for="credits">Credits</label>
-                <InputNumber id="credits" v-model="subject.credits" min="1" max="10" />
+            <div class="field mb-4">
+                <label for="credits" class="font-medium mb-2 block">Credits</label>
+                <InputNumber
+                    id="credits"
+                    v-model="subject.credits"
+                    min="1"
+                    max="10"
+                    showButtons
+                    buttonLayout="horizontal"
+                    decrementButtonClass="p-button-secondary"
+                    incrementButtonClass="p-button-secondary"
+                    incrementButtonIcon="pi pi-plus"
+                    decrementButtonIcon="pi pi-minus"
+                    class="w-full p-inputtext-lg"
+                />
             </div>
 
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" text @click="subjectDialog = false" />
-                <Button label="Save" icon="pi pi-check" @click="saveSubject" />
-                <Button v-if="subject.id" label="Delete" icon="pi pi-trash" class="p-button-danger ml-2" @click="deleteSubjectDialog = true" />
+                <div class="flex justify-content-between w-full">
+                    <Button v-if="subject.id" label="Delete" icon="pi pi-trash" class="p-button-danger p-button-outlined" @click="deleteSubjectDialog = true" />
+                    <div class="flex gap-2">
+                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="subjectDialog = false" />
+                        <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSubject" />
+                    </div>
+                </div>
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="deleteSubjectDialog" :style="{ width: '450px' }" header="Confirm" :modal="true">
-            <div class="flex align-items-center justify-content-center">
-                <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
-                <span v-if="subject"
-                    >Are you sure you want to delete <b>{{ subject.name }}</b> for <b>{{ subject.grade }}</b
-                    >?</span
-                >
+        <Dialog v-model:visible="deleteSubjectDialog" :style="{ width: '450px' }" header="Confirm Deletion" :modal="true" class="delete-dialog">
+            <div class="flex align-items-center justify-content-center py-4">
+                <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
+                <span class="text-lg">
+                    Are you sure you want to delete <span class="font-bold">{{ subject.name }}</span> for <span class="font-bold">{{ subject.grade }}</span
+                    >?
+                </span>
             </div>
+            <p class="text-center text-gray-600 mt-2">This action cannot be undone.</p>
             <template #footer>
-                <Button label="No" icon="pi pi-times" text @click="deleteSubjectDialog = false" />
-                <Button label="Yes" icon="pi pi-check" text @click="deleteSubject" />
+                <div class="flex justify-content-center gap-3 w-full">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-outlined" @click="deleteSubjectDialog = false" />
+                    <Button label="Delete" icon="pi pi-check" class="p-button-danger" @click="deleteSubject" />
+                </div>
             </template>
         </Dialog>
     </div>
@@ -293,5 +312,78 @@ onMounted(async () => {
     align-items: center;
     height: 100%;
     padding: 20px;
+}
+
+:deep(.subject-dialog) {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+:deep(.subject-dialog .p-dialog-header) {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+:deep(.subject-dialog .p-dialog-content) {
+    padding: 1.5rem;
+}
+
+:deep(.subject-dialog .p-dialog-footer) {
+    padding: 1.25rem 1.5rem;
+    background-color: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+}
+
+:deep(.subject-dialog input:focus),
+:deep(.subject-dialog textarea:focus),
+:deep(.subject-dialog .p-dropdown:focus) {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+:deep(.subject-dialog .p-inputtext),
+:deep(.subject-dialog .p-dropdown) {
+    border-radius: 8px;
+}
+
+:deep(.delete-dialog .p-dialog-header) {
+    background-color: #fee2e2;
+    color: #b91c1c;
+}
+
+:deep(.delete-dialog .p-dialog-header-close-icon) {
+    color: #b91c1c;
+}
+
+/* Make inputs and dropdowns consistent height */
+:deep(.p-inputtext-lg) {
+    height: 48px;
+}
+
+/* Ensure dropdown has same height as inputs */
+:deep(.p-dropdown) {
+    height: 48px;
+    display: flex;
+    align-items: center;
+}
+
+/* Style for the form field labels */
+.field .font-medium {
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+/* Add some animation to the modals */
+:deep(.p-dialog) {
+    transform: translateY(20px);
+    opacity: 0;
+    transition:
+        transform 0.3s,
+        opacity 0.3s;
+}
+
+:deep(.p-dialog-visible) {
+    transform: translateY(0);
+    opacity: 1;
 }
 </style>
