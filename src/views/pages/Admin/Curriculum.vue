@@ -1,5 +1,6 @@
 <script setup>
 import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -9,14 +10,27 @@ import { ref } from 'vue';
 
 const products = ref([]);
 const showCreateDialog = ref(false);
-const showStudentManagement = ref(false);
+const showSectionManagement = ref(false);
 const selectedGrade = ref(null);
 const newGradeLevel = ref('');
 const selectedYearRange = ref('2024-2025');
 const yearRanges = ref(['2023-2024', '2024-2025', '2025-2026', '2026-2027']);
-const students = ref([]);
-const newStudent = ref({ name: '', gradeLevel: '', age: '', birthdate: '' });
-const showStudentDialog = ref(false);
+const sections = ref([]);
+const newSection = ref({ name: '', gradeLevel: '', group: '', year: null });
+const showSectionDialog = ref(false);
+const groups = ref(['Group 1', 'Group 2', 'Group 3', 'Group 4']);
+const showSectionDetailsDialog = ref(false);
+const selectedSectionDetails = ref(null);
+const showAddSectionDialog = ref(false);
+const newSectionData = ref({
+    id: '',
+    subjectName: '',
+    teacherName: '',
+    startTime: '',
+    endTime: '',
+    startYear: '',
+    endYear: ''
+});
 
 function openCreateForm() {
     showCreateDialog.value = true;
@@ -35,17 +49,53 @@ function saveGradeLevel() {
     }
 }
 
-function openStudentManagement(grade) {
+function openSectionManagement(grade) {
     selectedGrade.value = grade;
-    showStudentManagement.value = true;
+    showSectionManagement.value = true;
 }
 
-function addStudent() {
-    if (newStudent.value.name.trim() !== '') {
-        students.value.push({ ...newStudent.value, gradeLevel: selectedGrade.value.name });
-        newStudent.value = { name: '', gradeLevel: '', age: '', birthdate: '' };
-        showStudentDialog.value = false;
+function addSection() {
+    if (newSection.value.name.trim() !== '') {
+        sections.value.push({ ...newSection.value, gradeLevel: selectedGrade.value.name });
+        resetSectionForm();
     }
+}
+
+function deleteSection(section) {
+    const index = sections.value.findIndex((s) => s.name === section.name && s.gradeLevel === section.gradeLevel);
+    if (index !== -1) {
+        sections.value.splice(index, 1);
+    }
+}
+
+function resetSectionForm() {
+    newSection.value = { name: '', gradeLevel: '', group: '', year: null };
+    showSectionDialog.value = false;
+}
+
+function openSectionDetails(section) {
+    selectedSectionDetails.value = section;
+    showSectionDetailsDialog.value = true;
+}
+
+function openAddSectionDialog() {
+    showAddSectionDialog.value = true;
+}
+
+function addNewSection() {
+    sections.value.push({ ...newSectionData.value });
+
+    newSectionData.value = {
+        id: '',
+        subjectName: '',
+        teacherName: '',
+        startTime: '',
+        endTime: '',
+        startYear: '',
+        endYear: ''
+    };
+
+    showAddSectionDialog.value = false;
 }
 </script>
 
@@ -59,7 +109,7 @@ function addStudent() {
 
             <div class="grid grid-cols-12 gap-4">
                 <div v-for="(item, index) in products" :key="index" class="col-span-12 sm:col-span-6 lg:col-span-4 p-2">
-                    <div class="p-6 border border-gray-300 rounded-lg bg-indigo-50 shadow-md cursor-pointer" @click="openStudentManagement(item)">
+                    <div class="p-6 border border-gray-300 rounded-lg bg-indigo-50 shadow-md cursor-pointer" @click="openSectionManagement(item)">
                         <div class="text-lg font-medium text-indigo-800">{{ item.name }}</div>
                         <span class="text-sm text-gray-600">{{ item.category }}</span>
                     </div>
@@ -82,35 +132,97 @@ function addStudent() {
         </div>
     </Dialog>
 
-    <!-- Student Management Section -->
-    <div v-if="showStudentManagement" class="card p-6 shadow-lg rounded-lg bg-white mt-6">
-        <h2 class="text-2xl font-semibold mb-6">Student Management - {{ selectedGrade?.name }}</h2>
+    <!-- Section Management Section -->
+    <div v-if="showSectionManagement" class="card p-6 shadow-lg rounded-lg bg-white mt-6">
+        <h2 class="text-2xl font-semibold mb-6">Section Management - {{ selectedGrade?.name }}</h2>
         <div class="flex justify-between items-center mb-4">
-            <Button label="Add Student" icon="pi pi-user-plus" class="p-button-success" @click="showStudentDialog = true" />
+            <Button label="Add Section" icon="pi pi-user-plus" class="p-button-success" @click="showSectionDialog = true" />
         </div>
-        <DataTable :value="students.filter((s) => s.gradeLevel === selectedGrade?.name)" class="p-datatable-striped">
+        <DataTable :value="sections.filter((s) => s.gradeLevel === selectedGrade?.name)" class="p-datatable-striped">
             <Column field="name" header="Name" sortable />
             <Column field="gradeLevel" header="Grade Level" sortable />
-            <Column field="age" header="Age" sortable />
-            <Column field="birthdate" header="Birthdate" sortable />
+            <Column field="year" header="Year" sortable />
+            <Column header="Action">
+                <template #body="slotProps">
+                    <div class="flex space-x-2">
+                        <Button icon="pi pi-pencil" class="p-button-text" @click="editSection(slotProps.data)" tooltip="Edit Section" aria-label="Edit Section" />
+                        <Button icon="pi pi-search" class="p-button-text" @click="openSectionDetails(slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
+                        <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
+                    </div>
+                </template>
+            </Column>
         </DataTable>
         <div class="border-t border-gray-300 mt-4 pt-4 flex justify-center">
-            <Button label="Close" class="p-button-secondary" @click="showStudentManagement = false" />
+            <Button label="Close" class="p-button-secondary" @click="showSectionManagement = false" />
         </div>
     </div>
 
-    <!-- Add Student Dialog -->
-    <Dialog v-model:visible="showStudentDialog" header="Add Student" modal class="max-w-md w-full rounded-lg">
+    <!-- Add Section Dialog -->
+    <Dialog v-model:visible="showSectionDialog" header="Add Section" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
-            <label class="block text-gray-700 font-medium">Student Name</label>
-            <InputText v-model="newStudent.name" placeholder="Enter Student Name" class="w-full" />
-            <label class="block text-gray-700 font-medium">Age</label>
-            <InputText v-model="newStudent.age" type="number" class="w-full" />
-            <label class="block text-gray-700 font-medium">Birthdate</label>
-            <InputText v-model="newStudent.birthdate" placeholder="YYYY-MM-DD" class="w-full" />
+            <label class="block text-gray-700 font-medium">Section Name</label>
+            <InputText v-model="newSection.name" placeholder="Enter Section Name" class="w-full" />
+            <label class="block text-gray-700 font-medium">Group</label>
+            <Dropdown v-model="newSection.group" :options="groups" placeholder="Select Group" class="w-full border border-gray-300 p-2 rounded-lg" />
+            <label class="block text-gray-700 font-medium">Year</label>
+            <Calendar v-model="newSection.year" :showIcon="true" placeholder="Select Year" />
             <div class="flex justify-end gap-2 mt-4">
-                <Button label="Cancel" class="p-button-secondary" @click="showStudentDialog = false" />
-                <Button label="Add" class="p-button-success" @click="addStudent" />
+                <Button label="Cancel" class="p-button-secondary" @click="resetSectionForm" />
+                <Button label="Save" class="p-button-success" @click="addSection()" />
+            </div>
+        </div>
+    </Dialog>
+
+    <!-- Section Details Dialog -->
+    <Dialog v-model:visible="showSectionDetailsDialog" header="Section Details" modal class="max-w-md w-full rounded-lg">
+        <div class="p-4 space-y-4">
+            <h3 class="text-lg font-semibold">Sections for {{ selectedGrade?.name }}</h3>
+
+            <!-- Table to display sections -->
+            <DataTable :value="sections.filter((section) => section.gradeLevel === selectedGrade?.name)" class="p-datatable-striped">
+                <Column field="id" header="ID" sortable />
+                <Column field="subjectName" header="Subject Name" sortable />
+                <Column field="teacherName" header="Teacher Name" sortable />
+                <Column field="startTime" header="Start Time" sortable />
+                <Column field="endTime" header="End Time" sortable />
+                <Column field="startYear" header="Start Year" sortable />
+                <Column field="endYear" header="End Year" sortable />
+            </DataTable>
+
+            <div class="flex justify-end gap-2 mt-4">
+                <Button label="Add Details" class="p-button-success" @click="openAddSectionDialog" />
+                <Button label="Close" class="p-button-secondary" @click="showSectionDetailsDialog = false" />
+            </div>
+        </div>
+    </Dialog>
+
+    <!-- Add Section Dialog -->
+    <Dialog v-model:visible="showAddSectionDialog" header="Add Section" modal class="max-w-md w-full rounded-lg">
+        <div class="p-4 space-y-4">
+            <label class="block text-gray-700 font-medium">ID</label>
+            <InputText v-model="newSectionData.id" placeholder="Enter ID" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">Subject Name</label>
+            <InputText v-model="newSectionData.subjectName" placeholder="Enter Subject Name" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">Teacher Name</label>
+            <InputText v-model="newSectionData.teacherName" placeholder="Enter Teacher Name" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">Start Time</label>
+            <InputText v-model="newSectionData.startTime" placeholder="Enter Start Time" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">End Time</label>
+            <InputText v-model="newSectionData.endTime" placeholder="Enter End Time" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">Start Year</label>
+            <InputText v-model="newSectionData.startYear" placeholder="Enter Start Year" class="w-full" />
+
+            <label class="block text-gray-700 font-medium">End Year</label>
+            <InputText v-model="newSectionData.endYear" placeholder="Enter End Year" class="w-full" />
+
+            <div class="flex justify-end gap-2 mt-4">
+                <Button label="Cancel" class="p-button-secondary" @click="showAddSectionDialog = false" />
+                <Button label="Save" class="p-button-success" @click="addNewSection" />
             </div>
         </div>
     </Dialog>
