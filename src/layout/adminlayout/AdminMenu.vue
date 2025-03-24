@@ -17,9 +17,6 @@ const model = ref([
         ]
     },
     {
-        items: [{ label: 'Settings', icon: 'pi pi-fw pi-cog', to: '/admin-settings' }]
-    },
-    {
         items: [{ label: 'Archive', icon: 'pi pi-fw pi-undo', to: '/archive' }]
     },
     {
