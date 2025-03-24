@@ -1,9 +1,18 @@
 import { PhotoService } from '@/router/service/PhotoService';
 
+// Create an in-memory store that all components can reference
+let studentStore = null;
+
 export const AttendanceService = {
     async getData() {
-        const photos = await PhotoService.getData(); // Get photo data
-        return [
+        // If we already have the data in our store, return it
+        if (studentStore) {
+            return [...studentStore]; // Return a copy to prevent direct mutations
+        }
+
+        // Otherwise fetch the data and store it
+        const photos = await PhotoService.getData();
+        studentStore = [
             {
                 id: 1001,
                 name: 'Maria Clara Santos',
@@ -12,8 +21,11 @@ export const AttendanceService = {
                 timeOut: '04:25 PM',
                 gender: 'Female',
                 gradeLevel: 3,
-                section: 'A',
-                photo: photos[0]?.itemImageSrc
+                section: 'Quezon',
+                photo: photos[0]?.itemImageSrc,
+                email: 'maria.santos@example.com',
+                phone: '123-456-7890',
+                address: 'Manila, Philippines'
             },
             {
                 id: 1002,
@@ -23,7 +35,7 @@ export const AttendanceService = {
                 timeOut: '04:35 PM',
                 gender: 'Male',
                 gradeLevel: 4,
-                section: 'B',
+                section: 'Luna',
                 photo: photos[1]?.itemImageSrc
             },
             {
@@ -34,7 +46,7 @@ export const AttendanceService = {
                 timeOut: '04:40 PM',
                 gender: 'Female',
                 gradeLevel: 5,
-                section: 'C',
+                section: 'Orchid',
                 photo: photos[2]?.itemImageSrc
             },
             {
@@ -115,6 +127,8 @@ export const AttendanceService = {
                 photo: photos[9]?.itemImageSrc
             }
         ];
+
+        return [...studentStore]; // Return a copy
     },
 
     // Get students by grade level
@@ -179,5 +193,74 @@ export const AttendanceService = {
     async getStudentById(id) {
         const students = await this.getData();
         return students.find((student) => student.id === parseInt(id));
+    },
+
+    // Create a new student
+    async createStudent(student) {
+        // Ensure studentStore is loaded
+        if (!studentStore) {
+            await this.getData();
+        }
+
+        // Generate a unique ID if not provided
+        if (!student.id) {
+            const maxId = Math.max(...studentStore.map((s) => parseInt(s.id)));
+            student.id = maxId + 1;
+        }
+
+        // Add to the store
+        studentStore.push({ ...student });
+
+        return { ...student };
+    },
+
+    // Update existing student
+    async updateStudent(id, updatedData) {
+        // Ensure studentStore is loaded
+        if (!studentStore) {
+            await this.getData();
+        }
+
+        // Find and update the student
+        const index = studentStore.findIndex((s) => s.id === parseInt(id));
+        if (index >= 0) {
+            studentStore[index] = { ...studentStore[index], ...updatedData };
+            return { ...studentStore[index] };
+        }
+
+        throw new Error(`Student with ID ${id} not found`);
+    },
+
+    // Delete a student
+    async deleteStudent(id) {
+        // Ensure studentStore is loaded
+        if (!studentStore) {
+            await this.getData();
+        }
+
+        // Find and remove the student
+        const index = studentStore.findIndex((s) => s.id === parseInt(id));
+        if (index >= 0) {
+            const removed = studentStore.splice(index, 1)[0];
+            return { ...removed };
+        }
+
+        throw new Error(`Student with ID ${id} not found`);
+    },
+
+    // Import students from CSV/Excel (simulated)
+    async importStudents(fileData) {
+        // In a real implementation, this would process the file and add students
+        console.log('Importing students from file');
+
+        return {
+            importedCount: fileData.length || 5, // Simulate importing 5 students
+            success: true
+        };
+    },
+
+    // Clear the store (useful for testing or resetting)
+    async clearStore() {
+        studentStore = null;
     }
 };

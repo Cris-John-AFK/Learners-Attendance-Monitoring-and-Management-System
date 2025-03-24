@@ -1,12 +1,20 @@
 // This file will contain centralized subject data
 import { AttendanceService } from './Students';
 
+// Create an in-memory store
+let subjectStore = null;
+
 export const SubjectService = {
     async getSubjects() {
-        // Sample subject data
-        return [
-            { id: 'MATH101', name: 'Mathematics', grade: 'Grade 1' },
-            { id: 'ENG101', name: 'English', grade: 'Grade 1' },
+        // If we already have the data in our store, return it
+        if (subjectStore) {
+            return [...subjectStore]; // Return a copy
+        }
+
+        // Otherwise populate the store
+        subjectStore = [
+            { id: 'MATH101', name: 'Mathematics', grade: 'Grade 1', description: 'Basic mathematics', credits: 3 },
+            { id: 'ENG101', name: 'English', grade: 'Grade 1', description: 'English language fundamentals', credits: 3 },
             { id: 'SCI101', name: 'Science', grade: 'Grade 1' },
             { id: 'MATH201', name: 'Mathematics', grade: 'Grade 2' },
             { id: 'ENG201', name: 'English', grade: 'Grade 2' },
@@ -27,6 +35,8 @@ export const SubjectService = {
             { id: 'ENGK', name: 'English', grade: 'Kinder' },
             { id: 'SCIK', name: 'Science', grade: 'Kinder' }
         ];
+
+        return [...subjectStore]; // Return a copy
     },
 
     async getSectionsByGrade(grade) {
@@ -161,5 +171,109 @@ export const SubjectService = {
             time: '',
             remarks: ''
         }));
+    },
+
+    // Get all grades associated with subjects
+    async getSubjectGrades() {
+        const subjects = await this.getSubjects();
+        // Extract unique grades from subjects
+        const grades = [...new Set(subjects.map((subject) => subject.grade))];
+        return grades;
+    },
+
+    // Get sections by both grade and subject
+    async getSectionsByGradeAndSubject(gradeName, subjectName) {
+        const allSections = await this.getSectionsByGrade(gradeName);
+        return allSections.filter((section) => section.subject === subjectName);
+    },
+
+    // Create a new subject
+    async createSubject(subject) {
+        // Ensure subjectStore is loaded
+        if (!subjectStore) {
+            await this.getSubjects();
+        }
+
+        // Generate ID if not provided
+        if (!subject.id) {
+            subject.id = `${subject.name.substring(0, 4).toUpperCase()}${subject.grade.replace('Grade ', '')}`;
+        }
+
+        // Add to store
+        subjectStore.push({ ...subject });
+
+        return { ...subject };
+    },
+
+    // Update curriculum for a subject
+    async updateCurriculum(subjectId, curriculum) {
+        // This would connect to a backend in a real implementation
+        console.log(`Updated curriculum for subject ${subjectId}`);
+        return {
+            subjectId,
+            curriculum,
+            success: true
+        };
+    },
+
+    // Update subject
+    async updateSubject(id, updatedData) {
+        // Ensure subjectStore is loaded
+        if (!subjectStore) {
+            await this.getSubjects();
+        }
+
+        // Find and update the subject
+        const index = subjectStore.findIndex((s) => s.id === id);
+        if (index >= 0) {
+            subjectStore[index] = { ...subjectStore[index], ...updatedData };
+            return { ...subjectStore[index] };
+        }
+
+        throw new Error(`Subject with ID ${id} not found`);
+    },
+
+    // Delete subject
+    async deleteSubject(id) {
+        // Ensure subjectStore is loaded
+        if (!subjectStore) {
+            await this.getSubjects();
+        }
+
+        // Find and remove the subject
+        const index = subjectStore.findIndex((s) => s.id === id);
+        if (index >= 0) {
+            const removed = subjectStore.splice(index, 1)[0];
+            return { ...removed };
+        }
+
+        throw new Error(`Subject with ID ${id} not found`);
+    },
+
+    // Get subject by ID
+    async getSubjectById(id) {
+        const subjects = await this.getSubjects();
+        return subjects.find((subject) => subject.id === id);
+    },
+
+    // Clear the store (useful for testing or resetting)
+    async clearStore() {
+        subjectStore = null;
+    },
+
+    // Get unique subjects (one per name)
+    async getUniqueSubjects() {
+        const allSubjects = await this.getSubjects();
+        const uniqueSubjects = [];
+        const subjectNames = new Set();
+
+        for (const subject of allSubjects) {
+            if (!subjectNames.has(subject.name)) {
+                subjectNames.add(subject.name);
+                uniqueSubjects.push(subject);
+            }
+        }
+
+        return uniqueSubjects;
     }
 };

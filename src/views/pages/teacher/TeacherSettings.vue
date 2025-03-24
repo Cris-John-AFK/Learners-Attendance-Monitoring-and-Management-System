@@ -1,29 +1,94 @@
 <script setup>
-import { ref } from 'vue';
+import { GradeService } from '@/router/service/Grades';
+import { useToast } from 'primevue/usetoast';
+import { onMounted, ref } from 'vue';
 
-const sections = ref([
-    { id: '1', section: 'Section A', startTime: '08:00 AM', endTime: '09:00 AM' },
-    { id: '2', section: 'Section B', startTime: '09:15 AM', endTime: '10:15 AM' },
-    { id: '3', section: 'Section C', startTime: '10:30 AM', endTime: '11:30 AM' }
-]);
-
+const sections = ref([]);
 const scheduleDialog = ref(false);
 const selectedSchedule = ref(null);
+const toast = useToast();
+
+// Load sections with schedules
+const loadSections = async () => {
+    try {
+        // Get all grades
+        const grades = await GradeService.getGrades();
+
+        // Create a flattened array of all sections with grade info
+        const allSections = [];
+
+        for (const grade of grades) {
+            for (const section of grade.sections) {
+                allSections.push({
+                    id: `${grade.id}-${section}`,
+                    section: `${grade.name} - Section ${section}`,
+                    grade: grade.name,
+                    startTime: '08:00 AM', // Default values
+                    endTime: '09:00 AM' // Default values
+                });
+            }
+        }
+
+        sections.value = allSections;
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections. Please try again.',
+            life: 3000
+        });
+    }
+};
 
 function editSchedule(section) {
     selectedSchedule.value = { ...section }; // Clone the section object
     scheduleDialog.value = true;
 }
 
-function saveSchedule() {
+async function saveSchedule() {
     if (selectedSchedule.value) {
-        const index = sections.value.findIndex(sec => sec.id === selectedSchedule.value.id);
-        if (index !== -1) {
-            sections.value[index] = { ...selectedSchedule.value }; // Update the section
+        try {
+            // Parse the section ID to get grade and section info
+            const [gradeId, sectionName] = selectedSchedule.value.id.split('-');
+
+            // Prepare schedule data
+            const schedule = {
+                startTime: selectedSchedule.value.startTime,
+                endTime: selectedSchedule.value.endTime
+            };
+
+            // Update the schedule using the GradeService
+            await GradeService.updateSectionSchedule(gradeId, sectionName, schedule);
+
+            // Update local state
+            const index = sections.value.findIndex((sec) => sec.id === selectedSchedule.value.id);
+            if (index !== -1) {
+                sections.value[index] = { ...selectedSchedule.value };
+            }
+
+            toast.add({
+                severity: 'success',
+                summary: 'Schedule Updated',
+                detail: `Updated schedule for ${selectedSchedule.value.section}`,
+                life: 3000
+            });
+        } catch (error) {
+            console.error('Error saving schedule:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to save schedule. Please try again.',
+                life: 3000
+            });
         }
     }
     scheduleDialog.value = false;
 }
+
+onMounted(() => {
+    loadSections();
+});
 </script>
 
 <template>

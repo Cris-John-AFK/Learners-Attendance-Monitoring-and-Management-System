@@ -145,6 +145,7 @@
 
 <script setup>
 import { AttendanceService } from '@/router/service/Students';
+import { SubjectService } from '@/router/service/Subjects';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import Button from 'primevue/button';
 import Column from 'primevue/column';
@@ -404,9 +405,21 @@ const getStatusClass = (status) => {
 // Use the service to fetch attendance data for the subject
 const fetchAttendanceData = async () => {
     try {
-        // If you have real subject data, use subjectName.value
+        // First try to get any existing attendance records
         const data = await AttendanceService.getAttendanceForSubject(subjectName.value);
         attendanceData.value = data;
+
+        // Also get subject information for context
+        const subjectInfo = await SubjectService.getSubjects();
+        const currentSubject = subjectInfo.find((s) => s.name.toLowerCase() === subjectName.value.toLowerCase() || s.id.toLowerCase() === route.params.subject.toLowerCase());
+
+        if (currentSubject) {
+            // You can use this information for additional context
+            console.log('Current Subject:', currentSubject);
+
+            // Maybe update UI with grade level
+            // subjectGrade.value = currentSubject.grade;
+        }
     } catch (error) {
         console.error('Error fetching attendance data:', error);
     }

@@ -7,7 +7,6 @@ import TopAbsentees from '@/components/Teachers/TopAbsentees.vue';
 
 <template>
     <div class="grid grid-cols-12 gap-6">
-
         <!-- Stats Widgets -->
         <StatsWidget />
 
