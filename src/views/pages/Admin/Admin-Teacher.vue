@@ -1,4 +1,5 @@
 <script setup>
+import { SubjectService } from '@/router/service/Subjects';
 import { TeacherService } from '@/router/service/TeacherService';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
@@ -6,21 +7,26 @@ import Dropdown from 'primevue/dropdown';
 import FileUpload from 'primevue/fileupload';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeMount, ref } from 'vue';
 
+const toast = useToast();
 const teachers = ref(null);
 const expandedRows = ref([]);
 const searchQuery = ref('');
 const editDialog = ref(false);
 const editingTeacher = ref(null);
 const createDialog = ref(false);
+const deleteDialog = ref(false);
+const teacherToDelete = ref(null);
 const newTeacher = ref({
     name: '',
     department: '',
     roomNumber: '',
     status: 'ACTIVE',
     subjectsCount: 0,
-    image: ''
+    image: 'default.png',
+    assignedGrades: []
 });
 
 // Add new refs for subject dialog
@@ -44,6 +50,33 @@ const newSection = ref({
     name: '',
     studentsCount: 0
 });
+
+// Refs for section assignment
+const assignSectionDialog = ref(false);
+const availableGrades = ref([]);
+const selectedGrade = ref(null);
+const availableSections = ref([]);
+const selectedSection = ref(null);
+
+// For viewing teacher assignments
+const assignmentsDialog = ref(false);
+const teacherAssignments = ref([]);
+
+// Departments for dropdown
+const departments = ['Mathematics', 'Science', 'Filipino', 'English', 'Social Studies', 'Physical Education', 'Music', 'Arts', 'Technology and Livelihood Education', 'Values Education'];
+
+// Status options
+const statusOptions = [
+    { label: 'Active', value: 'ACTIVE' },
+    { label: 'On Leave', value: 'ON_LEAVE' },
+    { label: 'Inactive', value: 'INACTIVE' }
+];
+
+// Add new refs for subject selection dialog
+const subjectSelectionDialog = ref(false);
+const availableSubjects = ref([]);
+const selectedSubjects = ref([]);
+const subjectSearchQuery = ref('');
 
 function expandAll() {
     expandedRows.value = teachers.value.reduce((acc, p) => (acc[p.id] = true) && acc, {});
@@ -98,9 +131,14 @@ function openEdit(teacher) {
 function saveEdit() {
     if (editingTeacher.value) {
         TeacherService.updateTeacher(editingTeacher.value.id, editingTeacher.value);
-        loadTeachers(); // Refresh data
+        loadTeachers();
         editDialog.value = false;
-        editingTeacher.value = null;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher updated successfully',
+            life: 3000
+        });
     }
 }
 
@@ -110,56 +148,166 @@ function openCreateForm() {
         department: '',
         roomNumber: '',
         status: 'ACTIVE',
-        subjectsCount: 0,
-        image: ''
+        image: 'default.png',
+        assignedGrades: []
     };
     createDialog.value = true;
 }
 
 function saveNewTeacher() {
-    TeacherService.createTeacher(newTeacher.value);
-    loadTeachers(); // Refresh data
-    createDialog.value = false;
-    newTeacher.value = {
-        name: '',
-        department: '',
-        roomNumber: '',
-        status: 'ACTIVE',
-        subjectsCount: 0,
-        image: ''
-    };
-}
-
-// Add subject functions
-function openSubjectDialog(teacher) {
-    selectedTeacher.value = teacher;
-    newSubject.value = {
-        name: '',
-        startDate: new Date().toISOString().split('T')[0],
-        sectionsCount: 0,
-        status: 'SCHEDULED'
-    };
-    subjectDialog.value = true;
-}
-
-function saveNewSubject() {
-    if (selectedTeacher.value) {
-        TeacherService.addSubject(selectedTeacher.value.id, newSubject.value);
-        loadTeachers(); // Refresh data
+    if (!newTeacher.value.name) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Teacher name is required',
+            life: 3000
+        });
+        return;
     }
-    subjectDialog.value = false;
+
+    TeacherService.createTeacher(newTeacher.value);
+    loadTeachers();
+    createDialog.value = false;
+    toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Teacher created successfully',
+        life: 3000
+    });
+}
+
+// Add function to fetch available subjects from Subject.js
+async function loadAvailableSubjects() {
+    try {
+        const subjects = await SubjectService.getSubjects();
+        availableSubjects.value = subjects.map((subject) => ({
+            id: subject.id,
+            name: subject.name,
+            grade: subject.grade
+        }));
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load available subjects',
+            life: 3000
+        });
+    }
+}
+
+// Replace openSubjectDialog with this new function
+function openSubjectSelectionDialog(teacher) {
+    selectedTeacher.value = teacher;
+    selectedSubjects.value = [];
+    subjectSearchQuery.value = '';
+    loadAvailableSubjects();
+    subjectSelectionDialog.value = true;
+}
+
+// Filter subjects based on search query
+const filteredSubjects = computed(() => {
+    if (!subjectSearchQuery.value.trim() || !availableSubjects.value) {
+        return availableSubjects.value;
+    }
+
+    const query = subjectSearchQuery.value.toLowerCase();
+    return availableSubjects.value.filter((subject) => subject.name.toLowerCase().includes(query) || subject.grade.toLowerCase().includes(query));
+});
+
+// Add function to add a subject to the selected list
+function addSubjectToSelection(subject) {
+    // Check if the subject is already selected
+    if (!selectedSubjects.value.some((s) => s.id === subject.id)) {
+        selectedSubjects.value.push(subject);
+    }
+}
+
+// Add function to remove a subject from the selected list
+function removeSubjectFromSelection(subject) {
+    selectedSubjects.value = selectedSubjects.value.filter((s) => s.id !== subject.id);
+}
+
+// Replace the saveSelectedSubjects function with this updated version
+async function saveSelectedSubjects() {
+    if (!selectedTeacher.value || selectedSubjects.value.length === 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Please select at least one subject',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // Ensure the teacher has a subjects array
+        if (!selectedTeacher.value.subjects) {
+            selectedTeacher.value.subjects = [];
+        }
+
+        // Track how many subjects were successfully added
+        let addedCount = 0;
+
+        // Assign each selected subject to the teacher
+        for (const subject of selectedSubjects.value) {
+            // Create a new subject object with the necessary properties
+            const newSubject = {
+                id: subject.id,
+                name: subject.name,
+                grade: subject.grade,
+                startDate: new Date().toISOString().split('T')[0],
+                sectionsCount: 0,
+                status: 'SCHEDULED',
+                sections: []
+            };
+
+            // Check if the subject is already assigned
+            const exists = selectedTeacher.value.subjects.some((s) => s.id === subject.id);
+
+            if (!exists) {
+                // Only add if not already assigned
+                TeacherService.addSubject(selectedTeacher.value.id, newSubject);
+                addedCount++;
+            }
+        }
+
+        // Refresh data
+        loadTeachers();
+        subjectSelectionDialog.value = false;
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `${addedCount} subject(s) assigned successfully`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error assigning subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to assign subjects: ' + error.message,
+            life: 3000
+        });
+    }
 }
 
 // Add function for image handling
 function onImageUpload(event) {
     const file = event.files[0];
-    newTeacher.value.image = file.name; // Save filename
+    if (file) {
+        newTeacher.value.image = file.name;
+    }
 }
 
 // Add function for edit image handling
 function onEditImageUpload(event) {
     const file = event.files[0];
-    editingTeacher.value.image = file.name; // Save filename
+    if (file) {
+        editingTeacher.value.image = file.name;
+    }
 }
 
 function openEditSubject(subject) {
@@ -205,6 +353,118 @@ function saveNewSection() {
         loadTeachers(); // Refresh all data
     }
     createSectionDialog.value = false;
+}
+
+function confirmDeleteTeacher(teacher) {
+    teacherToDelete.value = teacher;
+    deleteDialog.value = true;
+}
+
+function deleteTeacher() {
+    if (teacherToDelete.value) {
+        TeacherService.deleteTeacher(teacherToDelete.value.id);
+        loadTeachers();
+        deleteDialog.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher deleted successfully',
+            life: 3000
+        });
+    }
+}
+
+// Open section assignment dialog
+function openAssignSectionDialog(teacher) {
+    selectedTeacher.value = teacher;
+    loadAvailableGrades();
+    selectedGrade.value = null;
+    availableSections.value = [];
+    selectedSection.value = null;
+    assignSectionDialog.value = true;
+}
+
+// Load available grades for assignment
+function loadAvailableGrades() {
+    if (!selectedTeacher.value) return;
+
+    // Get all available assignments for this teacher
+    const availableAssignments = TeacherService.getAvailableSections(selectedTeacher.value.id);
+
+    // Extract just the grades for the dropdown
+    availableGrades.value = availableAssignments.map((item) => ({
+        label: item.gradeName,
+        value: item.gradeId
+    }));
+}
+
+// When a grade is selected, load its available sections
+function onGradeChange() {
+    if (!selectedTeacher.value || !selectedGrade.value) {
+        availableSections.value = [];
+        return;
+    }
+
+    const availableAssignments = TeacherService.getAvailableSections(selectedTeacher.value.id);
+    const gradeAssignment = availableAssignments.find((item) => item.gradeId === selectedGrade.value);
+
+    if (gradeAssignment) {
+        availableSections.value = gradeAssignment.sections.map((section) => ({
+            label: section,
+            value: section
+        }));
+    } else {
+        availableSections.value = [];
+    }
+}
+
+// Assign a section to a teacher
+function assignSection() {
+    if (!selectedTeacher.value || !selectedGrade.value || !selectedSection.value) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please select grade and section',
+            life: 3000
+        });
+        return;
+    }
+
+    TeacherService.assignTeacherToSection(selectedTeacher.value.id, selectedGrade.value, selectedSection.value);
+
+    loadTeachers();
+    assignSectionDialog.value = false;
+    toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Section ${selectedSection.value} assigned successfully`,
+        life: 3000
+    });
+}
+
+// View teacher's assignments
+function viewAssignments(teacher) {
+    selectedTeacher.value = teacher;
+    teacherAssignments.value = TeacherService.getTeacherAssignments(teacher.id);
+    assignmentsDialog.value = true;
+}
+
+// Remove assignment
+function removeAssignment(assignment) {
+    if (!selectedTeacher.value) return;
+
+    TeacherService.removeTeacherFromSection(selectedTeacher.value.id, assignment.gradeId, assignment.sectionName);
+
+    // Refresh assignments list
+    teacherAssignments.value = TeacherService.getTeacherAssignments(selectedTeacher.value.id);
+    loadTeachers();
+
+    toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Assignment removed successfully`,
+        life: 3000
+    });
 }
 
 function loadTeachers() {
@@ -257,7 +517,7 @@ onBeforeMount(() => {
             </Column>
             <Column header="Add Subject">
                 <template #body="slotProps">
-                    <Button icon="pi pi-plus" @click="openSubjectDialog(slotProps.data)" />
+                    <Button icon="pi pi-plus" class="p-button-rounded p-button-success p-button-sm" @click="openSubjectSelectionDialog(slotProps.data)" tooltip="Add Subjects" tooltipOptions="{ position: 'top' }" />
                 </template>
             </Column>
             <Column header="Actions">
@@ -554,6 +814,136 @@ onBeforeMount(() => {
                 <Button label="Save" icon="pi pi-check" @click="saveNewSection" autofocus />
             </template>
         </Dialog>
+
+        <!-- Delete Confirmation Dialog -->
+        <Dialog v-model:visible="deleteDialog" modal header="Confirm Deletion" :style="{ width: '450px' }" class="delete-dialog">
+            <div class="flex align-items-center justify-content-center py-4">
+                <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
+                <span class="text-lg">
+                    Are you sure you want to delete <span class="font-bold">{{ teacherToDelete?.name }}</span
+                    >?
+                </span>
+            </div>
+            <p class="text-center text-gray-600 mt-2">This will remove the teacher and all their assignments. This action cannot be undone.</p>
+
+            <template #footer>
+                <div class="flex justify-content-center gap-3 w-full">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-outlined" @click="deleteDialog = false" />
+                    <Button label="Delete" icon="pi pi-check" class="p-button-danger" @click="deleteTeacher" />
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Assign Section Dialog -->
+        <Dialog v-model:visible="assignSectionDialog" modal header="Assign Section" :style="{ width: '450px' }">
+            <div v-if="selectedTeacher" class="p-fluid">
+                <p class="mb-3">
+                    Assigning section to: <strong>{{ selectedTeacher.name }}</strong>
+                </p>
+
+                <div class="field mb-4">
+                    <label for="grade" class="font-medium">Grade Level</label>
+                    <Dropdown id="grade" v-model="selectedGrade" :options="availableGrades" optionLabel="label" optionValue="value" placeholder="Select Grade Level" @change="onGradeChange" />
+                </div>
+
+                <div class="field mb-4">
+                    <label for="section" class="font-medium">Section</label>
+                    <Dropdown id="section" v-model="selectedSection" :options="availableSections" optionLabel="label" optionValue="value" placeholder="Select Section" :disabled="!selectedGrade || availableSections.length === 0" />
+                    <small v-if="selectedGrade && availableSections.length === 0" class="text-gray-500"> No available sections in this grade level </small>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="assignSectionDialog = false" />
+                <Button label="Assign" icon="pi pi-check" class="p-button-success" @click="assignSection" :disabled="!selectedGrade || !selectedSection" />
+            </template>
+        </Dialog>
+
+        <!-- View Assignments Dialog -->
+        <Dialog v-model:visible="assignmentsDialog" modal header="Teacher Assignments" :style="{ width: '500px' }">
+            <div v-if="selectedTeacher" class="p-fluid">
+                <h4 class="mb-3 font-medium">{{ selectedTeacher.name }}'s Assignments</h4>
+
+                <div v-if="teacherAssignments.length > 0" class="assignments-list">
+                    <div v-for="(assignment, idx) in teacherAssignments" :key="idx" class="assignment-item p-3 mb-2 border-round flex align-items-center justify-content-between" :class="{ 'bg-gray-100': idx % 2 === 0 }">
+                        <div>
+                            <span class="font-medium">{{ assignment.gradeName }}</span> -
+                            <span>{{ assignment.sectionName }}</span>
+                        </div>
+                        <Button icon="pi pi-times" class="p-button-rounded p-button-danger p-button-text" @click="removeAssignment(assignment)" />
+                    </div>
+                </div>
+                <div v-else class="text-center p-4 text-gray-500">
+                    <i class="pi pi-info-circle mb-3" style="font-size: 2rem"></i>
+                    <p>No assignments found for this teacher</p>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="assignmentsDialog = false" />
+            </template>
+        </Dialog>
+
+        <!-- Add Subject Selection Dialog -->
+        <Dialog v-model:visible="subjectSelectionDialog" modal header="Select Subjects" :style="{ width: '600px' }" class="subject-selection-dialog">
+            <div v-if="selectedTeacher" class="p-fluid">
+                <p class="mb-3">
+                    Assign subjects to: <strong>{{ selectedTeacher.name }}</strong>
+                </p>
+
+                <!-- Selected Subjects -->
+                <div v-if="selectedSubjects.length > 0" class="selected-subjects mb-4">
+                    <h5 class="font-medium mb-2">Selected Subjects:</h5>
+                    <div class="flex flex-wrap gap-2">
+                        <div v-for="subject in selectedSubjects" :key="subject.id" class="selected-subject-tag p-2 border-round flex align-items-center gap-2">
+                            <span>{{ subject.name }} ({{ subject.grade }})</span>
+                            <Button icon="pi pi-times" class="p-button-rounded p-button-text p-button-sm" @click="removeSubjectFromSelection(subject)" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search and Subject List -->
+                <div class="subject-search mb-3">
+                    <span class="p-input-icon-left w-full">
+                        <i class="pi pi-search" />
+                        <InputText v-model="subjectSearchQuery" placeholder="Search subjects..." class="w-full" />
+                    </span>
+                </div>
+
+                <div class="available-subjects">
+                    <h5 class="font-medium mb-2">Available Subjects:</h5>
+                    <div v-if="availableSubjects.length === 0" class="text-center p-4 bg-gray-100 border-round">
+                        <i class="pi pi-info-circle mb-2" style="font-size: 1.5rem"></i>
+                        <p>Loading available subjects...</p>
+                    </div>
+                    <div v-else-if="filteredSubjects.length === 0" class="text-center p-4 bg-gray-100 border-round">
+                        <i class="pi pi-search-minus mb-2" style="font-size: 1.5rem"></i>
+                        <p>No subjects found matching your search</p>
+                    </div>
+                    <div v-else class="subject-list">
+                        <div
+                            v-for="subject in filteredSubjects"
+                            :key="subject.id"
+                            class="subject-item p-3 mb-2 border-round flex align-items-center justify-content-between"
+                            :class="{ selected: selectedSubjects.some((s) => s.id === subject.id) }"
+                            @click="addSubjectToSelection(subject)"
+                        >
+                            <div>
+                                <span class="font-medium">{{ subject.name }}</span>
+                                <span class="text-sm text-500 ml-2">{{ subject.grade }}</span>
+                            </div>
+                            <Button icon="pi pi-plus" class="p-button-rounded p-button-text p-button-sm" v-if="!selectedSubjects.some((s) => s.id === subject.id)" />
+                            <Button icon="pi pi-check" class="p-button-rounded p-button-text p-button-success p-button-sm" v-else disabled />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="subjectSelectionDialog = false" />
+                <Button label="Assign Selected" icon="pi pi-check" class="p-button-success" @click="saveSelectedSubjects" :disabled="selectedSubjects.length === 0" />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -594,5 +984,69 @@ onBeforeMount(() => {
 
 .custom-column {
     text-align: center;
+}
+
+.delete-dialog :deep(.p-dialog-header) {
+    background-color: #fee2e2;
+    color: #b91c1c;
+}
+
+.delete-dialog :deep(.p-dialog-header-close-icon) {
+    color: #b91c1c;
+}
+
+.assignments-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.assignment-item {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    transition: background-color 0.2s;
+}
+
+.assignment-item:hover {
+    background-color: #e9ecef;
+}
+
+.selected-subject-tag {
+    background-color: #e9ecef;
+    border: 1px solid #dee2e6;
+    transition: background-color 0.2s;
+}
+
+.selected-subject-tag:hover {
+    background-color: #dee2e6;
+}
+
+.subject-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+
+.subject-item {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.subject-item:hover {
+    background-color: #e9ecef;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.subject-item.selected {
+    background-color: #cfe2ff;
+    border-color: #9ec5fe;
+}
+
+.subject-selection-dialog :deep(.p-dialog-content) {
+    max-height: 70vh;
+    overflow-y: auto;
 }
 </style>
