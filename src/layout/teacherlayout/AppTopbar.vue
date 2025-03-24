@@ -59,65 +59,113 @@ const isLogoutSuccess = ref(false); // Controls the log out confirmation modal
 const logout = () => {
     isLogoutSuccess.value = true; // Show the success message
 };
-
-
 </script>
 
 <template>
     <div class="layout-topbar">
+
         <div class="layout-topbar-logo-container">
-            <button class="layout-menu-button layout-topbar-action" @click="toggleMenu" >
-                <i class="pi pi-bars"></i>
-            </button>
+
+            <button class="layout-menu-button layout-topbar-action" @click="toggleMenu">
+
+                    <i class="pi pi-bars"></i>
+
+                </button>
+
             <router-link to="/teacher" class="layout-topbar-logo">
+
                 <img src="/demo/images/logo.svg" alt="Logo" />
 
+
+
                 <span>NCS- for Teachers</span>
+
             </router-link>
+
             <Button class="back-button" @click="$router.push('/')">
-                    <i class="pi pi-arrow-left"></i> Back to Login
-            </Button>
+
+                        <i class="pi pi-arrow-left"></i> Back to Login
+
+                </Button>
+
         </div>
+
+
 
         <div class="layout-topbar-actions">
+
             <div class="layout-topbar-menu hidden lg:block">
+
                 <div class="layout-topbar-menu-content">
+
                     <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
-                        <i class="pi pi-calendar"></i>
-                        <span>Calendar</span>
-                    </button>
-                    <!-- Profile Button with Dropdown -->
-                    <div class="relative">
-                        <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
-                            <i class="pi pi-user"></i>
-                            <span>Profile</span>
+
+                            <i class="pi pi-calendar"></i>
+
+                            <span>Calendar</span>
+
                         </button>
-                        <!-- Styled Dropdown Menu -->
-                        <div v-if="isProfileOpen" class="profile-dropdown">
-                            <button class="logout-button" @click="logout">
-                                <i class="pi pi-sign-out"></i> Log Out
+
+                    <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
+
+                            <i class="pi pi-cog"></i>
+
+                            <span>Settings</span>
+
+                        </button>
+
+                    <!-- Profile Button with Dropdown -->
+
+                    <div class="relative">
+
+                        <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
+
+                                <i class="pi pi-user"></i>
+
+                                <span>Profile</span>
+
                             </button>
+
+                        <!-- Styled Dropdown Menu -->
+
+                        <div v-if="isProfileOpen" class="profile-dropdown">
+
+                            <button class="logout-button" @click="logout">
+
+                                    <i class="pi pi-sign-out"></i> Log Out
+
+                                </button>
+
                         </div>
+
                     </div>
+
                 </div>
+
             </div>
+
         </div>
+
     </div>
+
     <Dialog v-model:visible="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
-            <VCalendar
-        is-expanded
-        :attributes="attributes"
-        first-day-of-week="1"
-        theme-styling="rounded border shadow-lg bg-white"
-    />
+
+        <VCalendar is-expanded :attributes="attributes" first-day-of-week="1" theme-styling="rounded border shadow-lg bg-white" />
+
     </Dialog>
 
+
+
     <!-- Log Out Confirmation Modal -->
+
     <Dialog v-model:visible="isLogoutSuccess" header="Success" :modal="true" :style="{ width: '250px' }">
+
         <p>You have successfully logged out.</p>
+
         <template #footer>
-            <button class="p-button p-button-primary" @click="isLogoutSuccess = false">OK</button>
-        </template>
+
+                <button class="p-button p-button-primary" @click="isLogoutSuccess = false">OK</button>
+</template>
     </Dialog>
 
 </template>
@@ -127,6 +175,7 @@ img {
     width: 50px;
     height: 50px;
 }
+
 .profile-dropdown {
     position: absolute;
     right: 0;
@@ -141,7 +190,8 @@ img {
     width: 100%;
     padding: 8px 12px;
     border: none;
-    background: #f56565; /* Red button */
+    background: #f56565;
+    /* Red button */
     color: white;
     font-size: 14px;
     border-radius: 6px;
@@ -150,35 +200,38 @@ img {
 }
 
 .logout-button:hover {
-    background: #c53030; /* Darker red on hover */
+    background: #c53030;
+    /* Darker red on hover */
 }
 
 .logout-button i {
     margin-right: 6px;
 }
+
 .back-button {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: 10px; /* Adjust to align properly within the top bar */
-  background-color: #1976D2;
-  color: white;
-  font-weight: bold;
-  padding: 8px 16px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: 0.3s ease-in-out;
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 10px;
+    /* Adjust to align properly within the top bar */
+    background-color: #1976D2;
+    color: white;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: 0.3s ease-in-out;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .back-button:hover {
-  background-color: #1565C0;
-  transform: translateX(-50%) scale(1.05);
+    background-color: #1565C0;
+    transform: translateX(-50%) scale(1.05);
 }
 
 .back-button:active {
-  transform: translateX(-50%) scale(0.95);
+    transform: translateX(-50%) scale(0.95);
 }
 </style>

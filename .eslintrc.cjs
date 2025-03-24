@@ -15,11 +15,7 @@ module.exports = {
         'vue/multi-word-component-names': 'off',
         'vue/no-reserved-component-names': 'off',
         'vue/no-unused-vars': 'off',
-        'vue/component-tags-order': [
-            'error',
-            {
-                order: ['script', 'template', 'style']
-            }
-        ]
+        'vue/component-tags-order': 'off', // Disable the order warning for `<script setup>`// Disable Prettier warnings
+        'no-unused-vars': 'warn' // Change unused variables from error to warning
     }
 };

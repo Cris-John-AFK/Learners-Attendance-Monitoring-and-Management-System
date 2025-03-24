@@ -115,5 +115,69 @@ export const AttendanceService = {
                 photo: photos[9]?.itemImageSrc
             }
         ];
+    },
+
+    // Get students by grade level
+    async getStudentsByGrade(gradeLevel) {
+        const students = await this.getData();
+        return students.filter((student) => student.gradeLevel === parseInt(gradeLevel));
+    },
+
+    // Get students by section
+    async getStudentsBySection(sectionLetter) {
+        const students = await this.getData();
+        return students.filter((student) => student.section === sectionLetter);
+    },
+
+    // Get students by both grade and section
+    async getStudentsByGradeAndSection(gradeLevel, sectionLetter) {
+        const students = await this.getData();
+        return students.filter((student) => student.gradeLevel === parseInt(gradeLevel) && student.section === sectionLetter);
+    },
+
+    // Add student to the system
+    async addStudent(student) {
+        // Implementation would connect to your backend
+        // For now, we'll just return the student object
+        return student;
+    },
+
+    // Update attendance record for a student
+    async recordAttendance(studentId, attendanceRecord) {
+        // In a real implementation, this would update the database
+        return {
+            studentId,
+            ...attendanceRecord
+        };
+    },
+
+    // Get attendance history for a subject
+    async getAttendanceForSubject(subjectName) {
+        // This would typically fetch from a database
+        // For now, return sample data
+        return [
+            {
+                date: '2023-09-15',
+                studentName: 'Maria Clara Santos',
+                studentId: '1001',
+                status: 'Present',
+                time: '10:30:45 AM',
+                remarks: ''
+            },
+            {
+                date: '2023-09-15',
+                studentName: 'Juan Dela Cruz',
+                studentId: '1002',
+                status: 'Late',
+                time: '10:45:12 AM',
+                remarks: 'Traffic'
+            }
+        ];
+    },
+
+    // Get a student by ID
+    async getStudentById(id) {
+        const students = await this.getData();
+        return students.find((student) => student.id === parseInt(id));
     }
 };

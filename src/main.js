@@ -5,6 +5,7 @@ import 'primeicons/primeicons.css';
 import PrimeVue from 'primevue/config';
 import ConfirmationService from 'primevue/confirmationservice';
 
+import Dialog from 'primevue/dialog';
 import ToastService from 'primevue/toastservice';
 import VCalendar from 'v-calendar';
 import 'v-calendar/style.css';
@@ -26,5 +27,6 @@ app.use(PrimeVue, {
 });
 app.use(ToastService);
 app.use(ConfirmationService);
+app.component('Dialog', Dialog);
 
 app.mount('#app');

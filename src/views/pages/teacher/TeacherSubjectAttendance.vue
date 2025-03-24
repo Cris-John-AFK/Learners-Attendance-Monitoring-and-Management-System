@@ -87,31 +87,41 @@
         </template>
     </Dialog>
 
+    <!-- Enhanced Student Roll Call Modal -->
+    <Dialog v-model:visible="showRollCall" modal header="Mark Attendance" :style="{ width: '450px' }" class="attendance-modal">
+        <div class="card border-none shadow-none p-0">
+            <div class="student-profile text-center mb-4">
+                <div class="student-avatar mb-3">
+                    <i class="pi pi-user text-4xl"></i>
+                </div>
+                <h2 class="student-name text-xl font-bold mb-1">{{ currentStudent?.name || 'No Name' }}</h2>
+                <div class="student-id text-sm text-gray-500">ID: {{ currentStudent?.id || 'No ID' }}</div>
+            </div>
 
-    <!-- Single Student Roll Call Modal -->
-    <Dialog v-model:visible="showRollCall" modal :header="'Mark Attendance - ' + (currentStudent?.name || 'Unknown')" :style="{ width: '50vw' }">
-        <div class="card">
-            <div class="flex flex-column align-items-center p-4">
-
-                <div class="student-info mb-4">
-                    <h3 class="text-xl font-semibold">{{ currentStudent?.name || 'No Name' }}</h3>
-                    <p class="text-gray-600">ID: {{ currentStudent?.id || 'No ID' }}</p>
+            <div class="attendance-buttons-container">
+                <div class="attendance-btn present-btn" @click="markAttendance('Present')">
+                    <i class="pi pi-check status-icon"></i>
+                    <span>Present</span>
                 </div>
 
-                <div class="grid w-full">
-                    <div class="col-12 md:col-6 p-2">
-                        <Button label="Present" icon="pi pi-check" class="p-button-success w-full" @click="markAttendance('Present')" />
-                    </div>
-                    <div class="col-12 md:col-6 p-2">
-                        <Button label="Late" icon="pi pi-clock" class="p-button-warning w-full" @click="markAttendance('Late')" />
-                    </div>
-                    <div class="col-12 md:col-6 p-2">
-                        <Button label="Absent" icon="pi pi-times" class="p-button-danger w-full" @click="showRemarksModal('Absent')" />
-                    </div>
-                    <div class="col-12 md:col-6 p-2">
-                        <Button label="Excused" icon="pi pi-info-circle" class="p-button-info w-full" @click="showRemarksModal('Excused')" />
-                    </div>
+                <div class="attendance-btn late-btn" @click="markAttendance('Late')">
+                    <i class="pi pi-clock status-icon"></i>
+                    <span>Late</span>
                 </div>
+
+                <div class="attendance-btn absent-btn" @click="showRemarksModal('Absent')">
+                    <i class="pi pi-times status-icon"></i>
+                    <span>Absent</span>
+                </div>
+
+                <div class="attendance-btn excused-btn" @click="showRemarksModal('Excused')">
+                    <i class="pi pi-info-circle status-icon"></i>
+                    <span>Excused</span>
+                </div>
+            </div>
+
+            <div class="skip-button-container">
+                <Button label="Skip" icon="pi pi-arrow-right" iconPos="right" class="p-button-outlined p-button-lg w-full" style="font-size: 1.1rem; padding: 0.75rem" @click="moveToNextStudent()" />
             </div>
         </div>
     </Dialog>
@@ -144,10 +154,8 @@ import Textarea from 'primevue/textarea';
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-
 const route = useRoute();
 const subjectName = ref('Subject');
-
 
 // Modal states
 const showAttendanceModal = ref(true); // Show immediately when page loads
@@ -170,17 +178,16 @@ const scannedStudents = ref([]);
 let codeReader = null;
 
 const startScanning = async () => {
-  try {
-    const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoElement.value);
-    if (result) {
-      processScannedData(result.text);
-      codeReader.reset(); // Stop scanner after successful scan
+    try {
+        const result = await codeReader.decodeOnceFromVideoDevice(undefined, videoElement.value);
+        if (result) {
+            processScannedData(result.text);
+            codeReader.reset(); // Stop scanner after successful scan
+        }
+    } catch (error) {
+        console.warn('No QR code detected.');
     }
-  } catch (error) {
-    console.warn('No QR code detected.');
-  }
 };
-
 
 // Open Scanner
 const startQRAttendance = () => {
@@ -192,7 +199,7 @@ const startQRAttendance = () => {
         if (videoElement.value) {
             initializeCamera();
         } else {
-            console.error("Video element not found in DOM.");
+            console.error('Video element not found in DOM.');
         }
     });
 };
@@ -209,14 +216,14 @@ const initializeCamera = async () => {
 
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const videoDevices = devices.filter((device) => device.kind === 'videoinput');
 
         if (videoDevices.length > 0) {
             const selectedDeviceId = videoDevices[0].deviceId;
 
             // Ensure videoElement is available before accessing it
             if (!videoElement.value) {
-                console.error("Error: videoElement is not available.");
+                console.error('Error: videoElement is not available.');
                 return;
             }
 
@@ -224,7 +231,7 @@ const initializeCamera = async () => {
                 if (result) {
                     processScannedData(result.text);
                 } else if (err) {
-                    console.warn("QR Code scan error:", err);
+                    console.warn('QR Code scan error:', err);
                 }
             });
         } else {
@@ -239,31 +246,34 @@ const initializeCamera = async () => {
 
 const processScannedData = (scannedText) => {
     if (scannedText === 'DEFAULT-ATTENDANCE-QR') {
-        console.log("Attendance marked for Default Student");
-        alert("Attendance marked for Default Student");
+        console.log('Attendance marked for Default Student');
+        alert('Attendance marked for Default Student');
     } else {
-        console.log("Scanned:", scannedText);
+        console.log('Scanned:', scannedText);
         alert(`Scanned: ${scannedText}`);
     }
 };
 
-watch(() => route.fullPath, () => {
-    // Extract the subject name from the route
-    const matchedSubject = route.params.subject;
+watch(
+    () => route.fullPath,
+    () => {
+        // Extract the subject name from the route
+        const matchedSubject = route.params.subject;
 
-    if (matchedSubject) {
-        subjectName.value = formatSubjectName(matchedSubject);
-    } else {
-        subjectName.value = 'Subject'; // Default
+        if (matchedSubject) {
+            subjectName.value = formatSubjectName(matchedSubject);
+        } else {
+            subjectName.value = 'Subject'; // Default
+        }
     }
-});
+);
 
 // Function to format subject names
 const formatSubjectName = (subject) => {
     // Convert kebab-case or lowercase to title case
     return subject
-        .replace(/-/g, ' ')  // Replace dashes with spaces
-        .replace(/\b\w/g, char => char.toUpperCase()); // Capitalize words
+        .replace(/-/g, ' ') // Replace dashes with spaces
+        .replace(/\b\w/g, (char) => char.toUpperCase()); // Capitalize words
 };
 
 const closeScanner = () => {
@@ -279,16 +289,12 @@ const closeScanner = () => {
     if (videoElement.value && videoElement.value.srcObject) {
         const stream = videoElement.value.srcObject;
         const tracks = stream.getTracks();
-        tracks.forEach(track => track.stop()); // Stop each track
+        tracks.forEach((track) => track.stop()); // Stop each track
         videoElement.value.srcObject = null; // Clear video feed
     }
 
     showQRScanner.value = false;
 };
-
-
-
-
 
 onUnmounted(() => {
     if (codeReader) {
@@ -296,7 +302,6 @@ onUnmounted(() => {
         codeReader = null;
     }
 });
-
 
 const startRollCall = () => {
     showAttendanceModal.value = false;
@@ -307,26 +312,34 @@ const startRollCall = () => {
         currentStudentIndex.value = 0;
         currentStudent.value = students.value[0];
     } else {
-        console.error("No students found!");
+        console.error('No students found!');
     }
 };
 
-
-const markAttendance = (status) => {
+const markAttendance = async (status) => {
     if (!currentStudent.value) return;
 
-    // Add to attendance records
-    attendanceData.value.push({
+    const attendanceRecord = {
         date: new Date().toISOString().split('T')[0],
-        studentName: currentStudent.value.name, // Ensure this is correctly set
+        studentName: currentStudent.value.name,
         studentId: currentStudent.value.id,
         status: status,
         time: new Date().toLocaleTimeString(),
         remarks: ''
-    });
+    };
 
-    // Move to next student
-    moveToNextStudent();
+    try {
+        // Record attendance in the service
+        await AttendanceService.recordAttendance(currentStudent.value.id, attendanceRecord);
+
+        // Update local state
+        attendanceData.value.push(attendanceRecord);
+
+        // Move to next student
+        moveToNextStudent();
+    } catch (error) {
+        console.error('Error recording attendance:', error);
+    }
 };
 
 const showRemarksModal = (status) => {
@@ -334,23 +347,32 @@ const showRemarksModal = (status) => {
     showRemarks.value = true;
 };
 
-const saveWithRemarks = () => {
+const saveWithRemarks = async () => {
     if (!currentStudent.value || !pendingStatus.value) return;
 
-    // Add to attendance records with remarks
-    attendanceData.value.push({
+    const attendanceRecord = {
         date: new Date().toISOString().split('T')[0],
         studentName: currentStudent.value.name,
         studentId: currentStudent.value.id,
         status: pendingStatus.value,
         time: new Date().toLocaleTimeString(),
         remarks: remarks.value
-    });
+    };
 
-    // Reset and move to next student
-    remarks.value = '';
-    showRemarks.value = false;
-    moveToNextStudent();
+    try {
+        // Record attendance with remarks in the service
+        await AttendanceService.recordAttendance(currentStudent.value.id, attendanceRecord);
+
+        // Update local state
+        attendanceData.value.push(attendanceRecord);
+
+        // Reset and move to next student
+        remarks.value = '';
+        showRemarks.value = false;
+        moveToNextStudent();
+    } catch (error) {
+        console.error('Error recording attendance with remarks:', error);
+    }
 };
 
 const moveToNextStudent = () => {
@@ -363,6 +385,13 @@ const moveToNextStudent = () => {
     }
 };
 
+const moveToPreviousStudent = () => {
+    if (currentStudentIndex.value > 0) {
+        currentStudentIndex.value--;
+        currentStudent.value = students.value[currentStudentIndex.value];
+    }
+};
+
 const getStatusClass = (status) => {
     return {
         'text-green-500': status === 'Present',
@@ -372,23 +401,38 @@ const getStatusClass = (status) => {
     };
 };
 
+// Use the service to fetch attendance data for the subject
+const fetchAttendanceData = async () => {
+    try {
+        // If you have real subject data, use subjectName.value
+        const data = await AttendanceService.getAttendanceForSubject(subjectName.value);
+        attendanceData.value = data;
+    } catch (error) {
+        console.error('Error fetching attendance data:', error);
+    }
+};
+
 // Initialize data
 onMounted(async () => {
-    // Fetch students
-    const studentsData = await AttendanceService.getData(() => {
-        students.value = data;
-    });
+    try {
+        // Fetch students
+        const studentsData = await AttendanceService.getData();
+        if (studentsData && studentsData.length > 0) {
+            students.value = studentsData;
+        } else {
+            console.error('No students found in the database!');
+        }
 
-    if (studentsData && studentsData.length > 0) {
-        students.value = studentsData;
-    } else {
-        console.error("No students found in the database!");
+        // Also fetch existing attendance data
+        await fetchAttendanceData();
+    } catch (error) {
+        console.error('Error initializing data:', error);
     }
 });
-
 </script>
 
-<style scoped>/* Camera Card */
+<style scoped>
+/* Camera Card */
 .camera-card {
     position: relative;
     display: flex;
@@ -515,5 +559,108 @@ onMounted(async () => {
 
 .student-info {
     text-align: center;
+}
+
+/* Updated Attendance Modal Styling */
+.attendance-modal :deep(.p-dialog-header) {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 1rem;
+}
+
+.attendance-modal :deep(.p-dialog-content) {
+    padding: 1.5rem;
+}
+
+.student-avatar {
+    width: 70px;
+    height: 70px;
+    background: #f5f7f9;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    color: #758ca3;
+}
+
+/* New button container */
+.attendance-buttons-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Updated button styling for larger, more clickable buttons */
+.attendance-btn {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.attendance-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.attendance-btn:active {
+    transform: translateY(0);
+}
+
+.status-icon {
+    margin-right: 10px;
+    font-size: 1.3rem;
+}
+
+/* Button colors - darker versions for better visibility */
+.present-btn {
+    background-color: #c8e6c9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+}
+
+.late-btn {
+    background-color: #ffe0b2;
+    color: #e65100;
+    border: 1px solid #ffcc80;
+}
+
+.absent-btn {
+    background-color: #ffcdd2;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+}
+
+.excused-btn {
+    background-color: #bbdefb;
+    color: #0d47a1;
+    border: 1px solid #90caf9;
+}
+
+/* Enhanced Skip button */
+.skip-button-container {
+    margin-top: 20px;
+    text-align: center;
+}
+
+/* Remove the old grid-based layout styles */
+.attendance-options,
+.attendance-button {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .attendance-modal :deep(.p-dialog-content) {
+        padding: 1rem;
+    }
+
+    .attendance-btn {
+        padding: 14px;
+    }
 }
 </style>

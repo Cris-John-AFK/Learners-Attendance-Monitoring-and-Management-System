@@ -4,9 +4,11 @@ import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
-import SubjectAttendance from '@/views/pages/SubjectAttendance.vue';
+import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
+import TeacherSection from '@/views/pages/teacher/TeacherSection.vue';
+import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
+import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-
 const router = createRouter({
     history: createWebHistory(),
     routes: [
@@ -28,7 +30,7 @@ const router = createRouter({
                 {
                     path: '/teacher',
                     name: 'dashboard',
-                    component: () => import('@/views/Dashboard.vue')
+                    component: TeacherDashboard
                 },
                 {
                     path: '/pages/attendance',
@@ -43,17 +45,17 @@ const router = createRouter({
                 {
                     path: '/pages/section',
                     name: 'section',
-                    component: () => import('@/views/pages/Section.vue')
+                    component: TeacherSection
                 },
                 {
                     path: '/pages/settings',
                     name: 'settings',
-                    component: () => import('@/views/pages/Settings.vue')
+                    component: TeacherSettings
                 },
                 {
                     path: '/subject/:subject',
                     name: 'subject-attendance',
-                    component: SubjectAttendance
+                    component: TeacherSubjectAttendance
                 }
             ]
         },
