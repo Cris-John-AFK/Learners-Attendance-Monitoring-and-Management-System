@@ -12,6 +12,7 @@
         "@primevue/themes": "^4.2.5",
         "@zxing/browser": "^0.1.5",
         "apexcharts": "^4.5.0",
+        "axios": "^1.8.4",
         "chart.js": "3.3.2",
         "primeicons": "^7.0.0",
         "primevue": "^4.3.2",

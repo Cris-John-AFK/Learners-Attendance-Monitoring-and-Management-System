@@ -262,7 +262,6 @@ function closeAddSectionDialog() {
                 <Button label="Add Schedule" icon="pi pi-plus" class="p-button-success" @click="openAddSectionDialog" />
             </div>
 
-            <!-- Updated Table -->
             <DataTable
                 :value="sectionDetails.filter((d) => d.section?.name === selectedSectionDetails?.name)"
                 class="p-datatable-striped"
