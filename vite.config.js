@@ -20,5 +20,13 @@ export default defineConfig({
     },
     optimizeDeps: {
         include: ['vue-qrcode-reader']
+    },
+    server: {
+        proxy: {
+            '/api': {
+                target: 'http://localhost:8000',
+                changeOrigin: true
+            }
+        }
     }
 });

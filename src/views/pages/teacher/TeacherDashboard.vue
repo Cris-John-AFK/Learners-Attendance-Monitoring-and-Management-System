@@ -204,18 +204,11 @@ function handleFallbackData() {
     }
 }
 
-// Load attendance data for current selection using StudentAttendanceService
+// Load attendance data for current selection using API
 async function loadAttendanceData() {
     if (!selectedSubject.value) return;
 
     try {
-        console.log('Loading attendance data for subject:', selectedSubject.value);
-        console.log('Available services:', {
-            AttendanceService: Object.keys(AttendanceService),
-            StudentAttendanceService: Object.keys(StudentAttendanceService),
-            GradeService: Object.keys(GradeService)
-        });
-
         const subject = selectedSubject.value.originalSubject;
         const gradeId = GradeService.getGradeByName(subject.grade)?.id;
 
@@ -224,22 +217,8 @@ async function loadAttendanceData() {
             return;
         }
 
-        // Instead of trying to use StudentAttendanceService.getStudentsBySubject
-        // Use AttendanceService directly to get students and filter by grade/subject
-        const allStudents = await AttendanceService.getData();
-
-        // Convert gradeId to number for comparison
-        let gradeLevel;
-        if (gradeId === 'K') {
-            gradeLevel = 0; // Kinder is represented as 0
-        } else {
-            gradeLevel = parseInt(gradeId);
-        }
-
-        // Filter students by grade level
-        const students = allStudents.filter((student) => student.gradeLevel === gradeLevel);
-
-        console.log(`Found ${students.length} students in grade ${gradeId}`);
+        // Get all students taking this subject in this grade via API
+        const students = await AttendanceService.getStudentsByGrade(gradeId);
 
         if (!students || students.length === 0) {
             console.log('No students found for this subject');
@@ -254,7 +233,7 @@ async function loadAttendanceData() {
         }
 
         // Get attendance records for these students in this subject
-        const attendanceRecords = await getAttendanceRecords(
+        const attendanceRecords = await StudentAttendanceService.getSubjectAttendanceRecords(
             students.map((s) => s.id),
             subject.id,
             currentMonth.value,
