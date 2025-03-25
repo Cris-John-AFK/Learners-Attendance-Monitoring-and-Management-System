@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
@@ -226,9 +226,9 @@ function closeAddSectionDialog() {
             <Column header="Action">
                 <template #body="slotProps">
                     <div class="flex space-x-2">
-                        <Button icon="pi pi-pencil" class="p-button-text" @click="editSection(slotProps.data)" tooltip="Edit Section" aria-label="Edit Section" />
-                        <Button icon="pi pi-search" class="p-button-text" @click="openSectionDetails(slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
-                        <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
+                        <Button icon="pi pi-pencil" class="p-button-text" @click="$emit('edit-section', slotProps.data)" tooltip="Edit Section" aria-label="Edit Section" />
+                        <Button icon="pi pi-search" class="p-button-text" @click="$emit('open-section-details', slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
+                        <Button icon="pi pi-trash" class="p-button-text" @click="$emit('delete-section', slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
                     </div>
                 </template>
             </Column>
