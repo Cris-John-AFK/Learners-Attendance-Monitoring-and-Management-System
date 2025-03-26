@@ -63,45 +63,6 @@ const logout = () => {
 </script>
 
 <template>
-<<<<<<< HEAD
-    <div class="layout-topbar">
-        <div class="layout-topbar-logo-container">
-            <router-link to="/teacher" class="layout-topbar-logo">
-                <img src="/demo/images/logo.svg" alt="Logo" />
-
-                <span>NCS- for Teachers</span>
-            </router-link>
-
-            <Button class="back-button" @click="$router.push('/')"> <i class="pi pi-arrow-left"></i> Back to Login </Button>
-        </div>
-
-        <div class="layout-topbar-actions">
-            <div class="layout-topbar-menu hidden lg:block">
-                <div class="layout-topbar-menu-content">
-                    <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
-                        <i class="pi pi-calendar"></i>
-
-                        <span>Calendar</span>
-                    </button>
-                    <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
-                        <i class="pi pi-cog"></i>
-                        <span>Settings</span>
-                    </button>
-
-                    <!-- Profile Button with Dropdown -->
-
-                    <div class="relative">
-                        <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
-                            <i class="pi pi-user"></i>
-
-                            <span>Profile</span>
-                        </button>
-
-                        <!-- Styled Dropdown Menu -->
-
-                        <div v-if="isProfileOpen" class="profile-dropdown">
-                            <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
-=======
     <div>
         <div class="layout-topbar">
             <div class="layout-topbar-logo-container">
@@ -141,29 +102,11 @@ const logout = () => {
                             <div v-if="isProfileOpen" class="profile-dropdown">
                                 <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
                             </div>
->>>>>>> 91f0e0a49e7edc667df81b0159d9305307e9638c
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-<<<<<<< HEAD
-    </div>
-
-    <Dialog v-model:visible="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
-        <VCalendar is-expanded :attributes="attributes" first-day-of-week="1" theme-styling="rounded border shadow-lg bg-white" />
-    </Dialog>
-
-    <!-- Log Out Confirmation Modal -->
-
-    <Dialog v-model:visible="isLogoutSuccess" header="Success" :modal="true" :style="{ width: '250px' }">
-        <p>You have successfully logged out.</p>
-
-        <template #footer>
-            <button class="p-button p-button-primary" @click="isLogoutSuccess = false">OK</button>
-        </template>
-    </Dialog>
-=======
 
         <Dialog v-model="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
             <VCalendar is-expanded :attributes="attributes" first-day-of-week="1" theme-styling="rounded border shadow-lg bg-white" />
@@ -178,7 +121,6 @@ const logout = () => {
             </template>
         </Dialog>
     </div>
->>>>>>> 91f0e0a49e7edc667df81b0159d9305307e9638c
 </template>
 
 <style scoped>
@@ -221,13 +163,7 @@ img {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-<<<<<<< HEAD
-    top: 10px;
-    /* Adjust to align properly within the top bar */
-=======
-    top: 50%;
-    margin-top: 0;
->>>>>>> 91f0e0a49e7edc667df81b0159d9305307e9638c
+    top: 10px; /* Better alignment from HEAD version */
     background-color: #1976d2;
     color: white;
     font-weight: 600;
