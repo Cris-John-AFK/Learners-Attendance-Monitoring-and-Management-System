@@ -3,7 +3,9 @@ import { useLayout } from '@/layout/composables/layout';
 import AdminFooter from '@/views/admin/AdminFooter.vue';
 import AdminSidebar from '@/views/admin/AdminSidebar.vue';
 import AdminTopbar from '@/views/admin/AdminTopbar.vue';
+import Toast from 'primevue/toast';
 import { computed, ref, watch } from 'vue';
+
 const { layoutConfig, layoutState, isSidebarActive } = useLayout();
 
 const outsideClickListener = ref(null);
@@ -55,18 +57,20 @@ function isOutsideClicked(event) {
 </script>
 
 <template>
-    <div class="layout-wrapper" :class="containerClass">
-        <admin-topbar></admin-topbar>
-        <admin-sidebar></admin-sidebar>
-        <div class="layout-main-container">
-            <div class="layout-main">
-                <router-view></router-view>
+    <div class="admin-layout-container">
+        <div class="layout-wrapper" :class="containerClass">
+            <admin-topbar></admin-topbar>
+            <admin-sidebar></admin-sidebar>
+            <div class="layout-main-container">
+                <div class="layout-main">
+                    <router-view></router-view>
+                </div>
+                <admin-footer></admin-footer>
             </div>
-            <admin-footer></admin-footer>
+            <div class="layout-mask animate-fadein"></div>
         </div>
-        <div class="layout-mask animate-fadein"></div>
+        <Toast />
     </div>
-    <Toast />
 </template>
 
 <style lang="scss" scoped>

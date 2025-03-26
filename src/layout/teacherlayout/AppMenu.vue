@@ -11,7 +11,6 @@ const model = ref([
     {
         label: 'Subjects',
         icon: 'pi pi-fw pi-briefcase',
-        to: '/pages',
         items: [
             {
                 label: 'Homeroom',
@@ -59,7 +58,6 @@ const model = ref([
     {
         label: 'Manage',
         icon: 'pi pi-fw pi-briefcase',
-        to: '/pages',
         items: [
             {
                 label: 'Section',

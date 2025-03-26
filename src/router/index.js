@@ -8,6 +8,7 @@ import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSection from '@/views/pages/teacher/TeacherSection.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
+import ApiTest from '@/components/ApiTest.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 const router = createRouter({
     history: createWebHistory(),
@@ -172,6 +173,10 @@ const router = createRouter({
                     component: () => import('@/views/Enrollment/TransferStudentForm.vue')
                 }
             ]
+        },
+        {
+            path: '/api-test',
+            component: ApiTest
         }
     ]
 });
