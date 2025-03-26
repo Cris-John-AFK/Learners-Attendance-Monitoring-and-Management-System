@@ -1,6 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
@@ -17,15 +17,17 @@ watch(isSidebarActive, (newVal) => {
     }
 });
 
-const containerClass = ref({
-    'layout-theme-light': true,
-    'layout-overlay': layoutConfig.menuMode === 'overlay',
-    'layout-static': layoutConfig.menuMode === 'static',
-    'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
-    'layout-overlay-active': layoutState.overlayMenuActive,
-    'layout-mobile-active': layoutState.staticMenuMobileActive,
-    'p-input-filled': layoutConfig.inputStyle === 'filled',
-    'p-ripple-disabled': !layoutConfig.ripple
+const containerClass = computed(() => {
+    return {
+        'layout-theme-light': true,
+        'layout-overlay': layoutConfig.menuMode === 'overlay',
+        'layout-static': layoutConfig.menuMode === 'static',
+        'layout-static-inactive': layoutState.staticMenuDesktopInactive && layoutConfig.menuMode === 'static',
+        'layout-overlay-active': layoutState.overlayMenuActive,
+        'layout-mobile-active': layoutState.staticMenuMobileActive,
+        'p-input-filled': layoutConfig.inputStyle === 'filled',
+        'p-ripple-disabled': !layoutConfig.ripple
+    };
 });
 
 const bindOutsideClickListener = () => {
@@ -56,16 +58,18 @@ const isOutsideClicked = (event) => {
 </script>
 
 <template>
-    <div class="layout-wrapper" :class="containerClass">
-        <AppTopbar />
-        <AppSidebar />
-        <div class="layout-main-container">
-            <div class="layout-main">
-                <router-view></router-view>
+    <div class="app-layout-container">
+        <div class="layout-wrapper" :class="containerClass">
+            <AppTopbar />
+            <AppSidebar />
+            <div class="layout-main-container">
+                <div class="layout-main">
+                    <router-view></router-view>
+                </div>
+                <AppFooter />
             </div>
-            <AppFooter />
+            <div class="layout-mask"></div>
         </div>
-        <div class="layout-mask"></div>
     </div>
 </template>
 
