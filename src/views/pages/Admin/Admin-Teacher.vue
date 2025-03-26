@@ -1,4 +1,5 @@
 <script setup>
+import CustomModal from '@/components/custom/CustomModal.vue';
 import { SubjectService } from '@/router/service/Subjects';
 import { TeacherService } from '@/router/service/TeacherService';
 import Calendar from 'primevue/calendar';
@@ -607,7 +608,11 @@ onBeforeMount(() => {
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="createDialog" modal header="Register New Teacher" :style="{ width: '450px' }">
+        <CustomModal
+            v-model="createDialog"
+            header="Register New Teacher"
+            width="450px"
+        >
             <div class="p-fluid">
                 <!-- Teacher Name -->
                 <div class="field" :style="{ padding: '10px' }">
@@ -647,7 +652,7 @@ onBeforeMount(() => {
                     <Button label="Save" icon="pi pi-check" @click="saveNewTeacher" class="p-button-success" autofocus />
                 </div>
             </template>
-        </Dialog>
+        </CustomModal>
 
         <!-- Dialog for new subject -->
         <Dialog v-model:visible="subjectDialog" modal header="Add New Subject" :style="{ width: '450px' }">
