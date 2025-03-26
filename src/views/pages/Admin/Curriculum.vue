@@ -1,6 +1,4 @@
-<script setup>
-import SakaiCard from '@/components/SakaiCard.vue';
-import { GradeService } from '@/router/service/Grades';
+<script setup lang="ts">
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
@@ -8,31 +6,15 @@ import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { ref } from 'vue';
 
-const toast = useToast();
-const curriculums = ref([]);
-const grades = ref([]);
-const loading = ref(true);
-const curriculumDialog = ref(false);
-const deleteCurriculumDialog = ref(false);
-const selectedCurriculum = ref(null);
-const curriculum = ref({
-    id: null,
-    name: '',
-    yearRange: '',
-    description: '',
-    status: 'Active'
-});
-const submitted = ref(false);
-const yearRanges = ref(['2023-2024', '2024-2025', '2025-2026', '2026-2027', '2027-2028']);
-
-// Section management variables
+const products = ref([]);
+const showCreateDialog = ref(false);
 const showSectionManagement = ref(false);
 const selectedGrade = ref(null);
 const newGradeLevel = ref('');
 const selectedYearRange = ref('2024-2025');
+const yearRanges = ref(['2023-2024', '2024-2025', '2025-2026', '2026-2027']);
 const sections = ref([]);
 const newSection = ref({ name: '', gradeLevel: '', group: '', year: null });
 const showSectionDialog = ref(false);
@@ -51,245 +33,44 @@ const newSectionData = ref({
     section: null
 });
 const sectionDetails = ref([]);
-const subjects = ref([]);
+const subjects = ref(['Mathematics', 'Science', 'English', 'History', 'Physics', 'Chemistry']);
 const teachers = ref(['Mr. Smith', 'Mrs. Johnson', 'Dr. Williams', 'Ms. Brown']);
 const isEditMode = ref(false);
 const editingSectionDetail = ref(null);
-
-const getRandomGradient = () => {
-    const colors = ['#ff9a9e', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
-
-    const color1 = colors[Math.floor(Math.random() * colors.length)];
-    const color2 = colors[Math.floor(Math.random() * colors.length)];
-
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
-};
-
-// Mock data for curriculums
-const mockCurriculums = [
-    { id: 1, name: 'Curriculum', yearRange: '2023-2024', description: 'Standard curriculum for 2023-2024', status: 'Active' },
-    { id: 2, name: 'Curriculum', yearRange: '2024-2025', description: 'Standard curriculum for 2024-2025', status: 'Active' },
-    { id: 3, name: 'Curriculum', yearRange: '2025-2026', description: 'Standard curriculum for 2025-2026', status: 'Active' },
-    { id: 4, name: 'Curriculum', yearRange: '2026-2027', description: 'Standard curriculum for 2026-2027', status: 'Planned' },
-    { id: 5, name: 'Special Curriculum', yearRange: '2023-2024', description: 'Special education curriculum', status: 'Active' }
-];
-
-const filteredCurriculums = computed(() => {
-    if (!selectedCurriculum.value) {
-        return curriculums.value;
-    }
-
-    return curriculums.value.filter((c) => c.yearRange === selectedCurriculum.value);
-});
-
-const cardStyles = computed(() =>
-    filteredCurriculums.value.map(() => ({
-        background: getRandomGradient()
-    }))
-);
-
-onMounted(async () => {
-    await loadCurriculums();
-    await fetchGrades();
-    await fetchSubjects();
-});
-
-const loadCurriculums = async () => {
-    try {
-        loading.value = true;
-        // In a real app, you would fetch from an API
-        // For now, we'll use mock data
-        curriculums.value = mockCurriculums;
-        loading.value = false;
-    } catch (error) {
-        console.error('Error loading curriculum data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load curriculum data',
-            life: 3000
-        });
-        loading.value = false;
-    }
-};
-
-const openNew = () => {
-    curriculum.value = {
-        id: null,
-        name: 'Curriculum',
-        yearRange: selectedCurriculum.value || '',
-        description: '',
-        status: 'Active'
-    };
-    curriculumDialog.value = true;
-};
-
-const saveCurriculum = async () => {
-    submitted.value = true;
-
-    if (!curriculum.value.name.trim() || !curriculum.value.yearRange) {
-        toast.add({
-            severity: 'warn',
-            summary: 'Warning',
-            detail: 'Please enter required fields',
-            life: 3000
-        });
-        return;
-    }
-
-    try {
-        if (curriculum.value.id) {
-            // Update existing curriculum
-            const index = curriculums.value.findIndex((c) => c.id === curriculum.value.id);
-            if (index !== -1) {
-                curriculums.value[index] = { ...curriculum.value };
-            }
-        } else {
-            // Create new curriculum
-            const newId = Math.max(0, ...curriculums.value.map((c) => c.id)) + 1;
-            curriculums.value.push({
-                ...curriculum.value,
-                id: newId
-            });
-        }
-
-        curriculumDialog.value = false;
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: curriculum.value.id ? 'Curriculum Updated' : 'Curriculum Created',
-            life: 3000
-        });
-    } catch (error) {
-        console.error('Error saving curriculum:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to save curriculum',
-            life: 3000
-        });
-    }
-};
-
-// Section Management Functions
-async function fetchGrades() {
-    try {
-        loading.value = true;
-        const data = await GradeService.getGrades();
-        grades.value = data.map((grade) => ({
-            id: grade.id,
-            name: grade.name,
-            category: `Academic Year ${selectedYearRange.value}`,
-            sections: grade.sections
-        }));
-    } catch (error) {
-        console.error('Error fetching grades:', error);
-    } finally {
-        loading.value = false;
-    }
-}
-
-async function fetchSubjects() {
-    try {
-        const allSubjects = await GradeService.getSubjectsByGrade('all');
-        subjects.value = [...new Set(allSubjects.map((subject) => subject.name))];
-    } catch (error) {
-        console.error('Error fetching subjects:', error);
-    }
-}
 
 function openCreateForm() {
     showCreateDialog.value = true;
 }
 
-async function saveGradeLevel() {
+function saveGradeLevel() {
     if (newGradeLevel.value.trim() !== '' && selectedYearRange.value) {
-        try {
-            loading.value = true;
-            const newGrade = {
-                id: newGradeLevel.value,
-                name: `Grade ${newGradeLevel.value}`,
-                sections: []
-            };
-
-            grades.value.push({
-                id: newGrade.id,
-                name: newGrade.name,
-                category: `Academic Year ${selectedYearRange.value}`,
-                sections: []
-            });
-
-            newGradeLevel.value = '';
-            selectedYearRange.value = '2024-2025';
-            showCreateDialog.value = false;
-        } catch (error) {
-            console.error('Error creating grade:', error);
-        } finally {
-            loading.value = false;
-        }
-    }
-}
-
-// This is the function that will handle curriculum card click
-async function openSectionManagement(curr) {
-    try {
-        loading.value = true;
-        selectedCurriculum.value = curr;
-
-        // Simulate fetching section data for this curriculum
-        // In a real app, you would get this from your service
-        const mockSections = [
-            { name: 'Section A', gradeLevel: 'Grade 1', group: 'Group 1', year: new Date(), id: 's1' },
-            { name: 'Section B', gradeLevel: 'Grade 1', group: 'Group 2', year: new Date(), id: 's2' }
-        ];
-
-        sections.value = mockSections;
-        selectedGrade.value = {
-            name: `Curriculum - ${curr.yearRange}`,
-            id: curr.id
+        const grade = {
+            name: `Grade ${newGradeLevel.value}`,
+            category: `Year ${selectedYearRange.value}`
         };
-
-        showSectionManagement.value = true;
-    } catch (error) {
-        console.error('Error fetching sections:', error);
-    } finally {
-        loading.value = false;
+        products.value.push(grade);
+        newGradeLevel.value = '';
+        selectedYearRange.value = '2024-2025';
+        showCreateDialog.value = false;
     }
 }
 
-async function addSection() {
+function openSectionManagement(grade) {
+    selectedGrade.value = grade;
+    showSectionManagement.value = true;
+}
+
+function addSection() {
     if (newSection.value.name.trim() !== '') {
-        try {
-            loading.value = true;
-
-            // Create new section with form data
-            sections.value.push({
-                ...newSection.value,
-                gradeLevel: selectedGrade.value.name,
-                id: 'SEC-' + Math.random().toString(36).substr(2, 9).toUpperCase()
-            });
-
-            resetSectionForm();
-        } catch (error) {
-            console.error('Error creating section:', error);
-        } finally {
-            loading.value = false;
-        }
+        sections.value.push({ ...newSection.value, gradeLevel: selectedGrade.value.name });
+        resetSectionForm();
     }
 }
 
-async function deleteSection(section) {
-    try {
-        loading.value = true;
-
-        const index = sections.value.findIndex((s) => s.name === section.name && s.gradeLevel === section.gradeLevel);
-        if (index !== -1) {
-            sections.value.splice(index, 1);
-        }
-    } catch (error) {
-        console.error('Error deleting section:', error);
-    } finally {
-        loading.value = false;
+function deleteSection(section) {
+    const index = sections.value.findIndex((s) => s.name === section.name && s.gradeLevel === section.gradeLevel);
+    if (index !== -1) {
+        sections.value.splice(index, 1);
     }
 }
 
@@ -298,17 +79,9 @@ function resetSectionForm() {
     showSectionDialog.value = false;
 }
 
-async function openSectionDetails(section) {
-    try {
-        loading.value = true;
-        selectedSectionDetails.value = section;
-
-        showSectionDetailsDialog.value = true;
-    } catch (error) {
-        console.error('Error fetching section details:', error);
-    } finally {
-        loading.value = false;
-    }
+function openSectionDetails(section) {
+    selectedSectionDetails.value = section;
+    showSectionDetailsDialog.value = true;
 }
 
 function openAddSectionDialog() {
@@ -408,53 +181,36 @@ function closeAddSectionDialog() {
 </script>
 
 <template>
-    <div class="p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-semibold">Curriculum Management</h2>
-            <div class="flex gap-3">
-                <Button label="Add New Curriculum" icon="pi pi-plus" class="p-button-success" @click="openNew" />
+    <div class="flex flex-col bg-gray-100 p-6 rounded-lg shadow-lg">
+        <div class="card bg-white p-6 rounded-lg shadow-md">
+            <div class="font-semibold text-2xl text-indigo-600">Curriculum Management</div>
+            <div class="flex justify-between items-center my-4">
+                <Button label="Create" icon="pi pi-plus" class="p-button-success bg-green-500 text-white" @click="openCreateForm" />
             </div>
-        </div>
 
-        <div v-if="loading" class="flex justify-center my-8">
-            <i class="pi pi-spin pi-spinner text-4xl text-blue-500"></i>
-        </div>
-
-        <div v-else class="card-container">
-            <SakaiCard v-for="(curr, index) in filteredCurriculums" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionManagement(curr)">
-                <div class="card-header">
-                    <h1 class="curriculum-name">{{ curr.name }}</h1>
-                    <p class="year-info">{{ curr.yearRange }}</p>
+            <div class="grid grid-cols-12 gap-4">
+                <div v-for="(item, index) in products" :key="index" class="col-span-12 sm:col-span-6 lg:col-span-4 p-2">
+                    <div class="p-6 border border-gray-300 rounded-lg bg-indigo-50 shadow-md cursor-pointer" @click="openSectionManagement(item)">
+                        <div class="text-lg font-medium text-indigo-800">{{ item.name }}</div>
+                        <span class="text-sm text-gray-600">{{ item.category }}</span>
+                    </div>
                 </div>
-            </SakaiCard>
+            </div>
         </div>
     </div>
 
-    <!-- Add Curriculum Dialog -->
-    <Dialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
-        <div class="field mb-4">
-            <label for="name" class="font-medium mb-2 block">Curriculum Name</label>
-            <InputText id="name" v-model="curriculum.name" required autofocus :class="{ 'p-invalid': submitted && !curriculum.name }" placeholder="Enter curriculum name" class="w-full p-inputtext-lg" />
-            <small class="p-error" v-if="submitted && !curriculum.name">Curriculum name is required.</small>
-        </div>
-
-        <div class="field mb-4">
-            <label for="yearRange" class="font-medium mb-2 block">Academic Year</label>
-            <Dropdown id="yearRange" v-model="curriculum.yearRange" :options="yearRanges" placeholder="Select Academic Year" required :class="{ 'p-invalid': submitted && !curriculum.yearRange }" class="w-full p-inputtext-lg" />
-            <small class="p-error" v-if="submitted && !curriculum.yearRange">Academic year is required.</small>
-        </div>
-
-        <div class="field mb-4">
-            <label for="status" class="font-medium mb-2 block">Status</label>
-            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" />
-        </div>
-
-        <template #footer>
-            <div class="flex justify-end gap-2">
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="curriculumDialog = false" />
-                <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveCurriculum" />
+    <!-- Create Grade Level Dialog -->
+    <Dialog v-model:visible="showCreateDialog" header="Add Grade Level" modal class="w-96">
+        <div class="flex flex-col gap-4">
+            <label class="font-medium text-gray-700">Grade Level:</label>
+            <InputText v-model="newGradeLevel" placeholder="Enter Grade Level" class="p-inputtext-lg border border-gray-300 p-2 rounded-lg" />
+            <label class="font-medium text-gray-700">Year Range:</label>
+            <Dropdown v-model="selectedYearRange" :options="yearRanges" placeholder="Select Year Range" class="w-full border border-gray-300 p-2 rounded-lg" />
+            <div class="flex justify-end gap-2 mt-4">
+                <Button label="Cancel" class="p-button-secondary" @click="showCreateDialog = false" />
+                <Button label="Save" class="p-button-success" @click="saveGradeLevel" />
             </div>
-        </template>
+        </div>
     </Dialog>
 
     <!-- Section Management Section -->
@@ -463,15 +219,16 @@ function closeAddSectionDialog() {
         <div class="flex justify-between items-center mb-4">
             <Button label="Add Section" icon="pi pi-user-plus" class="p-button-success" @click="showSectionDialog = true" />
         </div>
-        <DataTable :value="sections" class="p-datatable-striped">
+        <DataTable :value="sections.filter((s) => s.gradeLevel === selectedGrade?.name)" class="p-datatable-striped">
             <Column field="name" header="Name" sortable />
             <Column field="gradeLevel" header="Grade Level" sortable />
-            <Column field="group" header="Group" sortable />
+            <Column field="year" header="Year" sortable />
             <Column header="Action">
                 <template #body="slotProps">
                     <div class="flex space-x-2">
-                        <Button icon="pi pi-search" class="p-button-text" @click="openSectionDetails(slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
-                        <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
+                        <Button icon="pi pi-pencil" class="p-button-text" @click="$emit('edit-section', slotProps.data)" tooltip="Edit Section" aria-label="Edit Section" />
+                        <Button icon="pi pi-search" class="p-button-text" @click="$emit('open-section-details', slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
+                        <Button icon="pi pi-trash" class="p-button-text" @click="$emit('delete-section', slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
                     </div>
                 </template>
             </Column>
@@ -539,7 +296,7 @@ function closeAddSectionDialog() {
         </div>
     </Dialog>
 
-    <!-- Add Schedule Dialog -->
+    <!-- Add Section Dialog -->
     <Dialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
             <div class="field">
@@ -581,63 +338,6 @@ function closeAddSectionDialog() {
 </template>
 
 <style scoped>
-.card-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-}
-
-.custom-card {
-    width: 200px;
-    height: 250px;
-    border-radius: 10px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    text-align: center;
-    background: #f0f0f0;
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
-    color: white;
-    font-weight: bold;
-    position: relative;
-}
-
-.custom-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-}
-
-.curriculum-name {
-    margin: 0;
-    text-align: center;
-    word-break: break-word;
-    overflow-wrap: break-word;
-    white-space: pre-wrap;
-    font-size: 25px;
-}
-
-.year-info {
-    position: absolute;
-    bottom: 10px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 14px;
-    opacity: 0.8;
-}
-
-.card-header {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    padding: 20px;
-}
-
 :deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
     background-color: #f9fafb;
 }

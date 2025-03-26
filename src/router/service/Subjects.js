@@ -1,46 +1,58 @@
 // This file will contain centralized subject data
 import { AttendanceService } from './Students';
+import axios from 'axios';
 
-// Create an in-memory store
-let subjectStore = null;
+// Base URL for the API
+const API_URL = 'http://localhost:8000/api';
+
+// Create an in-memory cache for performance
+let subjectCache = null;
 
 export const SubjectService = {
     async getSubjects() {
-        // If we already have the data in our store, return it
-        if (subjectStore) {
-            return [...subjectStore]; // Return a copy
+        try {
+            // If we already have the data in our cache, return it
+            if (subjectCache) {
+                return [...subjectCache]; // Return a copy
+            }
+
+            // Make API call to get subjects
+            const response = await axios.get(`${API_URL}/subjects`);
+            subjectCache = response.data;
+            return [...subjectCache]; // Return a copy
+        } catch (error) {
+            console.error('Error fetching subjects:', error);
+
+            // Fallback to mock data if API fails
+            console.warn('Falling back to mock data');
+            return [
+                { id: 'MATH101', name: 'Mathematics', grade: 'Grade 1', description: 'Basic mathematics', credits: 3 },
+                { id: 'ENG101', name: 'English', grade: 'Grade 1', description: 'English language fundamentals', credits: 3 },
+                { id: 'SCI101', name: 'Science', grade: 'Grade 1' },
+                { id: 'MATH201', name: 'Mathematics', grade: 'Grade 2' },
+                { id: 'ENG201', name: 'English', grade: 'Grade 2' },
+                { id: 'SCI201', name: 'Science', grade: 'Grade 2' },
+                { id: 'MATH301', name: 'Mathematics', grade: 'Grade 3' },
+                { id: 'ENG301', name: 'English', grade: 'Grade 3' },
+                { id: 'SCI301', name: 'Science', grade: 'Grade 3' },
+                { id: 'MATH401', name: 'Mathematics', grade: 'Grade 4' },
+                { id: 'ENG401', name: 'English', grade: 'Grade 4' },
+                { id: 'SCI401', name: 'Science', grade: 'Grade 4' },
+                { id: 'MATH501', name: 'Mathematics', grade: 'Grade 5' },
+                { id: 'ENG501', name: 'English', grade: 'Grade 5' },
+                { id: 'SCI501', name: 'Science', grade: 'Grade 5' },
+                { id: 'MATH601', name: 'Mathematics', grade: 'Grade 6' },
+                { id: 'ENG601', name: 'English', grade: 'Grade 6' },
+                { id: 'SCI601', name: 'Science', grade: 'Grade 6' },
+                { id: 'MATHK', name: 'Mathematics', grade: 'Kinder' },
+                { id: 'ENGK', name: 'English', grade: 'Kinder' },
+                { id: 'SCIK', name: 'Science', grade: 'Kinder' }
+            ];
         }
-
-        // Otherwise populate the store
-        subjectStore = [
-            { id: 'MATH101', name: 'Mathematics', grade: 'Grade 1', description: 'Basic mathematics', credits: 3 },
-            { id: 'ENG101', name: 'English', grade: 'Grade 1', description: 'English language fundamentals', credits: 3 },
-            { id: 'SCI101', name: 'Science', grade: 'Grade 1' },
-            { id: 'MATH201', name: 'Mathematics', grade: 'Grade 2' },
-            { id: 'ENG201', name: 'English', grade: 'Grade 2' },
-            { id: 'SCI201', name: 'Science', grade: 'Grade 2' },
-            { id: 'MATH301', name: 'Mathematics', grade: 'Grade 3' },
-            { id: 'ENG301', name: 'English', grade: 'Grade 3' },
-            { id: 'SCI301', name: 'Science', grade: 'Grade 3' },
-            { id: 'MATH401', name: 'Mathematics', grade: 'Grade 4' },
-            { id: 'ENG401', name: 'English', grade: 'Grade 4' },
-            { id: 'SCI401', name: 'Science', grade: 'Grade 4' },
-            { id: 'MATH501', name: 'Mathematics', grade: 'Grade 5' },
-            { id: 'ENG501', name: 'English', grade: 'Grade 5' },
-            { id: 'SCI501', name: 'Science', grade: 'Grade 5' },
-            { id: 'MATH601', name: 'Mathematics', grade: 'Grade 6' },
-            { id: 'ENG601', name: 'English', grade: 'Grade 6' },
-            { id: 'SCI601', name: 'Science', grade: 'Grade 6' },
-            { id: 'MATHK', name: 'Mathematics', grade: 'Kinder' },
-            { id: 'ENGK', name: 'English', grade: 'Kinder' },
-            { id: 'SCIK', name: 'Science', grade: 'Kinder' }
-        ];
-
-        return [...subjectStore]; // Return a copy
     },
 
     async getSectionsByGrade(grade) {
-        // Sample sections data
+        // This method still uses mock data, can be updated later to use API
         const allSections = [
             {
                 id: 'MATH101-A',
@@ -70,7 +82,6 @@ export const SubjectService = {
                 subject: 'Mathematics',
                 date: '2025-03-10'
             }
-            // Add more sections as needed
         ];
 
         // Filter sections by grade
@@ -78,6 +89,7 @@ export const SubjectService = {
     },
 
     async getStudentsBySection(sectionId) {
+        // This method still uses the existing AttendanceService, can be updated later to use API
         // Get all students from AttendanceService
         const allStudents = await AttendanceService.getData();
 
@@ -136,17 +148,15 @@ export const SubjectService = {
             }));
     },
 
+    // Other methods that don't need to change yet
     async updateSectionDate(sectionId, newDate) {
-        // This would update the section date in a real database
         console.log(`Updated section ${sectionId} date to ${newDate}`);
         return { success: true, sectionId, newDate };
     },
 
     async updateStudentStatus(sectionId, studentId, status, remarks = '') {
-        // This would update a student's attendance status in a real database
         console.log(`Updated student ${studentId} in section ${sectionId} to ${status}`);
 
-        // Also update the attendance record using AttendanceService
         await AttendanceService.recordAttendance(studentId, {
             date: new Date().toISOString().split('T')[0],
             status: status,
@@ -157,10 +167,7 @@ export const SubjectService = {
         return { success: true, sectionId, studentId, status, remarks };
     },
 
-    // Get attendance records for a specific section
     async getSectionAttendance(sectionId) {
-        // In a real app this would fetch from database
-        // For now return empty records that will be filled as attendance is taken
         const students = await this.getStudentsBySection(sectionId);
 
         return students.map((student) => ({
@@ -175,10 +182,15 @@ export const SubjectService = {
 
     // Get all grades associated with subjects
     async getSubjectGrades() {
-        const subjects = await this.getSubjects();
-        // Extract unique grades from subjects
-        const grades = [...new Set(subjects.map((subject) => subject.grade))];
-        return grades;
+        try {
+            const subjects = await this.getSubjects();
+            // Extract unique grades from subjects
+            const grades = [...new Set(subjects.map((subject) => subject.grade))];
+            return grades;
+        } catch (error) {
+            console.error('Error getting subject grades:', error);
+            return [];
+        }
     },
 
     // Get sections by both grade and subject
@@ -187,27 +199,26 @@ export const SubjectService = {
         return allSections.filter((section) => section.subject === subjectName);
     },
 
-    // Create a new subject
+    // Create a new subject - Updated to use API
     async createSubject(subject) {
-        // Ensure subjectStore is loaded
-        if (!subjectStore) {
-            await this.getSubjects();
+        try {
+            // Make API call to create subject
+            const response = await axios.post(`${API_URL}/subjects`, subject);
+
+            // Update the cache with the new subject
+            if (subjectCache) {
+                subjectCache.push(response.data);
+            }
+
+            return response.data;
+        } catch (error) {
+            console.error('Error creating subject:', error);
+            throw error;
         }
-
-        // Generate ID if not provided
-        if (!subject.id) {
-            subject.id = `${subject.name.substring(0, 4).toUpperCase()}${subject.grade.replace('Grade ', '')}`;
-        }
-
-        // Add to store
-        subjectStore.push({ ...subject });
-
-        return { ...subject };
     },
 
     // Update curriculum for a subject
     async updateCurriculum(subjectId, curriculum) {
-        // This would connect to a backend in a real implementation
         console.log(`Updated curriculum for subject ${subjectId}`);
         return {
             subjectId,
@@ -216,87 +227,116 @@ export const SubjectService = {
         };
     },
 
-    // Update subject
+    // Update subject - Updated to use API
     async updateSubject(id, updatedData) {
-        // Ensure subjectStore is loaded
-        if (!subjectStore) {
-            await this.getSubjects();
-        }
+        try {
+            // Make API call to update subject
+            const response = await axios.put(`${API_URL}/subjects/${id}`, updatedData);
 
-        // Find and update the subject
-        const index = subjectStore.findIndex((s) => s.id === id);
-        if (index >= 0) {
-            subjectStore[index] = { ...subjectStore[index], ...updatedData };
-            return { ...subjectStore[index] };
-        }
-
-        throw new Error(`Subject with ID ${id} not found`);
-    },
-
-    // Delete subject
-    async deleteSubject(id) {
-        // Ensure subjectStore is loaded
-        if (!subjectStore) {
-            await this.getSubjects();
-        }
-
-        // Find and remove the subject
-        const index = subjectStore.findIndex((s) => s.id === id);
-        if (index >= 0) {
-            const removed = subjectStore.splice(index, 1)[0];
-            return { ...removed };
-        }
-
-        throw new Error(`Subject with ID ${id} not found`);
-    },
-
-    // Get subject by ID
-    async getSubjectById(id) {
-        const subjects = await this.getSubjects();
-        return subjects.find((subject) => subject.id === id);
-    },
-
-    // Clear the store (useful for testing or resetting)
-    async clearStore() {
-        subjectStore = null;
-    },
-
-    // Get unique subjects (one per name)
-    async getUniqueSubjects() {
-        const allSubjects = await this.getSubjects();
-        const uniqueSubjects = [];
-        const subjectNames = new Set();
-
-        for (const subject of allSubjects) {
-            if (!subjectNames.has(subject.name)) {
-                subjectNames.add(subject.name);
-                uniqueSubjects.push(subject);
+            // Update the cache with the updated subject
+            if (subjectCache) {
+                const index = subjectCache.findIndex((s) => s.id === id);
+                if (index >= 0) {
+                    subjectCache[index] = response.data;
+                }
             }
-        }
 
-        return uniqueSubjects;
+            return response.data;
+        } catch (error) {
+            console.error('Error updating subject:', error);
+            throw error;
+        }
     },
 
-    // Add this method to your SubjectService if it doesn't exist
+    // Delete subject - Updated to use API
+    async deleteSubject(id) {
+        try {
+            // Make API call to delete subject
+            const response = await axios.delete(`${API_URL}/subjects/${id}`);
+
+            // Update the cache by removing the deleted subject
+            if (subjectCache) {
+                const index = subjectCache.findIndex((s) => s.id === id);
+                if (index >= 0) {
+                    subjectCache.splice(index, 1);
+                }
+            }
+
+            return { id, success: true };
+        } catch (error) {
+            console.error('Error deleting subject:', error);
+            throw error;
+        }
+    },
+
+    // Get subject by ID - Updated to use API
+    async getSubjectById(id) {
+        try {
+            // Try to find in cache first
+            if (subjectCache) {
+                const cached = subjectCache.find((s) => s.id === id);
+                if (cached) return cached;
+            }
+
+            // Make API call to get subject
+            const response = await axios.get(`${API_URL}/subjects/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error getting subject ${id}:`, error);
+            throw error;
+        }
+    },
+
+    // Clear the cache (useful for testing or resetting)
+    async clearCache() {
+        subjectCache = null;
+    },
+
+    // Get unique subjects (one per name) - Updated to use API
+    async getUniqueSubjects() {
+        try {
+            // Make API call to get unique subjects
+            const response = await axios.get(`${API_URL}/subjects/unique`);
+            return response.data;
+        } catch (error) {
+            console.error('Error getting unique subjects:', error);
+
+            // Fallback to client-side filtering
+            const allSubjects = await this.getSubjects();
+            const uniqueSubjects = [];
+            const subjectNames = new Set();
+
+            for (const subject of allSubjects) {
+                if (!subjectNames.has(subject.name)) {
+                    subjectNames.add(subject.name);
+                    uniqueSubjects.push(subject);
+                }
+            }
+
+            return uniqueSubjects;
+        }
+    },
+
+    // Get subjects by grade - Updated to use API
     async getSubjectsByGrade(gradeId) {
         try {
-            const allSubjects = await this.getSubjects();
+            // Format gradeId if needed
+            const grade = gradeId.startsWith('Grade ') ? gradeId : `Grade ${gradeId}`;
 
-            // Filter subjects by grade
-            // Assuming your subject objects have a grade or gradeId property
-            return allSubjects.filter((subject) => {
-                // Handle different formats of grade property
-                const subjectGrade = subject.grade || subject.gradeId;
-
-                // It could be "Grade 3" or just "3" or the ID
-                if (subjectGrade === gradeId) return true;
-                if (subjectGrade === `Grade ${gradeId}`) return true;
-
-                return false;
-            });
+            // Make API call to get subjects by grade
+            const response = await axios.get(`${API_URL}/subjects/grade/${encodeURIComponent(grade)}`);
+            return response.data;
         } catch (error) {
             console.error('Error getting subjects by grade:', error);
-            return [];
+
+            // Fallback to client-side filtering
+            const allSubjects = await this.getSubjects();
+            return allSubjects.filter((subject) => {
+                const subjectGrade = subject.grade || subject.gradeId;
+                if (subjectGrade === gradeId) return true;
+                if (subjectGrade === `Grade ${gradeId}`) return true;
+                return false;
+            });
         }
     }
 };

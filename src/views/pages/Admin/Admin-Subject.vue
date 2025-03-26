@@ -1,9 +1,18 @@
+<!-- eslint-disable prettier/prettier -->
+<!-- eslint-disable prettier/prettier -->
 <script setup>
-import SakaiCard from '@/components/SakaiCard.vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import InputNumber from 'primevue/inputnumber';
+import Dropdown from 'primevue/dropdown';
+import Select from 'primevue/dropdown';
+import ProgressSpinner from 'primevue/progressspinner';
 import { GradeService } from '@/router/service/Grades';
 import { SubjectService } from '@/router/service/Subjects';
-import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const subjects = ref([]);
@@ -12,6 +21,7 @@ const loading = ref(true);
 const subjectDialog = ref(false);
 const deleteSubjectDialog = ref(false);
 const selectedGrade = ref(null);
+
 const subject = ref({
     id: null,
     name: '',
@@ -23,36 +33,21 @@ const submitted = ref(false);
 
 const getRandomGradient = () => {
     const colors = ['#ff9a9e', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
-
     const color1 = colors[Math.floor(Math.random() * colors.length)];
     const color2 = colors[Math.floor(Math.random() * colors.length)];
-
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
+    return `linear-gradient(135deg, ${color1}, ${color2})`; // Enclose in backticks
 };
 
 const filteredSubjects = computed(() => {
-    if (!selectedGrade.value) {
-        const uniqueSubjects = [];
-        const subjectNames = new Set();
-
-        for (const subj of subjects.value) {
-            if (!subjectNames.has(subj.name)) {
-                subjectNames.add(subj.name);
-                uniqueSubjects.push(subj);
-            }
-        }
-
-        return uniqueSubjects;
-    }
-
-    return subjects.value.filter((s) => s.grade === selectedGrade.value);
+    return selectedGrade.value ? subjects.value.filter((s) => s.grade === selectedGrade.value) : subjects.value;
 });
 
-const cardStyles = computed(() =>
-    filteredSubjects.value.map(() => ({
-        background: getRandomGradient()
-    }))
-);
+const cardStyles = computed(() => {
+    return Object.fromEntries(
+        filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }])
+    );
+});
+
 
 const loadGrades = async () => {
     try {
@@ -100,15 +95,18 @@ const saveSubject = async () => {
     }
 
     try {
+        let result;
+
         if (subject.value.id) {
-            await SubjectService.updateSubject(subject.value.id, subject.value);
+            result = await SubjectService.updateSubject(subject.value.id, subject.value);
         } else {
-            await SubjectService.createSubject(subject.value);
+            result = await SubjectService.createSubject(subject.value);
         }
 
+        // Refresh the subjects list to include the new subject
         await loadSubjects();
+        hideDialog();
 
-        subjectDialog.value = false;
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -120,7 +118,7 @@ const saveSubject = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to save subject',
+            detail: 'Failed to save subject: ' + (error.message || 'Unknown error'),
             life: 3000
         });
     }
@@ -129,10 +127,9 @@ const saveSubject = async () => {
 const deleteSubject = async () => {
     try {
         await SubjectService.deleteSubject(subject.value.id);
-
         await loadSubjects();
-
         deleteSubjectDialog.value = false;
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -150,7 +147,13 @@ const deleteSubject = async () => {
     }
 };
 
+const hideDialog = () => {
+    subjectDialog.value = false;
+    submitted.value = false;
+};
+
 const openNew = () => {
+    // Reset the form
     subject.value = {
         id: null,
         name: '',
@@ -158,12 +161,22 @@ const openNew = () => {
         description: '',
         credits: 3
     };
+    submitted.value = false;
+
+    // Set dialog to true and add console log for debugging
+    console.log('Opening subject dialog...');
     subjectDialog.value = true;
+    console.log('Subject dialog state:', subjectDialog.value);
 };
 
 const editSubject = (subj) => {
     subject.value = { ...subj };
     subjectDialog.value = true;
+};
+
+const confirmDelete = (subj) => {
+    subject.value = { ...subj };
+    deleteSubjectDialog.value = true;
 };
 
 onMounted(async () => {
@@ -173,217 +186,396 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-semibold">Subject Management</h2>
-            <div class="flex gap-3">
-                <Dropdown v-model="selectedGrade" :options="grades" placeholder="Filter by grade" class="w-56" />
-                <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openNew" />
-            </div>
-        </div>
-
-        <div class="card-container">
-            <SakaiCard v-for="(subject, index) in filteredSubjects" :key="index" class="custom-card" :style="cardStyles[index]" @click="editSubject(subject)">
-                <div class="card-header">
-                    <h1 class="subject-name">{{ subject.name }}</h1>
-                    <p class="grade-info">{{ subject.grade }}</p>
+    <div class="admin-subject-wrapper">
+        <div class="admin-subject-container">
+            <!-- Top Section -->
+            <div class="top-nav-bar">
+                <div class="nav-left">
+                    <h2 class="text-2xl font-semibold">Subject Management</h2>
+                    <!-- Test button for direct dialog control -->
+                    <Button label="Test Dialog" class="ml-4" @click="subjectDialog = true" />
                 </div>
-            </SakaiCard>
-        </div>
-
-        <Dialog v-model:visible="subjectDialog" :style="{ width: '500px' }" header="Subject Details" :modal="true" class="p-fluid subject-dialog">
-            <div class="field mb-4">
-                <label for="name" class="font-medium mb-2 block">Subject Name</label>
-                <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" placeholder="Enter subject name" class="w-full p-inputtext-lg" />
-                <small class="p-error" v-if="submitted && !subject.name">Subject name is required.</small>
+                <div class="nav-right">
+                    <Dropdown v-model="selectedGrade" :options="grades" placeholder="Filter by grade" class="grade-filter" />
+                    <Button label="Add Subject" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
+                </div>
             </div>
 
-            <div class="field mb-4">
-                <label for="grade" class="font-medium mb-2 block">Grade Level</label>
-                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select Grade" required :class="{ 'p-invalid': submitted && !subject.grade }" class="w-full p-inputtext-lg" />
-                <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
+                <p>Loading subjects...</p>
             </div>
 
-            <div class="field mb-4">
-                <label for="description" class="font-medium mb-2 block">Description</label>
-                <Textarea id="description" v-model="subject.description" rows="3" placeholder="Brief description of the subject" class="w-full" />
-            </div>
-
-            <div class="field mb-4">
-                <label for="credits" class="font-medium mb-2 block">Credits</label>
-                <InputNumber
-                    id="credits"
-                    v-model="subject.credits"
-                    min="1"
-                    max="10"
-                    showButtons
-                    buttonLayout="horizontal"
-                    decrementButtonClass="p-button-secondary"
-                    incrementButtonClass="p-button-secondary"
-                    incrementButtonIcon="pi pi-plus"
-                    decrementButtonIcon="pi pi-minus"
-                    class="w-full p-inputtext-lg"
-                />
-            </div>
-
-            <template #footer>
-                <div class="flex justify-content-between w-full">
-                    <Button v-if="subject.id" label="Delete" icon="pi pi-trash" class="p-button-danger p-button-outlined" @click="deleteSubjectDialog = true" />
-                    <div class="flex gap-2">
-                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="subjectDialog = false" />
-                        <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSubject" />
+            <!-- Cards Grid -->
+            <div v-else class="cards-grid">
+                <div v-for="subject in filteredSubjects" :key="subject.id" class="subject-card" :style="cardStyles[subject.id]" @click="editSubject(subject)">
+                    <div class="card-content">
+                        <h1 class="subject-title">{{ subject.name }}</h1>
+                        <div class="grade-badge">{{ subject.grade }}</div>
+                        <div class="card-actions">
+                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editSubject(subject)" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDelete(subject)" />
+                        </div>
                     </div>
                 </div>
-            </template>
-        </Dialog>
-
-        <Dialog v-model:visible="deleteSubjectDialog" :style="{ width: '450px' }" header="Confirm Deletion" :modal="true" class="delete-dialog">
-            <div class="flex align-items-center justify-content-center py-4">
-                <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
-                <span class="text-lg">
-                    Are you sure you want to delete <span class="font-bold">{{ subject.name }}</span> for <span class="font-bold">{{ subject.grade }}</span
-                    >?
-                </span>
             </div>
-            <p class="text-center text-gray-600 mt-2">This action cannot be undone.</p>
-            <template #footer>
-                <div class="flex justify-content-center gap-3 w-full">
-                    <Button label="Cancel" icon="pi pi-times" class="p-button-outlined" @click="deleteSubjectDialog = false" />
-                    <Button label="Delete" icon="pi pi-check" class="p-button-danger" @click="deleteSubject" />
+
+            <!-- Empty State -->
+            <div v-if="filteredSubjects.length === 0" class="empty-state">
+                <p>No subjects found. Click "Add Subject" to create one.</p>
+            </div>
+        </div>
+
+        <!-- Subject Dialog - Sakai Style -->
+        <div v-if="subjectDialog" class="card">
+            <div class="sakai-dialog-overlay" @click="hideDialog"></div>
+            <div class="sakai-dialog-container">
+                <div class="sakai-dialog">
+                    <div class="sakai-dialog-header">
+                        <h5>{{ subject.id ? 'Edit Subject' : 'Add Subject' }}</h5>
+                        <Button icon="pi pi-times" class="p-button-rounded p-button-text" @click="hideDialog" />
+                    </div>
+                    <div class="sakai-dialog-content">
+                        <div class="field grid">
+                            <label for="name" class="col-12 mb-2">Name</label>
+                            <div class="col-12 p-0">
+                                <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
+                                <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
+                            </div>
+                        </div>
+                        <div class="field grid">
+                            <label for="grade" class="col-12 mb-2">Grade</label>
+                            <div class="col-12 p-0">
+                                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
+                                <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
+                            </div>
+                        </div>
+                        <div class="field grid">
+                            <label for="description" class="col-12 mb-2">Description</label>
+                            <div class="col-12 p-0">
+                                <Textarea id="description" v-model="subject.description" rows="3" placeholder="Add a description" />
+                            </div>
+                        </div>
+                        <div class="field grid">
+                            <label for="credits" class="col-12 mb-2">Credits</label>
+                            <div class="col-12 p-0">
+                                <InputNumber id="credits" v-model="subject.credits" :min="1" :max="10" placeholder="1-10" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sakai-dialog-footer">
+                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                        <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveSubject" />
+                    </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Delete Dialog -->
+        <Dialog v-model="deleteSubjectDialog" header="Confirm" modal style="width: 450px">
+            <div class="confirmation-content">
+                <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
+                <span>Are you sure you want to delete this subject?</span>
+            </div>
+            <template #footer>
+                <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteSubjectDialog = false" />
+                <Button label="Yes" icon="pi pi-check" class="p-button-danger" @click="deleteSubject()" />
             </template>
         </Dialog>
     </div>
 </template>
 
 <style scoped>
-.card-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+.admin-subject-container {
+    padding: 1rem 2rem;
+    background: #f8f9fa;
+    min-height: 100vh;
 }
 
-.custom-card {
-    width: 200px;
-    height: 250px;
-    border-radius: 10px;
-    overflow: hidden;
+.top-nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.nav-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.grade-filter {
+    min-width: 200px;
+}
+
+.loading-container {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 2rem;
+}
+
+.subject-card {
+    height: 200px;
+    border-radius: 12px;
+    overflow: hidden;
     cursor: pointer;
-    text-align: center;
-    background: #f0f0f0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     transition:
-        transform 0.2s,
-        box-shadow 0.2s;
-    color: white;
-    font-weight: bold;
-    position: relative;
+        transform 0.3s ease,
+        box-shadow 0.3s ease;
 }
 
-.custom-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+.subject-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
 }
 
-.subject-name {
-    margin: 0;
-    text-align: center;
-    word-break: break-word;
-    overflow-wrap: break-word;
-    white-space: pre-wrap;
-    font-size: 25px;
-}
-
-.grade-info {
-    position: absolute;
-    bottom: 10px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 14px;
-    opacity: 0.8;
-}
-
-.card-header {
+.card-content {
+    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    height: 100%;
-    padding: 20px;
+    padding: 1.5rem;
+    position: relative;
 }
 
-:deep(.subject-dialog) {
+.subject-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.grade-badge {
+    position: absolute;
+    bottom: 1rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    color: white;
+    font-weight: 600;
+}
+
+.card-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.subject-card:hover .card-actions {
+    opacity: 1;
+}
+
+.empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    background: white;
     border-radius: 12px;
+    color: #6c757d;
+}
+
+.dialog-content {
+    padding: 0 0.25rem;
+}
+
+.field {
+    margin-bottom: 1rem;
+}
+
+.field label {
+    font-size: 0.875rem;
+    margin-bottom: 0.375rem;
+}
+
+.field small.p-error {
+    color: #f44336;
+    font-size: 0.7rem;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+/* Animation classes */
+.animated {
+    animation-duration: 0.4s;
+    animation-fill-mode: both;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translate3d(0, -20px, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes fadeOutUp {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+        transform: translate3d(0, -20px, 0);
+    }
+}
+
+.fadeInDown {
+    animation-name: fadeInDown;
+}
+
+.fadeOutUp {
+    animation-name: fadeOutUp;
+}
+
+/* Enhanced dialog styles */
+:deep(.p-dialog) {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    transform-origin: center top;
+}
+
+:deep(.p-dialog-header) {
+    padding: 0.75rem 1.25rem;
+    background: #ffffff;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+:deep(.p-dialog-title) {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #344054;
+}
+
+:deep(.p-dialog-content) {
+    padding: 1rem;
+    background: #ffffff;
+}
+
+:deep(.p-dialog-footer) {
+    padding: 0.75rem 1.25rem;
+    background: #ffffff;
+    border-top: 1px solid #f0f0f0;
+}
+
+:deep(.p-inputtext),
+:deep(.p-dropdown),
+:deep(.p-dropdown-panel),
+:deep(.p-textarea),
+:deep(.p-inputnumber) {
+    width: 100%;
+    padding: 0.5rem 0.5rem;
+    border: 1px solid #d0d5dd;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    height: auto;
+    line-height: 1.5;
+}
+
+:deep(.p-dropdown-panel) {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.p-button) {
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+}
+
+:deep(.p-button .p-button-icon) {
+    font-size: 0.9rem;
+    margin-right: 0.3rem;
+}
+
+:deep(.p-dropdown),
+:deep(.p-select) {
+    width: 100%;
+}
+
+/* Sakai Dialog Styles */
+.sakai-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+}
+
+.sakai-dialog-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+}
+
+.sakai-dialog {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    width: 500px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
-:deep(.subject-dialog .p-dialog-header) {
-    background-color: #f8f9fa;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e9ecef;
-}
-
-:deep(.subject-dialog .p-dialog-content) {
-    padding: 1.5rem;
-}
-
-:deep(.subject-dialog .p-dialog-footer) {
-    padding: 1.25rem 1.5rem;
-    background-color: #f8f9fa;
-    border-top: 1px solid #e9ecef;
-}
-
-:deep(.subject-dialog input:focus),
-:deep(.subject-dialog textarea:focus),
-:deep(.subject-dialog .p-dropdown:focus) {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-}
-
-:deep(.subject-dialog .p-inputtext),
-:deep(.subject-dialog .p-dropdown) {
-    border-radius: 8px;
-}
-
-:deep(.delete-dialog .p-dialog-header) {
-    background-color: #fee2e2;
-    color: #b91c1c;
-}
-
-:deep(.delete-dialog .p-dialog-header-close-icon) {
-    color: #b91c1c;
-}
-
-/* Make inputs and dropdowns consistent height */
-:deep(.p-inputtext-lg) {
-    height: 48px;
-}
-
-/* Ensure dropdown has same height as inputs */
-:deep(.p-dropdown) {
-    height: 48px;
+.sakai-dialog-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
 }
 
-/* Style for the form field labels */
-.field .font-medium {
-    font-size: 0.95rem;
-    color: #495057;
+.sakai-dialog-header h5 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #343a40;
 }
 
-/* Add some animation to the modals */
-:deep(.p-dialog) {
-    transform: translateY(20px);
-    opacity: 0;
-    transition:
-        transform 0.3s,
-        opacity 0.3s;
+.sakai-dialog-content {
+    padding: 1.5rem;
+    overflow-y: auto;
 }
 
-:deep(.p-dialog-visible) {
-    transform: translateY(0);
-    opacity: 1;
+.sakai-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #f0f0f0;
 }
 </style>

@@ -1,0 +1,40 @@
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+  <title><%= htmlWebpackPlugin.options.title %></title>
+  <!-- Dialog fix styles -->
+  <style>
+    .p-dialog {
+      z-index: 1200 !important;
+      display: block !important;
+    }
+    .p-dialog-mask {
+      z-index: 1100 !important;
+      background-color: rgba(0, 0, 0, 0.4) !important;
+    }
+    .p-component, .p-component * {
+      box-sizing: border-box;
+    }
+    .p-dialog .p-dialog-content {
+      background: #ffffff;
+      color: #495057;
+      padding: 1.5rem;
+    }
+    .p-dialog .p-dialog-header {
+      background: #ffffff;
+      color: #495057;
+      padding: 1.25rem;
+      border-top-right-radius: 6px;
+      border-top-left-radius: 6px;
+    }
+    .p-dialog .p-dialog-footer {
+      background: #ffffff;
+      color: #495057;
+      padding: 1.25rem;
+      border-bottom-right-radius: 6px;
+      border-bottom-left-radius: 6px;
+    }
+  </style>
+</head>
