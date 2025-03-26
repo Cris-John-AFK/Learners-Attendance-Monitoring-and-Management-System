@@ -1,0 +1,144 @@
+/* Modern Dialog Styling */
+.p-dialog {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 6px 12px rgba(0, 0, 0, 0.08);
+    max-width: 90vw;
+
+    /* Animation for dialog appearance */
+    &.p-component-overlay-enter {
+      animation: dialog-fade-in 0.3s ease-out;
+    }
+
+    &.p-component-overlay-leave {
+      animation: dialog-fade-out 0.2s ease-in;
+    }
+
+    .p-dialog-header {
+      padding: 1.25rem 1.5rem;
+      background-color: #ffffff;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+
+      .p-dialog-title {
+        font-weight: 600;
+        font-size: 1.25rem;
+        color: #1e293b;
+      }
+
+      .p-dialog-header-icons {
+        .p-dialog-header-icon {
+          width: 2.5rem;
+          height: 2.5rem;
+          border-radius: 50%;
+          transition: background-color 0.2s;
+
+          &:hover {
+            background-color: rgba(0, 0, 0, 0.04);
+          }
+
+          &:focus {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+          }
+        }
+      }
+    }
+
+    .p-dialog-content {
+      padding: 1.5rem;
+      background-color: #ffffff;
+      color: #475569;
+      line-height: 1.5;
+    }
+
+    .p-dialog-footer {
+      padding: 1.25rem 1.5rem;
+      background-color: #f8fafc;
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+
+      .p-button {
+        border-radius: 8px;
+        font-weight: 500;
+
+        &.p-button-outlined {
+          border-color: #e2e8f0;
+          color: #64748b;
+
+          &:hover {
+            background-color: #f1f5f9;
+            border-color: #cbd5e1;
+          }
+        }
+
+        &.p-button-danger {
+          background-color: #ef4444;
+
+          &:hover {
+            background-color: #dc2626;
+          }
+        }
+      }
+    }
+  }
+
+  /* Special styling for confirmation dialogs */
+  .p-confirm-dialog {
+    .p-dialog-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+
+      .p-confirm-dialog-icon {
+        font-size: 1.5rem;
+
+        &.pi-exclamation-triangle {
+          color: #f59e0b;
+        }
+
+        &.pi-info-circle {
+          color: #3b82f6;
+        }
+      }
+
+      .p-confirm-dialog-message {
+        margin: 0;
+        line-height: 1.5;
+      }
+    }
+  }
+
+  /* Delete dialog specific styling */
+  .delete-dialog {
+    .p-dialog-header {
+      background-color: #fef2f2;
+
+      .p-dialog-title {
+        color: #b91c1c;
+      }
+    }
+  }
+
+  /* Animation keyframes */
+  @keyframes dialog-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes dialog-fade-out {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+  }

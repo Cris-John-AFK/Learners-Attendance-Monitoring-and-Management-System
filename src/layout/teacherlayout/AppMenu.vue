@@ -3,7 +3,8 @@ import { ref } from 'vue';
 
 import AppMenuItem from './AppMenuItem.vue';
 
-const model = ref([{
+const model = ref([
+    {
         label: 'Home',
         items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/teacher' }]
     },
@@ -11,13 +12,14 @@ const model = ref([{
         label: 'Subjects',
         icon: 'pi pi-fw pi-briefcase',
         to: '/pages',
-        items: [{
+        items: [
+            {
                 label: 'Homeroom',
                 icon: 'pi pi-fw pi-book',
                 to: '/subject/homeroom'
             },
             {
-                label: 'Mother Tounge',
+                label: 'Mother Tongue',
                 icon: 'pi pi-fw pi-book',
                 to: '/subject/mother-tongue'
             },
@@ -43,11 +45,13 @@ const model = ref([{
     },
     {
         label: 'Other Subjects',
-        items: [{
-            label: 'MAPEH',
-            icon: 'pi pi-fw pi-book',
-            to: '/subject/mapeh'
-        }]
+        items: [
+            {
+                label: 'MAPEH',
+                icon: 'pi pi-fw pi-book',
+                to: '/subject/mapeh'
+            }
+        ]
     },
     {
         separator: true
@@ -56,11 +60,13 @@ const model = ref([{
         label: 'Manage',
         icon: 'pi pi-fw pi-briefcase',
         to: '/pages',
-        items: [{
-            label: 'Section',
-            icon: 'pi pi-fw pi-users',
-            to: '/pages/section'
-        }]
+        items: [
+            {
+                label: 'Section',
+                icon: 'pi pi-fw pi-users',
+                to: '/pages/section'
+            }
+        ]
     }
 ]);
 </script>
@@ -68,12 +74,10 @@ const model = ref([{
 <template>
     <ul class="layout-menu">
         <template v-for="(item, i) in model" :key="item">
-                <app-menu-item v-if="!item.separator" :item="item" :index="i"></app-menu-item>
-                <li v-if="item.separator" class="menu-separator"></li>
-</template>
+            <app-menu-item v-if="!item.separator" :item="item" :index="i"></app-menu-item>
+            <li v-if="item.separator" class="menu-separator"></li>
+        </template>
     </ul>
 </template>
 
-<style lang="scss" scoped>
-
-</style>
+<style lang="scss" scoped></style>

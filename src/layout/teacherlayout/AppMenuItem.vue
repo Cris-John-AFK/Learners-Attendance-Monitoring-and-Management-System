@@ -71,6 +71,15 @@ function checkActiveRoute(item) {
 <template>
     <li :class="{ 'layout-root-menuitem': root, 'active-menuitem': isActiveMenu }">
         <div v-if="root && item.visible !== false" class="layout-menuitem-root-text">{{ item.label }}</div>
+        <template v-if="item.to">
+            <router-link :to="item.to" v-slot="{ navigate, href, isActive, isExactActive }" custom>
+                <a :href="href" @click="navigate" :class="linkClass({ isActive, isExactActive })" class="ripple">
+                    <i :class="item.icon" class="layout-menuitem-icon"></i>
+                    <span class="layout-menuitem-text">{{ item.label }}</span>
+                    <i v-if="item.items" class="pi pi-fw pi-angle-down layout-submenu-toggler"></i>
+                </a>
+            </router-link>
+        </template>
         <a v-if="(!item.to || item.items) && item.visible !== false" :href="item.url" @click="itemClick($event, item, index)" :class="item.class" :target="item.target" tabindex="0">
             <i :class="item.icon" class="layout-menuitem-icon"></i>
             <span class="layout-menuitem-text">{{ item.label }}</span>
