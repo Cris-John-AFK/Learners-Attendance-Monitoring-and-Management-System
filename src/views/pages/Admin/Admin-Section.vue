@@ -1,5 +1,4 @@
 <script setup>
-import SakaiCard from '@/components/SakaiCard.vue';
 import { GradeService } from '@/router/service/Grades';
 import { AttendanceService } from '@/router/service/Students';
 import { useToast } from 'primevue/usetoast';
@@ -237,178 +236,297 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="card-container">
-        <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionsModal(grade.name)">
-            <div class="card-header">
-                <h1 class="grade-name">{{ grade.name }}</h1>
+    <div class="admin-section-wrapper">
+        <div class="admin-section-container">
+            <!-- Top Section -->
+            <div class="top-nav-bar">
+                <div class="nav-left">
+                    <h2 class="text-2xl font-semibold">Section Management</h2>
+                </div>
             </div>
-        </Sakai-card>
+
+            <!-- Cards Grid -->
+            <div class="cards-grid">
+                <div v-for="(grade, index) in grades" :key="index" class="section-card" :style="cardStyles[index]" @click="openSectionsModal(grade.name)">
+                    <div class="card-content">
+                        <h1 class="grade-title">{{ grade.name }}</h1>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Sections Modal -->
-    <Dialog v-model:visible="showModal" :style="{ width: '500px' }" header="Sections" :modal="true">
+    <Dialog v-model:visible="showModal" header="Sections" :modal="true" class="section-dialog">
         <div v-if="!selectedSection">
-            <div class="flex justify-between items-center">
-                <h3>Sections in {{ selectedGrade }}</h3>
-                <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">Sections in {{ selectedGrade }}</h3>
+                <Button label="Add Section" icon="pi pi-plus" class="p-button-success" @click="openCreateForm" />
             </div>
-            <div v-if="loading" class="text-center py-4">
-                <i class="pi pi-spin pi-spinner text-3xl"></i>
+
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
                 <p>Loading sections...</p>
             </div>
-            <div v-else-if="sections.length === 0" class="text-center py-4">
-                <p>No sections found. Create a new section to get started.</p>
+
+            <!-- Empty State -->
+            <div v-else-if="sections.length === 0" class="empty-state">
+                <p>No sections found. Click "Add Section" to create one.</p>
             </div>
-            <ul v-else class="section-list">
-                <li v-for="(section, index) in sections" :key="index" class="section-item">
-                    <span class="section-name" @click="selectSection(section.name)">{{ section.name }}</span>
-                    <div class="section-buttons">
-                        <Button label="View" icon="pi pi-eye" class="p-button-text p-button-sm" @click="selectSection(section.name)" />
-                        <Button label="Delete" icon="pi pi-trash" class="p-button-danger p-button-sm" @click="deleteSectionById(section.name)" />
+
+            <!-- Sections List -->
+            <div v-else class="sections-grid">
+                <div v-for="(section, index) in sections" :key="index" class="section-item" :style="{ background: getRandomGradient() }">
+                    <div class="section-content">
+                        <h3 class="section-name">{{ section.name }}</h3>
+                        <div class="section-details" v-if="section.adviser">
+                            <span>Adviser: {{ section.adviser }}</span>
+                        </div>
+                        <div class="section-details" v-if="section.room">
+                            <span>Room: {{ section.room }}</span>
+                        </div>
+                        <div class="section-actions">
+                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text" @click.stop="selectSection(section.name)" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="deleteSectionById(section.name)" />
+                        </div>
                     </div>
-                </li>
-            </ul>
+                </div>
+            </div>
         </div>
+
+        <!-- Students View -->
         <div v-else>
-            <h3>Students in {{ selectedSection }}</h3>
-            <div v-if="loading" class="text-center py-4">
-                <i class="pi pi-spin pi-spinner text-3xl"></i>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">Students in {{ selectedSection }}</h3>
+                <Button icon="pi pi-arrow-left" class="p-button-text" @click="selectedSection = null" />
+            </div>
+
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
                 <p>Loading students...</p>
             </div>
-            <div v-else-if="studentsInSection.length === 0" class="text-center py-4 mt-3">
+
+            <!-- Empty State -->
+            <div v-else-if="studentsInSection.length === 0" class="empty-state">
                 <i class="pi pi-info-circle text-3xl text-blue-500 mb-2"></i>
                 <p>No students in this section.</p>
                 <p class="text-sm text-gray-500 mt-2">
-                    Students that have Grade Level {{ selectedGrade }} and Section {{ selectedSection }}
+                    Students with Grade Level {{ selectedGrade }} and Section {{ selectedSection }}
                     will appear here.
                 </p>
             </div>
-            <ul v-else class="student-list">
-                <li v-for="student in studentsInSection" :key="student.id" class="student-item">
-                    <i class="pi pi-user student-icon"></i>
-                    <span class="student-name">{{ student.name }}</span>
-                </li>
-            </ul>
 
-            <Button label="Back" icon="pi pi-arrow-left" class="mt-4" @click="selectedSection = null" />
+            <!-- Students List -->
+            <div v-else class="students-grid">
+                <div v-for="student in studentsInSection" :key="student.id" class="student-item">
+                    <div class="student-content">
+                        <i class="pi pi-user student-icon"></i>
+                        <span class="student-name">{{ student.name }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </Dialog>
 
     <!-- Create Section Modal -->
-    <Dialog v-model:visible="showCreateForm" :style="{ width: '500px' }" header="Create New Section" :modal="true">
+    <Dialog v-model:visible="showCreateForm" header="Add Section" :modal="true" class="section-dialog">
         <div class="p-fluid">
-            <div class="field">
-                <label for="sectionName">Section Name</label>
-                <InputText id="sectionName" v-model="section.name" required />
+            <div class="field grid">
+                <label for="sectionName" class="col-12 mb-2">Section Name</label>
+                <div class="col-12 p-0">
+                    <InputText id="sectionName" v-model="section.name" required placeholder="Enter section name" />
+                </div>
             </div>
 
-            <div class="field">
-                <label for="capacity">Capacity</label>
-                <InputNumber id="capacity" v-model="section.capacity" min="1" />
+            <div class="field grid">
+                <label for="capacity" class="col-12 mb-2">Capacity</label>
+                <div class="col-12 p-0">
+                    <InputNumber id="capacity" v-model="section.capacity" min="1" placeholder="Enter capacity" />
+                </div>
             </div>
 
-            <div class="field">
-                <label for="adviser">Adviser</label>
-                <InputText id="adviser" v-model="section.adviser" />
+            <div class="field grid">
+                <label for="adviser" class="col-12 mb-2">Adviser</label>
+                <div class="col-12 p-0">
+                    <InputText id="adviser" v-model="section.adviser" placeholder="Enter adviser name" />
+                </div>
             </div>
 
-            <div class="field">
-                <label for="room">Room</label>
-                <InputText id="room" v-model="section.room" />
-            </div>
-
-            <div class="flex justify-content-end">
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text mr-2" @click="showCreateForm = false" />
-                <Button label="Save" icon="pi pi-check" @click="createSection" />
+            <div class="field grid">
+                <label for="room" class="col-12 mb-2">Room</label>
+                <div class="col-12 p-0">
+                    <InputText id="room" v-model="section.room" placeholder="Enter room number" />
+                </div>
             </div>
         </div>
+
+        <template #footer>
+            <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showCreateForm = false" />
+            <Button label="Save" icon="pi pi-check" class="p-button-success" @click="createSection" />
+        </template>
     </Dialog>
 </template>
 
 <style scoped>
-.student-list {
-    list-style: none;
-    padding: 0;
-    margin-top: 10px;
+.admin-section-wrapper {
+    padding: 1rem;
 }
 
-.student-item {
+.admin-section-container {
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.top-nav-bar {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    padding: 10px;
-    background: #f9f9f9;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    transition:
-        background 0.3s,
-        transform 0.2s;
+    margin-bottom: 2rem;
 }
 
-.student-icon {
-    font-size: 18px;
-    color: #007ad9;
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
 }
 
-.student-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-}
-.card-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-}
-.custom-card {
-    width: 200px;
-    height: 250px;
-    border-radius: 10px;
+.section-card {
+    height: 180px;
+    border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition:
+        transform 0.3s ease,
+        box-shadow 0.3s ease;
+}
+
+.section-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.card-content {
+    height: 100%;
     display: flex;
     flex-direction: column;
-    cursor: pointer;
-    text-align: center;
-    background: #f0f0f0;
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
 }
 
-.custom-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 02);
+.grade-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Sections Grid */
+.sections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
 }
 
 .section-item {
-    padding: 10px;
-    cursor: pointer;
-    background: #eee;
-    margin: 5px 0;
-}
-.section-item:hover {
-    background: #ddd;
+    border-radius: 10px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+    color: white;
 }
 
-.section-list {
-    list-style: none;
-    padding: 0;
-    margin-top: 10px;
+.section-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 .section-name {
-    font-size: 16px;
+    font-size: 1.25rem;
     font-weight: 600;
-    color: #333;
+    margin-bottom: 0.5rem;
 }
 
-.section-buttons {
+.section-details {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.section-actions {
     display: flex;
-    gap: 8px;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
 }
 
-.custom-card {
-    color: white;
-    font-weight: bold;
+/* Students Grid */
+.students-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.student-item {
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.student-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.student-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.student-icon {
+    font-size: 1.25rem;
+    color: #3b82f6;
+}
+
+.student-name {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+/* Loading and Empty States */
+.loading-container,
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    color: #64748b;
+}
+
+.loading-container p,
+.empty-state p {
+    margin-top: 1rem;
 }
 </style>
