@@ -9,72 +9,78 @@ class SubjectsTableSeeder extends Seeder
 {
     /**
      * Run the database seeds.
-     *
-     * @return void
      */
-    public function run()
+    public function run(): void
     {
-        // Create initial subjects data
+        // Clear existing data
+        Subject::truncate();
+
         $subjects = [
             [
                 'id' => 'MATH101',
                 'name' => 'Mathematics',
                 'grade' => 'Grade 1',
                 'description' => 'Basic mathematics',
-                'credits' => 3
+                'credits' => 3,
+            ],
+            [
+                'id' => 'MATH102',
+                'name' => 'Mathematics',
+                'grade' => 'Grade 2',
+                'description' => 'Advanced mathematics',
+                'credits' => 3,
+            ],
+            [
+                'id' => 'MATH103',
+                'name' => 'Mathematics',
+                'grade' => 'Grade 3',
+                'description' => 'Advanced mathematics',
+                'credits' => 3,
             ],
             [
                 'id' => 'ENG101',
                 'name' => 'English',
                 'grade' => 'Grade 1',
-                'description' => 'English language fundamentals',
-                'credits' => 3
+                'description' => 'Basic English',
+                'credits' => 3,
+            ],
+            [
+                'id' => 'ENG102',
+                'name' => 'English',
+                'grade' => 'Grade 2',
+                'description' => 'Advanced English',
+                'credits' => 3,
+            ],
+            [
+                'id' => 'ENG103',
+                'name' => 'English',
+                'grade' => 'Grade 3',
+                'description' => 'Advanced English',
+                'credits' => 3,
             ],
             [
                 'id' => 'SCI101',
                 'name' => 'Science',
                 'grade' => 'Grade 1',
-                'description' => 'Basic science concepts',
-                'credits' => 3
+                'description' => 'Basic Science',
+                'credits' => 3,
             ],
             [
-                'id' => 'MATH201',
-                'name' => 'Mathematics',
-                'grade' => 'Grade 2',
-                'description' => 'Grade 2 mathematics',
-                'credits' => 3
-            ],
-            [
-                'id' => 'ENG201',
-                'name' => 'English',
-                'grade' => 'Grade 2',
-                'description' => 'Grade 2 English',
-                'credits' => 3
-            ],
-            [
-                'id' => 'SCI201',
+                'id' => 'SCI102',
                 'name' => 'Science',
                 'grade' => 'Grade 2',
-                'description' => 'Grade 2 science',
-                'credits' => 3
+                'description' => 'Advanced Science',
+                'credits' => 3,
             ],
             [
-                'id' => 'MATH301',
-                'name' => 'Mathematics',
+                'id' => 'SCI103',
+                'name' => 'Science',
                 'grade' => 'Grade 3',
-                'description' => 'Grade 3 mathematics',
-                'credits' => 3
+                'description' => 'Advanced Science',
+                'credits' => 3,
             ],
-            [
-                'id' => 'ENG301',
-                'name' => 'English',
-                'grade' => 'Grade 3',
-                'description' => 'Grade 3 English',
-                'credits' => 3
-            ]
         ];
 
-        // Insert the subjects data
         foreach ($subjects as $subject) {
             Subject::create($subject);
         }
