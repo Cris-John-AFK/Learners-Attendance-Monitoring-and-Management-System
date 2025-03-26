@@ -1,18 +1,17 @@
 <!-- eslint-disable prettier/prettier -->
 <!-- eslint-disable prettier/prettier -->
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
-import { useToast } from 'primevue/usetoast';
-import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
-import InputText from 'primevue/inputtext';
-import Textarea from 'primevue/textarea';
-import InputNumber from 'primevue/inputnumber';
-import Dropdown from 'primevue/dropdown';
-import Select from 'primevue/dropdown';
-import ProgressSpinner from 'primevue/progressspinner';
 import { GradeService } from '@/router/service/Grades';
 import { SubjectService } from '@/router/service/Subjects';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import ProgressSpinner from 'primevue/progressspinner';
+import Textarea from 'primevue/textarea';
+import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const subjects = ref([]);
@@ -193,7 +192,6 @@ onMounted(async () => {
                 <div class="nav-left">
                     <h2 class="text-2xl font-semibold">Subject Management</h2>
                     <!-- Test button for direct dialog control -->
-                    <Button label="Test Dialog" class="ml-4" @click="subjectDialog = true" />
                 </div>
                 <div class="nav-right">
                     <Dropdown v-model="selectedGrade" :options="grades" placeholder="Filter by grade" class="grade-filter" />
