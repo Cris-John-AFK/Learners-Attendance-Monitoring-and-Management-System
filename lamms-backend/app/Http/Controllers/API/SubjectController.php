@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class SubjectController extends Controller
 {
@@ -14,7 +17,32 @@ class SubjectController extends Controller
      */
     public function index()
     {
-        return Subject::all();
+        try {
+            // Test database connection
+            DB::connection()->getPdo();
+            Log::info('Database connection successful');
+
+            // Check if the subjects table exists
+            if (!Schema::hasTable('subjects')) {
+                Log::error('Subjects table does not exist');
+                return response()->json(['error' => 'Subjects table does not exist'], 500);
+            }
+
+            // Try to get subjects
+            $subjects = Subject::all();
+
+            // Log the number of subjects found
+            Log::info('Found ' . $subjects->count() . ' subjects');
+
+            return response()->json($subjects);
+        } catch (\PDOException $e) {
+            Log::error('Database connection error: ' . $e->getMessage());
+            return response()->json(['error' => 'Database connection error: ' . $e->getMessage()], 500);
+        } catch (\Exception $e) {
+            Log::error('Error in SubjectController@index: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
