@@ -45,11 +45,8 @@ const filteredSubjects = computed(() => {
 });
 
 const cardStyles = computed(() => {
-    return Object.fromEntries(
-        filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }])
-    );
+    return Object.fromEntries(filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }]));
 });
-
 
 const loadGrades = async () => {
     try {
@@ -183,7 +180,7 @@ const openNew = () => {
     // Reset any animations by removing and re-adding the class
     setTimeout(() => {
         const fields = document.querySelectorAll('.animated-field');
-        fields.forEach(field => {
+        fields.forEach((field) => {
             field.style.animation = 'none';
             field.offsetHeight; // Trigger reflow
             field.style.animation = '';
@@ -335,16 +332,12 @@ onMounted(async () => {
                         <div class="edit-form">
                             <div class="field">
                                 <label for="name">Name</label>
-                                <InputText id="name" v-model="subject.name" required placeholder="Enter subject name"
-                                    :class="{ 'p-invalid': submitted && !subject.name }" />
+                                <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
                                 <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
                             </div>
                             <div class="field">
                                 <label for="grade">Grade</label>
-                                <Dropdown id="grade" v-model="subject.grade" :options="grades"
-                                    optionLabel="label" optionValue="value"
-                                    placeholder="Select a grade"
-                                    :class="{ 'p-invalid': submitted && !subject.grade }" />
+                                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
                                 <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
                             </div>
                             <div class="field">
@@ -371,31 +364,24 @@ onMounted(async () => {
         </div>
 
         <!-- Add/Edit Dialog (used only for adding new) -->
-        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid add-subject-dialog"
-               :style="{ width: '450px' }"
-               :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
-            <div class="add-subject-content">
-                <div class="animated-field">
-                    <label for="name">Subject Name</label>
-                    <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" placeholder="Enter subject name" />
-                    <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
-                </div>
-                <div class="animated-field">
-                    <label for="grade">Grade Level</label>
-                    <Dropdown id="grade" v-model="subject.grade" :options="grades"
-                        optionLabel="label" optionValue="value"
-                        placeholder="Select a grade level"
-                        :class="{ 'p-invalid': submitted && !subject.grade }" />
-                    <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
-                </div>
-                <div class="animated-field">
-                    <label for="description">Subject Description</label>
-                    <Textarea id="description" v-model="subject.description" rows="3" placeholder="Enter subject description" />
-                </div>
-                <div class="animated-field">
-                    <label for="credits">Credit Units</label>
-                    <InputNumber id="credits" v-model="subject.credits" :min="1" :max="10" placeholder="1-10" showButtons buttonLayout="horizontal" />
-                </div>
+        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid" :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
+            <div class="field">
+                <label for="name">Name</label>
+                <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" />
+                <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
+            </div>
+            <div class="field">
+                <label for="grade">Grade</label>
+                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
+                <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
+            </div>
+            <div class="field">
+                <label for="description">Description</label>
+                <Textarea id="description" v-model="subject.description" rows="3" />
+            </div>
+            <div class="field">
+                <label for="credits">Credits</label>
+                <InputNumber id="credits" v-model="subject.credits" :min="1" />
             </div>
             <template #footer>
                 <div class="dialog-footer-buttons">
@@ -406,9 +392,7 @@ onMounted(async () => {
         </Dialog>
 
         <!-- Delete Dialog -->
-        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal
-               :style="{ width: '450px' }"
-               :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
+        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
             <div class="confirmation-content">
                 <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                 <span>Are you sure you want to delete this subject?</span>
@@ -487,7 +471,7 @@ onMounted(async () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(45deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
     transform: translateX(-100%);
     transition: transform 0.6s;
 }
@@ -601,8 +585,9 @@ onMounted(async () => {
 }
 
 #modal-container.six .modal-background .modal .modal-svg rect {
-    animation: sketchIn 0.4s 0.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards,
-               pulseBorder 2s 1s ease-in-out infinite;
+    animation:
+        sketchIn 0.4s 0.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards,
+        pulseBorder 2s 1s ease-in-out infinite;
 }
 
 #modal-container.six.out {
@@ -706,7 +691,8 @@ onMounted(async () => {
     margin-bottom: 0.25rem;
 }
 
-.detail-row span, .detail-row p {
+.detail-row span,
+.detail-row p {
     color: #475467;
 }
 
@@ -760,7 +746,7 @@ onMounted(async () => {
 }
 
 .modal-svg rect {
-    stroke: #3B82F6;
+    stroke: #3b82f6;
     stroke-width: 2px;
     stroke-dasharray: 1500;
     stroke-dashoffset: 1500;
@@ -855,15 +841,15 @@ onMounted(async () => {
 
 @keyframes pulseBorder {
     0% {
-        stroke: #3B82F6;
+        stroke: #3b82f6;
         stroke-width: 2px;
     }
     50% {
-        stroke: #10B981;
+        stroke: #10b981;
         stroke-width: 3px;
     }
     100% {
-        stroke: #3B82F6;
+        stroke: #3b82f6;
         stroke-width: 2px;
     }
 }
@@ -885,7 +871,8 @@ onMounted(async () => {
         left: -100%;
         top: -100%;
     }
-    20%, 100% {
+    20%,
+    100% {
         left: 100%;
         top: 100%;
     }
@@ -930,7 +917,10 @@ onMounted(async () => {
 }
 
 :deep(.p-button) {
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease !important;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease !important;
 }
 
 :deep(.p-button:hover:not(.p-disabled)) {
@@ -960,7 +950,9 @@ body.modal-active {
 
 /* Enhanced Add Subject Dialog styles */
 :deep(.add-subject-dialog) {
-    box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+    box-shadow:
+        0 15px 35px rgba(50, 50, 93, 0.1),
+        0 5px 15px rgba(0, 0, 0, 0.07);
 }
 
 :deep(.add-subject-dialog .p-dialog-header) {

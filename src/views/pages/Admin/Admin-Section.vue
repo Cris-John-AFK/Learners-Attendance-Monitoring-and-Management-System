@@ -266,15 +266,15 @@ onMounted(async () => {
             root: { class: 'single-modal-container' },
             content: { class: 'single-modal-content' }
         }"
-        :showHeader="false">
+        :showHeader="false"
+    >
         <div class="dialog-header-content">
             <div class="education-icon pencil"></div>
             <div class="education-icon book"></div>
             <div class="education-icon globe"></div>
             <div class="education-icon math"></div>
             <h2>Sections</h2>
-            <Button icon="pi pi-times" class="p-button-rounded p-button-text p-button-plain close-button"
-                @click="showModal = false" />
+            <Button icon="pi pi-times" class="p-button-rounded p-button-text p-button-plain close-button" @click="showModal = false" />
         </div>
 
         <div class="dialog-body">
@@ -297,12 +297,7 @@ onMounted(async () => {
 
                 <!-- Sections List -->
                 <div v-else class="sections-grid">
-                    <div
-                        v-for="(section, index) in sections"
-                        :key="index"
-                        class="section-item"
-                        :style="{ background: getRandomGradient(), '--index': index }"
-                    >
+                    <div v-for="(section, index) in sections" :key="index" class="section-item" :style="{ background: getRandomGradient(), '--index': index }">
                         <div class="section-content">
                             <h3 class="section-name">{{ section.name }}</h3>
                             <div class="section-info">
@@ -317,12 +312,8 @@ onMounted(async () => {
                                 </div>
                             </div>
                             <div class="section-actions">
-                                <Button icon="pi pi-eye" class="p-button-rounded p-button-text animated-icon-button"
-                                    aria-label="View students" v-tooltip.top="'View students'"
-                                    @click.stop="selectSection(section.name)" />
-                                <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger animated-icon-button"
-                                    aria-label="Delete section" v-tooltip.top="'Delete section'"
-                                    @click.stop="deleteSectionById(section.name)" />
+                                <Button icon="pi pi-eye" class="p-button-rounded p-button-text animated-icon-button" aria-label="View students" v-tooltip.top="'View students'" @click.stop="selectSection(section.name)" />
+                                <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger animated-icon-button" aria-label="Delete section" v-tooltip.top="'Delete section'" @click.stop="deleteSectionById(section.name)" />
                             </div>
                         </div>
                     </div>
@@ -354,8 +345,7 @@ onMounted(async () => {
 
                 <!-- Students List -->
                 <div v-else class="students-grid">
-                    <div v-for="(student, index) in studentsInSection" :key="student.id"
-                        class="student-item" :style="{ '--index': index }">
+                    <div v-for="(student, index) in studentsInSection" :key="student.id" class="student-item" :style="{ '--index': index }">
                         <div class="student-content">
                             <i class="pi pi-user student-icon"></i>
                             <span class="student-name">{{ student.name }}</span>
@@ -376,13 +366,13 @@ onMounted(async () => {
             root: { class: 'single-modal-container' },
             content: { class: 'single-modal-content' }
         }"
-        :showHeader="false">
+        :showHeader="false"
+    >
         <div class="dialog-header-content">
             <div class="education-icon pencil"></div>
             <div class="education-icon book"></div>
             <h2>Add Section</h2>
-            <Button icon="pi pi-times" class="p-button-rounded p-button-text p-button-plain close-button"
-                @click="showCreateForm = false" />
+            <Button icon="pi pi-times" class="p-button-rounded p-button-text p-button-plain close-button" @click="showCreateForm = false" />
         </div>
 
         <div class="dialog-body">
@@ -568,7 +558,7 @@ onMounted(async () => {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
     opacity: 0;
     transform: scale(1);
     animation: ripple 8s linear infinite;
@@ -603,14 +593,16 @@ onMounted(async () => {
     margin-bottom: 0.5rem;
 }
 
-.section-details, .section-capacity {
+.section-details,
+.section-capacity {
     font-size: 0.95rem;
     opacity: 0.95;
     line-height: 1.4;
     padding-left: 0.25rem;
 }
 
-.section-details strong, .section-capacity strong {
+.section-details strong,
+.section-capacity strong {
     font-weight: 600;
     margin-right: 4px;
 }
@@ -708,28 +700,32 @@ onMounted(async () => {
     top: -15px;
     right: 20%;
     animation-delay: 0s;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25z'/%3E%3C/svg%3E") no-repeat center center;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25z'/%3E%3C/svg%3E")
+        no-repeat center center;
 }
 
 .education-icon.book {
     top: 5px;
     right: 8%;
     animation-delay: 0.5s;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z'/%3E%3C/svg%3E") no-repeat center center;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z'/%3E%3C/svg%3E")
+        no-repeat center center;
 }
 
 .education-icon.globe {
     bottom: 0;
     right: 35%;
     animation-delay: 1s;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'/%3E%3C/svg%3E") no-repeat center center;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'/%3E%3C/svg%3E")
+        no-repeat center center;
 }
 
 .education-icon.math {
     bottom: -15px;
     right: 18%;
     animation-delay: 1.5s;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-2v-4h-2v4H8v-2h4v-4h2v4h2v2z'/%3E%3C/svg%3E") no-repeat center center;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-2v-4h-2v4H8v-2h4v-4h2v4h2v2z'/%3E%3C/svg%3E")
+        no-repeat center center;
 }
 
 /* Animation styles */
@@ -836,7 +832,9 @@ onMounted(async () => {
     max-width: 90vw !important;
     border-radius: 16px !important;
     overflow: hidden !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), 0 8px 10px rgba(0, 0, 0, 0.1) !important;
+    box-shadow:
+        0 12px 28px rgba(0, 0, 0, 0.2),
+        0 8px 10px rgba(0, 0, 0, 0.1) !important;
     background-color: white !important;
 }
 
@@ -873,7 +871,9 @@ onMounted(async () => {
 .animated-icon-button {
     position: relative;
     overflow: hidden;
-    transition: transform 0.3s ease, background-color 0.3s ease;
+    transition:
+        transform 0.3s ease,
+        background-color 0.3s ease;
 }
 
 .animated-icon-button:hover {
@@ -894,7 +894,9 @@ onMounted(async () => {
     background-color: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    transition: width 0.5s ease, height 0.5s ease;
+    transition:
+        width 0.5s ease,
+        height 0.5s ease;
 }
 
 .animated-icon-button:hover::before {
@@ -912,7 +914,9 @@ onMounted(async () => {
     background-color: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    transition: width 0.5s ease, height 0.5s ease;
+    transition:
+        width 0.5s ease,
+        height 0.5s ease;
 }
 
 .animated-icon-button:hover::after {

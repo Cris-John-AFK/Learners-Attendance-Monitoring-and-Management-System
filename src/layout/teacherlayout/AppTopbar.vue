@@ -107,7 +107,7 @@ const logout = () => {
             </div>
         </div>
 
-        <Dialog v-model="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
+        <Dialog v-model:visible="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
             <VCalendar is-expanded :attributes="attributes" first-day-of-week="1" theme-styling="rounded border shadow-lg bg-white" />
         </Dialog>
 
@@ -194,7 +194,7 @@ const logout = () => {
 }
 
 .back-button {
-    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
     border: none;
     padding: 0.75rem 1.5rem;
     color: white;

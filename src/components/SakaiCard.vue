@@ -1,6 +1,7 @@
 <template>
     <div class="sakai-card">
-        <slot></slot> <!-- Allows content to be inserted -->
+        <slot></slot>
+        <!-- Allows content to be inserted -->
     </div>
 </template>
 
@@ -11,7 +12,9 @@
     background: #fff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+        transform 0.2s,
+        box-shadow 0.2s;
 }
 
 .sakai-card:hover {

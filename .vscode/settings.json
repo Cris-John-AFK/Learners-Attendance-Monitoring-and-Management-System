@@ -6,18 +6,18 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "[javascript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": true
     },
     "[vue]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": true
     },
     "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": true
     },
     "[json]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": true
     }
 }

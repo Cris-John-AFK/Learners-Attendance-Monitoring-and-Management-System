@@ -46,9 +46,7 @@ const logout = () => {
                     </button>
                     <!-- Styled Dropdown Menu -->
                     <div v-if="isProfileOpen" class="profile-dropdown">
-                        <button class="logout-button" @click="logout">
-                            <i class="pi pi-sign-out"></i> Log Out
-                        </button>
+                        <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
                     </div>
                 </div>
             </div>
@@ -134,7 +132,7 @@ const logout = () => {
 }
 
 .back-button {
-    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
     border: none;
     padding: 0.75rem 1.5rem;
     color: white;

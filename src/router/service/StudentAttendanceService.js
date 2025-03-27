@@ -66,11 +66,6 @@ export const StudentAttendanceService = {
         return state.attendanceRecords.filter((record) => record.studentId === studentId);
     },
 
-    // Get records for a specific subject
-    getSubjectRecords(subjectId) {
-        return state.attendanceRecords.filter((record) => record.subjectId === subjectId);
-    },
-
     // Get records for students in a subject for a specific month
     getSubjectAttendanceRecords(studentIds, subjectId, month, year) {
         const key = `${subjectId}-${month}-${year}`;

@@ -77,7 +77,17 @@ function linkClass({ isActive, isExactActive }) {
         <div v-if="root && item.visible !== false" class="layout-menuitem-root-text">{{ item.label }}</div>
         <template v-if="item.to && item.items">
             <router-link :to="item.to" v-slot="{ navigate, href, isActive, isExactActive }" custom>
-                <a :href="href" @click="(e) => { itemClick(e, item); navigate(e); }" :class="linkClass({ isActive, isExactActive })" class="ripple">
+                <a
+                    :href="href"
+                    @click="
+                        (e) => {
+                            itemClick(e, item);
+                            navigate(e);
+                        }
+                    "
+                    :class="linkClass({ isActive, isExactActive })"
+                    class="ripple"
+                >
                     <i :class="item.icon" class="layout-menuitem-icon"></i>
                     <span class="layout-menuitem-text">{{ item.label }}</span>
                     <i v-if="item.items" class="pi pi-fw pi-angle-down layout-submenu-toggler"></i>
