@@ -111,7 +111,7 @@ const saveSubject = async () => {
         if (showSubjectDetails.value) {
             detailsEditMode.value = false;
         } else {
-        hideDialog();
+            hideDialog();
         }
 
         toast.add({
@@ -311,7 +311,7 @@ onMounted(async () => {
                             <div class="detail-row">
                                 <label>Grade:</label>
                                 <span>{{ subject.grade }}</span>
-                        </div>
+                            </div>
                             <div class="detail-row">
                                 <label>Credits:</label>
                                 <span>{{ subject.credits }}</span>
@@ -319,8 +319,8 @@ onMounted(async () => {
                             <div class="detail-row description">
                                 <label>Description:</label>
                                 <p>{{ subject.description || 'No description available.' }}</p>
-                        </div>
                             </div>
+                        </div>
                         <div class="modal-actions">
                             <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
                             <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(subject)" />
@@ -352,7 +352,7 @@ onMounted(async () => {
                         <div class="modal-actions">
                             <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
                             <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveSubject" />
-                    </div>
+                        </div>
                     </div>
 
                     <!-- Modal SVG for sketch animation -->

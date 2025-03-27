@@ -1,22 +1,21 @@
 <template>
     <div class="landing-container">
-      <h1>Select Enrollment Type</h1>
-      <div class="card-group">
-        <div class="enrollment-card old" @click="$router.push('/enrollment/old-student')">
-          <h2>Old Student</h2>
+        <h1>Select Enrollment Type</h1>
+        <div class="card-group">
+            <div class="enrollment-card old" @click="$router.push('/enrollment/old-student')">
+                <h2>Old Student</h2>
+            </div>
+            <div class="enrollment-card new" @click="$router.push('/enrollment/registration')">
+                <h2>New Student</h2>
+            </div>
+            <div class="enrollment-card transfer" @click="$router.push('/enrollment/transfer-student')">
+                <h2>Transfer Student</h2>
+            </div>
         </div>
-        <div class="enrollment-card new" @click="$router.push('/enrollment/new-student')">
-          <h2>New Student</h2>
-        </div>
-        <div class="enrollment-card transfer" @click="$router.push('/enrollment/transfer-student')">
-          <h2>Transfer Student</h2>
-        </div>
-      </div>
     </div>
 </template>
 
-<script setup>
-</script>
+<script setup></script>
 
 <style scoped>
 /* Page Styling */
@@ -45,7 +44,7 @@ h1 {
 .enrollment-card {
     width: 280px; /* Increased width */
     height: 180px; /* Increased height */
-    background: linear-gradient(135deg, #1976D2, #64B5F6);
+    background: linear-gradient(135deg, #1976d2, #64b5f6);
     color: white;
     display: flex;
     align-items: center;
@@ -56,7 +55,9 @@ h1 {
     text-transform: uppercase;
     cursor: pointer;
     position: relative;
-    transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+    transition:
+        transform 0.3s ease-out,
+        box-shadow 0.3s ease-out;
     box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     text-align: center;
@@ -76,10 +77,9 @@ h1 {
     overflow: hidden; /* Prevents overflow */
 }
 
-
 /* Hover Effect - Shine Glare */
 .enrollment-card::before {
-    content: "";
+    content: '';
     position: absolute;
     top: -100%;
     left: -100%;

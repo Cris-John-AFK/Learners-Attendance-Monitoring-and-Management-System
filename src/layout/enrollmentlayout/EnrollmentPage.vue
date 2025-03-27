@@ -1,15 +1,14 @@
 <template>
     <div class="enrollment-container">
         <div class="school-placeholder">
-            <img src="@/assets/school-placeholder.jpg" alt="School Placeholder">
+            <img src="@/assets/school-placeholder.jpg" alt="School Placeholder" />
         </div>
         <h1>Want to Enroll?</h1>
         <button class="enroll-now" @click="$router.push('/enrollment/landing')">Enroll Now!</button>
     </div>
 </template>
 
-<script setup>
-</script>
+<script setup></script>
 
 <style scoped>
 /* ✅ Keeps content centered but reduces excess height */
@@ -26,7 +25,7 @@
 /* ✅ Ensures image stays centered & properly sized */
 .school-placeholder img {
     max-width: 100%; /* Ensures responsiveness */
-    width: 300px;
+    width: 600px;
     height: auto;
     margin-bottom: 20px;
 }
@@ -41,7 +40,7 @@ h1 {
 
 /* ✅ Centers button & adds smooth hover effect */
 .enroll-now {
-    background: #1976D2;
+    background: #1976d2;
     color: white;
     padding: 15px 30px;
     font-size: 18px;
@@ -53,6 +52,6 @@ h1 {
 }
 
 .enroll-now:hover {
-    background: #1257A3;
+    background: #1257a3;
 }
 </style>
