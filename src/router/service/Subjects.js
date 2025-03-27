@@ -1,6 +1,6 @@
 // This file will contain centralized subject data
-import { AttendanceService } from './Students';
 import axios from 'axios';
+import { AttendanceService } from './Students';
 
 // Mock data
 const mockSubjects = [
@@ -16,13 +16,27 @@ const API_URL = 'http://localhost:8000/api';
 
 // Create an in-memory cache for performance
 let subjectCache = null;
+let cacheTimestamp = null;
+const CACHE_TTL = 60000; // 1 minute cache lifetime
 
 export const SubjectService = {
     async getSubjects() {
         try {
-            console.log('Fetching subjects from API...');
+            // Check if we have a valid cache
+            const now = Date.now();
+            if (subjectCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
+                console.log('Using cached subjects data, age:', Math.round((now - cacheTimestamp) / 1000), 'seconds');
+                return subjectCache;
+            }
+
+            console.log('Cache expired or not available, fetching subjects from API...');
             const response = await axios.get(`${API_URL}/subjects`);
-            console.log('API response received:', response.data);
+            console.log('API response received:', response.status, 'with', response.data.length, 'subjects');
+
+            // Update cache
+            subjectCache = response.data;
+            cacheTimestamp = now;
+
             return response.data;
         } catch (error) {
             console.error('Error fetching subjects:', error);
@@ -193,11 +207,25 @@ export const SubjectService = {
     // Create a new subject - Updated to use API
     async createSubject(subject) {
         try {
+            console.log('Sending subject data to API:', subject);
             const response = await axios.post(`${API_URL}/subjects`, subject);
+            console.log('Subject created successfully:', response.status, response.data);
+
+            // Invalidate cache after creating a new subject
+            this.clearCache();
+
             return response.data;
         } catch (error) {
             console.error('Error creating subject:', error);
-            // For testing purposes, return a mock created subject
+
+            if (error.response && error.response.status === 422) {
+                console.error('Validation error details:', error.response.data);
+                // Throw the error to be handled by the caller
+                throw error;
+            }
+
+            // For testing purposes or if server is down, return a mock created subject
+            console.log('Falling back to mock response');
             return { ...subject, id: Date.now() };
         }
     },
@@ -250,7 +278,10 @@ export const SubjectService = {
 
     // Clear the cache (useful for testing or resetting)
     async clearCache() {
+        console.log('Clearing subject cache');
         subjectCache = null;
+        cacheTimestamp = null;
+        return true;
     },
 
     // Get unique subjects (one per name) - Updated to use API
