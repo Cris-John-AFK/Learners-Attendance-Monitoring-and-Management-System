@@ -34,11 +34,11 @@ app.use(PrimeVue, {
     ripple: true,
     inputStyle: 'filled',
     zIndex: {
-        modal: 1200,        // Match App.css
-        overlay: 1100,      // Match App.css
+        modal: 1200, // Match App.css
+        overlay: 1100, // Match App.css
         menu: 1000,
         tooltip: 1100,
-        toast: 1300         // Keep toast above modal
+        toast: 1300 // Keep toast above modal
     }
 });
 app.use(ToastService);
