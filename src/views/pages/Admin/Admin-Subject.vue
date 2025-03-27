@@ -357,7 +357,9 @@ onMounted(async () => {
         </div>
 
         <!-- Add/Edit Dialog (used only for adding new) -->
-        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid" :style="{ width: '450px' }">
+        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid"
+               :style="{ width: '450px' }"
+               :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
             <div class="field">
                 <label for="name">Name</label>
                 <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" />
@@ -365,7 +367,8 @@ onMounted(async () => {
             </div>
             <div class="field">
                 <label for="grade">Grade</label>
-                <Dropdown id="grade" v-model="subject.grade" :options="grades" optionLabel="name" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
+                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade"
+                    :class="{ 'p-invalid': submitted && !subject.grade }" />
                 <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
             </div>
             <div class="field">
@@ -383,7 +386,9 @@ onMounted(async () => {
         </Dialog>
 
         <!-- Delete Dialog -->
-        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal style="width: 450px">
+        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal
+               :style="{ width: '450px' }"
+               :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
             <div class="confirmation-content">
                 <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                 <span>Are you sure you want to delete this subject?</span>
