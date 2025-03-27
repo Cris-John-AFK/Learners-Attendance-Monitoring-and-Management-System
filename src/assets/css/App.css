@@ -11,6 +11,8 @@
   top: auto !important;
   bottom: auto !important;
   transform: none !important;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .p-dialog-mask {
@@ -50,6 +52,8 @@
   padding: 1.25rem;
   font-weight: 700;
   border-bottom: 1px solid #dee2e6;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
 }
 
 .p-dialog-footer {
@@ -57,6 +61,8 @@
   color: #495057;
   padding: 1.25rem;
   border-top: 1px solid #dee2e6;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
 /* Input component fixes */

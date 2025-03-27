@@ -25,6 +25,8 @@
       padding: 1.25rem 1.5rem;
       background-color: #ffffff;
       border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
 
       .p-dialog-title {
         font-weight: 600;
@@ -64,6 +66,8 @@
       display: flex;
       justify-content: flex-end;
       gap: 0.75rem;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
 
       .p-button {
         border-radius: 8px;
