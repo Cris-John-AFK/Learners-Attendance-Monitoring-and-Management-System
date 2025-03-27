@@ -51,7 +51,10 @@ const cardStyles = computed(() => {
 const loadGrades = async () => {
     try {
         const gradesData = await GradeService.getGrades();
-        grades.value = gradesData.map((g) => g.name);
+        grades.value = gradesData.map((g) => ({
+            label: g.name,
+            value: g.name
+        }));
     } catch (error) {
         toast.add({
             severity: 'error',
@@ -173,7 +176,16 @@ const openNew = () => {
     // Set dialog to true and add console log for debugging
     console.log('Opening subject dialog...');
     subjectDialog.value = true;
-    console.log('Subject dialog state:', subjectDialog.value);
+
+    // Reset any animations by removing and re-adding the class
+    setTimeout(() => {
+        const fields = document.querySelectorAll('.animated-field');
+        fields.forEach((field) => {
+            field.style.animation = 'none';
+            field.offsetHeight; // Trigger reflow
+            field.style.animation = '';
+        });
+    }, 50);
 };
 
 const editSubject = (subj) => {
@@ -249,7 +261,7 @@ onMounted(async () => {
                     <h2 class="text-2xl font-semibold">Subject Management</h2>
                 </div>
                 <div class="nav-right">
-                    <Dropdown v-model="selectedGrade" :options="grades" placeholder="Filter by grade" class="grade-filter" />
+                    <Dropdown v-model="selectedGrade" :options="grades" optionLabel="label" optionValue="value" placeholder="Filter by grade" class="grade-filter" />
                     <Button label="Add Subject" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
             </div>
@@ -345,7 +357,7 @@ onMounted(async () => {
 
                     <!-- Modal SVG for sketch animation -->
                     <svg class="modal-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
-                        <rect x="0" y="0" fill="none" width="100%" height="100%" rx="8" ry="8"></rect>
+                        <rect x="0" y="0" fill="none" width="100%" height="100%" rx="12" ry="12"></rect>
                     </svg>
                 </div>
             </div>
@@ -372,8 +384,10 @@ onMounted(async () => {
                 <InputNumber id="credits" v-model="subject.credits" :min="1" />
             </div>
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
-                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveSubject" />
+                <div class="dialog-footer-buttons">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text cancel-button" @click="hideDialog" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-text save-button" @click="saveSubject" />
+                </div>
             </template>
         </Dialog>
 
@@ -609,24 +623,28 @@ onMounted(async () => {
     background: white;
     padding: 30px;
     display: inline-block;
-    border-radius: 8px;
+    border-radius: 12px;
     font-weight: 300;
     position: relative;
     max-width: 600px;
     width: 90%;
     text-align: left;
     z-index: 999;
+    overflow: hidden;
 }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
+    margin: -30px -30px 1.5rem -30px;
+    padding: 20px 30px;
     border-bottom: 1px solid #e9ecef;
     position: relative;
     z-index: 2;
+    background-color: #ffffff;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
 }
 
 .modal-header h2 {
@@ -652,6 +670,7 @@ onMounted(async () => {
 .modal-content {
     position: relative;
     z-index: 1;
+    margin-bottom: -10px;
 }
 
 .subject-details {
@@ -689,9 +708,12 @@ onMounted(async () => {
     display: flex;
     justify-content: flex-end;
     gap: 0.75rem;
-    margin-top: 2rem;
-    padding-top: 1rem;
+    margin: 2rem -30px -30px -30px;
+    padding: 20px 30px;
     border-top: 1px solid #e9ecef;
+    background-color: #f8fafc;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
 }
 
 .edit-form {
@@ -717,7 +739,7 @@ onMounted(async () => {
     left: 0;
     height: 100%;
     width: 100%;
-    border-radius: 8px;
+    border-radius: 12px;
     z-index: 0;
     pointer-events: none;
 }
@@ -727,6 +749,8 @@ onMounted(async () => {
     stroke-width: 2px;
     stroke-dasharray: 1500;
     stroke-dashoffset: 1500;
+    rx: 12px;
+    ry: 12px;
 }
 
 /* Modal Animations */
@@ -841,6 +865,30 @@ onMounted(async () => {
     }
 }
 
+@keyframes buttonShine {
+    0% {
+        left: -100%;
+        top: -100%;
+    }
+    20%,
+    100% {
+        left: 100%;
+        top: 100%;
+    }
+}
+
+@keyframes floatingInput {
+    0% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+    100% {
+        transform: translateY(0px);
+    }
+}
+
 :deep(.p-inputtext),
 :deep(.p-dropdown),
 :deep(.p-dropdown-panel),
@@ -883,11 +931,272 @@ body.modal-active {
     overflow: hidden;
 }
 
-/* Media queries for responsiveness */
+/* Single media query for responsiveness */
 @media (max-width: 768px) {
     .modal {
         width: 95%;
         padding: 20px;
     }
+
+    :deep(.add-subject-dialog) {
+        width: 95vw !important;
+    }
+
+    .animated-field {
+        gap: 0.35rem;
+    }
+}
+
+/* Enhanced Add Subject Dialog styles */
+:deep(.add-subject-dialog) {
+    box-shadow:
+        0 15px 35px rgba(50, 50, 93, 0.1),
+        0 5px 15px rgba(0, 0, 0, 0.07);
+}
+
+:deep(.add-subject-dialog .p-dialog-header) {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    padding: 1.5rem;
+}
+
+:deep(.add-subject-dialog .p-dialog-title) {
+    font-weight: 700;
+    font-size: 1.35rem;
+    letter-spacing: 0.5px;
+    position: relative;
+    display: inline-block;
+    animation: titlePulse 2s infinite alternate;
+}
+
+:deep(.add-subject-dialog .p-dialog-content) {
+    padding: 2rem;
+    background: white;
+}
+
+.add-subject-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.animated-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fieldAppear 0.5s forwards;
+    position: relative;
+}
+
+.animated-field:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.animated-field:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.animated-field:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.animated-field:nth-child(4) {
+    animation-delay: 0.4s;
+}
+
+.animated-field label {
+    font-weight: 600;
+    color: #4b5563;
+    font-size: 0.9rem;
+    position: relative;
+    display: inline-block;
+}
+
+.animated-field label::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    transition: width 0.3s ease;
+}
+
+.animated-field:hover label::after {
+    width: 100%;
+}
+
+:deep(.animated-field .p-inputtext:focus),
+:deep(.animated-field .p-dropdown:focus),
+:deep(.animated-field .p-textarea:focus),
+:deep(.animated-field .p-inputnumber:focus) {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
+}
+
+:deep(.add-subject-dialog .p-dialog-footer) {
+    background: #f9fafb;
+    padding: 1rem 2rem;
+    border-top: 1px solid #f3f4f6;
+}
+
+.dialog-footer-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+:deep(.cancel-button) {
+    transition: all 0.3s ease;
+    color: #6b7280;
+}
+
+:deep(.cancel-button:hover) {
+    background-color: #f3f4f6 !important;
+    transform: translateY(-2px);
+}
+
+:deep(.save-button) {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+:deep(.save-button:hover) {
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+:deep(.save-button::after) {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(transparent, transparent, rgba(255, 255, 255, 0.2), transparent, transparent);
+    transform: rotate(45deg);
+    animation: buttonShine 3s infinite;
+}
+
+@keyframes fieldAppear {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes titlePulse {
+    0% {
+        text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    }
+    100% {
+        text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+    }
+}
+
+:deep(.animated-field .p-inputtext),
+:deep(.animated-field .p-dropdown),
+:deep(.animated-field .p-textarea) {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    animation: floatingInput 3s ease-in-out infinite;
+}
+
+:deep(.animated-field:nth-child(1) .p-inputtext),
+:deep(.animated-field:nth-child(1) .p-dropdown),
+:deep(.animated-field:nth-child(1) .p-textarea) {
+    animation-delay: 0s;
+}
+
+:deep(.animated-field:nth-child(2) .p-inputtext),
+:deep(.animated-field:nth-child(2) .p-dropdown),
+:deep(.animated-field:nth-child(2) .p-textarea) {
+    animation-delay: 0.5s;
+}
+
+:deep(.animated-field:nth-child(3) .p-inputtext),
+:deep(.animated-field:nth-child(3) .p-dropdown),
+:deep(.animated-field:nth-child(3) .p-textarea) {
+    animation-delay: 1s;
+}
+
+:deep(.animated-field:nth-child(4) .p-inputtext),
+:deep(.animated-field:nth-child(4) .p-dropdown),
+:deep(.animated-field:nth-child(4) .p-textarea),
+:deep(.animated-field:nth-child(4) .p-inputnumber) {
+    animation-delay: 1.5s;
+}
+
+:deep(.animated-field .p-inputtext:focus),
+:deep(.animated-field .p-dropdown:focus),
+:deep(.animated-field .p-textarea:focus),
+:deep(.animated-field .p-inputnumber:focus) {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
+    animation-play-state: paused;
+}
+
+:deep(.animated-field .p-dropdown:hover),
+:deep(.animated-field .p-inputtext:hover),
+:deep(.animated-field .p-textarea:hover),
+:deep(.animated-field .p-inputnumber:hover) {
+    border-color: #c7d2fe;
+}
+
+:deep(.animated-field .p-inputnumber) {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    animation: floatingInput 3s ease-in-out infinite;
+}
+
+:deep(.animated-field .p-inputnumber-buttons-stacked .p-button.p-inputnumber-button) {
+    background: linear-gradient(135deg, #c7d2fe, #a5b4fc);
+    color: #4338ca;
+    border: none;
+}
+
+:deep(.animated-field .p-inputnumber-buttons-stacked .p-button.p-inputnumber-button:hover) {
+    background: linear-gradient(135deg, #a5b4fc, #818cf8);
+}
+
+:deep(.animated-field .p-dropdown-panel) {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.animated-field .p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight) {
+    background: linear-gradient(135deg, #c7d2fe, #a5b4fc);
+    color: #4338ca;
+}
+
+:deep(.animated-field .p-dropdown) {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    animation: floatingInput 3s ease-in-out infinite;
+    display: flex;
+    align-items: center;
+    height: auto;
+    min-height: 42px;
+}
+
+:deep(.p-dropdown-panel) {
+    z-index: 9999 !important;
+}
+
+:deep(.p-dropdown .p-dropdown-trigger) {
+    padding: 0 0.5rem;
+    cursor: pointer;
 }
 </style>
