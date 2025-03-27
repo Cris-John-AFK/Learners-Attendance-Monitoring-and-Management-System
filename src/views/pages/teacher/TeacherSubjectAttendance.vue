@@ -30,12 +30,7 @@
         </div>
     </div>
     <!-- Custom Attendance Method Selection Modal using the reusable CustomModal component -->
-    <CustomModal
-        v-model="showAttendanceModal"
-        header="Select Attendance Method"
-        width="350px"
-        maxWidth="90vw"
-    >
+    <CustomModal v-model="showAttendanceModal" header="Select Attendance Method" width="350px" maxWidth="90vw">
         <div class="attendance-methods-container">
             <div class="method-card qr-card" @click="startQRAttendance">
                 <div class="card-icon-container">
@@ -565,11 +560,11 @@ onMounted(async () => {
 }
 
 .qr-card {
-    background: #5E72E4;
+    background: #5e72e4;
 }
 
 .roll-card {
-    background: #2DCE89;
+    background: #2dce89;
 }
 
 .card-icon-container {

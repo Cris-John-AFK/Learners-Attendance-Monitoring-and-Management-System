@@ -11,7 +11,7 @@ import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const subjects = ref([]);
@@ -20,6 +20,9 @@ const loading = ref(true);
 const subjectDialog = ref(false);
 const deleteSubjectDialog = ref(false);
 const selectedGrade = ref(null);
+const showSubjectDetails = ref(false);
+const detailsEditMode = ref(false);
+const modalContainer = ref(null);
 
 const subject = ref({
     id: null,
@@ -42,11 +45,8 @@ const filteredSubjects = computed(() => {
 });
 
 const cardStyles = computed(() => {
-    return Object.fromEntries(
-        filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }])
-    );
+    return Object.fromEntries(filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }]));
 });
-
 
 const loadGrades = async () => {
     try {
@@ -104,7 +104,12 @@ const saveSubject = async () => {
 
         // Refresh the subjects list to include the new subject
         await loadSubjects();
-        hideDialog();
+
+        if (showSubjectDetails.value) {
+            detailsEditMode.value = false;
+        } else {
+            hideDialog();
+        }
 
         toast.add({
             severity: 'success',
@@ -128,6 +133,9 @@ const deleteSubject = async () => {
         await SubjectService.deleteSubject(subject.value.id);
         await loadSubjects();
         deleteSubjectDialog.value = false;
+        if (showSubjectDetails.value) {
+            closeDetailsModal();
+        }
 
         toast.add({
             severity: 'success',
@@ -170,12 +178,60 @@ const openNew = () => {
 
 const editSubject = (subj) => {
     subject.value = { ...subj };
-    subjectDialog.value = true;
+
+    // If we're in the details modal, switch to edit mode
+    if (showSubjectDetails.value) {
+        detailsEditMode.value = true;
+    } else {
+        // Otherwise open the details modal first, then enable edit mode
+        openDetailsModal(subj);
+        nextTick(() => {
+            detailsEditMode.value = true;
+        });
+    }
 };
 
 const confirmDelete = (subj) => {
     subject.value = { ...subj };
     deleteSubjectDialog.value = true;
+};
+
+const openDetailsModal = (subj) => {
+    // Set the current subject
+    subject.value = { ...subj };
+
+    // Show the modal with animation
+    showSubjectDetails.value = true;
+
+    // Reset edit mode
+    detailsEditMode.value = false;
+
+    // Apply the animation class
+    nextTick(() => {
+        if (modalContainer.value) {
+            modalContainer.value.classList.add('six');
+            document.body.classList.add('modal-active');
+        }
+    });
+};
+
+const closeDetailsModal = () => {
+    // Add out class to animate closing
+    if (modalContainer.value) {
+        modalContainer.value.classList.add('out');
+    }
+
+    // Remove body class
+    document.body.classList.remove('modal-active');
+
+    // Reset state after animation
+    setTimeout(() => {
+        showSubjectDetails.value = false;
+        detailsEditMode.value = false;
+        if (modalContainer.value) {
+            modalContainer.value.classList.remove('six', 'out');
+        }
+    }, 300);
 };
 
 onMounted(async () => {
@@ -191,7 +247,6 @@ onMounted(async () => {
             <div class="top-nav-bar">
                 <div class="nav-left">
                     <h2 class="text-2xl font-semibold">Subject Management</h2>
-                    <!-- Test button for direct dialog control -->
                 </div>
                 <div class="nav-right">
                     <Dropdown v-model="selectedGrade" :options="grades" placeholder="Filter by grade" class="grade-filter" />
@@ -207,7 +262,7 @@ onMounted(async () => {
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="subject in filteredSubjects" :key="subject.id" class="subject-card" :style="cardStyles[subject.id]" @click="editSubject(subject)">
+                <div v-for="subject in filteredSubjects" :key="subject.id" class="subject-card" :style="cardStyles[subject.id]" @click="openDetailsModal(subject)">
                     <div class="card-content">
                         <h1 class="subject-title">{{ subject.name }}</h1>
                         <div class="grade-badge">{{ subject.grade }}</div>
@@ -220,58 +275,110 @@ onMounted(async () => {
             </div>
 
             <!-- Empty State -->
-            <div v-if="filteredSubjects.length === 0" class="empty-state">
+            <div v-if="filteredSubjects.length === 0 && !loading" class="empty-state">
                 <p>No subjects found. Click "Add Subject" to create one.</p>
             </div>
         </div>
 
-        <!-- Subject Dialog - Sakai Style -->
-        <div v-if="subjectDialog" class="card">
-            <div class="sakai-dialog-overlay" @click="hideDialog"></div>
-            <div class="sakai-dialog-container">
-                <div class="sakai-dialog">
-                    <div class="sakai-dialog-header">
-                        <h5>{{ subject.id ? 'Edit Subject' : 'Add Subject' }}</h5>
-                        <Button icon="pi pi-times" class="p-button-rounded p-button-text" @click="hideDialog" />
+        <!-- Sketch Style Modal -->
+        <div v-if="showSubjectDetails" ref="modalContainer" id="modal-container">
+            <div class="modal-background" @click="closeDetailsModal">
+                <div class="modal" @click.stop>
+                    <div class="modal-header">
+                        <h2>{{ detailsEditMode ? 'Edit Subject' : 'Subject Details' }}</h2>
+                        <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="closeDetailsModal" aria-label="Close" />
                     </div>
-                    <div class="sakai-dialog-content">
-                        <div class="field grid">
-                            <label for="name" class="col-12 mb-2">Name</label>
-                            <div class="col-12 p-0">
+
+                    <!-- View Mode -->
+                    <div v-if="!detailsEditMode" class="modal-content">
+                        <div class="subject-details">
+                            <div class="detail-row">
+                                <label>Name:</label>
+                                <span>{{ subject.name }}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label>Grade:</label>
+                                <span>{{ subject.grade }}</span>
+                            </div>
+                            <div class="detail-row">
+                                <label>Credits:</label>
+                                <span>{{ subject.credits }}</span>
+                            </div>
+                            <div class="detail-row description">
+                                <label>Description:</label>
+                                <p>{{ subject.description || 'No description available.' }}</p>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
+                            <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(subject)" />
+                        </div>
+                    </div>
+
+                    <!-- Edit Mode -->
+                    <div v-else class="modal-content">
+                        <div class="edit-form">
+                            <div class="field">
+                                <label for="name">Name</label>
                                 <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
                                 <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
                             </div>
-                        </div>
-                        <div class="field grid">
-                            <label for="grade" class="col-12 mb-2">Grade</label>
-                            <div class="col-12 p-0">
+                            <div class="field">
+                                <label for="grade">Grade</label>
                                 <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
                                 <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
                             </div>
-                        </div>
-                        <div class="field grid">
-                            <label for="description" class="col-12 mb-2">Description</label>
-                            <div class="col-12 p-0">
+                            <div class="field">
+                                <label for="description">Description</label>
                                 <Textarea id="description" v-model="subject.description" rows="3" placeholder="Add a description" />
                             </div>
-                        </div>
-                        <div class="field grid">
-                            <label for="credits" class="col-12 mb-2">Credits</label>
-                            <div class="col-12 p-0">
+                            <div class="field">
+                                <label for="credits">Credits</label>
                                 <InputNumber id="credits" v-model="subject.credits" :min="1" :max="10" placeholder="1-10" />
                             </div>
                         </div>
+                        <div class="modal-actions">
+                            <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
+                            <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveSubject" />
+                        </div>
                     </div>
-                    <div class="sakai-dialog-footer">
-                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
-                        <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveSubject" />
-                    </div>
+
+                    <!-- Modal SVG for sketch animation -->
+                    <svg class="modal-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
+                        <rect x="0" y="0" fill="none" width="100%" height="100%" rx="8" ry="8"></rect>
+                    </svg>
                 </div>
             </div>
         </div>
 
+        <!-- Add/Edit Dialog (used only for adding new) -->
+        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid" :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
+            <div class="field">
+                <label for="name">Name</label>
+                <InputText id="name" v-model="subject.name" required autofocus :class="{ 'p-invalid': submitted && !subject.name }" />
+                <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
+            </div>
+            <div class="field">
+                <label for="grade">Grade</label>
+                <Dropdown id="grade" v-model="subject.grade" :options="grades" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !subject.grade }" />
+                <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
+            </div>
+            <div class="field">
+                <label for="description">Description</label>
+                <Textarea id="description" v-model="subject.description" rows="3" />
+            </div>
+            <div class="field">
+                <label for="credits">Credits</label>
+                <InputNumber id="credits" v-model="subject.credits" :min="1" />
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveSubject" />
+            </template>
+        </Dialog>
+
         <!-- Delete Dialog -->
-        <Dialog v-model="deleteSubjectDialog" header="Confirm" modal style="width: 450px">
+        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
             <div class="confirmation-content">
                 <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                 <span>Are you sure you want to delete this subject?</span>
@@ -333,11 +440,48 @@ onMounted(async () => {
     transition:
         transform 0.3s ease,
         box-shadow 0.3s ease;
+    position: relative;
 }
 
 .subject-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+    animation: cardPulse 0.6s infinite alternate;
+}
+
+.subject-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
+    transform: translateX(-100%);
+    transition: transform 0.6s;
+}
+
+.subject-card:hover::before {
+    transform: translateX(100%);
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes cardPulse {
+    0% {
+        transform: translateY(-5px) scale(1);
+    }
+    100% {
+        transform: translateY(-5px) scale(1.03);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 .card-content {
@@ -392,90 +536,309 @@ onMounted(async () => {
     color: #6c757d;
 }
 
-.dialog-content {
-    padding: 0 0.25rem;
+/* Sketch Modal Styles */
+#modal-container {
+    position: fixed;
+    display: table;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    left: 0;
+    transform: scale(0);
+    z-index: 999;
 }
 
-.field {
-    margin-bottom: 1rem;
+#modal-container.six {
+    transform: scale(1);
 }
 
-.field label {
-    font-size: 0.875rem;
-    margin-bottom: 0.375rem;
+#modal-container.six .modal-background {
+    background: rgba(0, 0, 0, 0);
+    animation: fadeIn 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
 }
 
-.field small.p-error {
-    color: #f44336;
-    font-size: 0.7rem;
-    margin-top: 0.25rem;
-    display: block;
+#modal-container.six .modal-background .modal {
+    background-color: transparent;
+    animation: modalFadeIn 0.3s 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
 }
 
-/* Animation classes */
-.animated {
-    animation-duration: 0.4s;
-    animation-fill-mode: both;
+#modal-container.six .modal-background .modal h2,
+#modal-container.six .modal-background .modal .modal-content {
+    opacity: 0;
+    position: relative;
+    animation: modalContentFadeIn 0.3s 0.5s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
 }
 
-@keyframes fadeInDown {
-    from {
-        opacity: 0;
-        transform: translate3d(0, -20px, 0);
-    }
-    to {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
-    }
+#modal-container.six .modal-background .modal .modal-svg rect {
+    animation:
+        sketchIn 0.4s 0.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards,
+        pulseBorder 2s 1s ease-in-out infinite;
 }
 
-@keyframes fadeOutUp {
-    from {
-        opacity: 1;
-    }
-    to {
-        opacity: 0;
-        transform: translate3d(0, -20px, 0);
-    }
+#modal-container.six.out {
+    animation: quickScaleDown 0s 0.3s linear forwards;
 }
 
-.fadeInDown {
-    animation-name: fadeInDown;
+#modal-container.six.out .modal-background {
+    animation: fadeOut 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
 }
 
-.fadeOutUp {
-    animation-name: fadeOutUp;
+#modal-container.six.out .modal-background .modal {
+    animation: modalFadeOut 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
 }
 
-/* Enhanced dialog styles */
-:deep(.p-dialog) {
+#modal-container.six.out .modal-background .modal h2,
+#modal-container.six.out .modal-background .modal .modal-content {
+    animation: modalContentFadeOut 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+}
+
+#modal-container.six.out .modal-background .modal .modal-svg rect {
+    animation: sketchOut 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+}
+
+.modal-background {
+    display: table-cell;
+    background: rgba(0, 0, 0, 0.8);
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    z-index: 998;
+}
+
+.modal {
+    background: white;
+    padding: 30px;
+    display: inline-block;
     border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-    transform-origin: center top;
+    font-weight: 300;
+    position: relative;
+    max-width: 600px;
+    width: 90%;
+    text-align: left;
+    z-index: 999;
 }
 
-:deep(.p-dialog-header) {
-    padding: 0.75rem 1.25rem;
-    background: #ffffff;
-    border-bottom: 1px solid #f0f0f0;
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+    position: relative;
+    z-index: 2;
 }
 
-:deep(.p-dialog-title) {
-    font-size: 1rem;
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
     font-weight: 600;
     color: #344054;
 }
 
-:deep(.p-dialog-content) {
-    padding: 1rem;
-    background: #ffffff;
+.close-button {
+    z-index: 3;
+    position: relative;
+    cursor: pointer !important;
+    transition: background-color 0.2s;
+    margin-right: -0.5rem;
+    margin-top: -0.5rem;
 }
 
-:deep(.p-dialog-footer) {
-    padding: 0.75rem 1.25rem;
-    background: #ffffff;
-    border-top: 1px solid #f0f0f0;
+.close-button:hover {
+    background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.modal-content {
+    position: relative;
+    z-index: 1;
+}
+
+.subject-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.detail-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-row label {
+    font-weight: 600;
+    color: #344054;
+    margin-bottom: 0.25rem;
+}
+
+.detail-row span,
+.detail-row p {
+    color: #475467;
+}
+
+.detail-row.description {
+    margin-top: 0.5rem;
+}
+
+.detail-row.description p {
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.edit-form .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.edit-form label {
+    font-weight: 600;
+    color: #344054;
+}
+
+.modal-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    border-radius: 8px;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.modal-svg rect {
+    stroke: #3b82f6;
+    stroke-width: 2px;
+    stroke-dasharray: 1500;
+    stroke-dashoffset: 1500;
+}
+
+/* Modal Animations */
+@keyframes fadeIn {
+    0% {
+        background: rgba(0, 0, 0, 0);
+    }
+    100% {
+        background: rgba(0, 0, 0, 0.7);
+    }
+}
+
+@keyframes fadeOut {
+    0% {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    100% {
+        background: rgba(0, 0, 0, 0);
+    }
+}
+
+@keyframes modalFadeIn {
+    0% {
+        background-color: transparent;
+        transform: scale(0.95);
+    }
+    100% {
+        background-color: white;
+        transform: scale(1);
+    }
+}
+
+@keyframes modalFadeOut {
+    0% {
+        background-color: white;
+        transform: scale(1);
+    }
+    100% {
+        background-color: transparent;
+        transform: scale(0.95);
+    }
+}
+
+@keyframes modalContentFadeIn {
+    0% {
+        opacity: 0;
+        top: -20px;
+    }
+    70% {
+        opacity: 1;
+        top: 5px;
+    }
+    100% {
+        opacity: 1;
+        top: 0;
+    }
+}
+
+@keyframes modalContentFadeOut {
+    0% {
+        opacity: 1;
+        top: 0px;
+    }
+    100% {
+        opacity: 0;
+        top: -20px;
+    }
+}
+
+@keyframes sketchIn {
+    0% {
+        stroke-dashoffset: 1500;
+    }
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes sketchOut {
+    0% {
+        stroke-dashoffset: 0;
+    }
+    100% {
+        stroke-dashoffset: 1500;
+    }
+}
+
+@keyframes pulseBorder {
+    0% {
+        stroke: #3b82f6;
+        stroke-width: 2px;
+    }
+    50% {
+        stroke: #10b981;
+        stroke-width: 3px;
+    }
+    100% {
+        stroke: #3b82f6;
+        stroke-width: 2px;
+    }
+}
+
+@keyframes quickScaleDown {
+    0% {
+        transform: scale(1);
+    }
+    99.9% {
+        transform: scale(1);
+    }
+    100% {
+        transform: scale(0);
+    }
 }
 
 :deep(.p-inputtext),
@@ -497,83 +860,34 @@ onMounted(async () => {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
-:deep(.p-button) {
-    border-radius: 4px;
-    padding: 0.4rem 0.75rem;
-    transition: all 0.2s ease;
-    font-size: 0.85rem;
-}
-
-:deep(.p-button .p-button-icon) {
-    font-size: 0.9rem;
-    margin-right: 0.3rem;
-}
-
-:deep(.p-dropdown),
-:deep(.p-select) {
-    width: 100%;
-}
-
-/* Sakai Dialog Styles */
-.sakai-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 1000;
-}
-
-.sakai-dialog-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1001;
-}
-
-.sakai-dialog {
-    background: white;
+/* Enhanced dialog styles */
+:deep(.p-dialog) {
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    width: 500px;
-    max-width: 95vw;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+:deep(.p-button) {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease !important;
+}
+
+:deep(.p-button:hover:not(.p-disabled)) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.modal-active {
     overflow: hidden;
 }
 
-.sakai-dialog-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.sakai-dialog-header h5 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #343a40;
-}
-
-.sakai-dialog-content {
-    padding: 1.5rem;
-    overflow-y: auto;
-}
-
-.sakai-dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid #f0f0f0;
+/* Media queries for responsiveness */
+@media (max-width: 768px) {
+    .modal {
+        width: 95%;
+        padding: 20px;
+    }
 }
 </style>
