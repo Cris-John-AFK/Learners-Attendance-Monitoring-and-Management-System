@@ -81,7 +81,7 @@ const computedStyles = computed(() => {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999;
+    z-index: 1100;
 }
 
 .custom-modal {
@@ -90,6 +90,7 @@ const computedStyles = computed(() => {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
     overflow: hidden;
     min-width: 300px;
+    margin: auto;
 }
 
 .custom-modal-header {
