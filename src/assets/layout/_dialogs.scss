@@ -4,6 +4,8 @@
     overflow: hidden;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 6px 12px rgba(0, 0, 0, 0.08);
     max-width: 90vw;
+    position: relative;
+    margin: auto;
 
     /* Animation for dialog appearance */
     &.p-component-overlay-enter {

@@ -41,7 +41,6 @@ const logout = () => {
                             <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
                         </div>
                     </div>
-                    <!-- Closing tag for .relative -->
                 </div>
             </div>
         </div>

@@ -1,18 +1,18 @@
 // src/main.js
-import '@/assets/styles.scss'; // Ensure this path is correct
 import '@/assets/css/App.css'; // Import our custom CSS fixes
+import '@/assets/styles.scss'; // Ensure this path is correct
 import Aura from '@primevue/themes/aura'; // Import the Aura theme
 import 'primeicons/primeicons.css';
 import PrimeVue from 'primevue/config';
 import ConfirmationService from 'primevue/confirmationservice';
 import DialogService from 'primevue/dialogservice';
 
-import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
-import InputNumber from 'primevue/inputnumber';
-import Dropdown from 'primevue/dropdown';
 import ToastService from 'primevue/toastservice';
 import VCalendar from 'v-calendar';
 import 'v-calendar/style.css';
@@ -34,11 +34,11 @@ app.use(PrimeVue, {
     ripple: true,
     inputStyle: 'filled',
     zIndex: {
-        modal: 1100,
-        overlay: 1000,
+        modal: 1200,        // Match App.css
+        overlay: 1100,      // Match App.css
         menu: 1000,
         tooltip: 1100,
-        toast: 1200
+        toast: 1300         // Keep toast above modal
     }
 });
 app.use(ToastService);

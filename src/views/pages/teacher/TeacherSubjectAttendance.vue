@@ -29,25 +29,31 @@
             </div>
         </div>
     </div>
-    <!-- Attendance Method Selection Modal -->
-    <Dialog v-model:visible="showAttendanceModal" modal header="Select Attendance Method" :style="{ width: '40vw' }">
-        <div class="grid gap-4">
-            <div class="col-12 md:col-6">
-                <div class="attendance-option" @click="startQRAttendance">
-                    <i class="pi pi-qrcode icon"></i>
-                    <h3 class="title">QR Code Attendance</h3>
-                    <p class="description">Scan student's QR Code for quick and efficient attendance tracking.</p>
+    <!-- Custom Attendance Method Selection Modal using the reusable CustomModal component -->
+    <CustomModal
+        v-model="showAttendanceModal"
+        header="Select Attendance Method"
+        width="350px"
+        maxWidth="90vw"
+    >
+        <div class="attendance-methods-container">
+            <div class="method-card qr-card" @click="startQRAttendance">
+                <div class="card-icon-container">
+                    <i class="pi pi-qrcode"></i>
                 </div>
+                <h3>QR Code Attendance</h3>
+                <p>Scan student's QR Code for quick attendance.</p>
             </div>
-            <div class="col-12 md:col-6">
-                <div class="attendance-option" @click="startRollCall">
-                    <i class="pi pi-list icon"></i>
-                    <h3 class="title">Roll Call</h3>
-                    <p class="description">Manually call out names and mark attendance.</p>
+
+            <div class="method-card roll-card" @click="startRollCall">
+                <div class="card-icon-container">
+                    <i class="pi pi-list"></i>
                 </div>
+                <h3>Roll Call</h3>
+                <p>Manually call out names and mark attendance.</p>
             </div>
         </div>
-    </Dialog>
+    </CustomModal>
 
     <!-- QR Scanner Modal -->
     <Dialog v-model:visible="showQRScanner" modal header="QR Code Scanner" :style="{ width: '80vw' }">
@@ -144,6 +150,7 @@
 </template>
 
 <script setup>
+import CustomModal from '@/components/custom/CustomModal.vue';
 import { AttendanceService } from '@/router/service/Students';
 import { SubjectService } from '@/router/service/Subjects';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -465,6 +472,126 @@ onMounted(async () => {
     border: 3px solid #007bff;
 }
 
+/* Custom Modal Styles */
+.custom-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.custom-modal {
+    width: 350px;
+    max-width: 90vw;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    animation: modal-appear 0.2s ease;
+}
+
+@keyframes modal-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.custom-modal-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.custom-modal-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.custom-modal-close {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+}
+
+.custom-modal-close:hover {
+    color: #343a40;
+}
+
+.custom-modal-content {
+    padding: 0;
+}
+
+.attendance-methods-container {
+    padding: 0.75rem;
+}
+
+/* Attendance Method Cards */
+.method-card {
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.2s ease;
+    color: white;
+}
+
+.method-card:hover {
+    transform: translateY(-2px);
+}
+
+.method-card:last-child {
+    margin-bottom: 0;
+}
+
+.qr-card {
+    background: #5E72E4;
+}
+
+.roll-card {
+    background: #2DCE89;
+}
+
+.card-icon-container {
+    display: inline-flex;
+    margin-right: 0.5rem;
+    font-size: 1.2rem;
+}
+
+.method-card h3 {
+    display: inline;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.method-card p {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
 /* Scanning Indicator */
 .camera-indicator {
     margin-top: 8px;
@@ -502,72 +629,6 @@ onMounted(async () => {
 
 .scanned-student i {
     margin-right: 10px;
-}
-.attendance-option {
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 20px;
-    text-align: center;
-    transition: all 0.3s ease-in-out;
-    cursor: pointer;
-}
-
-.attendance-option:hover {
-    background: #f0f8ff;
-    border-color: #007bff;
-    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.2);
-}
-.icon {
-    font-size: 3rem;
-    color: #007bff;
-    margin-bottom: 10px;
-}
-
-.title {
-    font-size: 1.2rem;
-    font-weight: bold;
-    color: #333;
-}
-
-.description {
-    font-size: 0.9rem;
-    color: #666;
-}
-.camera-container {
-    width: 100%;
-    height: 400px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.camera-placeholder {
-    text-align: center;
-    color: #6c757d;
-}
-
-.scanned-list {
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-:deep(.p-datatable) {
-    font-size: 0.875rem;
-}
-
-:deep(.p-datatable .p-datatable-header) {
-    padding: 0.5rem;
-}
-
-:deep(.p-datatable .p-datatable-thead > tr > th) {
-    padding: 0.5rem;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr > td) {
-    padding: 0.5rem;
 }
 
 .student-info {

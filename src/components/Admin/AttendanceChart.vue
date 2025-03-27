@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
 
 const props = defineProps({
