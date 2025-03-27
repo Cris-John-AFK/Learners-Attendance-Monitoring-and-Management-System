@@ -1,6 +1,7 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import GuestTopbar from '@/layout/guestlayout/GuestTopbar.vue';
+import Toast from 'primevue/toast';
 import { ref, watch } from 'vue';
 import AppFooter from './AppFooter.vue';
 const { layoutState, isSidebarActive } = useLayout();
@@ -38,7 +39,7 @@ function unbindOutsideClickListener() {
 function isOutsideClicked(event) {
     const topbarEl = document.querySelector('.layout-menu-button');
 
-    return !(topbarEl.isSameNode(event.target) || topbarEl.contains(event.target));
+    return !(topbarEl && (topbarEl.isSameNode(event.target) || topbarEl.contains(event.target)));
 }
 </script>
 
@@ -54,8 +55,8 @@ function isOutsideClicked(event) {
         </div>
         <app-footer></app-footer>
         <div class="layout-mask animate-fadein"></div>
+        <Toast />
     </div>
-    <Toast />
 </template>
 
 <style lang="scss" scoped>
