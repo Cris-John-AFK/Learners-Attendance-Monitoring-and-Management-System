@@ -69,40 +69,39 @@ const logout = () => {
                 <button class="layout-menu-button layout-topbar-action" @click="toggleMenu">
                     <i class="pi pi-bars"></i>
                 </button>
-
                 <router-link to="/teacher" class="layout-topbar-logo">
                     <img src="/demo/images/logo.svg" alt="Logo" />
                     <span>NCS- for Teachers</span>
                 </router-link>
+            </div>
 
-                <Button class="back-button" @click="$router.push('/')"> <i class="pi pi-arrow-left"></i> Back to Login </Button>
+            <div class="layout-topbar-center">
+                <Button class="back-button" @click="$router.push('/')">
+                    <i class="pi pi-arrow-left"></i>
+                    Back to Login
+                </Button>
             </div>
 
             <div class="layout-topbar-actions">
-                <div class="layout-topbar-menu hidden lg:block">
-                    <div class="layout-topbar-menu-content">
-                        <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
-                            <i class="pi pi-calendar"></i>
-                            <span>Calendar</span>
-                        </button>
+                <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
+                    <i class="pi pi-calendar"></i>
+                    <span>Calendar</span>
+                </button>
 
-                        <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
-                            <i class="pi pi-cog"></i>
-                            <span>Settings</span>
-                        </button>
+                <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
+                    <i class="pi pi-cog"></i>
+                    <span>Settings</span>
+                </button>
 
-                        <!-- Profile Button with Dropdown -->
-                        <div class="relative">
-                            <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
-                                <i class="pi pi-user"></i>
-                                <span>Profile</span>
-                            </button>
-
-                            <!-- Styled Dropdown Menu -->
-                            <div v-if="isProfileOpen" class="profile-dropdown">
-                                <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
-                            </div>
-                        </div>
+                <!-- Profile Button with Dropdown -->
+                <div class="relative">
+                    <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
+                        <i class="pi pi-user"></i>
+                        <span>Profile</span>
+                    </button>
+                    <!-- Styled Dropdown Menu -->
+                    <div v-if="isProfileOpen" class="profile-dropdown">
+                        <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
                     </div>
                 </div>
             </div>
@@ -115,7 +114,6 @@ const logout = () => {
         <!-- Log Out Confirmation Modal -->
         <Dialog v-model="isLogoutSuccess" header="Success" :modal="true" :style="{ width: '250px' }">
             <p>You have successfully logged out.</p>
-
             <template #footer>
                 <button class="p-button p-button-primary" @click="isLogoutSuccess = false">OK</button>
             </template>
@@ -124,17 +122,110 @@ const logout = () => {
 </template>
 
 <style scoped>
-img {
-    width: 50px;
-    height: 50px;
+.layout-topbar {
+    position: fixed;
+    height: 4rem;
+    z-index: 997;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 2rem;
+    background-color: var(--surface-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.layout-topbar-logo-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 200px;
+}
+
+.layout-topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: var(--text-color);
+}
+
+.layout-topbar-logo img {
+    height: 2.5rem;
+}
+
+.layout-topbar-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.layout-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 200px;
+    justify-content: flex-end;
+}
+
+.layout-topbar-action {
+    width: auto;
+    height: 2.5rem;
+    padding: 0 0.5rem;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-color);
+    transition: background-color 0.2s;
+}
+
+.layout-topbar-action:hover {
+    background-color: var(--surface-hover);
+}
+
+.layout-topbar-action i {
+    font-size: 1.25rem;
+}
+
+.back-button {
+    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    border: none;
+    padding: 0.75rem 1.5rem;
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.back-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
+
+.back-button:active {
+    transform: scale(0.98);
 }
 
 .profile-dropdown {
     position: absolute;
     right: 0;
+    top: 100%;
+    background: white;
     box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
     min-width: 120px;
     z-index: 100;
+    border-radius: 6px;
+    overflow: hidden;
 }
 
 .logout-button {
@@ -143,46 +234,36 @@ img {
     width: 100%;
     padding: 8px 12px;
     border: none;
-    background: #f56565; /* Red button */
+    background: #f56565;
     color: white;
     font-size: 14px;
-    border-radius: 6px;
     cursor: pointer;
     transition: background 0.2s;
 }
 
 .logout-button:hover {
-    background: #c53030; /* Darker red on hover */
+    background: #c53030;
 }
 
 .logout-button i {
     margin-right: 6px;
 }
 
-.back-button {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    top: 10px; /* Better alignment from HEAD version */
-    background-color: #1976d2;
-    color: white;
-    font-weight: 600;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: 0.3s ease-in-out;
-    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
-    z-index: 5;
-}
+@media (max-width: 991px) {
+    .layout-topbar {
+        padding: 0 1rem;
+    }
 
-.back-button:hover {
-    background-color: #1565c0;
-    transform: translateX(-50%) scale(1.05);
-}
+    .layout-topbar-logo-container {
+        min-width: auto;
+    }
 
-.back-button:active {
-    transform: translateX(-50%) scale(0.95);
+    .layout-topbar-actions {
+        min-width: auto;
+    }
+
+    .layout-topbar-action span {
+        display: none;
+    }
 }
 </style>

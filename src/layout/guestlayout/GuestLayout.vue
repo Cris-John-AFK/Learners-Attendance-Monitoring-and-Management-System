@@ -46,77 +46,59 @@ function isOutsideClicked(event) {
     <div class="layout-wrapper">
         <guest-topbar></guest-topbar>
         <div class="layout-main-container">
-            <div class="profile-container">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png" alt="Student Profile" class="profile-picture" />
+            <div class="layout-content">
+                <div class="layout-main">
+                    <router-view></router-view>
+                </div>
             </div>
-            <div class="layout-main">
-                <!-- Search bar component -->
-                <router-view></router-view>
-            </div>
-            <app-footer></app-footer>
         </div>
+        <app-footer></app-footer>
         <div class="layout-mask animate-fadein"></div>
     </div>
     <Toast />
 </template>
 
 <style lang="scss" scoped>
-.profile-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    margin-bottom: 2rem;
-    padding-top: 10%;
-}
-
-.profile-picture {
-    width: 200px;
-    height: 200px;
-    border-radius: 50%;
-    border: 5px solid #fff;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%,
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
-    }
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px 10px rgba(0, 0, 0, 0.1);
-    }
-}
-
 .layout-wrapper {
+    min-height: 100vh;
+    background-color: var(--surface-ground);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100vw;
-    height: 100vh;
+    position: relative;
 }
 
 .layout-main-container {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: calc(100vh - 8rem); /* Subtract topbar and footer heights */
+    margin-top: 4rem; /* Account for fixed topbar */
+    margin-bottom: 4rem; /* Space for footer */
 }
 
-.layout-main {
+.layout-content {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     padding: 2rem;
-    background-color: #f8f9fa;
-    min-height: 400px;
     width: 100%;
-    box-sizing: border-box;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.layout-main {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+}
+
+@media (max-width: 991px) {
+    .layout-content {
+        padding: 1rem;
+    }
 }
 </style>
