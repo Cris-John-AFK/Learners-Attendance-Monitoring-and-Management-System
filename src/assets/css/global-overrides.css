@@ -1,0 +1,42 @@
+/* Global overrides for PrimeVue components */
+
+/* Force all dropdown panels to appear at the highest z-index */
+body .p-dropdown-panel {
+  position: fixed !important;
+  z-index: 99999 !important;
+}
+
+/* Target the specific dropdown panel elements */
+body .p-dropdown-items-wrapper,
+body .p-dropdown-items,
+body .p-dropdown-item {
+  z-index: 99999 !important;
+}
+
+/* Override PrimeVue's overlay container */
+body .p-component-overlay {
+  z-index: 99998 !important;
+}
+
+/* Make sure dropdowns are rendered on top of everything */
+body .p-dropdown {
+  position: relative;
+  z-index: 99999 !important;
+}
+
+/* Override any PrimeVue styles that might conflict */
+body .p-dialog-mask {
+  z-index: 1000 !important;
+}
+
+body .p-dialog {
+  z-index: 1001 !important;
+}
+
+/* Force dropdown panels to be visible */
+body .p-dropdown-panel {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+}

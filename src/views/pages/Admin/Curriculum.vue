@@ -5,7 +5,7 @@ import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dialog from 'primevue/dialog';
+import CustomDialog from '@/components/CustomDialog.vue';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
@@ -408,7 +408,7 @@ function closeAddSectionDialog() {
     </div>
 
     <!-- Add Curriculum Dialog -->
-    <Dialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
+    <CustomDialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
         <div class="field mb-4">
             <label for="name" class="font-medium mb-2 block">Curriculum Name</label>
             <InputText id="name" v-model="curriculum.name" required autofocus :class="{ 'p-invalid': submitted && !curriculum.name }" placeholder="Enter curriculum name" class="w-full p-inputtext-lg" />
@@ -426,6 +426,7 @@ function closeAddSectionDialog() {
                     required
                     :class="{ 'p-invalid': submitted && !curriculum.yearRange.start }"
                     class="w-full p-inputtext-lg"
+                    appendTo="body"
                 />
                 <Dropdown
                     id="endYear"
@@ -435,6 +436,7 @@ function closeAddSectionDialog() {
                     required
                     :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }"
                     class="w-full p-inputtext-lg"
+                    appendTo="body"
                 />
             </div>
             <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)">Academic year is required.</small>
@@ -442,7 +444,7 @@ function closeAddSectionDialog() {
 
         <div class="field mb-4">
             <label for="status" class="font-medium mb-2 block">Status</label>
-            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" />
+            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" appendTo="body" />
         </div>
 
         <template #footer>
@@ -451,10 +453,10 @@ function closeAddSectionDialog() {
                 <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveCurriculum" />
             </div>
         </template>
-    </Dialog>
+    </CustomDialog>
 
     <!-- Grade Level Management Section -->
-    <Dialog v-model:visible="showGradeLevelManagement" :header="`Grade Level Management - ${selectedGrade?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true" :baseZIndex="1000">
+    <CustomDialog v-model:visible="showGradeLevelManagement" :header="`Grade Level Management - ${selectedGrade?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true" :baseZIndex="1000">
         <div class="p-4 space-y-4">
             <div class="flex justify-between items-center mb-4">
                 <div class="flex gap-2">
@@ -477,10 +479,10 @@ function closeAddSectionDialog() {
                 <Button label="Close" icon="pi pi-times" class="p-button-secondary" @click="showGradeLevelManagement = false" />
             </div>
         </div>
-    </Dialog>
+    </CustomDialog>
 
     <!-- Add Section Dialog -->
-    <Dialog v-model:visible="showSectionDialog" header="Add Grade Level" modal class="max-w-md w-full rounded-lg">
+    <CustomDialog v-model:visible="showSectionDialog" header="Add Grade Level" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
             <label class="block text-gray-700 font-medium">Grade Level</label>
             <InputText v-model="newSection.name" placeholder="Enter Grade Level" class="w-full" />
@@ -491,10 +493,10 @@ function closeAddSectionDialog() {
                 <Button label="Save" class="p-button-success" @click="addSection()" />
             </div>
         </div>
-    </Dialog>
+    </CustomDialog>
 
     <!-- Subject Details Dialog -->
-    <Dialog v-model:visible="showSubjectDetailsDialog" :header="`Subject Details - ${selectedSubjectDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
+    <CustomDialog v-model:visible="showSubjectDetailsDialog" :header="`Subject Details - ${selectedSubjectDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
         <div class="p-4 space-y-4">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-semibold">Schedule Details</h3>
@@ -528,14 +530,14 @@ function closeAddSectionDialog() {
                 </Column>
             </DataTable>
         </div>
-    </Dialog>
+    </CustomDialog>
 
     <!-- Add Schedule Dialog -->
-    <Dialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
+    <CustomDialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
             <div class="field">
                 <label class="block text-gray-700 font-medium">Subject</label>
-                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" />
+                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" appendTo="body" />
             </div>
 
             <div class="flex justify-end gap-2 mt-4">
@@ -543,7 +545,7 @@ function closeAddSectionDialog() {
                 <Button :label="isEditMode ? 'Update' : 'Save'" class="p-button-success" @click="addNewSection" :disabled="!validateSectionData()" />
             </div>
         </div>
-    </Dialog>
+    </CustomDialog>
 </template>
 
 <style scoped>
