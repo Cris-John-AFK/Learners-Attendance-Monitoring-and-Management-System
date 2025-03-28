@@ -12,6 +12,7 @@ const model = ref([
         items: [
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
+            { label: 'Grade', icon: 'pi pi-fw pi-id-card', to: '/admin-grade' },
             { label: 'Section', icon: 'pi pi-fw pi-home', to: '/admin-section' },
             { label: 'Subject', icon: 'pi pi-fw pi-book', to: '/admin-subject' }
         ]

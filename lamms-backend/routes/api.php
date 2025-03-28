@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\SubjectController;
 use Illuminate\Support\Facades\Route;
@@ -13,6 +14,11 @@ Route::get('students/grade/{gradeLevel}/section/{section}', [StudentController::
 Route::apiResource('subjects', SubjectController::class);
 Route::get('subjects/grade/{grade}', [SubjectController::class, 'byGrade']);
 Route::get('subjects/unique', [SubjectController::class, 'uniqueSubjects']);
+
+// Grade routes
+Route::apiResource('grades', GradeController::class);
+Route::get('grades/active', [GradeController::class, 'getActiveGrades']);
+Route::patch('grades/{id}/toggle-status', [GradeController::class, 'toggleStatus']);
 
 // Test route
 Route::get('/test', function() {

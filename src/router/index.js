@@ -85,6 +85,11 @@ const router = createRouter({
                     component: () => import('@/views/pages/Admin/Admin-Section.vue')
                 },
                 {
+                    path: '/admin-grade',
+                    name: 'admin-grade',
+                    component: () => import('@/views/pages/Admin/Admin-Grade.vue')
+                },
+                {
                     path: '/admin-subject',
                     name: 'admin-subject',
                     component: () => import('@/views/pages/Admin/Admin-Subject.vue')
