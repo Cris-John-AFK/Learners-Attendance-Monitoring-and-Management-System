@@ -71,8 +71,9 @@ const filteredSubjects = computed(() => {
 
     // Filter by grade and search query
     return subjects.value.filter(subject => {
-        // If no grade is selected, only apply search filter
-        if (!selectedGrade.value) {
+        // If no grade is selected or the "All Grades" option is selected (value is null),
+        // only apply search filter
+        if (!selectedGrade.value || selectedGrade.value.value === null) {
             return matchesSearch(subject);
         }
 
@@ -96,10 +97,14 @@ const cardStyles = computed(() => {
 const loadGrades = async () => {
     try {
         const gradesData = await GradeService.getGrades();
-        grades.value = gradesData.map((g) => ({
-            label: g.name,
-            value: g.name  // Use the name as the value for consistency
-        }));
+        // Add "All Grades" option at the beginning of the array
+        grades.value = [
+            { label: 'All Grades', value: null },
+            ...gradesData.map((g) => ({
+                label: g.name,
+                value: g.name  // Use the name as the value for consistency
+            }))
+        ];
     } catch (error) {
         toast.add({
             severity: 'error',
@@ -183,6 +188,11 @@ const saveSubject = async () => {
             }
 
             toast.add({ severity: 'success', summary: 'Success', detail: 'Subject Updated', life: 3000 });
+
+            // Close the details modal if it's open
+            if (showSubjectDetails.value) {
+                closeDetailsModal();
+            }
         } else {
             // Create new subject
             const created = await SubjectService.createSubject(formattedSubject);
@@ -659,7 +669,9 @@ watch(subjectDialog, (newValue) => {
     z-index: 0;
     border-radius: 0 0 24px 0;
 }
-
+.nav-right {
+    display: flex; align-items: center;
+}
 /* Base styles for all geometric shapes */
 .geometric-shape {
     position: absolute;
@@ -1637,7 +1649,24 @@ watch(subjectDialog, (newValue) => {
 .card-content {
     transition: transform 0.3s ease;
 }
-
+.grade-filter {
+    margin-right: 1rem;
+}
+.grade-filter :deep(.p-dropdown) {
+    background: rgba(211, 233, 255, 0.8) !important;
+    border: 1px solid rgba(74, 135, 213, 0.3) !important;
+    border-radius: 8px !important; min-width: 150px;
+}
+.grade-filter :deep(.p-dropdown-label) {
+    color: #1a365d !important; font-weight: 500;
+}
+.grade-filter :deep(.p-dropdown-trigger) {
+    color: #4a87d5 !important;
+}
+grade-filter :deep(.p-dropdown:hover) {
+    border-color: rgba(74, 135, 213, 0.6) !important;
+    box-shadow: 0 0 0 1px rgba(74, 135, 213, 0.2) !important;
+}
 /* Style the grade filter dropdown to match theme */
 :deep(.grade-filter) {
     background: rgba(211, 233, 255, 0.8) !important;
@@ -1734,9 +1763,9 @@ watch(subjectDialog, (newValue) => {
 
 /* Card interaction animations */
 .subject-card:hover .symbol {
-    animation-play-state: paused;
     color: rgba(26, 54, 93, 0.6);
 }
+
 
 .subject-card:hover::after {
     content: '';
@@ -2102,7 +2131,7 @@ watch(subjectDialog, (newValue) => {
 .p-inputtext, .p-inputnumber, .p-dropdown, .p-calendar {
     width: 100%;
     background: rgba(255, 255, 255, 0.1) !important;
-    color: white !important;
+    color: #1a365d !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
     border-radius: 8px !important;
     transition: all 0.3s ease;

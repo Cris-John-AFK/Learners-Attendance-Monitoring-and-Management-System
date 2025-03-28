@@ -18,7 +18,9 @@ import VCalendar from 'v-calendar';
 import 'v-calendar/style.css';
 import { createApp } from 'vue';
 import App from './App.vue';
+import CustomDialog from './components/CustomDialog.vue';
 import router from './router';
+import '@/assets/css/global-overrides.css'; // Import global overrides last to ensure they take precedence
 
 const app = createApp(App);
 
@@ -34,11 +36,11 @@ app.use(PrimeVue, {
     ripple: true,
     inputStyle: 'filled',
     zIndex: {
-        modal: 1200,        // Match App.css
-        overlay: 1100,      // Match App.css
+        modal: 1200, // Match App.css
+        overlay: 1100, // Match App.css
         menu: 1000,
         tooltip: 1100,
-        toast: 1300         // Keep toast above modal
+        toast: 1300 // Keep toast above modal
     }
 });
 app.use(ToastService);
@@ -47,6 +49,7 @@ app.use(ConfirmationService);
 
 // Register PrimeVue components
 app.component('Dialog', Dialog);
+app.component('CustomDialog', CustomDialog);
 app.component('Button', Button);
 app.component('InputText', InputText);
 app.component('Textarea', Textarea);

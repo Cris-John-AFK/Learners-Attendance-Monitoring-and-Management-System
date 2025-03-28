@@ -1,0 +1,34 @@
+/* Global fixes for PrimeVue dropdown components */
+
+/* Target the overlay container that PrimeVue uses for dropdowns */
+.p-component-overlay {
+  z-index: 9999 !important;
+}
+
+/* Target the dropdown panel directly */
+.p-dropdown-panel {
+  z-index: 9999 !important;
+  position: fixed !important;
+}
+
+/* Force the dropdown items to be visible */
+.p-dropdown-items-wrapper,
+.p-dropdown-items,
+.p-dropdown-item {
+  z-index: 9999 !important;
+}
+
+/* Ensure the dropdown panel is properly positioned */
+body .p-dropdown-panel {
+  transform: none !important;
+  position: absolute !important;
+  top: auto !important;
+  left: auto !important;
+}
+
+/* Override any other styles that might be affecting the dropdown */
+.p-dialog-mask ~ .p-dropdown-panel,
+.p-dialog ~ .p-dropdown-panel,
+.p-dialog-content ~ .p-dropdown-panel {
+  z-index: 9999 !important;
+}

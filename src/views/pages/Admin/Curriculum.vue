@@ -5,7 +5,7 @@ import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dialog from 'primevue/dialog';
+import CustomDialog from '@/components/CustomDialog.vue';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
@@ -21,15 +21,21 @@ const selectedCurriculum = ref(null);
 const curriculum = ref({
     id: null,
     name: '',
-    yearRange: '',
+    yearRange: { start: '', end: '' },
     description: '',
     status: 'Active'
 });
 const submitted = ref(false);
-const yearRanges = ref(['2023-2024', '2024-2025', '2025-2026', '2026-2027', '2027-2028']);
+const yearRanges = ref([
+    { start: '2023', end: '2024' },
+    { start: '2024', end: '2025' },
+    { start: '2025', end: '2026' },
+    { start: '2026', end: '2027' },
+    { start: '2027', end: '2028' }
+]);
 
-// Section management variables
-const showSectionManagement = ref(false);
+// Grade Level Management variables
+const showGradeLevelManagement = ref(false);
 const selectedGrade = ref(null);
 const newGradeLevel = ref('');
 const selectedYearRange = ref('2024-2025');
@@ -37,18 +43,13 @@ const sections = ref([]);
 const newSection = ref({ name: '', gradeLevel: '', group: '', year: null });
 const showSectionDialog = ref(false);
 const groups = ref(['Group 1', 'Group 2', 'Group 3', 'Group 4']);
-const showSectionDetailsDialog = ref(false);
-const selectedSectionDetails = ref(null);
+const showSubjectDetailsDialog = ref(false);
+const selectedSubjectDetails = ref(null);
 const showAddSectionDialog = ref(false);
 const newSectionData = ref({
     id: '',
     subjectName: '',
-    teacherName: '',
-    startTime: null,
-    endTime: null,
-    startYear: '',
-    endYear: '',
-    section: null
+    section: selectedSubjectDetails.value
 });
 const sectionDetails = ref([]);
 const subjects = ref([]);
@@ -67,11 +68,11 @@ const getRandomGradient = () => {
 
 // Mock data for curriculums
 const mockCurriculums = [
-    { id: 1, name: 'Curriculum', yearRange: '2023-2024', description: 'Standard curriculum for 2023-2024', status: 'Active' },
-    { id: 2, name: 'Curriculum', yearRange: '2024-2025', description: 'Standard curriculum for 2024-2025', status: 'Active' },
-    { id: 3, name: 'Curriculum', yearRange: '2025-2026', description: 'Standard curriculum for 2025-2026', status: 'Active' },
-    { id: 4, name: 'Curriculum', yearRange: '2026-2027', description: 'Standard curriculum for 2026-2027', status: 'Planned' },
-    { id: 5, name: 'Special Curriculum', yearRange: '2023-2024', description: 'Special education curriculum', status: 'Active' }
+    { id: 1, name: 'Curriculum', yearRange: { start: '2023', end: '2024' }, description: 'Standard curriculum for 2023-2024', status: 'Active' },
+    { id: 2, name: 'Curriculum', yearRange: { start: '2024', end: '2025' }, description: 'Standard curriculum for 2024-2025', status: 'Active' },
+    { id: 3, name: 'Curriculum', yearRange: { start: '2025', end: '2026' }, description: 'Standard curriculum for 2025-2026', status: 'Active' },
+    { id: 4, name: 'Curriculum', yearRange: { start: '2026', end: '2027' }, description: 'Standard curriculum for 2026-2027', status: 'Planned' },
+    { id: 5, name: 'Special Curriculum', yearRange: { start: '2023', end: '2024' }, description: 'Special education curriculum', status: 'Active' }
 ];
 
 const filteredCurriculums = computed(() => {
@@ -79,11 +80,11 @@ const filteredCurriculums = computed(() => {
         return curriculums.value;
     }
 
-    return curriculums.value.filter((c) => c.yearRange === selectedCurriculum.value);
+    return curriculums.value.filter((c) => c.yearRange.start === selectedCurriculum.value.start && c.yearRange.end === selectedCurriculum.value.end);
 });
 
 const cardStyles = computed(() =>
-    filteredCurriculums.value.map(() => ({
+    curriculums.value.map(() => ({
         background: getRandomGradient()
     }))
 );
@@ -117,7 +118,7 @@ const openNew = () => {
     curriculum.value = {
         id: null,
         name: 'Curriculum',
-        yearRange: selectedCurriculum.value || '',
+        yearRange: { start: '', end: '' },
         description: '',
         status: 'Active'
     };
@@ -127,7 +128,7 @@ const openNew = () => {
 const saveCurriculum = async () => {
     submitted.value = true;
 
-    if (!curriculum.value.name.trim() || !curriculum.value.yearRange) {
+    if (!curriculum.value.name.trim() || !curriculum.value.yearRange.start || !curriculum.value.yearRange.end) {
         toast.add({
             severity: 'warn',
             summary: 'Warning',
@@ -171,7 +172,7 @@ const saveCurriculum = async () => {
     }
 };
 
-// Section Management Functions
+// Grade Level Management Functions
 async function fetchGrades() {
     try {
         loading.value = true;
@@ -231,25 +232,31 @@ async function saveGradeLevel() {
 }
 
 // This is the function that will handle curriculum card click
-async function openSectionManagement(curr) {
+async function openGradeLevelManagement(curr) {
     try {
         loading.value = true;
         selectedCurriculum.value = curr;
 
+        // Directly show grade level management
+        showGradeLevelManagement.value = true;
+
         // Simulate fetching section data for this curriculum
         // In a real app, you would get this from your service
         const mockSections = [
-            { name: 'Section A', gradeLevel: 'Grade 1', group: 'Group 1', year: new Date(), id: 's1' },
-            { name: 'Section B', gradeLevel: 'Grade 1', group: 'Group 2', year: new Date(), id: 's2' }
+            { name: 'Kinder', gradeLevel: 'Kinder', group: '', year: new Date(), id: 's1' },
+            { name: 'Grade 1', gradeLevel: 'Grade 1', group: '', year: new Date(), id: 's2' },
+            { name: 'Grade 2', gradeLevel: 'Grade 2', group: '', year: new Date(), id: 's3' },
+            { name: 'Grade 3', gradeLevel: 'Grade 3', group: '', year: new Date(), id: 's4' },
+            { name: 'Grade 4', gradeLevel: 'Grade 4', group: '', year: new Date(), id: 's5' },
+            { name: 'Grade 5', gradeLevel: 'Grade 5', group: '', year: new Date(), id: 's6' },
+            { name: 'Grade 6', gradeLevel: 'Grade 6', group: '', year: new Date(), id: 's7' }
         ];
 
         sections.value = mockSections;
         selectedGrade.value = {
-            name: `Curriculum - ${curr.yearRange}`,
+            name: `Curriculum - ${curr.yearRange.start}-${curr.yearRange.end}`,
             id: curr.id
         };
-
-        showSectionManagement.value = true;
     } catch (error) {
         console.error('Error fetching sections:', error);
     } finally {
@@ -298,14 +305,14 @@ function resetSectionForm() {
     showSectionDialog.value = false;
 }
 
-async function openSectionDetails(section) {
+async function openSubjectDetails(section) {
     try {
         loading.value = true;
-        selectedSectionDetails.value = section;
+        selectedSubjectDetails.value = section;
 
-        showSectionDetailsDialog.value = true;
+        showSubjectDetailsDialog.value = true;
     } catch (error) {
-        console.error('Error fetching section details:', error);
+        console.error('Error fetching subject details:', error);
     } finally {
         loading.value = false;
     }
@@ -317,12 +324,7 @@ function openAddSectionDialog() {
     newSectionData.value = {
         id: generateId(),
         subjectName: '',
-        teacherName: '',
-        startTime: null,
-        endTime: null,
-        startYear: '',
-        endYear: '',
-        section: selectedSectionDetails.value
+        section: selectedSubjectDetails.value
     };
     showAddSectionDialog.value = true;
 }
@@ -337,16 +339,12 @@ function addNewSection() {
             const index = sectionDetails.value.findIndex((d) => d.id === editingSectionDetail.value.id);
             if (index !== -1) {
                 sectionDetails.value[index] = {
-                    ...newSectionData.value,
-                    startTime: formatTime(newSectionData.value.startTime),
-                    endTime: formatTime(newSectionData.value.endTime)
+                    ...newSectionData.value
                 };
             }
         } else {
             sectionDetails.value.push({
-                ...newSectionData.value,
-                startTime: formatTime(newSectionData.value.startTime),
-                endTime: formatTime(newSectionData.value.endTime)
+                ...newSectionData.value
             });
         }
         closeAddSectionDialog();
@@ -354,12 +352,7 @@ function addNewSection() {
 }
 
 function validateSectionData() {
-    return newSectionData.value.subjectName && newSectionData.value.teacherName && newSectionData.value.startTime && newSectionData.value.endTime;
-}
-
-function formatTime(date) {
-    if (!date) return '';
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return newSectionData.value.subjectName;
 }
 
 function deleteSectionDetail(detail) {
@@ -374,20 +367,9 @@ function editSectionDetail(detail) {
     editingSectionDetail.value = { ...detail };
     newSectionData.value = {
         ...detail,
-        startTime: parseTime(detail.startTime),
-        endTime: parseTime(detail.endTime),
-        section: selectedSectionDetails.value
+        section: selectedSubjectDetails.value
     };
     showAddSectionDialog.value = true;
-}
-
-function parseTime(timeString) {
-    if (!timeString) return null;
-    const [hours, minutes] = timeString.split(':');
-    const date = new Date();
-    date.setHours(parseInt(hours));
-    date.setMinutes(parseInt(minutes));
-    return date;
 }
 
 function closeAddSectionDialog() {
@@ -397,12 +379,7 @@ function closeAddSectionDialog() {
     newSectionData.value = {
         id: generateId(),
         subjectName: '',
-        teacherName: '',
-        startTime: null,
-        endTime: null,
-        startYear: '',
-        endYear: '',
-        section: selectedSectionDetails.value
+        section: selectedSubjectDetails.value
     };
 }
 </script>
@@ -421,17 +398,17 @@ function closeAddSectionDialog() {
         </div>
 
         <div v-else class="card-container">
-            <SakaiCard v-for="(curr, index) in filteredCurriculums" :key="index" class="custom-card" :style="cardStyles[index]" @click="openSectionManagement(curr)">
+            <SakaiCard v-for="(curr, index) in curriculums" :key="curr.id" class="custom-card" :style="cardStyles[index]" @click="openGradeLevelManagement(curr)">
                 <div class="card-header">
                     <h1 class="curriculum-name">{{ curr.name }}</h1>
-                    <p class="year-info">{{ curr.yearRange }}</p>
+                    <p class="year-info">{{ curr.yearRange.start }}-{{ curr.yearRange.end }}</p>
                 </div>
             </SakaiCard>
         </div>
     </div>
 
     <!-- Add Curriculum Dialog -->
-    <Dialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
+    <CustomDialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
         <div class="field mb-4">
             <label for="name" class="font-medium mb-2 block">Curriculum Name</label>
             <InputText id="name" v-model="curriculum.name" required autofocus :class="{ 'p-invalid': submitted && !curriculum.name }" placeholder="Enter curriculum name" class="w-full p-inputtext-lg" />
@@ -440,13 +417,34 @@ function closeAddSectionDialog() {
 
         <div class="field mb-4">
             <label for="yearRange" class="font-medium mb-2 block">Academic Year</label>
-            <Dropdown id="yearRange" v-model="curriculum.yearRange" :options="yearRanges" placeholder="Select Academic Year" required :class="{ 'p-invalid': submitted && !curriculum.yearRange }" class="w-full p-inputtext-lg" />
-            <small class="p-error" v-if="submitted && !curriculum.yearRange">Academic year is required.</small>
+            <div class="flex gap-2">
+                <Dropdown
+                    id="startYear"
+                    v-model="curriculum.yearRange.start"
+                    :options="['2023', '2024', '2025', '2026', '2027', '2028']"
+                    placeholder="Select Start Year"
+                    required
+                    :class="{ 'p-invalid': submitted && !curriculum.yearRange.start }"
+                    class="w-full p-inputtext-lg"
+                    appendTo="body"
+                />
+                <Dropdown
+                    id="endYear"
+                    v-model="curriculum.yearRange.end"
+                    :options="['2024', '2025', '2026', '2027', '2028', '2029']"
+                    placeholder="Select End Year"
+                    required
+                    :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }"
+                    class="w-full p-inputtext-lg"
+                    appendTo="body"
+                />
+            </div>
+            <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)">Academic year is required.</small>
         </div>
 
         <div class="field mb-4">
             <label for="status" class="font-medium mb-2 block">Status</label>
-            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" />
+            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" appendTo="body" />
         </div>
 
         <template #footer>
@@ -455,39 +453,39 @@ function closeAddSectionDialog() {
                 <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveCurriculum" />
             </div>
         </template>
-    </Dialog>
+    </CustomDialog>
 
-    <!-- Section Management Section -->
-    <div v-if="showSectionManagement" class="card p-6 shadow-lg rounded-lg bg-white mt-6">
-        <h2 class="text-2xl font-semibold mb-6">Section Management - {{ selectedGrade?.name }}</h2>
-        <div class="flex justify-between items-center mb-4">
-            <Button label="Add Section" icon="pi pi-user-plus" class="p-button-success" @click="showSectionDialog = true" />
+    <!-- Grade Level Management Section -->
+    <CustomDialog v-model:visible="showGradeLevelManagement" :header="`Grade Level Management - ${selectedGrade?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true" :baseZIndex="1000">
+        <div class="p-4 space-y-4">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex gap-2">
+                    <Button icon="pi pi-arrow-left" class="p-button-secondary" @click="showGradeLevelManagement = false" tooltip="Back to Curriculum" />
+                    <Button label="Add Grade Level" icon="pi pi-user-plus" class="p-button-success" @click="showSectionDialog = true" />
+                </div>
+            </div>
+            <DataTable :value="sections" class="p-datatable-striped">
+                <Column field="name" header="Grade Level" sortable />
+                <Column header="Action">
+                    <template #body="slotProps">
+                        <div class="flex space-x-2">
+                            <Button icon="pi pi-search" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
+                            <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Grade Level" aria-label="Delete Grade Level" />
+                        </div>
+                    </template>
+                </Column>
+            </DataTable>
+            <div class="flex justify-end mt-4">
+                <Button label="Close" icon="pi pi-times" class="p-button-secondary" @click="showGradeLevelManagement = false" />
+            </div>
         </div>
-        <DataTable :value="sections" class="p-datatable-striped">
-            <Column field="name" header="Name" sortable />
-            <Column field="gradeLevel" header="Grade Level" sortable />
-            <Column field="group" header="Group" sortable />
-            <Column header="Action">
-                <template #body="slotProps">
-                    <div class="flex space-x-2">
-                        <Button icon="pi pi-search" class="p-button-text" @click="openSectionDetails(slotProps.data)" tooltip="View Section Details" aria-label="View Section Details" />
-                        <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Section" aria-label="Delete Section" />
-                    </div>
-                </template>
-            </Column>
-        </DataTable>
-        <div class="border-t border-gray-300 mt-4 pt-4 flex justify-center">
-            <Button label="Close" class="p-button-secondary" @click="showSectionManagement = false" />
-        </div>
-    </div>
+    </CustomDialog>
 
     <!-- Add Section Dialog -->
-    <Dialog v-model:visible="showSectionDialog" header="Add Section" modal class="max-w-md w-full rounded-lg">
+    <CustomDialog v-model:visible="showSectionDialog" header="Add Grade Level" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
-            <label class="block text-gray-700 font-medium">Section Name</label>
-            <InputText v-model="newSection.name" placeholder="Enter Section Name" class="w-full" />
-            <label class="block text-gray-700 font-medium">Group</label>
-            <Dropdown v-model="newSection.group" :options="groups" placeholder="Select Group" class="w-full border border-gray-300 p-2 rounded-lg" />
+            <label class="block text-gray-700 font-medium">Grade Level</label>
+            <InputText v-model="newSection.name" placeholder="Enter Grade Level" class="w-full" />
             <label class="block text-gray-700 font-medium">Year</label>
             <Calendar v-model="newSection.year" :showIcon="true" placeholder="Select Year" />
             <div class="flex justify-end gap-2 mt-4">
@@ -495,10 +493,10 @@ function closeAddSectionDialog() {
                 <Button label="Save" class="p-button-success" @click="addSection()" />
             </div>
         </div>
-    </Dialog>
+    </CustomDialog>
 
-    <!-- Section Details Dialog -->
-    <Dialog v-model:visible="showSectionDetailsDialog" :header="`Section Details - ${selectedSectionDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
+    <!-- Subject Details Dialog -->
+    <CustomDialog v-model:visible="showSubjectDetailsDialog" :header="`Subject Details - ${selectedSubjectDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
         <div class="p-4 space-y-4">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-semibold">Schedule Details</h3>
@@ -506,7 +504,7 @@ function closeAddSectionDialog() {
             </div>
 
             <DataTable
-                :value="sectionDetails.filter((d) => d.section?.name === selectedSectionDetails?.name)"
+                :value="sectionDetails.filter((d) => d.section?.name === selectedSubjectDetails?.name)"
                 class="p-datatable-striped"
                 responsiveLayout="stack"
                 :rows="10"
@@ -522,11 +520,6 @@ function closeAddSectionDialog() {
             >
                 <Column field="id" header="ID" sortable style="min-width: 100px" />
                 <Column field="subjectName" header="Subject" sortable style="min-width: 150px" />
-                <Column field="teacherName" header="Teacher" sortable style="min-width: 150px" />
-                <Column field="startTime" header="Start Time" sortable style="min-width: 120px" />
-                <Column field="endTime" header="End Time" sortable style="min-width: 120px" />
-                <Column field="startYear" header="Start Year" sortable style="min-width: 120px" />
-                <Column field="endYear" header="End Year" sortable style="min-width: 120px" />
                 <Column header="Actions" style="min-width: 100px">
                     <template #body="slotProps">
                         <div class="flex gap-2">
@@ -537,39 +530,14 @@ function closeAddSectionDialog() {
                 </Column>
             </DataTable>
         </div>
-    </Dialog>
+    </CustomDialog>
 
     <!-- Add Schedule Dialog -->
-    <Dialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
+    <CustomDialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
         <div class="p-4 space-y-4">
             <div class="field">
                 <label class="block text-gray-700 font-medium">Subject</label>
-                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label class="block text-gray-700 font-medium">Teacher</label>
-                <Dropdown v-model="newSectionData.teacherName" :options="teachers" placeholder="Select Teacher" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label class="block text-gray-700 font-medium">Start Time</label>
-                <Calendar v-model="newSectionData.startTime" timeOnly placeholder="Select Start Time" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label class="block text-gray-700 font-medium">End Time</label>
-                <Calendar v-model="newSectionData.endTime" timeOnly placeholder="Select End Time" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label class="block text-gray-700 font-medium">Start Year</label>
-                <InputText v-model="newSectionData.startYear" placeholder="Enter Start Year" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label class="block text-gray-700 font-medium">End Year</label>
-                <InputText v-model="newSectionData.endYear" placeholder="Enter End Year" class="w-full" />
+                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" appendTo="body" />
             </div>
 
             <div class="flex justify-end gap-2 mt-4">
@@ -577,7 +545,7 @@ function closeAddSectionDialog() {
                 <Button :label="isEditMode ? 'Update' : 'Save'" class="p-button-success" @click="addNewSection" :disabled="!validateSectionData()" />
             </div>
         </div>
-    </Dialog>
+    </CustomDialog>
 </template>
 
 <style scoped>
@@ -647,6 +615,11 @@ function closeAddSectionDialog() {
 }
 :deep(.p-dialog) {
     border-radius: 12px;
+    z-index: 1000;
+}
+:deep(.p-dialog-mask) {
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(3px);
 }
 :deep(.p-button-success) {
     background-color: #22c55e;
