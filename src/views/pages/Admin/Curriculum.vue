@@ -72,6 +72,7 @@ const newSectionData = ref({
 });
 const sectionDetails = ref([]);
 const subjects = ref([]);
+const gradeSubjects = ref({}); // Store subjects for each grade level
 const teachers = ref(['Mr. Smith', 'Mrs. Johnson', 'Dr. Williams', 'Ms. Brown']);
 const isEditMode = ref(false);
 const editingSectionDetail = ref(null);
@@ -395,8 +396,16 @@ function resetSectionForm() {
 async function openSubjectDetails(section) {
     try {
         loading.value = true;
+        selectedGrade.value = section;
         selectedSubjectDetails.value = section;
-
+        
+        // Initialize subjects array for this grade if not exists
+        if (!gradeSubjects.value[section.name]) {
+            gradeSubjects.value[section.name] = [];
+        }
+        
+        // Load subjects for this grade
+        sectionDetails.value = gradeSubjects.value[section.name];
         showSubjectDetailsDialog.value = true;
     } catch (error) {
         console.error('Error fetching subject details:', error);
@@ -422,19 +431,39 @@ function generateId() {
 
 function addNewSection() {
     if (validateSectionData()) {
+        const gradeName = selectedGrade.value.name;
+        
+        // Initialize grade subjects if not exists
+        if (!gradeSubjects.value[gradeName]) {
+            gradeSubjects.value[gradeName] = [];
+        }
+        
+        const newSection = {
+            id: generateId(),
+            subjectName: newSectionData.value.subjectName,
+            gradeName: gradeName
+        };
+        
         if (isEditMode.value) {
-            const index = sectionDetails.value.findIndex((d) => d.id === editingSectionDetail.value.id);
+            // Update existing subject
+            const index = sectionDetails.value.findIndex(d => d.id === editingSectionDetail.value.id);
             if (index !== -1) {
-                sectionDetails.value[index] = {
-                    ...newSectionData.value
-                };
+                sectionDetails.value[index] = newSection;
+                gradeSubjects.value[gradeName][index] = newSection;
             }
         } else {
-            sectionDetails.value.push({
-                ...newSectionData.value
-            });
+            // Add new subject
+            sectionDetails.value.push(newSection);
+            gradeSubjects.value[gradeName].push(newSection);
         }
+        
         closeAddSectionDialog();
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Subject ${isEditMode.value ? 'updated' : 'added'} successfully`,
+            life: 3000
+        });
     }
 }
 
@@ -443,9 +472,19 @@ function validateSectionData() {
 }
 
 function deleteSectionDetail(detail) {
-    const index = sectionDetails.value.findIndex((d) => d.id === detail.id);
+    const gradeName = selectedGrade.value.name;
+    const index = sectionDetails.value.findIndex(d => d.id === detail.id);
     if (index !== -1) {
+        // Remove from both arrays
         sectionDetails.value.splice(index, 1);
+        gradeSubjects.value[gradeName].splice(index, 1);
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Subject removed successfully',
+            life: 3000
+        });
     }
 }
 
@@ -570,7 +609,7 @@ function closeAddSectionDialog() {
                 <Column header="Action">
                     <template #body="slotProps">
                         <div class="flex space-x-2">
-                            <Button icon="pi pi-search" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
+                            <Button icon="pi pi-folder-plus" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
                             <Button icon="pi pi-eye" class="p-button-text" />
                             <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Grade Level" aria-label="Delete Grade Level" />
                         </div>
