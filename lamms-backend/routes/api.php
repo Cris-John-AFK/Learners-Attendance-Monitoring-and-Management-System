@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\SubjectController;
+use App\Http\Controllers\API\SectionController;
 use Illuminate\Support\Facades\Route;
 
 // Student routes
@@ -21,6 +22,13 @@ Route::patch('subjects/{subject}/toggle-status', [SubjectController::class, 'tog
 Route::apiResource('grades', GradeController::class);
 Route::get('grades/active', [GradeController::class, 'getActiveGrades']);
 Route::patch('grades/{id}/toggle-status', [GradeController::class, 'toggleStatus']);
+
+// Section routes
+Route::apiResource('sections', SectionController::class);
+Route::get('sections/grade/{gradeId}', [SectionController::class, 'byGrade']);
+Route::get('sections/active', [SectionController::class, 'getActiveSections']);
+Route::patch('sections/{section}/toggle-status', [SectionController::class, 'toggleStatus']);
+Route::post('sections/{id}/restore', [SectionController::class, 'restore']);
 
 // Test route
 Route::get('/test', function() {
