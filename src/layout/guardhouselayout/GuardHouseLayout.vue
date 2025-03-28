@@ -142,83 +142,88 @@ const processStudentScan = (studentId) => {
     console.log('Found student:', student);
 
     if (student) {
-        // Check if already scanned today
+        // Get today's records for this student
         const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === student.id.toString() && record.date === new Date().toLocaleDateString());
 
-        const hasCheckedIn = todaysRecords.some((record) => record.recordType === 'check-in');
-        const hasCheckedOut = todaysRecords.some((record) => record.recordType === 'check-out');
+        console.log("Today's records for this student:", todaysRecords);
 
-        // Determine record type and status
-        let recordType = 'check-in';
-        let status = 'on-time';
-        let message = '';
+        // Determine record type based on the pattern of previous records
+        let recordType;
 
-        const currentHour = new Date().getHours();
-
-        if (hasCheckedIn && !hasCheckedOut) {
-            // Student is checking out
-            recordType = 'check-out';
-            status = 'on-time'; // Always on-time for check-out
-            message = 'Check-out successful';
-        } else if (hasCheckedIn && hasCheckedOut) {
-            // Already checked in and out today
-            recordType = 'duplicate';
-            status = 'unauthorized';
-            message = 'Already checked in and out today';
-        } else {
-            // First check-in of the day
+        if (todaysRecords.length === 0) {
+            // First scan of the day - always a check-in
             recordType = 'check-in';
+        } else {
+            // Get the most recent record for this student
+            const latestRecord = [...todaysRecords].sort((a, b) => {
+                // Convert timestamps to Date objects for proper comparison
+                const timeA = new Date(`1/1/2023 ${a.timestamp}`);
+                const timeB = new Date(`1/1/2023 ${b.timestamp}`);
+                return timeB - timeA; // Sort in descending order (newest first)
+            })[0];
 
-            // Determine if late (after 8 AM)
-            if (currentHour >= 8) {
-                status = 'late';
-                message = 'Late arrival';
-            } else {
-                status = 'on-time';
-                message = 'Check-in successful';
-            }
+            console.log('Latest record:', latestRecord);
+
+            // If the latest record is a check-in, this should be a check-out
+            // If the latest record is a check-out, this should be a check-in
+            recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
         }
 
-        // Create record
+        console.log('Determined record type:', recordType);
+
+        // Determine status (simplified logic - in real app would check against schedule)
+        let status = 'on-time';
+        const currentHour = new Date().getHours();
+
+        // Only check for late status on check-ins
+        if (recordType === 'check-in' && currentHour >= 8) {
+            status = 'late';
+        }
+
+        // Create record with unique ID
         const record = {
             ...student,
             timestamp: new Date().toLocaleTimeString(),
             date: new Date().toLocaleDateString(),
             status: status,
-            recordType: recordType
+            recordType: recordType,
+            recordId: `${student.id}-${Date.now()}` // Unique ID for each record
         };
 
-        // Only add valid records (not duplicates)
-        if (recordType !== 'duplicate') {
-            // Show feedback
-            showScanFeedback(status, message);
+        // Show feedback
+        showScanFeedback(status, recordType);
 
-            // Play sound based on status
-            playStatusSound(status);
+        // Play sound based on status
+        playStatusSound(status);
 
-            // Add to records and show details
-            attendanceRecords.value.unshift(record); // Add to beginning
-            selectedStudent.value = record;
+        // Add to records and show details
+        attendanceRecords.value.unshift(record); // Add to beginning
+        selectedStudent.value = record;
 
-            console.log('Student record created:', record);
-        } else {
-            // Show unauthorized feedback for duplicates
-            showScanFeedback('unauthorized', message);
-            playStatusSound('unauthorized');
-        }
+        console.log('Student record created:', record);
     } else {
         // Invalid QR code
         console.log('Invalid student ID:', studentId);
-        showScanFeedback('unauthorized', 'Invalid student ID');
+        showScanFeedback('unauthorized', null, 'Invalid student ID');
         playStatusSound('unauthorized');
     }
 };
 
-const showScanFeedback = (status, message = '') => {
+const showScanFeedback = (status, recordType, message = '') => {
+    // Default messages based on record type and status
+    let defaultMessage = '';
+    if (recordType === 'check-in') {
+        defaultMessage = status === 'on-time' ? 'Check-in successful' : status === 'late' ? 'Late check-in recorded' : 'Unauthorized check-in attempt';
+    } else if (recordType === 'check-out') {
+        defaultMessage = 'Check-out successful';
+    } else {
+        defaultMessage = 'Unauthorized scan';
+    }
+
     scanFeedback.value = {
         show: true,
         type: status,
-        message: message || (status === 'on-time' ? 'Valid check-in' : status === 'late' ? 'Late arrival' : 'Unauthorized attempt')
+        message: message || defaultMessage
     };
 
     // Hide feedback after 3 seconds
@@ -537,12 +542,12 @@ const filteredRecords = computed(() => {
 }
 
 .school-logo {
-    height: 40px;
+    height: 55px;
     width: auto;
 }
 
 .header-left h1 {
-    font-size: 1.25rem;
+    font-size: 1.8rem;
     font-weight: 600;
     color: #1e293b;
     margin: 0;
@@ -559,12 +564,12 @@ const filteredRecords = computed(() => {
 }
 
 .date {
-    font-size: 0.875rem;
+    font-size: 1.2rem;
     color: #64748b;
 }
 
 .time {
-    font-size: 1.25rem;
+    font-size: 1.8rem;
     font-weight: 600;
     color: #1e293b;
 }
@@ -580,7 +585,7 @@ const filteredRecords = computed(() => {
     gap: 0.75rem;
 
     i {
-        font-size: 1.5rem;
+        font-size: 2rem;
         color: #64748b;
         background: #f1f5f9;
         width: 40px;
@@ -598,12 +603,13 @@ const filteredRecords = computed(() => {
 }
 
 .guard-name {
+    font-size: 1.2rem;
     font-weight: 600;
     color: #1e293b;
 }
 
 .guard-id {
-    font-size: 0.75rem;
+    font-size: 1.2rem;
     color: #64748b;
 }
 
