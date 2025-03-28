@@ -14,8 +14,8 @@
                     <li>
                         <i class="pi pi-envelope"></i>
                         <div>
-                            <h3>Check Your Email</h3>
-                            <p>We've sent a confirmation email with your registration details.</p>
+                            <h3>Check Your Messages</h3>
+                            <p>We've sent a confirmation text to contact details you've provided.</p>
                         </div>
                     </li>
                     <li>

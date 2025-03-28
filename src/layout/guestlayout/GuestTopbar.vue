@@ -3,8 +3,6 @@ import Button from 'primevue/button';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
-
-
 </script>
 
 <template>
@@ -12,7 +10,7 @@ const router = useRouter();
         <div class="layout-topbar">
             <div class="layout-topbar-logo-container">
                 <router-link to="/guest" class="layout-topbar-logo">
-                    <img src="/demo/images/logo.svg" alt="Logo" />
+                    <img src="/demo/images/logo.png" alt="Logo" />
                     <span>NCS- for Guardians</span>
                 </router-link>
             </div>
@@ -81,7 +79,7 @@ const router = useRouter();
 }
 
 .back-button {
-    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
     border: none;
     padding: 0.75rem 1.5rem;
     color: white;
@@ -143,7 +141,7 @@ const router = useRouter();
 }
 
 .search-button {
-    background: #10B981;
+    background: #10b981;
     color: white;
     border: none;
     padding: 0.75rem 1.5rem;
@@ -189,4 +187,4 @@ const router = useRouter();
 }
 </style>
 
-        display: none;
+display: none;

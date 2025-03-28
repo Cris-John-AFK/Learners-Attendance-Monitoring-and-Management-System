@@ -70,7 +70,7 @@ const logout = () => {
                     <i class="pi pi-bars"></i>
                 </button>
                 <router-link to="/teacher" class="layout-topbar-logo">
-                    <img src="/demo/images/logo.svg" alt="Logo" />
+                    <img src="/demo/images/logo.png" alt="Logo" />
                     <span>NCS- for Teachers</span>
                 </router-link>
             </div>

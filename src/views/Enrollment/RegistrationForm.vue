@@ -235,13 +235,54 @@ watch(
         }
     }
 );
+
+// Create array of floating letters and numbers
+const floatingItems = reactive([
+    // Foreground (larger, more opaque)
+    { content: 'A', top: 15, left: 10, size: 90, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' },
+    { content: '7', top: 25, left: 85, size: 100, color: 'rgba(255,255,255,0.65)', duration: 30, delay: 1, zIndex: -1, direction: 'diagonal-1' },
+    { content: 'B', top: 60, left: 5, size: 95, color: 'rgba(255,255,255,0.68)', duration: 28, delay: 3, zIndex: -1, direction: 'diagonal-2' },
+
+    // Middleground (medium size and opacity)
+    { content: '3', top: 75, left: 80, size: 75, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' },
+    { content: 'C', top: 10, left: 60, size: 70, color: 'rgba(255,255,255,0.65)', duration: 30, delay: 1, zIndex: -1, direction: 'diagonal-1' },
+    { content: '9', top: 40, left: 90, size: 80, color: 'rgba(255,255,255,0.68)', duration: 28, delay: 3, zIndex: -1, direction: 'diagonal-2' },
+
+    // Background (smaller, more visible)
+    { content: 'D', top: 85, left: 30, size: 55, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' },
+    { content: '1', top: 30, left: 15, size: 50, color: 'rgba(255,255,255,0.65)', duration: 30, delay: 1, zIndex: -1, direction: 'diagonal-1' },
+    { content: 'E', top: 50, left: 75, size: 48, color: 'rgba(255,255,255,0.52)', duration: 31, delay: 2, zIndex: -3, direction: 'horizontal' },
+    { content: '5', top: 70, left: 45, size: 52, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' }
+]);
 </script>
 <template>
     <div class="registration-container">
+        <!-- Gradient background -->
+        <div class="gradient-background">
+            <div class="animated-gradient"></div>
+        </div>
+
+        <!-- Floating letters and numbers -->
+        <div
+            v-for="(item, index) in floatingItems"
+            :key="index"
+            class="floating-element"
+            :class="['bounce-' + item.direction, 'delay-' + Math.floor(item.delay)]"
+            :style="{
+                top: item.top + '%',
+                left: item.left + '%',
+                fontSize: item.size + 'px',
+                color: item.color,
+                zIndex: item.zIndex
+            }"
+        >
+            {{ item.content }}
+        </div>
+
         <div class="registration-card">
             <div class="form-header">
                 <div class="header-logo">
-                    <img src="/demo/images/logo.svg" alt="School Logo" />
+                    <img src="/demo/images/logo.png" alt="School Logo" />
                 </div>
                 <div class="header-text">
                     <h1>BASIC EDUCATION ENROLLMENT FORM</h1>
@@ -832,17 +873,182 @@ watch(
 .registration-container {
     display: flex;
     justify-content: center;
-    padding: 2rem;
-    background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+    align-items: center;
     min-height: 100vh;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Gradient background */
+.gradient-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.animated-gradient {
+    position: absolute;
+    top: -50px;
+    left: -50px;
+    right: -50px;
+    bottom: -50px;
+    background: linear-gradient(-45deg, rgba(238, 119, 82, 0.7), /* #ee7752 */ rgba(231, 60, 126, 0.7), /* #e73c7e */ rgba(35, 166, 213, 0.7), /* #23a6d5 */ rgba(35, 213, 171, 0.7) /* #23d5ab */);
+    background-size: 400% 400%;
+    animation: gradient-animation 15s ease infinite;
+    filter: blur(20px);
+}
+
+@keyframes gradient-animation {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Floating elements */
+.floating-element {
+    position: absolute;
+    font-weight: bold;
+    opacity: 1;
+    font-family: 'Arial Rounded MT Bold', 'Helvetica Rounded', Arial, sans-serif;
+    pointer-events: none; /* Ensure they don't interfere with clicks */
+}
+
+/* Different animations for different directions */
+.bounce-horizontal {
+    animation: bounce-horizontal 25s linear infinite;
+}
+
+.bounce-diagonal-1 {
+    animation: bounce-diagonal-1 25s linear infinite;
+}
+
+.bounce-diagonal-2 {
+    animation: bounce-diagonal-2 25s linear infinite;
+}
+
+/* Animation delays */
+.delay-0 {
+    animation-delay: 0s;
+}
+.delay-1 {
+    animation-delay: 1s;
+}
+.delay-2 {
+    animation-delay: 2s;
+}
+.delay-3 {
+    animation-delay: 3s;
+}
+.delay-4 {
+    animation-delay: 4s;
+}
+
+/* Horizontal bouncing (left to right) */
+@keyframes bounce-horizontal {
+    0%,
+    100% {
+        transform: translateX(0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    25% {
+        transform: translateX(calc(70vw - 100%)) rotate(5deg);
+        animation-timing-function: ease-in-out;
+    }
+    50% {
+        transform: translateX(0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    75% {
+        transform: translateX(calc(-70vw + 100%)) rotate(-5deg);
+        animation-timing-function: ease-in-out;
+    }
+}
+
+/* Diagonal bouncing (top-left to bottom-right) */
+@keyframes bounce-diagonal-1 {
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    25% {
+        transform: translate(calc(70vw - 100%), calc(40vh - 100%)) rotate(5deg);
+        animation-timing-function: ease-in-out;
+    }
+    50% {
+        transform: translate(0, 0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    75% {
+        transform: translate(calc(-70vw + 100%), calc(-40vh + 100%)) rotate(-5deg);
+        animation-timing-function: ease-in-out;
+    }
+}
+
+/* Diagonal bouncing (top-right to bottom-left) */
+@keyframes bounce-diagonal-2 {
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    25% {
+        transform: translate(calc(-70vw + 100%), calc(40vh - 100%)) rotate(-5deg);
+        animation-timing-function: ease-in-out;
+    }
+    50% {
+        transform: translate(0, 0) rotate(0deg);
+        animation-timing-function: ease-in-out;
+    }
+    75% {
+        transform: translate(calc(70vw - 100%), calc(-40vh + 100%)) rotate(5deg);
+        animation-timing-function: ease-in-out;
+    }
+}
+
+/* Add blur effect based on z-index for depth perception */
+.floating-element[style*='z-index: -1'] {
+    text-shadow:
+        0 0 20px rgba(255, 255, 255, 0.7),
+        0 0 40px rgba(255, 255, 255, 0.5),
+        0 0 60px rgba(255, 255, 255, 0.3);
+    filter: blur(0px);
+}
+
+.floating-element[style*='z-index: -2'] {
+    text-shadow:
+        0 0 15px rgba(255, 255, 255, 0.6),
+        0 0 30px rgba(255, 255, 255, 0.4);
+    filter: blur(0.5px);
+}
+
+.floating-element[style*='z-index: -3'] {
+    text-shadow:
+        0 0 10px rgba(255, 255, 255, 0.5),
+        0 0 20px rgba(255, 255, 255, 0.3);
+    filter: blur(1px);
 }
 
 .registration-card {
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 800px;
+    max-width: 900px;
+    position: relative;
+    z-index: 1;
+    border: none;
     overflow: hidden;
 }
 
@@ -850,8 +1056,11 @@ watch(
     display: flex;
     align-items: center;
     padding: 1.5rem 2rem;
-    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    background: linear-gradient(90deg, #1e3a8a, #3b82f6);
     color: white;
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
 }
 
 .header-logo {
@@ -869,17 +1078,19 @@ watch(
     font-weight: 700;
     letter-spacing: 0.5px;
     color: white;
+    text-transform: uppercase;
 }
 
 .form-subtitle {
     margin: 0.25rem 0 0;
     font-size: 0.875rem;
     opacity: 0.9;
+    text-transform: uppercase;
 }
 
 .form-instructions {
     background-color: #f8fafc;
-    padding: 1rem 2rem;
+    padding: 1.5rem 2rem;
     border-bottom: 1px solid #e2e8f0;
 }
 

@@ -4,6 +4,7 @@
     <div class="layout-topbar">
         <div class="layout-topbar-logo-container">
             <router-link to="/enrollment" class="layout-topbar-logo">
+<<<<<<< HEAD
                 <img src="/demo/images/logo.svg" alt="Logo" />
                 <span>NAAWAN CENTRAL SCHOOL</span>
             </router-link>
@@ -19,6 +20,13 @@
             </div>
             <button class="account-btn"><i class="pi pi-user"></i> MY ACCOUNT</button>
         </div>
+=======
+                <img src="/demo/images/logo.png" alt="Logo" />
+
+                <span>NCS</span>
+            </router-link>
+        </div>
+>>>>>>> e67c080b151cc554617d62bfbf42ad9eeb0f8425
     </div>
 </template>
 
