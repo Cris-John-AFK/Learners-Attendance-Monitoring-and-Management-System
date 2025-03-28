@@ -238,6 +238,11 @@ watch(
 </script>
 <template>
     <div class="registration-container">
+        <!-- Add gradient background -->
+        <div class="gradient-background">
+            <div class="animated-gradient"></div>
+        </div>
+
         <div class="registration-card">
             <div class="form-header">
                 <div class="header-logo">
@@ -832,17 +837,115 @@ watch(
 .registration-container {
     display: flex;
     justify-content: center;
-    padding: 2rem;
-    background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+    align-items: center;
     min-height: 100vh;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Gradient background */
+.gradient-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.animated-gradient {
+    position: absolute;
+    top: -50px;
+    left: -50px;
+    right: -50px;
+    bottom: -50px;
+    background: linear-gradient(-45deg, rgba(238, 119, 82, 0.7), /* #ee7752 */ rgba(231, 60, 126, 0.7), /* #e73c7e */ rgba(35, 166, 213, 0.7), /* #23a6d5 */ rgba(35, 213, 171, 0.7) /* #23d5ab */);
+    background-size: 400% 400%;
+    animation: gradient-animation 15s ease infinite;
+    filter: blur(20px);
+}
+
+@keyframes gradient-animation {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Floating particles */
+.registration-container::before,
+.registration-container::after {
+    content: '';
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: -1;
+}
+
+.registration-container::before {
+    top: -150px;
+    left: -150px;
+    animation: float-1 20s infinite linear;
+}
+
+.registration-container::after {
+    bottom: -150px;
+    right: -150px;
+    animation: float-2 15s infinite linear;
+}
+
+@keyframes float-1 {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+    25% {
+        transform: translate(100px, 100px) scale(1.2);
+    }
+    50% {
+        transform: translate(200px, 50px) scale(0.8);
+    }
+    75% {
+        transform: translate(100px, 200px) scale(1.1);
+    }
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+}
+
+@keyframes float-2 {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(-100px, -50px) scale(1.3);
+    }
+    66% {
+        transform: translate(-50px, -150px) scale(0.9);
+    }
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
 }
 
 .registration-card {
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 800px;
+    max-width: 900px;
+    position: relative;
+    z-index: 1;
+    border: none;
     overflow: hidden;
 }
 
@@ -850,8 +953,11 @@ watch(
     display: flex;
     align-items: center;
     padding: 1.5rem 2rem;
-    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    background: linear-gradient(90deg, #1e3a8a, #3b82f6);
     color: white;
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
 }
 
 .header-logo {
@@ -869,17 +975,19 @@ watch(
     font-weight: 700;
     letter-spacing: 0.5px;
     color: white;
+    text-transform: uppercase;
 }
 
 .form-subtitle {
     margin: 0.25rem 0 0;
     font-size: 0.875rem;
     opacity: 0.9;
+    text-transform: uppercase;
 }
 
 .form-instructions {
     background-color: #f8fafc;
-    padding: 1rem 2rem;
+    padding: 1.5rem 2rem;
     border-bottom: 1px solid #e2e8f0;
 }
 
