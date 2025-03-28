@@ -12,8 +12,10 @@ Route::get('students/grade/{gradeLevel}/section/{section}', [StudentController::
 
 // Subject routes
 Route::apiResource('subjects', SubjectController::class);
-Route::get('subjects/grade/{grade}', [SubjectController::class, 'byGrade']);
+Route::get('subjects/grade/{gradeId}', [SubjectController::class, 'byGrade']);
 Route::get('subjects/unique', [SubjectController::class, 'uniqueSubjects']);
+Route::get('subjects/available-grades', [SubjectController::class, 'availableGrades']);
+Route::patch('subjects/{subject}/toggle-status', [SubjectController::class, 'toggleStatus']);
 
 // Grade routes
 Route::apiResource('grades', GradeController::class);

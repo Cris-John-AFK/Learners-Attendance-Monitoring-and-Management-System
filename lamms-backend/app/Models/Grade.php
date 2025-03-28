@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Grade extends Model
 {
@@ -21,6 +22,15 @@ class Grade extends Model
         'is_active' => 'boolean',
         'display_order' => 'integer'
     ];
+
+    /**
+     * Get the subjects for this grade.
+     */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class)
+                    ->withTimestamps();
+    }
 
     // Relationship methods will be implemented when related models are created
 }

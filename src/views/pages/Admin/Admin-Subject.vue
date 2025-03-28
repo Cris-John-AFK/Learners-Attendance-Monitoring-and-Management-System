@@ -1,7 +1,7 @@
 <!-- eslint-disable prettier/prettier -->
 <!-- eslint-disable prettier/prettier -->
 <script setup>
-import { GradeService } from '@/router/service/Grades';
+import { GradesService } from '@/router/service/GradesService';
 import { SubjectService } from '@/router/service/Subjects';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
@@ -96,16 +96,21 @@ const cardStyles = computed(() => {
 
 const loadGrades = async () => {
     try {
-        const gradesData = await GradeService.getGrades();
-        // Add "All Grades" option at the beginning of the array
-        grades.value = [
-            { label: 'All Grades', value: null },
-            ...gradesData.map((g) => ({
-                label: g.name,
-                value: g.name  // Use the name as the value for consistency
-            }))
-        ];
+        const gradesData = await GradesService.getGrades();
+        console.log('Fetched grades from API:', gradesData);
+
+        // Map the grades data to include all necessary properties
+        grades.value = gradesData.map(grade => ({
+            id: grade.id,
+            name: grade.name,
+            code: grade.code,
+            label: grade.name, // Use name as label for display
+            value: grade.id // Use id as value for selection
+        }));
+
+        console.log('Processed grades for dropdown:', grades.value);
     } catch (error) {
+        console.error('Error loading grades:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -160,16 +165,12 @@ const saveSubject = async () => {
         }
 
         // Format the grade value properly
-        // If grade is an object with a name property, use that as the grade value
         let formattedSubject = { ...subject.value };
 
         if (typeof formattedSubject.grade === 'object' && formattedSubject.grade !== null) {
             console.log('Grade is an object:', formattedSubject.grade);
-            if (formattedSubject.grade.name) {
-                formattedSubject.grade = formattedSubject.grade.name;
-            } else if (formattedSubject.grade.label) {
-                formattedSubject.grade = formattedSubject.grade.label;
-            }
+            formattedSubject.grade = formattedSubject.grade.name;
+            formattedSubject.grade_id = formattedSubject.grade.id;
         }
 
         console.log('Saving subject with data:', formattedSubject);
@@ -388,6 +389,20 @@ watch(subjectDialog, (newValue) => {
         });
     }
 });
+
+// Add a watcher to refresh grades when dialog closes
+watch(subjectDialog, async (newValue, oldValue) => {
+    if (!newValue && oldValue) {
+        // Dialog is closing, refresh grades
+        await loadGrades();
+    }
+});
+
+// Ensure grades are loaded when component mounts
+onMounted(async () => {
+    await loadGrades();
+    await loadSubjects();
+});
 </script>
 
 <template>
@@ -514,7 +529,7 @@ watch(subjectDialog, (newValue) => {
                                         id="grade"
                                         v-model="subject.grade"
                                         :options="grades"
-                                        optionLabel="label"
+                                        optionLabel="name"
                                         placeholder="Select a grade"
                                         :class="{ 'p-invalid': submitted && !subject.grade }"
                                         appendTo="body"
@@ -576,7 +591,7 @@ watch(subjectDialog, (newValue) => {
                             id="grade"
                             v-model="subject.grade"
                             :options="grades"
-                            optionLabel="label"
+                            optionLabel="name"
                             placeholder="Select a grade"
                             :class="{ 'p-invalid': submitted && !subject.grade }"
                             appendTo="body"

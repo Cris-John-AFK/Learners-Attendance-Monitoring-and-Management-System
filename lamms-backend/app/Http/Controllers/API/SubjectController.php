@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Subject;
+use App\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
@@ -13,25 +14,20 @@ use Illuminate\Support\Facades\Schema;
 class SubjectController extends Controller
 {
     /**
-     * Get all subjects
+     * Get all subjects with their grades
      */
     public function index()
     {
         try {
-            // Test database connection
             DB::connection()->getPdo();
             Log::info('Database connection successful');
 
-            // Check if the subjects table exists
             if (!Schema::hasTable('subjects')) {
                 Log::error('Subjects table does not exist');
                 return response()->json(['error' => 'Subjects table does not exist'], 500);
             }
 
-            // Try to get subjects
-            $subjects = Subject::all();
-
-            // Log the number of subjects found
+            $subjects = Subject::with('grades')->get();
             Log::info('Found ' . $subjects->count() . ' subjects');
 
             return response()->json($subjects);
@@ -46,56 +42,88 @@ class SubjectController extends Controller
     }
 
     /**
-     * Create a new subject
+     * Create a new subject with grade assignments
      */
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'grade' => 'required|string|max:255',
+            'name' => 'required|string|max:255|unique:subjects',
             'description' => 'nullable|string',
-            'credits' => 'nullable|integer|min:1|max:10'
+            'credits' => 'nullable|integer|min:1|max:10',
+            'grade_ids' => 'required|array',
+            'grade_ids.*' => 'exists:grades,id',
+            'is_active' => 'boolean'
         ]);
 
-        // Generate ID if not provided (similar to the frontend logic)
-        if (!$request->id) {
-            $prefix = Str::upper(Str::substr($request->name, 0, 4));
-            $gradeNum = preg_replace('/\D/', '', $request->grade);
-            $id = $prefix . ($gradeNum ?: '');
+        try {
+            DB::beginTransaction();
 
-            // If there's a duplicate ID, append a random character
-            if (Subject::find($id)) {
-                $id .= chr(rand(65, 90)); // Random uppercase letter A-Z
+            // Generate ID if not provided
+            if (!$request->id) {
+                $prefix = Str::upper(Str::substr($request->name, 0, 4));
+                $id = $prefix;
+
+                // If there's a duplicate ID, append a random character
+                while (Subject::find($id)) {
+                    $id = $prefix . chr(rand(65, 90)); // Random uppercase letter A-Z
+                }
+
+                $request->merge(['id' => $id]);
             }
 
-            $request->merge(['id' => $id]);
-        }
+            // Create the subject
+            $subject = Subject::create($request->except('grade_ids'));
 
-        return Subject::create($request->all());
+            // Attach grades
+            $subject->grades()->attach($request->grade_ids);
+
+            DB::commit();
+
+            // Return the subject with its grades
+            return Subject::with('grades')->find($subject->id);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error creating subject: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
-     * Get a specific subject
+     * Get a specific subject with its grades
      */
     public function show(Subject $subject)
     {
-        return $subject;
+        return $subject->load('grades');
     }
 
     /**
-     * Update a subject
+     * Update a subject and its grade assignments
      */
     public function update(Request $request, Subject $subject)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'grade' => 'required|string|max:255',
+            'name' => 'required|string|max:255|unique:subjects,name,' . $subject->id,
             'description' => 'nullable|string',
-            'credits' => 'nullable|integer|min:1|max:10'
+            'credits' => 'nullable|integer|min:1|max:10',
+            'grade_ids' => 'required|array',
+            'grade_ids.*' => 'exists:grades,id',
+            'is_active' => 'boolean'
         ]);
 
-        $subject->update($request->all());
-        return $subject;
+        try {
+            DB::beginTransaction();
+
+            $subject->update($request->except('grade_ids'));
+            $subject->grades()->sync($request->grade_ids);
+
+            DB::commit();
+
+            return $subject->load('grades');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating subject: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -103,16 +131,28 @@ class SubjectController extends Controller
      */
     public function destroy(Subject $subject)
     {
-        $subject->delete();
-        return response()->json(['message' => 'Subject deleted successfully']);
+        try {
+            DB::beginTransaction();
+
+            // The grade relationships will be automatically deleted due to cascade
+            $subject->delete();
+
+            DB::commit();
+            return response()->json(['message' => 'Subject deleted successfully']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error deleting subject: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
      * Get subjects by grade
      */
-    public function byGrade($grade)
+    public function byGrade($gradeId)
     {
-        return Subject::where('grade', $grade)->get();
+        $grade = Grade::findOrFail($gradeId);
+        return $grade->subjects;
     }
 
     /**
@@ -120,20 +160,37 @@ class SubjectController extends Controller
      */
     public function uniqueSubjects()
     {
-        // Get all subjects ordered by name
-        $subjects = Subject::orderBy('name')->get();
+        return Subject::select('name')
+            ->distinct()
+            ->orderBy('name')
+            ->get()
+            ->map(function ($subject) {
+                return [
+                    'name' => $subject->name,
+                    'subjects' => Subject::where('name', $subject->name)
+                        ->with('grades')
+                        ->get()
+                ];
+            });
+    }
 
-        // Filter to get only unique names
-        $uniqueSubjects = [];
-        $subjectNames = [];
+    /**
+     * Get all available grades for subject assignment
+     */
+    public function availableGrades()
+    {
+        return Grade::where('is_active', true)
+            ->orderBy('display_order')
+            ->get();
+    }
 
-        foreach ($subjects as $subject) {
-            if (!in_array($subject->name, $subjectNames)) {
-                $subjectNames[] = $subject->name;
-                $uniqueSubjects[] = $subject;
-            }
-        }
-
-        return $uniqueSubjects;
+    /**
+     * Toggle subject active status
+     */
+    public function toggleStatus(Subject $subject)
+    {
+        $subject->is_active = !$subject->is_active;
+        $subject->save();
+        return $subject->load('grades');
     }
 }

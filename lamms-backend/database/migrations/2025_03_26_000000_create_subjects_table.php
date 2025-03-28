@@ -11,13 +11,13 @@ return new class extends Migration
         Schema::create('subjects', function (Blueprint $table) {
             $table->string('id')->primary();
             $table->string('name');
-            $table->string('grade');
             $table->text('description')->nullable();
             $table->integer('credits')->default(3);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            // Add a unique constraint to ensure no duplicates of name+grade
-            $table->unique(['name', 'grade']);
+            // Add a unique constraint on name to prevent duplicates
+            $table->unique('name');
         });
     }
 
