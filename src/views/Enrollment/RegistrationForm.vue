@@ -1,201 +1,6 @@
-<template>
-    <div class="registration-container">
-        <div class="registration-card">
-            <div class="form-header">
-                <h1>Student Registration</h1>
-                <p>Please fill in the information below to enroll a student</p>
-            </div>
-
-            <div class="form-progress">
-                <div class="progress-step active">
-                    <div class="step-number">1</div>
-                    <div class="step-label">Basic Info</div>
-                </div>
-                <div class="progress-line"></div>
-                <div class="progress-step">
-                    <div class="step-number">2</div>
-                    <div class="step-label">Contact</div>
-                </div>
-                <div class="progress-line"></div>
-                <div class="progress-step">
-                    <div class="step-number">3</div>
-                    <div class="step-label">Review</div>
-                </div>
-            </div>
-
-            <div class="form-body">
-                <div v-if="currentStep === 1" class="form-step">
-                    <h2>Basic Information</h2>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="firstName">First Name</label>
-                            <InputText id="firstName" v-model="student.firstName" :class="{ 'p-invalid': submitted && !student.firstName }" />
-                            <small v-if="submitted && !student.firstName" class="p-error">First name is required.</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="lastName">Last Name</label>
-                            <InputText id="lastName" v-model="student.lastName" :class="{ 'p-invalid': submitted && !student.lastName }" />
-                            <small v-if="submitted && !student.lastName" class="p-error">Last name is required.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="middleName">Middle Name</label>
-                            <InputText id="middleName" v-model="student.middleName" />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="birthdate">Date of Birth</label>
-                            <Calendar id="birthdate" v-model="student.birthdate" :showIcon="true" dateFormat="mm/dd/yy" :class="{ 'p-invalid': submitted && !student.birthdate }" />
-                            <small v-if="submitted && !student.birthdate" class="p-error">Birth date is required.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="gender">Gender</label>
-                            <Dropdown id="gender" v-model="student.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" :class="{ 'p-invalid': submitted && !student.gender }" />
-                            <small v-if="submitted && !student.gender" class="p-error">Gender is required.</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="gradeLevel">Grade Level</label>
-                            <Dropdown id="gradeLevel" v-model="student.gradeLevel" :options="gradeLevelOptions" optionLabel="label" optionValue="value" placeholder="Select Grade Level" :class="{ 'p-invalid': submitted && !student.gradeLevel }" />
-                            <small v-if="submitted && !student.gradeLevel" class="p-error">Grade level is required.</small>
-                        </div>
-                    </div>
-                </div>
-
-                <div v-if="currentStep === 2" class="form-step">
-                    <h2>Contact Information</h2>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="email">Email Address</label>
-                            <InputText id="email" v-model="student.email" type="email" :class="{ 'p-invalid': submitted && !student.email }" />
-                            <small v-if="submitted && !student.email" class="p-error">Email is required.</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="phone">Phone Number</label>
-                            <InputText id="phone" v-model="student.phone" :class="{ 'p-invalid': submitted && !student.phone }" />
-                            <small v-if="submitted && !student.phone" class="p-error">Phone number is required.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-group full-width">
-                        <label for="address">Home Address</label>
-                        <Textarea id="address" v-model="student.address" rows="3" :class="{ 'p-invalid': submitted && !student.address }" />
-                        <small v-if="submitted && !student.address" class="p-error">Address is required.</small>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="city">City</label>
-                            <InputText id="city" v-model="student.city" :class="{ 'p-invalid': submitted && !student.city }" />
-                            <small v-if="submitted && !student.city" class="p-error">City is required.</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="zipCode">Zip Code</label>
-                            <InputText id="zipCode" v-model="student.zipCode" :class="{ 'p-invalid': submitted && !student.zipCode }" />
-                            <small v-if="submitted && !student.zipCode" class="p-error">Zip code is required.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-group full-width">
-                        <label for="guardianName">Parent/Guardian Name</label>
-                        <InputText id="guardianName" v-model="student.guardianName" :class="{ 'p-invalid': submitted && !student.guardianName }" />
-                        <small v-if="submitted && !student.guardianName" class="p-error">Guardian name is required.</small>
-                    </div>
-
-                    <div class="form-group full-width">
-                        <label for="guardianContact">Parent/Guardian Contact Number</label>
-                        <InputText id="guardianContact" v-model="student.guardianContact" :class="{ 'p-invalid': submitted && !student.guardianContact }" />
-                        <small v-if="submitted && !student.guardianContact" class="p-error">Guardian contact is required.</small>
-                    </div>
-                </div>
-
-                <div v-if="currentStep === 3" class="form-step">
-                    <h2>Review Information</h2>
-
-                    <div class="review-section">
-                        <h3>Basic Information</h3>
-                        <div class="review-grid">
-                            <div class="review-item">
-                                <div class="review-label">Full Name:</div>
-                                <div class="review-value">{{ student.firstName }} {{ student.middleName }} {{ student.lastName }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Date of Birth:</div>
-                                <div class="review-value">{{ formatDate(student.birthdate) }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Gender:</div>
-                                <div class="review-value">{{ getGenderLabel(student.gender) }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Grade Level:</div>
-                                <div class="review-value">{{ getGradeLevelLabel(student.gradeLevel) }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="review-section">
-                        <h3>Contact Information</h3>
-                        <div class="review-grid">
-                            <div class="review-item">
-                                <div class="review-label">Email:</div>
-                                <div class="review-value">{{ student.email }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Phone:</div>
-                                <div class="review-value">{{ student.phone }}</div>
-                            </div>
-                            <div class="review-item full-width">
-                                <div class="review-label">Address:</div>
-                                <div class="review-value">{{ student.address }}, {{ student.city }}, {{ student.zipCode }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Guardian:</div>
-                                <div class="review-value">{{ student.guardianName }}</div>
-                            </div>
-                            <div class="review-item">
-                                <div class="review-label">Guardian Contact:</div>
-                                <div class="review-value">{{ student.guardianContact }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="terms-section">
-                        <Checkbox v-model="student.termsAccepted" :binary="true" id="terms" />
-                        <label for="terms" class="ml-2">I confirm that all information provided is accurate and complete.</label>
-                        <small v-if="submitted && !student.termsAccepted" class="p-error block mt-2">You must confirm the information is accurate.</small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-footer">
-                <Button v-if="currentStep > 1" label="Previous" icon="pi pi-arrow-left" class="p-button-outlined" @click="prevStep" />
-                <Button v-if="currentStep < 3" label="Next" icon="pi pi-arrow-right" iconPos="right" @click="nextStep" />
-                <Button v-if="currentStep === 3" label="Submit Registration" icon="pi pi-check" class="p-button-success" @click="submitForm" />
-            </div>
-        </div>
-    </div>
-</template>
-
 <script setup>
-import Button from 'primevue/button';
-import Calendar from 'primevue/calendar';
-import Checkbox from 'primevue/checkbox';
-import Dropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -203,50 +8,97 @@ const toast = useToast();
 const currentStep = ref(1);
 const submitted = ref(false);
 
-const student = ref({
-    firstName: '',
+// Define student data structure
+const student = reactive({
+    // Enrollment Info
+    schoolYearStart: '',
+    schoolYearEnd: '',
+    gradeLevel: '',
+    hasLRN: false,
+    isReturning: false,
+    lrn: '',
+
+    // Learner Info
+    psaBirthCertNo: '',
     lastName: '',
+    firstName: '',
     middleName: '',
+    extensionName: '',
     birthdate: null,
-    gender: null,
-    gradeLevel: null,
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    zipCode: '',
-    guardianName: '',
-    guardianContact: '',
+    birthplace: '',
+    sex: '',
+    age: null,
+    motherTongue: '',
+
+    // Indigenous People
+    isIndigenous: false,
+    indigenousCommunity: '',
+
+    // 4Ps
+    is4PsBeneficiary: false,
+    householdID: '',
+
+    // Disability
+    hasDisability: false,
+    disabilities: [],
+    visualImpairment: false,
+    hearingImpairment: false,
+    learningDisability: false,
+    intellectualDisability: false,
+    blind: false,
+    autismSpectrum: false,
+    emotionalBehavioral: false,
+    orthopedicPhysical: false,
+    lowVision: false,
+    speechLanguage: false,
+    cerebralPalsy: false,
+    specialHealth: false,
+    multipleDisorder: false,
+    cancer: false,
+
+    // Current Address
+    currentAddress: {
+        houseNo: '',
+        street: '',
+        barangay: '',
+        city: '',
+        province: '',
+        country: '',
+        zipCode: ''
+    },
+
+    // Permanent Address
+    sameAddress: false,
+    permanentAddress: {
+        houseNo: '',
+        street: '',
+        barangay: '',
+        city: '',
+        province: '',
+        country: '',
+        zipCode: ''
+    },
+
+    // Parents Info
+    father: {
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        contactNumber: ''
+    },
+    mother: {
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        contactNumber: ''
+    },
+
     termsAccepted: false
 });
 
-const genderOptions = [
-    { label: 'Male', value: 'male' },
-    { label: 'Female', value: 'female' }
-];
-
-const gradeLevelOptions = [
-    { label: 'Kindergarten', value: 'K' },
-    { label: 'Grade 1', value: '1' },
-    { label: 'Grade 2', value: '2' },
-    { label: 'Grade 3', value: '3' },
-    { label: 'Grade 4', value: '4' },
-    { label: 'Grade 5', value: '5' },
-    { label: 'Grade 6', value: '6' }
-];
-
-const getGenderLabel = (value) => {
-    const option = genderOptions.find((opt) => opt.value === value);
-    return option ? option.label : '';
-};
-
-const getGradeLevelLabel = (value) => {
-    const option = gradeLevelOptions.find((opt) => opt.value === value);
-    return option ? option.label : '';
-};
-
+// Format date for display
 const formatDate = (date) => {
-    if (!date) return '';
+    if (!date) return 'N/A';
     return new Date(date).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
@@ -254,129 +106,793 @@ const formatDate = (date) => {
     });
 };
 
-const validateCurrentStep = () => {
-    submitted.value = true;
+// Format address for display
+const formatAddress = (address) => {
+    if (!address) return 'N/A';
+    const parts = [address.houseNo, address.street, address.barangay, address.city, address.province, address.country, address.zipCode].filter((part) => part && part.trim() !== '');
 
-    if (currentStep.value === 1) {
-        return student.value.firstName && student.value.lastName && student.value.birthdate && student.value.gender && student.value.gradeLevel;
-    } else if (currentStep.value === 2) {
-        return student.value.email && student.value.phone && student.value.address && student.value.city && student.value.zipCode && student.value.guardianName && student.value.guardianContact;
-    }
-
-    return true;
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
 };
 
+// Get text representation of selected disabilities
+const getDisabilitiesText = () => {
+    const disabilityMap = {
+        visualImpairment: 'Visual Impairment',
+        hearingImpairment: 'Hearing Impairment',
+        learningDisability: 'Learning Disability',
+        intellectualDisability: 'Intellectual Disability',
+        blind: 'Blind',
+        autismSpectrum: 'Autism Spectrum Disorder',
+        emotionalBehavioral: 'Emotional-Behavioral Disorder',
+        orthopedicPhysical: 'Orthopedic/Physical Handicap',
+        lowVision: 'Low Vision',
+        speechLanguage: 'Speech/Language Disorder',
+        cerebralPalsy: 'Cerebral Palsy',
+        specialHealth: 'Special Health Problem/Chronic Disease',
+        multipleDisorder: 'Multiple Disorder',
+        cancer: 'Cancer'
+    };
+
+    const selectedDisabilities = Object.keys(disabilityMap)
+        .filter((key) => student[key])
+        .map((key) => disabilityMap[key]);
+
+    return selectedDisabilities.length > 0 ? selectedDisabilities.join(', ') : 'None';
+};
+
+// Navigation functions
 const nextStep = () => {
     if (validateCurrentStep()) {
         currentStep.value++;
-        submitted.value = false;
-
-        // Update progress steps
-        const steps = document.querySelectorAll('.progress-step');
-        steps.forEach((step, index) => {
-            if (index < currentStep.value) {
-                step.classList.add('active');
-            } else {
-                step.classList.remove('active');
-            }
+        window.scrollTo(0, 0);
+    } else {
+        submitted.value = true;
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: 'Please fill in all required fields',
+            life: 3000
         });
     }
 };
 
 const prevStep = () => {
-    if (currentStep.value > 1) {
-        currentStep.value--;
-        submitted.value = false;
+    currentStep.value--;
+    window.scrollTo(0, 0);
+};
 
-        // Update progress steps
-        const steps = document.querySelectorAll('.progress-step');
-        steps.forEach((step, index) => {
-            if (index < currentStep.value) {
-                step.classList.add('active');
+// Validation for each step
+const validateCurrentStep = () => {
+    submitted.value = true;
+
+    switch (currentStep.value) {
+        case 1: // Basic Info
+            return !!student.schoolYearStart && !!student.schoolYearEnd && !!student.gradeLevel && (student.hasLRN ? !!student.lrn : true);
+
+        case 2: // Personal Details
+            return !!student.lastName && !!student.firstName && !!student.birthdate && !!student.birthplace && !!student.sex && !!student.age;
+
+        case 3: {
+            // Address
+            const currentAddressValid = !!student.currentAddress.street && !!student.currentAddress.barangay && !!student.currentAddress.city;
+
+            if (student.sameAddress) {
+                return currentAddressValid;
             } else {
-                step.classList.remove('active');
+                return currentAddressValid && !!student.permanentAddress.street && !!student.permanentAddress.barangay && !!student.permanentAddress.city;
             }
+        }
+
+        case 4: // Family Info
+            return true; // Family info is optional
+
+        case 5: // Review
+            return student.termsAccepted;
+
+        default:
+            return true;
+    }
+};
+
+// Submit the form
+const submitForm = () => {
+    if (validateCurrentStep()) {
+        // Here you would typically send the data to your backend
+        toast.add({
+            severity: 'success',
+            summary: 'Form Submitted',
+            detail: 'Your enrollment form has been submitted successfully',
+            life: 3000
+        });
+
+        // Redirect to confirmation page or dashboard
+        setTimeout(() => {
+            router.push('/enrollment/confirmation');
+        }, 2000);
+    } else {
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: 'Please accept the terms to continue',
+            life: 3000
         });
     }
 };
 
-const submitForm = () => {
-    submitted.value = true;
-
-    if (!student.value.termsAccepted) {
-        return;
+// Handle address copy
+const copyCurrentToPermanent = () => {
+    if (student.sameAddress) {
+        student.permanentAddress = { ...student.currentAddress };
     }
-
-    // Here you would typically send the data to your backend
-    console.log('Submitting student data:', student.value);
-
-    // Show success message
-    toast.add({
-        severity: 'success',
-        summary: 'Registration Successful',
-        detail: 'Your registration has been submitted successfully!',
-        life: 5000
-    });
-
-    // Redirect to confirmation page or dashboard
-    setTimeout(() => {
-        router.push('/enrollment/confirmation');
-    }, 2000);
 };
+
+// Watch for changes in sameAddress
+watch(
+    () => student.sameAddress,
+    (newValue) => {
+        if (newValue) {
+            copyCurrentToPermanent();
+        }
+    }
+);
 </script>
+<template>
+    <div class="registration-container">
+        <div class="registration-card">
+            <div class="form-header">
+                <div class="header-logo">
+                    <img src="/demo/images/logo.svg" alt="School Logo" />
+                </div>
+                <div class="header-text">
+                    <h1>BASIC EDUCATION ENROLLMENT FORM</h1>
+                    <p class="form-subtitle">THIS FORM IS NOT FOR SALE</p>
+                </div>
+            </div>
+
+            <div class="form-instructions">
+                <p>
+                    INSTRUCTIONS: Please provide accurate and honest information in all fields. This information will be used to create or update your child's learner profile in the school's information system. If you need assistance, please contact
+                    the school registrar (+639123456789).
+                </p>
+            </div>
+
+            <div class="form-progress">
+                <div class="progress-step" :class="{ active: currentStep >= 1 }">
+                    <div class="step-number">1</div>
+                    <div class="step-label">Basic Info</div>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" :class="{ active: currentStep >= 2 }">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Personal Details</div>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" :class="{ active: currentStep >= 3 }">
+                    <div class="step-number">3</div>
+                    <div class="step-label">Address</div>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" :class="{ active: currentStep >= 4 }">
+                    <div class="step-number">4</div>
+                    <div class="step-label">Family Info</div>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" :class="{ active: currentStep >= 5 }">
+                    <div class="step-number">5</div>
+                    <div class="step-label">Review</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Basic Enrollment Information -->
+            <div v-if="currentStep === 1" class="form-section">
+                <h2 class="section-title">ENROLLMENT INFORMATION</h2>
+
+                <div class="form-group">
+                    <label for="schoolYear">School Year</label>
+                    <div class="school-year-input">
+                        <InputText id="schoolYearStart" v-model="student.schoolYearStart" placeholder="Start" maxlength="4" />
+                        <span class="year-separator">-</span>
+                        <InputText id="schoolYearEnd" v-model="student.schoolYearEnd" placeholder="End" maxlength="4" />
+                    </div>
+                    <small v-if="submitted && !student.schoolYearStart" class="p-error">School year is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="gradeLevel">Grade level to Enroll</label>
+                    <InputText id="gradeLevel" v-model="student.gradeLevel" maxlength="3" />
+                    <small v-if="submitted && !student.gradeLevel" class="p-error">Grade level is required</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>1. With LRN?</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="lrnYes" v-model="student.hasLRN" :value="true" />
+                            <label for="lrnYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="lrnNo" v-model="student.hasLRN" :value="false" />
+                            <label for="lrnNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>2. Returning (Balik-Aral)</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="returningYes" v-model="student.isReturning" :value="true" />
+                            <label for="returningYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="returningNo" v-model="student.isReturning" :value="false" />
+                            <label for="returningNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" v-if="student.hasLRN">
+                    <label for="learnerReferenceNo">Learner Reference No.</label>
+                    <InputText id="learnerReferenceNo" v-model="student.lrn" />
+                    <small v-if="submitted && student.hasLRN && !student.lrn" class="p-error">LRN is required</small>
+                </div>
+
+                <div v-if="student.isReturning" class="returning-learner-section">
+                    <div class="form-group">
+                        <label for="lastGradeLevel">Last Grade Level Completed</label>
+                        <InputText id="lastGradeLevel" v-model="student.lastGradeLevel" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="lastSchoolYear">Last School Year Completed</label>
+                        <InputText id="lastSchoolYear" v-model="student.lastSchoolYear" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="lastSchoolAttended">Last School Attended</label>
+                        <InputText id="lastSchoolAttended" v-model="student.lastSchoolAttended" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="schoolId">School ID</label>
+                        <InputText id="schoolId" v-model="student.schoolId" maxlength="6" />
+                    </div>
+                </div>
+
+                <!-- Fix the disability section in the review step -->
+                <div class="review-section" v-if="student.hasDisability">
+                    <h3>Disability Information</h3>
+                    <div class="review-item full-width">
+                        <div class="review-label">Disabilities:</div>
+                        <div class="review-value">{{ getDisabilitiesText() }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Learner Personal Information -->
+            <div v-if="currentStep === 2" class="form-section">
+                <h2 class="section-title">LEARNER INFORMATION</h2>
+
+                <div class="form-group">
+                    <label for="psaBirthCertNo">PSA Birth Certificate No. (if available)</label>
+                    <InputText id="psaBirthCertNo" v-model="student.psaBirthCertNo" />
+                </div>
+
+                <div class="form-group">
+                    <label for="lastName">Last Name</label>
+                    <InputText id="lastName" v-model="student.lastName" :class="{ 'p-invalid': submitted && !student.lastName }" />
+                    <small v-if="submitted && !student.lastName" class="p-error">Last name is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="firstName">First Name</label>
+                    <InputText id="firstName" v-model="student.firstName" :class="{ 'p-invalid': submitted && !student.firstName }" />
+                    <small v-if="submitted && !student.firstName" class="p-error">First name is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="middleName">Middle Name</label>
+                    <InputText id="middleName" v-model="student.middleName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="extensionName">Extension Name e.g. Jr., III (if applicable)</label>
+                    <InputText id="extensionName" v-model="student.extensionName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="birthdate">Birthdate (mm/dd/yyyy)</label>
+                    <Calendar id="birthdate" v-model="student.birthdate" :showIcon="true" dateFormat="mm/dd/yy" :class="{ 'p-invalid': submitted && !student.birthdate }" />
+                    <small v-if="submitted && !student.birthdate" class="p-error">Birth date is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="birthplace">Place of Birth (Municipality/City)</label>
+                    <InputText id="birthplace" v-model="student.birthplace" />
+                    <small v-if="submitted && !student.birthplace" class="p-error">Place of birth is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Sex</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="male" v-model="student.sex" value="male" />
+                            <label for="male">Male</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="female" v-model="student.sex" value="female" />
+                            <label for="female">Female</label>
+                        </div>
+                    </div>
+                    <small v-if="submitted && !student.sex" class="p-error">Sex is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="age">Age</label>
+                    <InputNumber id="age" v-model="student.age" :min="0" :max="100" />
+                    <small v-if="submitted && !student.age" class="p-error">Age is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="motherTongue">Mother Tongue</label>
+                    <InputText id="motherTongue" v-model="student.motherTongue" />
+                </div>
+
+                <div class="form-group">
+                    <label>Belonging to any Indigenous Peoples (IP) Community/Indigenous Cultural Community</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="ipYes" v-model="student.isIndigenous" :value="true" />
+                            <label for="ipYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="ipNo" v-model="student.isIndigenous" :value="false" />
+                            <label for="ipNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" v-if="student.isIndigenous">
+                    <label>If Yes, please specify:</label>
+                    <InputText v-model="student.indigenousCommunity" />
+                    <small v-if="submitted && student.isIndigenous && !student.indigenousCommunity" class="p-error">Please specify the indigenous community</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Is your family a beneficiary of 4Ps?</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="4psYes" v-model="student.is4PsBeneficiary" :value="true" />
+                            <label for="4psYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="4psNo" v-model="student.is4PsBeneficiary" :value="false" />
+                            <label for="4psNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" v-if="student.is4PsBeneficiary">
+                    <label>If Yes, write the 4Ps Household ID Number below:</label>
+                    <InputText v-model="student.householdID" />
+                    <small v-if="submitted && student.is4PsBeneficiary && !student.householdID" class="p-error">Household ID is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Is the child a Learner with Disability?</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="disabilityYes" v-model="student.hasDisability" :value="true" />
+                            <label for="disabilityYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="disabilityNo" v-model="student.hasDisability" :value="false" />
+                            <label for="disabilityNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="student.hasDisability" class="disability-section">
+                    <label>If Yes, specify the type of disability:</label>
+                    <div class="disability-options">
+                        <div class="disability-option">
+                            <Checkbox id="visualImpairment" v-model="student.disabilities.visualImpairment" :binary="true" />
+                            <label for="visualImpairment">Visual Impairment</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="hearingImpairment" v-model="student.disabilities.hearingImpairment" :binary="true" />
+                            <label for="hearingImpairment">Hearing Impairment</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="learningDisability" v-model="student.disabilities.learningDisability" :binary="true" />
+                            <label for="learningDisability">Learning Disability</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="intellectualDisability" v-model="student.disabilities.intellectualDisability" :binary="true" />
+                            <label for="intellectualDisability">Intellectual Disability</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="blind" v-model="student.disabilities.blind" :binary="true" />
+                            <label for="blind">Blind</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="autismSpectrum" v-model="student.disabilities.autismSpectrum" :binary="true" />
+                            <label for="autismSpectrum">Autism Spectrum Disorder</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="lowVision" v-model="student.disabilities.lowVision" :binary="true" />
+                            <label for="lowVision">Low Vision</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="speechLanguage" v-model="student.disabilities.speechLanguage" :binary="true" />
+                            <label for="speechLanguage">Speech/Language Disorder</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="emotionalBehavioral" v-model="student.disabilities.emotionalBehavioral" :binary="true" />
+                            <label for="emotionalBehavioral">Emotional-Behavioral Disorder</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="cerebralPalsy" v-model="student.disabilities.cerebralPalsy" :binary="true" />
+                            <label for="cerebralPalsy">Cerebral Palsy</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="orthopedic" v-model="student.disabilities.orthopedic" :binary="true" />
+                            <label for="orthopedic">Orthopedic/Physical Handicap</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="specialHealth" v-model="student.disabilities.specialHealth" :binary="true" />
+                            <label for="specialHealth">Special Health Problem/ Chronic Disease</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="multipleDisorder" v-model="student.disabilities.multipleDisorder" :binary="true" />
+                            <label for="multipleDisorder">Multiple Disorder</label>
+                        </div>
+                        <div class="disability-option">
+                            <Checkbox id="cancer" v-model="student.disabilities.cancer" :binary="true" />
+                            <label for="cancer">Cancer</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Address Information -->
+            <div v-if="currentStep === 3" class="form-section">
+                <h2 class="section-title">CURRENT ADDRESS</h2>
+
+                <div class="form-group">
+                    <label for="currentHouseNo">House No.</label>
+                    <InputText id="currentHouseNo" v-model="student.currentAddress.houseNo" />
+                </div>
+
+                <div class="form-group">
+                    <label for="currentStreet">Street/Sitio/Purok</label>
+                    <InputText id="currentStreet" v-model="student.currentAddress.street" />
+                </div>
+
+                <div class="form-group">
+                    <label for="currentBarangay">Barangay</label>
+                    <InputText id="currentBarangay" v-model="student.currentAddress.barangay" :class="{ 'p-invalid': submitted && !student.currentAddress.barangay }" />
+                    <small v-if="submitted && !student.currentAddress.barangay" class="p-error">Barangay is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="currentCity">Municipality/City</label>
+                    <InputText id="currentCity" v-model="student.currentAddress.city" :class="{ 'p-invalid': submitted && !student.currentAddress.city }" />
+                    <small v-if="submitted && !student.currentAddress.city" class="p-error">City is required</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="currentProvince">Province</label>
+                    <InputText id="currentProvince" v-model="student.currentAddress.province" />
+                </div>
+
+                <div class="form-group">
+                    <label for="currentCountry">Country</label>
+                    <InputText id="currentCountry" v-model="student.currentAddress.country" />
+                </div>
+
+                <div class="form-group">
+                    <label for="currentZipCode">Zip Code</label>
+                    <InputText id="currentZipCode" v-model="student.currentAddress.zipCode" />
+                </div>
+
+                <h2 class="section-title">PERMANENT ADDRESS</h2>
+
+                <div class="form-group checkbox-group">
+                    <label>Same with your Current Address?</label>
+                    <div class="checkbox-options">
+                        <div class="checkbox-option">
+                            <RadioButton id="sameAddressYes" v-model="student.sameAddress" :value="true" />
+                            <label for="sameAddressYes">Yes</label>
+                        </div>
+                        <div class="checkbox-option">
+                            <RadioButton id="sameAddressNo" v-model="student.sameAddress" :value="false" />
+                            <label for="sameAddressNo">No</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="!student.sameAddress">
+                    <div class="form-group">
+                        <label for="permanentHouseNo">House No./Street</label>
+                        <InputText id="permanentHouseNo" v-model="student.permanentAddress.houseNo" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentStreet">Street Name</label>
+                        <InputText id="permanentStreet" v-model="student.permanentAddress.street" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentBarangay">Barangay</label>
+                        <InputText id="permanentBarangay" v-model="student.permanentAddress.barangay" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentCity">Municipality/City</label>
+                        <InputText id="permanentCity" v-model="student.permanentAddress.city" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentProvince">Province</label>
+                        <InputText id="permanentProvince" v-model="student.permanentAddress.province" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentCountry">Country</label>
+                        <InputText id="permanentCountry" v-model="student.permanentAddress.country" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="permanentZipCode">Zip Code</label>
+                        <InputText id="permanentZipCode" v-model="student.permanentAddress.zipCode" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Parent/Guardian Information -->
+            <div v-if="currentStep === 4" class="form-section">
+                <h2 class="section-title">PARENT'S/GUARDIAN'S INFORMATION</h2>
+
+                <h3 class="subsection-title">Father's Name</h3>
+                <div class="form-group">
+                    <label for="fatherLastName">Last Name</label>
+                    <InputText id="fatherLastName" v-model="student.father.lastName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="fatherFirstName">First Name</label>
+                    <InputText id="fatherFirstName" v-model="student.father.firstName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="fatherMiddleName">Middle Name</label>
+                    <InputText id="fatherMiddleName" v-model="student.father.middleName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="fatherContact">Contact Number</label>
+                    <InputText id="fatherContact" v-model="student.father.contactNumber" />
+                </div>
+
+                <h3 class="subsection-title">Mother's Maiden Name</h3>
+                <div class="form-group">
+                    <label for="motherLastName">Last Name</label>
+                    <InputText id="motherLastName" v-model="student.mother.lastName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="motherFirstName">First Name</label>
+                    <InputText id="motherFirstName" v-model="student.mother.firstName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="motherMiddleName">Middle Name</label>
+                    <InputText id="motherMiddleName" v-model="student.mother.middleName" />
+                </div>
+
+                <div class="form-group">
+                    <label for="motherContact">Contact Number</label>
+                    <InputText id="motherContact" v-model="student.mother.contactNumber" />
+                </div>
+            </div>
+
+            <!-- Step 5: Review Information -->
+            <div v-if="currentStep === 5" class="form-section">
+                <h2 class="section-title">REVIEW INFORMATION</h2>
+
+                <div class="review-section">
+                    <h3>Enrollment Information</h3>
+                    <div class="review-item">
+                        <div class="review-label">School Year:</div>
+                        <div class="review-value">{{ student.schoolYearStart }} - {{ student.schoolYearEnd }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Grade Level:</div>
+                        <div class="review-value">{{ student.gradeLevel }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">With LRN:</div>
+                        <div class="review-value">{{ student.hasLRN ? 'Yes' : 'No' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Returning (Balik-Aral):</div>
+                        <div class="review-value">{{ student.isReturning ? 'Yes' : 'No' }}</div>
+                    </div>
+                    <div class="review-item" v-if="student.hasLRN">
+                        <div class="review-label">LRN:</div>
+                        <div class="review-value">{{ student.lrn }}</div>
+                    </div>
+                </div>
+
+                <div class="review-section">
+                    <h3>Learner Information</h3>
+                    <div class="review-item">
+                        <div class="review-label">Full Name:</div>
+                        <div class="review-value">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }} {{ student.extensionName }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">PSA Birth Certificate No.:</div>
+                        <div class="review-value">{{ student.psaBirthCertNo || 'N/A' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Birthdate:</div>
+                        <div class="review-value">{{ formatDate(student.birthdate) }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Place of Birth:</div>
+                        <div class="review-value">{{ student.birthplace }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Sex:</div>
+                        <div class="review-value">{{ student.sex === 'male' ? 'Male' : 'Female' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Age:</div>
+                        <div class="review-value">{{ student.age }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Mother Tongue:</div>
+                        <div class="review-value">{{ student.motherTongue || 'N/A' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Indigenous People:</div>
+                        <div class="review-value">{{ student.isIndigenous ? 'Yes - ' + student.indigenousCommunity : 'No' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">4Ps Beneficiary:</div>
+                        <div class="review-value">{{ student.is4PsBeneficiary ? 'Yes - ' + student.householdID : 'No' }}</div>
+                    </div>
+                </div>
+
+                <div class="review-section" v-if="student.hasDisability">
+                    <h3>Disability Information</h3>
+                    <div class="review-item">
+                        <div class="review-label">Disabilities:</div>
+                        <div class="review-value">{{ getDisabilitiesText() }}</div>
+                    </div>
+                </div>
+
+                <div class="review-section">
+                    <h3>Address Information</h3>
+                    <div class="review-item">
+                        <div class="review-label">Current Address:</div>
+                        <div class="review-value">{{ formatAddress(student.currentAddress) }}</div>
+                    </div>
+                    <div class="review-item" v-if="!student.sameAddress">
+                        <div class="review-label">Permanent Address:</div>
+                        <div class="review-value">{{ formatAddress(student.permanentAddress) }}</div>
+                    </div>
+                </div>
+
+                <div class="review-section">
+                    <h3>Parent/Guardian Information</h3>
+                    <div class="review-item">
+                        <div class="review-label">Father's Name:</div>
+                        <div class="review-value">
+                            {{ student.father.lastName ? student.father.lastName + ', ' + student.father.firstName + ' ' + student.father.middleName : 'N/A' }}
+                        </div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Father's Contact:</div>
+                        <div class="review-value">{{ student.father.contactNumber || 'N/A' }}</div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Mother's Name:</div>
+                        <div class="review-value">
+                            {{ student.mother.lastName ? student.mother.lastName + ', ' + student.mother.firstName + ' ' + student.mother.middleName : 'N/A' }}
+                        </div>
+                    </div>
+                    <div class="review-item">
+                        <div class="review-label">Mother's Contact:</div>
+                        <div class="review-value">{{ student.mother.contactNumber || 'N/A' }}</div>
+                    </div>
+                </div>
+
+                <div class="terms-section">
+                    <Checkbox id="termsAccepted" v-model="student.termsAccepted" :binary="true" />
+                    <label for="termsAccepted">
+                        I hereby certify that the above information given are true and correct to the best of my knowledge and I allow the school to use my child's details to create and/or update his/her learner profile in the Learner Information
+                        System.
+                    </label>
+                </div>
+                <small v-if="submitted && !student.termsAccepted" class="p-error">You must accept the terms to continue</small>
+            </div>
+
+            <div class="form-footer">
+                <Button v-if="currentStep > 1" label="Previous" icon="pi pi-arrow-left" class="p-button-outlined" @click="prevStep" />
+                <Button v-if="currentStep < 5" label="Next" icon="pi pi-arrow-right" iconPos="right" @click="nextStep" />
+                <Button v-if="currentStep === 5" label="Submit" icon="pi pi-check" class="p-button-success" @click="submitForm" />
+            </div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .registration-container {
-    min-height: calc(100vh - 4rem);
     display: flex;
     justify-content: center;
-    align-items: center;
     padding: 2rem;
-    background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+    background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+    min-height: 100vh;
 }
 
 .registration-card {
     background: white;
-    border-radius: 16px;
+    border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
     width: 100%;
-    max-width: 900px;
+    max-width: 800px;
     overflow: hidden;
-    animation: card-fade-in 0.6s ease-out;
-}
-
-@keyframes card-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .form-header {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    display: flex;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background: linear-gradient(135deg, #1e40af, #3b82f6);
     color: white;
-    padding: 2rem;
-    text-align: center;
 }
 
-.form-header h1 {
+.header-logo {
+    margin-right: 1.5rem;
+}
+
+.header-logo img {
+    height: 60px;
+    width: auto;
+}
+
+.header-text h1 {
     margin: 0;
-    font-size: 2rem;
-    font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: white;
 }
 
-.form-header p {
-    margin: 0.5rem 0 0;
+.form-subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
     opacity: 0.9;
+}
+
+.form-instructions {
+    background-color: #f8fafc;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.form-instructions p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #475569;
+    line-height: 1.5;
 }
 
 .form-progress {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     padding: 1.5rem 2rem;
     background-color: #f8fafc;
@@ -391,7 +907,7 @@ const submitForm = () => {
     z-index: 1;
 }
 
-.step-number {
+.progress-step .step-number {
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -401,14 +917,14 @@ const submitForm = () => {
     justify-content: center;
     align-items: center;
     font-weight: 600;
+    margin-bottom: 0.5rem;
     transition: all 0.3s ease;
 }
 
-.step-label {
-    margin-top: 0.5rem;
+.progress-step .step-label {
     font-size: 0.875rem;
     color: #64748b;
-    font-weight: 500;
+    transition: all 0.3s ease;
 }
 
 .progress-step.active .step-number {
@@ -417,7 +933,7 @@ const submitForm = () => {
 }
 
 .progress-step.active .step-label {
-    color: #1e40af;
+    color: #3b82f6;
     font-weight: 600;
 }
 
@@ -431,162 +947,214 @@ const submitForm = () => {
     z-index: 0;
 }
 
-.form-body {
+.form-section {
     padding: 2rem;
 }
 
-.form-step {
-    animation: fade-in 0.4s ease-out;
-}
-
-@keyframes fade-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.form-step h2 {
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    color: #1e293b;
-    font-weight: 600;
+.section-title {
+    margin: 0 0 1.5rem;
     font-size: 1.5rem;
+    font-weight: 600;
+    color: #1e293b;
+    text-align: center;
+    position: relative;
+    padding-bottom: 0.75rem;
 }
 
-.form-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
+.section-title:after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #1e40af);
+    border-radius: 3px;
 }
 
 .form-group {
-    flex: 1;
     margin-bottom: 1.5rem;
 }
 
-.form-group.full-width {
-    width: 100%;
-}
-
-.form-group label {
+label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
     font-weight: 500;
-    color: #475569;
+    color: #334155;
 }
 
-:deep(.p-inputtext),
-:deep(.p-dropdown),
-:deep(.p-calendar),
-:deep(.p-textarea) {
-    width: 100%;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-:deep(.p-inputtext:hover),
-:deep(.p-dropdown:hover),
-:deep(.p-calendar:hover),
-:deep(.p-textarea:hover) {
-    border-color: #3b82f6;
-}
-
-:deep(.p-inputtext:focus),
-:deep(.p-dropdown:focus),
-:deep(.p-calendar:focus),
-:deep(.p-textarea:focus) {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-    border-color: #3b82f6;
-}
-
-:deep(.p-invalid) {
-    border-color: #ef4444 !important;
-}
-
-:deep(.p-invalid:focus) {
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25) !important;
-}
-
-.p-error {
-    color: #ef4444;
-    font-size: 0.75rem;
-    margin-top: 0.25rem;
-    display: block;
-}
-
-.form-footer {
-    padding: 1.5rem 2rem;
-    background-color: #f8fafc;
-    border-top: 1px solid #e2e8f0;
+.checkbox-options {
     display: flex;
-    justify-content: space-between;
+    gap: 2rem;
 }
 
-/* Review page styling */
-.review-section {
+.checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.checkbox-option label {
+    margin-bottom: 0;
+    font-weight: normal;
+}
+
+.school-year-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.year-separator {
+    font-weight: bold;
+    color: #64748b;
+}
+
+.ip-specify,
+.household-id {
+    margin-top: 0.75rem;
+}
+
+.disability-section {
+    margin-top: 1rem;
+    padding: 1.5rem;
     background-color: #f8fafc;
     border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.disability-options {
+    margin-top: 1rem;
+}
+
+.disability-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.disability-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.parent-info {
+    margin-bottom: 2rem;
+}
+
+.parent-info h3 {
+    margin: 0 0 1rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #334155;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.review-section {
+    margin-bottom: 2rem;
     padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
 }
 
 .review-section h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    color: #3b82f6;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-
-.review-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+    margin: 0 0 1.25rem;
+    font-size: 1.2rem;
+    color: #334155;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .review-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.review-item.full-width {
-    grid-column: span 2;
+    margin-bottom: 1.25rem;
 }
 
 .review-label {
-    font-weight: 500;
+    font-weight: 600;
     color: #64748b;
-    font-size: 0.875rem;
-    margin-bottom: 0.25rem;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .review-value {
     color: #1e293b;
     font-weight: 500;
+    font-size: 1.1rem;
+    padding-left: 1rem;
+}
+
+.form-footer {
+    padding: 1.5rem 2rem;
+    background-color: #f8fafc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-top: 1px solid #e2e8f0;
 }
 
 .terms-section {
-    margin-top: 2rem;
     display: flex;
     align-items: flex-start;
+    gap: 1rem;
+    margin: 2rem 0 1rem;
+    padding: 1.5rem;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.terms-section label {
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+:deep(.p-inputtext),
+:deep(.p-calendar),
+:deep(.p-inputnumber) {
+    width: 100%;
+    font-size: 1.1rem;
+    padding: 0.75rem 1rem;
+}
+
+:deep(.p-calendar .p-inputtext) {
+    width: 100%;
+}
+
+:deep(.p-checkbox),
+:deep(.p-radiobutton) {
+    width: 22px;
+    height: 22px;
+}
+
+:deep(.p-button) {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+.p-error {
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    display: block;
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .form-row {
-        flex-direction: column;
-        gap: 0;
+    .form-progress {
+        overflow-x: auto;
+        padding: 1rem;
     }
 
-    .review-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .review-item.full-width {
-        grid-column: span 1;
+    .progress-step {
+        min-width: 80px;
     }
 
     .form-footer {
@@ -596,6 +1164,11 @@ const submitForm = () => {
 
     .form-footer button {
         width: 100%;
+    }
+
+    .checkbox-options {
+        flex-direction: column;
+        gap: 0.75rem;
     }
 }
 </style>
