@@ -144,7 +144,7 @@ export const AttendanceService = {
         return students.find((student) => student.id === parseInt(id));
     },
 
-    // Create a new student
+    // Create a new studenn
     async createStudent(student) {
         // Ensure studentStore is loaded
         if (!state.students) {
