@@ -1,3 +1,4 @@
+import ApiTest from '@/components/ApiTest.vue';
 import LoginLayout from '@/layout/LoginLayout/LoginLayout.vue';
 import AdminLayout from '@/layout/adminlayout/AdminLayout.vue';
 import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
@@ -8,7 +9,6 @@ import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSection from '@/views/pages/teacher/TeacherSection.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
-import ApiTest from '@/components/ApiTest.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 const router = createRouter({
     history: createWebHistory(),
@@ -165,7 +165,7 @@ const router = createRouter({
                 {
                     path: 'new-student',
                     name: 'NewStudent',
-                    component: () => import('@/views/Enrollment/NewStudentForm.vue')
+                    component: () => import('@/views/Enrollment/RegistrationForm.vue')
                 },
                 {
                     path: 'transfer-student',
@@ -173,6 +173,22 @@ const router = createRouter({
                     component: () => import('@/views/Enrollment/TransferStudentForm.vue')
                 }
             ]
+        },
+        {
+            path: '/enrollment/registration',
+            name: 'registration',
+            component: () => import('@/views/Enrollment/RegistrationForm.vue'),
+            meta: {
+                layout: 'enrollment'
+            }
+        },
+        {
+            path: '/enrollment/confirmation',
+            name: 'registration-confirmation',
+            component: () => import('@/views/Enrollment/RegistrationConfirmation.vue'),
+            meta: {
+                layout: 'enrollment'
+            }
         },
         {
             path: '/api-test',

@@ -16,7 +16,8 @@ const containerClass = computed(() => ({
         <EnrollmentTopbar />
         <div class="layout-content">
             <div class="layout-main">
-                <router-view /> <!-- ✅ Ensures pages load inside layout -->
+                <router-view />
+                <!-- ✅ Ensures pages load inside layout -->
             </div>
         </div>
         <div class="layout-mask animate-fadein"></div>
@@ -51,7 +52,8 @@ const containerClass = computed(() => ({
 }
 
 /* ✅ Removes extra margin/padding */
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     height: 100%;
