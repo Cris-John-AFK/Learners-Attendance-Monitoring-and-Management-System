@@ -1,65 +1,57 @@
 <template>
     <div class="landing-container">
-        <h1>Select Enrollment Type</h1>
-        <div class="card-group">
-            <div class="enrollment-card old" @click="$router.push('/enrollment/old-student')" :style="{ background: getRandomGradient('green') }">
-                <div class="card-content">
-                    <i class="pi pi-user-edit card-icon"></i>
-                    <h2>Old Student</h2>
-                    <p class="card-description">Returning students who were previously enrolled</p>
+        <div class="landing-card">
+            <h1>Select Enrollment Type</h1>
+            <div class="card-group">
+                <div class="enrollment-card old">
+                    <!-- Floating symbols -->
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+
+                    <div class="card-content" @click="$router.push('/enrollment/old-student')">
+                        <i class="pi pi-user-edit card-icon"></i>
+                        <h2>Old Student</h2>
+                    </div>
+                </div>
+                <div class="enrollment-card new">
+                    <!-- Floating symbols -->
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+
+                    <div class="card-content" @click="$router.push('/enrollment/registration')">
+                        <i class="pi pi-user-plus card-icon"></i>
+                        <h2>New Student</h2>
+                    </div>
+                </div>
+                <div class="enrollment-card transfer">
+                    <!-- Floating symbols -->
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+
+                    <div class="card-content" @click="$router.push('/enrollment/transfer-student')">
+                        <i class="pi pi-directions card-icon"></i>
+                        <h2>Transfer Student</h2>
+                    </div>
                 </div>
             </div>
-            <div class="enrollment-card new" @click="$router.push('/enrollment/registration')" :style="{ background: getRandomGradient('orange') }">
-                <div class="card-content">
-                    <i class="pi pi-user-plus card-icon"></i>
-                    <h2>New Student</h2>
-                    <p class="card-description">First-time enrollees in our institution</p>
-                </div>
-            </div>
-            <div class="enrollment-card transfer" @click="$router.push('/enrollment/transfer-student')" :style="{ background: getRandomGradient('purple') }">
-                <div class="card-content">
-                    <i class="pi pi-directions card-icon"></i>
-                    <h2>Transfer Student</h2>
-                    <p class="card-description">Students coming from other schools</p>
-                </div>
+            <div class="accessibility-note">
+                <p>Need help? Call us at <a href="tel:+1234567890">(123) 456-7890</a></p>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-const getRandomGradient = (type) => {
-    // Color palettes for different card types
-    const palettes = {
-        green: [
-            ['#84fab0', '#8fd3f4'],
-            ['#a8ff78', '#78ffd6'],
-            ['#56ab2f', '#a8e063'],
-            ['#00b09b', '#96c93d'],
-            ['#43a047', '#7cb342']
-        ],
-        orange: [
-            ['#ff9a9e', '#fad0c4'],
-            ['#ff758c', '#ff7eb3'],
-            ['#f6d365', '#fda085'],
-            ['#fb8c00', '#ffb74d'],
-            ['#ff7043', '#ffb74d']
-        ],
-        purple: [
-            ['#a18cd1', '#fbc2eb'],
-            ['#8e2de2', '#4a00e0'],
-            ['#d81b60', '#f06292'],
-            ['#c2185b', '#e91e63'],
-            ['#6a1b9a', '#9c27b0']
-        ]
-    };
-
-    const selectedPalette = palettes[type];
-    const randomIndex = Math.floor(Math.random() * selectedPalette.length);
-    const [color1, color2] = selectedPalette[randomIndex];
-
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
-};
+// No script needed
 </script>
 
 <style scoped>
@@ -67,22 +59,49 @@ const getRandomGradient = (type) => {
 .landing-container {
     text-align: center;
     padding: 50px;
-    background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
-    min-height: calc(100vh - 4rem);
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 1;
+}
+
+.landing-card {
+    max-width: 1200px;
+    width: 100%;
+    padding: 40px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    animation: fadeIn 0.8s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 h1 {
-    font-size: 32px;
+    font-size: 36px;
     font-weight: bold;
-    color: #1e293b;
+    color: white;
     text-transform: uppercase;
     letter-spacing: 1.5px;
     margin-bottom: 40px;
     position: relative;
+    text-shadow:
+        0 2px 10px rgba(0, 0, 0, 0.4),
+        0 0 5px rgba(0, 0, 0, 0.3);
 }
 
 h1::after {
@@ -91,10 +110,11 @@ h1::after {
     bottom: -10px;
     left: 50%;
     transform: translateX(-50%);
-    width: 80px;
-    height: 4px;
+    width: 100px;
+    height: 5px;
     background: linear-gradient(90deg, #3b82f6, #8b5cf6);
     border-radius: 2px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 /* Cards Container */
@@ -106,83 +126,210 @@ h1::after {
     flex-wrap: wrap;
 }
 
-/* Enrollment Cards */
+/* Enrollment Cards - Admin Subject Style */
 .enrollment-card {
-    width: 300px;
+    width: 280px;
     height: 220px;
-    color: white;
     border-radius: 16px;
     cursor: pointer;
     position: relative;
     transition: all 0.3s ease;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
+    background: linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9));
+    border: 1px solid rgba(74, 135, 213, 0.3);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
 .card-content {
-    padding: 20px;
+    position: relative;
     z-index: 2;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
     width: 100%;
+    height: 100%;
+    padding: 20px;
 }
 
 .card-icon {
-    font-size: 3rem;
-    margin-bottom: 15px;
-    background: rgba(255, 255, 255, 0.2);
-    width: 70px;
-    height: 70px;
+    font-size: 4rem;
+    margin-bottom: 25px;
+    background: white;
+    width: 85px;
+    height: 85px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    color: #4a87d5;
 }
 
 .enrollment-card h2 {
-    margin: 0 0 10px 0;
-    font-size: 24px;
-    font-weight: 600;
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
+    color: #1a365d;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4);
 }
 
-.card-description {
-    font-size: 14px;
-    opacity: 0.9;
-    margin: 0;
-    max-width: 90%;
-}
-
-/* Hover Effect - Shine Glare */
-.enrollment-card::before {
-    content: '';
+/* Make symbols more visible */
+.enrollment-card .symbol {
     position: absolute;
-    top: -100%;
-    left: -100%;
-    width: 150%;
-    height: 150%;
-    background: rgba(255, 255, 255, 0.2);
-    transform: rotate(45deg);
-    transition: all 0.7s ease-in-out;
+    color: rgba(26, 54, 93, 0.5);
+    font-family: 'Courier New', monospace;
+    pointer-events: none;
+    z-index: 1;
+    animation: float-symbol 8s linear infinite;
+    font-weight: bold;
 }
 
-.enrollment-card:hover::before {
-    top: 100%;
-    left: 100%;
+.enrollment-card:nth-child(3n) .symbol {
+    animation-duration: 10s;
+}
+
+.enrollment-card:nth-child(3n + 1) .symbol {
+    animation-duration: 7s;
+}
+
+.enrollment-card .symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.enrollment-card .symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.enrollment-card .symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.enrollment-card .symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.enrollment-card .symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
+}
+
+/* Math symbol content variations */
+.enrollment-card.old .symbol:nth-child(1)::after {
+    content: 'π';
+    font-size: 28px;
+}
+.enrollment-card.old .symbol:nth-child(2)::after {
+    content: '∑';
+    font-size: 32px;
+}
+.enrollment-card.old .symbol:nth-child(3)::after {
+    content: '∞';
+    font-size: 36px;
+}
+.enrollment-card.old .symbol:nth-child(4)::after {
+    content: '√';
+    font-size: 32px;
+}
+.enrollment-card.old .symbol:nth-child(5)::after {
+    content: 'θ';
+    font-size: 28px;
+}
+
+.enrollment-card.new .symbol:nth-child(1)::after {
+    content: 'H₂O';
+    font-size: 24px;
+}
+.enrollment-card.new .symbol:nth-child(2)::after {
+    content: 'CO₂';
+    font-size: 24px;
+}
+.enrollment-card.new .symbol:nth-child(3)::after {
+    content: 'E=mc²';
+    font-size: 22px;
+}
+.enrollment-card.new .symbol:nth-child(4)::after {
+    content: 'H⁺';
+    font-size: 26px;
+}
+.enrollment-card.new .symbol:nth-child(5)::after {
+    content: 'NaCl';
+    font-size: 24px;
+}
+
+.enrollment-card.transfer .symbol:nth-child(1)::after {
+    content: 'A';
+    font-size: 34px;
+}
+.enrollment-card.transfer .symbol:nth-child(2)::after {
+    content: 'B';
+    font-size: 36px;
+}
+.enrollment-card.transfer .symbol:nth-child(3)::after {
+    content: 'C';
+    font-size: 32px;
+}
+.enrollment-card.transfer .symbol:nth-child(4)::after {
+    content: 'X';
+    font-size: 30px;
+}
+.enrollment-card.transfer .symbol:nth-child(5)::after {
+    content: 'Y';
+    font-size: 34px;
+}
+
+@keyframes float-symbol {
+    0% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+    }
+    80% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100px) translateX(20px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+/* Accessibility note */
+.accessibility-note {
+    margin-top: 40px;
+    font-size: 18px;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.accessibility-note a {
+    color: white;
+    font-weight: bold;
+    text-decoration: underline;
+    padding: 5px;
+}
+
+.accessibility-note a:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
 }
 
 /* Hover Effect - Scale & Shadow */
 .enrollment-card:hover {
     transform: translateY(-10px);
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+    border-color: rgba(74, 135, 213, 0.5);
 }
 
 /* Click Animation */
@@ -204,7 +351,15 @@ h1::after {
     }
 
     h1 {
-        font-size: 28px;
+        font-size: 32px;
+    }
+
+    .landing-card {
+        padding: 30px 20px;
+    }
+
+    .accessibility-note {
+        font-size: 16px;
     }
 }
 </style>

@@ -244,15 +244,15 @@ const floatingItems = reactive([
     { content: 'B', top: 60, left: 5, size: 95, color: 'rgba(255,255,255,0.68)', duration: 28, delay: 3, zIndex: -1, direction: 'diagonal-2' },
 
     // Middleground (medium size and opacity)
-    { content: '3', top: 75, left: 80, size: 75, color: 'rgba(255,255,255,0.6)', duration: 32, delay: 2, zIndex: -2, direction: 'diagonal-2' },
-    { content: 'C', top: 10, left: 60, size: 70, color: 'rgba(255,255,255,0.62)', duration: 26, delay: 0.5, zIndex: -2, direction: 'horizontal' },
-    { content: '9', top: 40, left: 90, size: 80, color: 'rgba(255,255,255,0.58)', duration: 34, delay: 2.5, zIndex: -2, direction: 'diagonal-1' },
+    { content: '3', top: 75, left: 80, size: 75, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' },
+    { content: 'C', top: 10, left: 60, size: 70, color: 'rgba(255,255,255,0.65)', duration: 30, delay: 1, zIndex: -1, direction: 'diagonal-1' },
+    { content: '9', top: 40, left: 90, size: 80, color: 'rgba(255,255,255,0.68)', duration: 28, delay: 3, zIndex: -1, direction: 'diagonal-2' },
 
     // Background (smaller, more visible)
-    { content: 'D', top: 85, left: 30, size: 55, color: 'rgba(255,255,255,0.55)', duration: 29, delay: 1.5, zIndex: -3, direction: 'diagonal-1' },
-    { content: '1', top: 30, left: 15, size: 50, color: 'rgba(255,255,255,0.5)', duration: 24, delay: 4, zIndex: -3, direction: 'diagonal-2' },
+    { content: 'D', top: 85, left: 30, size: 55, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' },
+    { content: '1', top: 30, left: 15, size: 50, color: 'rgba(255,255,255,0.65)', duration: 30, delay: 1, zIndex: -1, direction: 'diagonal-1' },
     { content: 'E', top: 50, left: 75, size: 48, color: 'rgba(255,255,255,0.52)', duration: 31, delay: 2, zIndex: -3, direction: 'horizontal' },
-    { content: '5', top: 70, left: 45, size: 52, color: 'rgba(255,255,255,0.48)', duration: 27, delay: 0.7, zIndex: -3, direction: 'horizontal' }
+    { content: '5', top: 70, left: 45, size: 52, color: 'rgba(255,255,255,0.7)', duration: 25, delay: 0, zIndex: -1, direction: 'horizontal' }
 ]);
 </script>
 <template>
