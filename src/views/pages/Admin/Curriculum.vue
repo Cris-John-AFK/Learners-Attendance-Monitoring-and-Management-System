@@ -1,11 +1,11 @@
 <script setup>
+import CustomDialog from '@/components/CustomDialog.vue';
 import SakaiCard from '@/components/SakaiCard.vue';
 import { GradeService } from '@/router/service/Grades';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import CustomDialog from '@/components/CustomDialog.vue';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
@@ -18,6 +18,7 @@ const loading = ref(true);
 const curriculumDialog = ref(false);
 const deleteCurriculumDialog = ref(false);
 const selectedCurriculum = ref(null);
+const archiveDialog = ref(false);
 const curriculum = ref({
     id: null,
     name: '',
@@ -33,6 +34,17 @@ const yearRanges = ref([
     { start: '2026', end: '2027' },
     { start: '2027', end: '2028' }
 ]);
+
+// Search functionality
+const searchYear = ref('');
+const availableYears = computed(() => {
+    const years = new Set();
+    curriculums.value.forEach((curr) => {
+        years.add(curr.yearRange.start);
+        years.add(curr.yearRange.end);
+    });
+    return Array.from(years).sort();
+});
 
 // Grade Level Management variables
 const showGradeLevelManagement = ref(false);
@@ -76,18 +88,65 @@ const mockCurriculums = [
 ];
 
 const filteredCurriculums = computed(() => {
-    if (!selectedCurriculum.value) {
-        return curriculums.value;
+    let filtered = curriculums.value;
+    
+    // Filter by year if searchYear is set
+    if (searchYear.value) {
+        filtered = filtered.filter((c) => 
+            c.yearRange.start === searchYear.value || 
+            c.yearRange.end === searchYear.value ||
+            `${c.yearRange.start}-${c.yearRange.end}` === searchYear.value
+        );
     }
-
-    return curriculums.value.filter((c) => c.yearRange.start === selectedCurriculum.value.start && c.yearRange.end === selectedCurriculum.value.end);
+    
+    // Only show active curriculums in the main view
+    filtered = filtered.filter(c => c.status === 'Active');
+    
+    return filtered;
 });
 
 const cardStyles = computed(() =>
-    curriculums.value.map(() => ({
+    filteredCurriculums.value.map(() => ({
         background: getRandomGradient()
     }))
 );
+
+const clearSearch = () => {
+    searchYear.value = '';
+};
+
+const openArchiveDialog = () => {
+    archiveDialog.value = true;
+};
+
+const archiveCurriculum = (curr) => {
+    const index = curriculums.value.findIndex(c => c.id === curr.id);
+    if (index !== -1) {
+        curriculums.value[index].status = 'Archived';
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Curriculum archived successfully',
+            life: 3000
+        });
+    }
+    archiveDialog.value = false;
+};
+
+const restoreCurriculum = (curr) => {
+    const index = curriculums.value.findIndex(c => c.id === curr.id);
+    if (index !== -1) {
+        curriculums.value[index].status = 'Active';
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Curriculum restored successfully',
+            life: 3000
+        });
+    }
+};
 
 onMounted(async () => {
     await loadCurriculums();
@@ -389,7 +448,19 @@ function closeAddSectionDialog() {
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-semibold">Curriculum Management</h2>
             <div class="flex gap-3">
+                <div class="p-inputgroup">
+                    <Dropdown v-model="searchYear" :options="availableYears" placeholder="Search by Year" class="w-full" appendTo="body">
+                        <template #value="slotProps">
+                            <div v-if="slotProps.value" class="flex align-items-center">
+                                <span>{{ slotProps.value }}</span>
+                            </div>
+                            <span v-else>Search by Year</span>
+                        </template>
+                    </Dropdown>
+                    <Button icon="pi pi-times" @click="clearSearch" v-if="searchYear" class="p-button-secondary" />
+                </div>
                 <Button label="Add New Curriculum" icon="pi pi-plus" class="p-button-success" @click="openNew" />
+                <Button label="Archive" icon="pi pi-archive" class="p-button-warning" @click="openArchiveDialog" />
             </div>
         </div>
 
@@ -398,7 +469,7 @@ function closeAddSectionDialog() {
         </div>
 
         <div v-else class="card-container">
-            <SakaiCard v-for="(curr, index) in curriculums" :key="curr.id" class="custom-card" :style="cardStyles[index]" @click="openGradeLevelManagement(curr)">
+            <SakaiCard v-for="(curr, index) in filteredCurriculums" :key="curr.id" class="custom-card" :style="cardStyles[index]" @click="openGradeLevelManagement(curr)">
                 <div class="card-header">
                     <h1 class="curriculum-name">{{ curr.name }}</h1>
                     <p class="year-info">{{ curr.yearRange.start }}-{{ curr.yearRange.end }}</p>
@@ -546,6 +617,52 @@ function closeAddSectionDialog() {
             </div>
         </div>
     </CustomDialog>
+
+    <!-- Archive Dialog -->
+    <CustomDialog v-model:visible="archiveDialog" header="Archive Curriculum" :modal="true" class="max-w-4xl w-full rounded-lg">
+        <div class="p-4">
+            <h3 class="text-xl font-semibold mb-4">Archive Curriculum</h3>
+            
+            <DataTable :value="curriculums" stripedRows class="p-datatable-sm" v-model:selection="selectedCurriculum" 
+                selectionMode="single" dataKey="id" :paginator="true" :rows="5" 
+                paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+                :rowsPerPageOptions="[5, 10, 25]">
+                <Column selectionMode="single" headerStyle="width: 3rem"></Column>
+                <Column field="name" header="Name" sortable></Column>
+                <Column header="Year Range" sortable>
+                    <template #body="slotProps">
+                        {{ slotProps.data.yearRange.start }}-{{ slotProps.data.yearRange.end }}
+                    </template>
+                </Column>
+                <Column field="status" header="Status" sortable>
+                    <template #body="slotProps">
+                        <Tag :severity="slotProps.data.status === 'Active' ? 'success' : 'warning'" 
+                            :value="slotProps.data.status" />
+                    </template>
+                </Column>
+                <Column header="Actions">
+                    <template #body="slotProps">
+                        <div class="flex gap-2">
+                            <Button v-if="slotProps.data.status === 'Active'" 
+                                icon="pi pi-archive" 
+                                class="p-button-rounded p-button-warning p-button-sm" 
+                                @click="archiveCurriculum(slotProps.data)" 
+                                tooltip="Archive" />
+                            <Button v-else 
+                                icon="pi pi-refresh" 
+                                class="p-button-rounded p-button-success p-button-sm" 
+                                @click="restoreCurriculum(slotProps.data)" 
+                                tooltip="Restore" />
+                        </div>
+                    </template>
+                </Column>
+            </DataTable>
+            
+            <div class="flex justify-end gap-2 mt-4">
+                <Button label="Close" class="p-button-text" @click="archiveDialog = false" />
+            </div>
+        </div>
+    </CustomDialog>
 </template>
 
 <style scoped>
@@ -553,6 +670,7 @@ function closeAddSectionDialog() {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
+    transition: all 0.3s ease;
 }
 
 .custom-card {
@@ -571,6 +689,20 @@ function closeAddSectionDialog() {
     color: white;
     font-weight: bold;
     position: relative;
+    animation: card-appear 0.5s ease-out forwards;
+    padding: 15px;
+    justify-content: center;
+}
+
+@keyframes card-appear {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .custom-card:hover {
@@ -583,18 +715,19 @@ function closeAddSectionDialog() {
     text-align: center;
     word-break: break-word;
     overflow-wrap: break-word;
-    white-space: pre-wrap;
-    font-size: 25px;
+    white-space: normal;
+    font-size: 24px;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    margin-bottom: 10px;
+    line-height: 1.2;
 }
 
 .year-info {
-    position: absolute;
-    bottom: 10px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 14px;
-    opacity: 0.8;
+    margin: 10px 0 0;
+    font-size: 18px;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .card-header {
@@ -603,7 +736,7 @@ function closeAddSectionDialog() {
     justify-content: center;
     align-items: center;
     height: 100%;
-    padding: 20px;
+    width: 100%;
 }
 
 :deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
