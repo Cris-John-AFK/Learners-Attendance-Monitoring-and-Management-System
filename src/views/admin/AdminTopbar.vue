@@ -21,7 +21,7 @@ const logout = () => {
                     <i class="pi pi-bars"></i>
                 </button>
                 <router-link to="/admin" class="layout-topbar-logo">
-                    <img src="/demo/images/logo.svg" alt="Logo" />
+                    <img src="/demo/images/logo.png" alt="Logo" />
                     <span>NCS - for Admin</span>
                 </router-link>
             </div>
