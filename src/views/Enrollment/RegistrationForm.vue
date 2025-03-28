@@ -241,7 +241,7 @@ watch(
         <div class="registration-card">
             <div class="form-header">
                 <div class="header-logo">
-                    <img src="/demo/images/logo.svg" alt="School Logo" />
+                    <img src="/demo/images/logo.png" alt="School Logo" />
                 </div>
                 <div class="header-text">
                     <h1>BASIC EDUCATION ENROLLMENT FORM</h1>

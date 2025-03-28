@@ -1,18 +1,15 @@
-<script setup>
-
-</script>
+<script setup></script>
 
 <template>
     <div class="layout-topbar">
         <div class="layout-topbar-logo-container">
             <router-link to="/enrollment" class="layout-topbar-logo">
-                <img src="/demo/images/logo.svg" alt="Logo" />
+                <img src="/demo/images/logo.png" alt="Logo" />
 
                 <span>NCS</span>
             </router-link>
         </div>
     </div>
-
 </template>
 
 <style scoped>

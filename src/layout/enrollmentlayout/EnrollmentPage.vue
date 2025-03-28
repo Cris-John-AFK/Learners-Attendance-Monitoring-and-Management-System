@@ -1,14 +1,13 @@
 <template>
     <div class="enrollment-hero">
         <div class="hero-content">
-            <div class="school-image-container">
-                <img src="@/assets/school-placeholder.jpg" alt="School" class="school-image" />
-                <div class="image-overlay"></div>
+            <div class="gradient-background">
+                <div class="animated-gradient"></div>
             </div>
 
             <div class="hero-text-container">
                 <div class="school-logo">
-                    <img src="/demo/images/logo.svg" alt="School Logo" />
+                    <img src="/demo/images/logo.png" alt="School Logo" />
                 </div>
 
                 <h1 class="hero-title">Begin Your Educational Journey</h1>
@@ -94,11 +93,28 @@ const scrollToInfo = () => {
 </script>
 
 <style scoped>
+/* Target the main layout container */
+:deep(.layout-main) {
+    margin: 0;
+    padding: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+:deep(.layout-content) {
+    margin: 0;
+    padding: 0;
+}
+
 /* Hero Section */
 .enrollment-hero {
     position: relative;
     height: 100vh;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
+    box-shadow: 0 0 40px 20px rgba(0, 0, 0, 0.4); /* Added dark box shadow */
+    z-index: 1; /* Ensure the shadow appears above other elements */
 }
 
 .hero-content {
@@ -107,33 +123,48 @@ const scrollToInfo = () => {
     justify-content: center;
     align-items: center;
     height: 100%;
+    width: 100%;
     position: relative;
     z-index: 1;
-    padding: 0 20px;
+    padding: 0;
+    margin: 0;
 }
 
-.school-image-container {
+.gradient-background {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     z-index: -1;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
 }
 
-.school-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.image-overlay {
+/* Updated gradient colors to match the layout background */
+.animated-gradient {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(139, 92, 246, 0.8));
+    top: -100px;
+    left: -100px;
+    right: -100px;
+    bottom: -100px;
+    background: linear-gradient(45deg, rgba(238, 119, 82, 0.7), /* #ee7752 */ rgba(231, 60, 126, 0.7), /* #e73c7e */ rgba(35, 166, 213, 0.7), /* #23a6d5 */ rgba(35, 213, 171, 0.7) /* #23d5ab */);
+    background-size: 400% 400%;
+    animation: gradientAnimation 15s ease infinite;
+    filter: blur(20px);
+}
+
+@keyframes gradientAnimation {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
 }
 
 .hero-text-container {
@@ -142,29 +173,25 @@ const scrollToInfo = () => {
     color: white;
     padding: 40px;
     border-radius: 20px;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     animation: fadeIn 1s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    z-index: 2;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
 .school-logo {
-    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    width: 100%;
 }
 
 .school-logo img {
-    height: 80px;
-    filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.3));
+    width: 150px;
+    height: auto;
+    filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.5));
 }
 
 .hero-title {
@@ -172,6 +199,7 @@ const scrollToInfo = () => {
     font-weight: 700;
     margin-bottom: 20px;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    color: white;
 }
 
 .hero-subtitle {
