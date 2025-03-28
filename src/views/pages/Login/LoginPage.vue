@@ -2,39 +2,50 @@
     <div class="landing-container">
         <h1>Select User Type</h1>
         <div class="card-group">
-            <Card class="enrollment-card guardians" @click="$router.push('/guest')">
-                <template #content>
-                    <i class="pi pi-users icon"></i>
-                    <h2>Guardians</h2>
-                </template>
-            </Card>
+            <div class="new-card guardians" @click="$router.push('/guest')">
+                <div class="card-content">
+                    <h2>I am a Guardian</h2>
+                    <p>View student information</p>
+                </div>
+                <div class="card-arrow">
+                    <i class="pi pi-angle-right"></i>
+                </div>
+            </div>
 
-            <Card class="enrollment-card teachers" @click="$router.push('/teacher')">
-                <template #content>
-                    <i class="pi pi-user icon"></i>
-                    <h2>Teachers</h2>
-                </template>
-            </Card>
+            <div class="new-card teachers" @click="$router.push('/teacher')">
+                <div class="card-content">
+                    <h2>I am a Teacher</h2>
+                    <p>Manage classes and grades</p>
+                </div>
+                <div class="card-arrow">
+                    <i class="pi pi-angle-right"></i>
+                </div>
+            </div>
 
-            <Card class="enrollment-card admin" @click="$router.push('/admin')">
-                <template #content>
-                    <i class="pi pi-cog icon"></i>
-                    <h2>Admin</h2>
-                </template>
-            </Card>
+            <div class="new-card admin" @click="$router.push('/admin')">
+                <div class="card-content">
+                    <h2>I am an Admin</h2>
+                    <p>School administration</p>
+                </div>
+                <div class="card-arrow">
+                    <i class="pi pi-angle-right"></i>
+                </div>
+            </div>
 
-            <Card class="enrollment-card gate" @click="$router.push('/guardhouse')">
-                <template #content>
-                    <i class="pi pi-shield icon"></i>
-                    <h2>Gate</h2>
-                </template>
-            </Card>
+            <div class="new-card gate" @click="$router.push('/guardhouse')">
+                <div class="card-content">
+                    <h2>I am Gate Personnel</h2>
+                    <p>Manage entry and exit</p>
+                </div>
+                <div class="card-arrow">
+                    <i class="pi pi-angle-right"></i>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import Card from 'primevue/card';
 import { useRouter } from 'vue-router';
 const router = useRouter();
 </script>
@@ -62,63 +73,97 @@ h1 {
     gap: 20px;
     justify-content: center;
     align-items: center;
-    max-width: 600px;
+    max-width: 800px;
     margin: 0 auto;
 }
 
-.enrollment-card {
-    width: 100%;
-    height: 140px;
+/* New Card Design */
+.new-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    height: 100px;
+    position: relative;
+    overflow: hidden;
+}
+
+.new-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 8px;
+    height: 100%;
+    border-radius: 4px 0 0 4px;
+}
+
+.guardians::before {
+    background-color: #1e88e5;
+}
+
+.teachers::before {
+    background-color: #43a047;
+}
+
+.admin::before {
+    background-color: #fb8c00;
+}
+
+.gate::before {
+    background-color: #d81b60;
+}
+
+.card-content {
+    text-align: left;
+    padding-left: 10px;
+}
+
+.card-content h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin: 0 0 5px 0;
+}
+
+.card-content p {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+.card-arrow {
+    background-color: #ff7518;
+    color: white;
+    width: 40px;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
-    flex-direction: column;
-    border-radius: 15px;
-    font-size: 22px;
-    font-weight: bold;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
-    box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2);
-    padding-top: 20px;
+    position: absolute;
+    right: 0;
+    top: 0;
 }
 
-/* Text & Icon Styling */
-.enrollment-card h2 {
-    margin: 10px 0 0;
-    font-size: 20px;
-    text-align: center;
-    color: white;
-    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7); /* Stronger contrast */
-}
-
-.icon {
-    font-size: 50px;
-    color: white;
+.card-arrow i {
+    font-size: 24px;
 }
 
 /* Hover Effects */
-.enrollment-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.3);
+.new-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
-.enrollment-card:active {
-    transform: scale(0.95);
-}
-
-/* Unique Colors for Each Card */
-.guardians {
-    background: linear-gradient(135deg, #1E88E5, #1976D2);
-}
-.teachers {
-    background: linear-gradient(135deg, #43A047, #2E7D32);
-}
-.admin {
-    background: linear-gradient(135deg, #FB8C00, #E65100);
-}
-.gate {
-    background: linear-gradient(135deg, #D81B60, #880E4F);
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-group {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
