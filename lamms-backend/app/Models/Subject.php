@@ -4,30 +4,41 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Subject extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'id',
         'name',
+        'code',
         'description',
         'credits',
         'is_active'
     ];
 
-    // Primary key is string
-    protected $keyType = 'string';
-    public $incrementing = false;
+    protected $casts = [
+        'is_active' => 'boolean'
+    ];
 
-    /**
-     * Get the grades that this subject belongs to.
-     */
-    public function grades(): BelongsToMany
+    public function teachers()
     {
-        return $this->belongsToMany(Grade::class)
-                    ->withTimestamps();
+        return $this->belongsToMany(Teacher::class, 'teacher_section_subject')
+            ->withPivot('section_id', 'is_primary', 'is_active')
+            ->withTimestamps();
+    }
+
+    public function sections()
+    {
+        return $this->belongsToMany(Section::class, 'teacher_section_subject')
+            ->withPivot('teacher_id', 'is_primary', 'is_active')
+            ->withTimestamps();
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
     }
 }

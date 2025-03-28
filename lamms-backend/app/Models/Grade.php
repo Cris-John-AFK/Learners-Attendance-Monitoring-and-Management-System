@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Grade extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'code',
@@ -23,13 +23,19 @@ class Grade extends Model
         'display_order' => 'integer'
     ];
 
-    /**
-     * Get the subjects for this grade.
-     */
-    public function subjects(): BelongsToMany
+    public function sections()
     {
-        return $this->belongsToMany(Subject::class)
-                    ->withTimestamps();
+        return $this->hasMany(Section::class);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('display_order', 'asc');
     }
 
     // Relationship methods will be implemented when related models are created

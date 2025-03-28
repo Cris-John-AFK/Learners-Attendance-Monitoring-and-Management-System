@@ -11,11 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('sections', function (Blueprint $table) {
+        Schema::create('grades', function (Blueprint $table) {
             $table->id();
+            $table->string('code')->unique();
             $table->string('name');
-            $table->foreignId('grade_id')->constrained('grades')->onDelete('cascade');
-            $table->text('description')->nullable();
+            $table->string('description')->nullable();
+            $table->integer('display_order')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
@@ -27,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('sections');
+        Schema::dropIfExists('grades');
     }
 };

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Section;
@@ -58,7 +58,8 @@ class SectionController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'grade' => 'required',
+            'grade_id' => 'required_without:grade|exists:grades,id',
+            'grade' => 'required_without:grade_id',
             'description' => 'nullable|string'
         ]);
 
@@ -66,8 +67,14 @@ class SectionController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // If grade is provided as an object, extract the ID
+        $gradeId = $request->grade_id;
+        if (!$gradeId && isset($request->grade['id'])) {
+            $gradeId = $request->grade['id'];
+        }
+
         // Check if section name is unique within the grade
-        if (!Section::isNameUniqueInGrade($request->name, $request->grade['id'])) {
+        if (!Section::isNameUniqueInGrade($request->name, $gradeId)) {
             return response()->json([
                 'errors' => [
                     'name' => ['Section name already exists in this grade.']
@@ -77,7 +84,7 @@ class SectionController extends Controller
 
         $section = new Section();
         $section->name = $request->name;
-        $section->grade_id = $request->grade['id'];
+        $section->grade_id = $gradeId;
         $section->description = $request->description;
         $section->save();
 
@@ -99,7 +106,8 @@ class SectionController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'grade' => 'required',
+            'grade_id' => 'required_without:grade|exists:grades,id',
+            'grade' => 'required_without:grade_id',
             'description' => 'nullable|string'
         ]);
 
@@ -107,8 +115,14 @@ class SectionController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // If grade is provided as an object, extract the ID
+        $gradeId = $request->grade_id;
+        if (!$gradeId && isset($request->grade['id'])) {
+            $gradeId = $request->grade['id'];
+        }
+
         // Check if section name is unique within the grade (excluding current section)
-        if (!Section::isNameUniqueInGrade($request->name, $request->grade['id'], $section->id)) {
+        if (!Section::isNameUniqueInGrade($request->name, $gradeId, $section->id)) {
             return response()->json([
                 'errors' => [
                     'name' => ['Section name already exists in this grade.']
@@ -117,7 +131,7 @@ class SectionController extends Controller
         }
 
         $section->name = $request->name;
-        $section->grade_id = $request->grade['id'];
+        $section->grade_id = $gradeId;
         $section->description = $request->description;
         $section->save();
 

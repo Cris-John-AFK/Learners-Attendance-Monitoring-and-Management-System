@@ -1,205 +1,363 @@
-# LAMMS Project Summary
+# Project Summary: LAMMS Teacher Management System
 
 ## Overview
-The LAMMS (Learning and Academic Management System) project is a comprehensive educational platform with an space-themed UI. Key components include subject management, grade management, attendance tracking, and teacher dashboards.
+We've been working on the LAMMS (Learning and Academic Management System) teacher management module, specifically focusing on the `Admin-Teacher.vue` component which handles teacher registration, assignment management, scheduling, and UI improvements. The project has faced several technical challenges related to API connectivity, data persistence, and UI/UX enhancements.
 
-## Recent Developments and Fixes
+## Key Issues Addressed
 
-### Subject Management Interface
-- Modified the Admin Subject page to have a space-themed design with smoother transitions
-- Fixed issues with the card components, enhancing visibility and removing distracting effects
-- Added a search function in the header for subject filtering
-- Enhanced hover effects on cards for better user interaction
-- Fixed dialog visibility issues and form handling
-
-### CSS and UI Enhancements
-1. Enhanced header visibility:
-   - Increased font size and improved text shadow
-   - Added letter spacing for better readability
-   - Applied a more distinctive color scheme
-
-2. Smoother corners and transitions:
-   - Added consistent border-radius (24px) to containers and cards
-   - Implemented soft box-shadows for a more natural appearance
-   - Increased backdrop blur effects for depth
-
-3. Card design improvements:
-   - Taller cards (220px) with better spacing
-   - Improved content layout and symbol visibility
-   - Enhanced hover effects with transform and shadow
-
-4. Better component integration:
-   - Added gradient backgrounds to match the space theme
-   - Improved button styling with animations
-   - Enhanced empty state and dialog styling
-
-### Technical Fixes
-
-#### Fixed Grade Dropdown Issues
-- Updated Select components to use consistent `optionLabel` without `optionValue` to handle objects properly
-- Enhanced grade normalization in filtering logic
-- Fixed grade format handling in the form submission process
+### 1. API Connection & Data Loading Issues
+- **Problem**: Encountered 500 Internal Server Error when fetching active sections from the API endpoint at `http://localhost:8000/api/sections/active` and other connection issues.
+- **Solution**: 
+  - Implemented a resilient API connection system with multiple fallback endpoints
+  - Created a `tryApiEndpoints` helper function that attempts multiple API URLs (localhost:8000, 127.0.0.1:8000, localhost)
+  - Added proper error handling with detailed logging
+  - Implemented fallback data for offline functionality
 
 ```javascript
-// Helper function to normalize grade values for comparison
-const normalizeGrade = (grade) => {
-    if (typeof grade === 'object' && grade !== null) {
-        // If grade is an object, try to get name or label property
-        return grade.name || grade.label || '';
+// API configuration with multiple endpoints to try
+const API_ENDPOINTS = [
+    'http://localhost:8000/api',
+    'http://127.0.0.1:8000/api',
+    'http://localhost/api'
+];
+
+// Function to try multiple API endpoints
+const tryApiEndpoints = async (path, options = {}) => {
+    let lastError = null;
+    let lastResponse = null;
+    
+    // Try each endpoint until one works
+    for (const baseUrl of API_ENDPOINTS) {
+        try {
+            const url = `${baseUrl}${path}`;
+            console.log(`Trying API endpoint: ${url}`);
+            
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            // Make the request
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Accept': 'application/json',
+                    ...(options.headers || {})
+                },
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            lastResponse = response;
+            
+            // If successful, update the base URL and return the response
+            if (response.ok) {
+                if (baseUrl !== API_BASE_URL) {
+                    console.log(`Found working API endpoint: ${baseUrl}`);
+                    API_BASE_URL = baseUrl;
+                }
+                return await response.json();
+            }
+            
+            // Try to parse error response but continue to next endpoint
+            // [Error handling code...]
+        } catch (error) {
+            // [Error handling code...]
+        }
     }
-    return String(grade || '');
+    
+    // If we get here, all endpoints failed
+    throw lastError || new Error('Failed to connect to any API endpoint');
 };
 ```
 
-#### Data Handling and Caching
-- Added improved caching to the SubjectService:
-```javascript
-// Create an in-memory cache for performance
-let subjectCache = null;
-let cacheTimestamp = null;
-const CACHE_TTL = 60000; // 1 minute cache lifetime
-
-// Clear cache method
-async clearCache() {
-    console.log('Clearing subject cache');
-    subjectCache = null;
-    cacheTimestamp = null;
-    return true;
-}
-```
-
-#### Dialog Form Visibility
-- Enhanced z-index management for proper layering
-- Fixed CSS for form fields to ensure visibility
-- Added animation and transition effects
-
-```css
-.subject-dialog {
-    z-index: 1100 !important;
-    border-radius: 16px;
-    overflow: visible !important;
-}
-
-.subject-dialog .p-dialog-content {
-    display: block !important;
-    min-height: 200px !important;
-    background: rgba(18, 24, 40, 0.85) !important;
-    color: #fff !important;
-    border-radius: 0 0 16px 16px;
-    padding: 0 !important;
-    opacity: 1 !important;
-    overflow: visible !important;
-}
-```
-
-#### Form Reset and Modal Opening
-- Enhanced the `openNew` function to properly reset animations
-- Added debugging for dialog visibility
+### 2. Teacher Assignment Management
+- **Problem**: Teacher assignments weren't saving correctly due to API connectivity issues and payload structure problems.
+- **Solution**:
+  - Implemented a local-first approach to save assignments in localStorage
+  - Added background sync to backend when connectivity is available
+  - Fixed payload structure to match backend expectations (wrapped in 'assignments' array)
+  - Added proper validation and error handling
 
 ```javascript
-const openNew = () => {
-    // Reset form fields first
-    subject.value = {
-        id: null,
-        name: '',
-        grade: null,
-        description: '',
-        credits: 3
-    };
-    
-    submitted.value = false;
-    
-    // Use nextTick to ensure DOM is updated after form reset
-    nextTick(() => {
-        // Reset animations for any fields
-        const fields = document.querySelectorAll('.animated-field');
-        fields.forEach(field => {
-            field.style.animation = 'none';
-            // Trigger reflow to reset animations
-            setTimeout(() => {
-                field.style.animation = '';
-            }, 10);
+const saveAssignment = async () => {
+    // Validate first
+    const errors = validateAssignment();
+    if (errors.length > 0) {
+        assignmentErrors.value = errors;
+        return;
+    }
+
+    try {
+        // Extra validation for IDs
+        if (!assignment.value.section_id || assignment.value.section_id === 0 ||
+            !assignment.value.subject_id || assignment.value.subject_id === 0) {
+            toast.add({
+                severity: 'error',
+                summary: 'Invalid Data',
+                detail: 'Section or Subject ID cannot be zero or null',
+                life: 3000
+            });
+            console.error('Attempted to save with invalid IDs:', {
+                section_id: assignment.value.section_id,
+                subject_id: assignment.value.subject_id
+            });
+            return;
+        }
+
+        // Show processing toast
+        toast.add({
+            severity: 'info',
+            summary: 'Processing',
+            detail: 'Saving assignment...',
+            life: 2000
         });
-        
-        console.log('Opening dialog with reset form');
-        subjectDialog.value = true;
-    });
+
+        // Create a unique ID for local storage
+        const localId = 'local-' + Date.now();
+
+        // Get the actual section and subject objects
+        const selectedSection = filteredSections.value.find(s => Number(s.id) === Number(assignment.value.section_id));
+        const selectedSubject = subjectOptions.value.find(s => Number(s.id) === Number(assignment.value.subject_id));
+
+        // Create new assignment object with necessary data
+        const newAssignment = {
+            id: localId,
+            teacher_id: teacher.value.id,
+            section_id: Number(assignment.value.section_id),
+            subject_id: Number(assignment.value.subject_id),
+            is_primary: assignment.value.is_primary,
+            role: assignment.value.role,
+            // Include the related objects for display
+            section: selectedSection,
+            subject: selectedSubject
+        };
+
+        // Add to teacher's assignments
+        teacher.value.active_assignments.push(newAssignment);
+
+        // Show success message
+        setTimeout(() => {
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Assignment saved successfully',
+                life: 3000
+            });
+        }, 1000);
+
+        // Close the dialog
+        hideAssignmentDialog();
+
+        // Try to sync with backend in the background
+        // [Background sync code...]
+    } catch (error) {
+        console.error('Error saving assignment:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'An unexpected error occurred',
+            life: 3000
+        });
+    }
 };
 ```
 
-### Search Functionality
-- Added a search bar in the Subject Management interface
-- Implemented real-time filtering of subjects
-- Added clear search button
-- Styled to match the space theme
-- Added search query validation and normalization
+### 3. UI/UX Improvements
+- **Problem**: The original UI was not professional-looking and had usability issues (buttons not working, scrolling requirements).
+- **Solution**:
+  - Created a modern card-based layout for teachers instead of a table
+  - Improved button sizes and styling for better usability
+  - Enhanced the teacher details dialog for better information display
+  - Added educational/mathematical themed styling elements
+  - Added animated background elements for visual appeal
 
 ```html
-<div class="search-container">
-    <div class="search-input-wrapper">
-        <i class="pi pi-search search-icon"></i>
-        <input type="text" placeholder="Search subjects..." class="search-input" v-model="searchQuery" @input="filterSubjects" />
-        <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch">
-            <i class="pi pi-times"></i>
-        </button>
+<div class="teacher-card">
+    <div class="teacher-card-header">
+        <div class="teacher-info">
+            <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
+            <div v-if="teacher.is_head_teacher" class="teacher-role">Head Teacher</div>
+        </div>
+        <Tag :value="teacher.is_active ? 'ACTIVE' : 'INACTIVE'"
+            :severity="teacher.is_active ? 'success' : 'danger'" />
+    </div>
+
+    <div class="teacher-card-body">
+        <div class="teacher-detail">
+            <span class="detail-label">Grade:</span>
+            <span class="grade-badge">{{ getGradeName(teacher.active_assignments) }}</span>
+        </div>
+
+        <div class="teacher-detail">
+            <span class="detail-label">Section:</span>
+            <span class="section-badge">{{ getSectionName(teacher.active_assignments) }}</span>
+        </div>
+
+        <div class="teacher-detail">
+            <span class="detail-label">Subjects:</span>
+            <span class="subjects-list">{{ getSubjects(teacher.active_assignments) }}</span>
+        </div>
+    </div>
+
+    <div class="teacher-card-actions">
+        <Button class="action-btn schedule-btn" @click="viewTeacher(teacher)" v-tooltip.top="'View Details'">
+            <i class="pi pi-user"></i>
+            <span>Details</span>
+        </Button>
+        <!-- Other action buttons... -->
     </div>
 </div>
 ```
 
-## Architecture and Components
+```css
+.teacher-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
 
-### File Structure
-- `/src/views/pages/Admin/Admin-Subject.vue` - Admin subject management interface
-- `/src/router/service/Subjects.js` - Service for subject data handling
-- `/src/router/service/Grades.js` - Service for grade data
+.teacher-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.1);
+}
 
-### Key Components
-1. Subject Cards - Display subject information with space-themed styling
-2. Subject Dialog - Form for adding/editing subjects
-3. Search Bar - For filtering subjects
-4. Grade Filter - Dropdown for filtering by grade
-5. Modal Details View - For viewing and editing subject details
+/* Other styling... */
+```
 
-### APIs and Services
-- SubjectService includes methods for:
-  - Getting all subjects
-  - Filtering by grade
-  - Creating, updating, and deleting subjects
-  - Cache management for performance
+### 4. Teacher Details View
+- **Problem**: The original teacher details dialog was basic and lacked visual appeal.
+- **Solution**:
+  - Created a more structured layout for teacher information
+  - Added teacher avatar with initials
+  - Improved the display of subjects, grades and sections
+  - Enhanced the styling for badges and status indicators
 
-## Current Issues and Pending Tasks
+```html
+<Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
+    <div class="p-fluid" v-if="selectedTeacher">
+        <div class="teacher-details-header">
+            <div class="teacher-avatar">
+                <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
+            </div>
+            <div class="teacher-details-name">
+                <h2>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h2>
+                <div class="teacher-status">
+                    <Tag :value="selectedTeacher.is_active ? 'ACTIVE' : 'INACTIVE'"
+                        :severity="selectedTeacher.is_active ? 'success' : 'danger'" />
+                    <span v-if="selectedTeacher.is_head_teacher" class="head-teacher-badge">Head Teacher</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Additional teacher details sections... -->
+    </div>
+</Dialog>
+```
 
-### Fixed Issues
-- ✅ Subject dialog visibility issue resolved
-- ✅ Grade dropdown format inconsistency fixed
-- ✅ Search filtering enhanced to handle different data formats
-- ✅ Caching implementation improved
-- ✅ Modal stack order corrected with proper z-index
+### 5. Class Scheduling Functionality
+- **Problem**: Schedule management was limited and not visually appealing.
+- **Solution**:
+  - Enhanced the schedule dialog with better layout and styling
+  - Implemented a weekly view for better schedule visualization
+  - Added room information and section display
+  - Improved the UI for adding and managing schedule items
 
-### Pending Fixes
-- ⬜ HTML parsing errors in the template structure (current focus)
+```html
+<!-- Schedule Dialog -->
+<Dialog v-model:visible="scheduleDialog"
+    :header="`Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`"
+    modal
+    :style="{ width: '80vw', maxWidth: '1000px' }"
+    class="schedule-dialog">
+    <div v-if="selectedSubjectForSchedule" class="p-fluid">
+        <div class="schedule-header mb-4">
+            <!-- Header content -->
+        </div>
 
-## Project Specifications and Requirements
+        <!-- Schedule Form -->
+        <div class="schedule-form p-3 mb-4 border-1 surface-border border-round">
+            <h5 class="mb-3">Add New Schedule</h5>
+            <div class="formgrid grid">
+                <!-- Form fields -->
+            </div>
+        </div>
 
-### Design Principles
-- Space-themed UI with floating elements and cosmic visuals
-- Educational focus with grade levels and subject management
-- Responsive design for various device sizes
-- Smooth transitions and animations
+        <!-- Schedule Table -->
+        <div class="schedule-table">
+            <!-- Table content -->
+        </div>
 
-### Technical Requirements
-- Vue.js frontend with PrimeVue components
-- Axios for API communication
-- Laravel backend (not shown in current work)
+        <!-- Weekly View -->
+        <div v-if="scheduleData.length > 0" class="weekly-schedule mt-4">
+            <h5 class="mb-3">Weekly View</h5>
+            <div class="schedule-grid border-1 surface-border">
+                <!-- Weekly view content -->
+            </div>
+        </div>
+    </div>
+</Dialog>
+```
 
-## Next Steps
-1. Fix remaining template parsing issues
-2. Continue enhancing the user experience
-3. Implement any additional features for subject management
-4. Ensure cross-browser compatibility
-5. Optimize performance for large dataset handling
+## Current State
 
-## Additional Notes
-- The space theme should be maintained throughout the application
-- Performance is important, particularly for search and filtering
-- UI should be intuitive for educational staff users 
+### Working Features
+1. **Teacher Management**:
+   - Teacher registration/editing
+   - Subject assignment
+   - Class scheduling
+   - Status tracking (active/inactive)
+
+2. **Data Loading**:
+   - Resilient API connectivity with multiple fallbacks
+   - Proper error handling and user feedback
+   - Offline functionality with fallback data
+
+3. **UI/UX**:
+   - Modern card-based layout
+   - Animated elements for visual appeal
+   - Enhanced dialog designs
+   - Better organization of information
+
+### Pending/Future Tasks
+1. **Backend Integration**:
+   - Additional endpoint discovery for edge cases
+   - Potential CORS handling
+
+2. **Data Synchronization**:
+   - More robust conflict resolution for offline/online sync
+   - Potential queue system for failed API calls
+
+3. **UI Enhancements**:
+   - Potential filter/search improvements
+   - Mobile responsiveness testing/improvements
+
+## Technical Implementation Notes
+
+### API Communication Strategy
+- Always try multiple endpoints (localhost:8000, 127.0.0.1:8000, localhost)
+- Implement proper timeouts to prevent hanging
+- Provide fallback data for all API requests
+- Use local storage for persistence when offline
+
+### Data Normalization
+- Ensure all IDs are converted to numbers for consistency
+- Provide consistent data structures even with fallback data
+- Map API responses to expected formats with defaults for missing fields
+
+### UI Philosophy
+- Card-based layout for better visual organization
+- No scrolling requirement for main views
+- Educational/mathematical themed styling
+- Clear action buttons with tooltips
+- Consistent error handling with toast notifications
+
+## Technologies Used
+- Vue.js 3 with Composition API
+- PrimeVue components (Button, Dialog, DataTable, etc.)
+- Fetch API for backend communication
+- LocalStorage for offline persistence
+- CSS animations for visual enhancements 

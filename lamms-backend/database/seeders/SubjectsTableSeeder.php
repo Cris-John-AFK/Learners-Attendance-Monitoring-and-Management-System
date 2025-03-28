@@ -2,8 +2,10 @@
 
 namespace Database\Seeders;
 
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Subject;
+use App\Models\Grade;
 
 class SubjectsTableSeeder extends Seeder
 {
@@ -17,72 +19,83 @@ class SubjectsTableSeeder extends Seeder
 
         $subjects = [
             [
-                'id' => 'MATH101',
+                'code' => 'MATH101',
                 'name' => 'Mathematics',
-                'grade' => 'Grade 1',
                 'description' => 'Basic mathematics',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['1']
             ],
             [
-                'id' => 'MATH102',
+                'code' => 'MATH102',
                 'name' => 'Mathematics',
-                'grade' => 'Grade 2',
                 'description' => 'Advanced mathematics',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['2']
             ],
             [
-                'id' => 'MATH103',
+                'code' => 'MATH103',
                 'name' => 'Mathematics',
-                'grade' => 'Grade 3',
                 'description' => 'Advanced mathematics',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['3']
             ],
             [
-                'id' => 'ENG101',
+                'code' => 'ENG101',
                 'name' => 'English',
-                'grade' => 'Grade 1',
                 'description' => 'Basic English',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['1']
             ],
             [
-                'id' => 'ENG102',
+                'code' => 'ENG102',
                 'name' => 'English',
-                'grade' => 'Grade 2',
                 'description' => 'Advanced English',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['2']
             ],
             [
-                'id' => 'ENG103',
+                'code' => 'ENG103',
                 'name' => 'English',
-                'grade' => 'Grade 3',
                 'description' => 'Advanced English',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['3']
             ],
             [
-                'id' => 'SCI101',
+                'code' => 'SCI101',
                 'name' => 'Science',
-                'grade' => 'Grade 1',
                 'description' => 'Basic Science',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['1']
             ],
             [
-                'id' => 'SCI102',
+                'code' => 'SCI102',
                 'name' => 'Science',
-                'grade' => 'Grade 2',
                 'description' => 'Advanced Science',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['2']
             ],
             [
-                'id' => 'SCI103',
+                'code' => 'SCI103',
                 'name' => 'Science',
-                'grade' => 'Grade 3',
                 'description' => 'Advanced Science',
-                'credits' => 3,
+                'is_active' => true,
+                'grades' => ['3']
             ],
         ];
 
-        foreach ($subjects as $subject) {
-            Subject::create($subject);
+        foreach ($subjects as $subjectData) {
+            $grades = $subjectData['grades'];
+            unset($subjectData['grades']);
+
+            $subject = Subject::create($subjectData);
+
+            // Attach grades to the subject
+            foreach ($grades as $gradeCode) {
+                $grade = Grade::where('code', $gradeCode)->first();
+                if ($grade) {
+                    $subject->grades()->attach($grade->id);
+                }
+            }
         }
     }
 }

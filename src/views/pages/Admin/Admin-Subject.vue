@@ -1,24 +1,20 @@
 <!-- eslint-disable prettier/prettier -->
 <!-- eslint-disable prettier/prettier -->
 <script setup>
-import { GradesService } from '@/router/service/GradesService';
 import { SubjectService } from '@/router/service/Subjects';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
-import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const subjects = ref([]);
-const grades = ref([]);
 const loading = ref(true);
 const subjectDialog = ref(false);
 const deleteSubjectDialog = ref(false);
-const selectedGrade = ref(null);
 const showSubjectDetails = ref(false);
 const detailsEditMode = ref(false);
 const modalContainer = ref(null);
@@ -27,7 +23,6 @@ const searchQuery = ref('');
 const subject = ref({
     id: null,
     name: '',
-    grade: '',
     description: ''
 });
 const submitted = ref(false);
@@ -41,82 +36,26 @@ const getRandomGradient = () => {
 
 const filteredSubjects = computed(() => {
     console.log('Computing filtered subjects with:', {
-        selectedGrade: selectedGrade.value,
         searchQuery: searchQuery.value,
         subjectsCount: subjects.value.length
     });
 
-    // Helper function to normalize grade values for comparison
-    const normalizeGrade = (grade) => {
-        if (typeof grade === 'object' && grade !== null) {
-            // If grade is an object, try to get name or label property
-            return grade.name || grade.label || '';
-        }
-        return String(grade || '');
-    };
+    // Filter by search query
+    if (!searchQuery.value) {
+        return subjects.value;
+    }
 
-    // Helper function to check if a subject matches the search query
-    const matchesSearch = (subject) => {
-        if (!searchQuery.value) return true;
-
-        const query = searchQuery.value.toLowerCase();
-        const nameMatch = subject.name?.toLowerCase().includes(query);
-        const gradeMatch = normalizeGrade(subject.grade).toLowerCase().includes(query);
-        const descMatch = subject.description?.toLowerCase().includes(query);
-
-        return nameMatch || gradeMatch || descMatch;
-    };
-
-    // Filter by grade and search query
+    const query = searchQuery.value.toLowerCase();
     return subjects.value.filter(subject => {
-        // If no grade is selected or the "All Grades" option is selected (value is null),
-        // only apply search filter
-        if (!selectedGrade.value || selectedGrade.value.value === null) {
-            return matchesSearch(subject);
-        }
-
-        // Normalize the selected grade and subject grade for comparison
-        const selectedGradeStr = normalizeGrade(selectedGrade.value);
-        const subjectGradeStr = normalizeGrade(subject.grade);
-
-        // Log comparison details if needed
-        console.log(`Comparing grades: selected=${selectedGradeStr}, subject=${subjectGradeStr}`,
-            selectedGradeStr === subjectGradeStr);
-
-        // Match both grade and search query
-        return subjectGradeStr === selectedGradeStr && matchesSearch(subject);
+        const nameMatch = subject.name?.toLowerCase().includes(query);
+        const descMatch = subject.description?.toLowerCase().includes(query);
+        return nameMatch || descMatch;
     });
 });
 
 const cardStyles = computed(() => {
     return Object.fromEntries(filteredSubjects.value.map((subject) => [subject.id, { background: getRandomGradient() }]));
 });
-
-const loadGrades = async () => {
-    try {
-        const gradesData = await GradesService.getGrades();
-        console.log('Fetched grades from API:', gradesData);
-
-        // Map the grades data to include all necessary properties
-        grades.value = gradesData.map(grade => ({
-            id: grade.id,
-            name: grade.name,
-            code: grade.code,
-            label: grade.name, // Use name as label for display
-            value: grade.id // Use id as value for selection
-        }));
-
-        console.log('Processed grades for dropdown:', grades.value);
-    } catch (error) {
-        console.error('Error loading grades:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load grades',
-            life: 3000
-        });
-    }
-};
 
 const loadSubjects = async () => {
     try {
@@ -157,8 +96,8 @@ const loadSubjects = async () => {
 const saveSubject = async () => {
     try {
         // Validation
-        if (!subject.value.name || !subject.value.grade) {
-            toast.add({ severity: 'error', summary: 'Error', detail: 'Please fill in all required fields', life: 3000 });
+        if (!subject.value.name) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Please fill in the subject name', life: 3000 });
             return;
         }
 
@@ -167,23 +106,6 @@ const saveSubject = async () => {
             name: subject.value.name,
             description: subject.value.description
         };
-
-        // Handle grade selection and grade_ids
-        if (typeof subject.value.grade === 'object' && subject.value.grade !== null) {
-            console.log('Selected grade object:', subject.value.grade);
-            formattedSubject.grade_ids = [subject.value.grade.id];
-            formattedSubject.grade = subject.value.grade.name;
-        } else {
-            // If grade is not an object, try to find the grade object from grades list
-            const gradeObj = grades.value.find(g => g.name === subject.value.grade);
-            if (gradeObj) {
-                formattedSubject.grade_ids = [gradeObj.id];
-                formattedSubject.grade = gradeObj.name;
-            } else {
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Invalid grade selected', life: 3000 });
-                return;
-            }
-        }
 
         console.log('Saving subject with formatted data:', formattedSubject);
         submitted.value = true;
@@ -199,71 +121,75 @@ const saveSubject = async () => {
                 subjects.value[index] = { ...updated };
             }
 
-            toast.add({ severity: 'success', summary: 'Success', detail: 'Subject Updated', life: 3000 });
-
-            // Close the details modal if it's open
-            if (showSubjectDetails.value) {
-                closeDetailsModal();
-            }
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Subject updated successfully',
+                life: 3000
+            });
         } else {
             // Create new subject
             const created = await SubjectService.createSubject(formattedSubject);
             console.log('Subject created:', created);
 
-            // Add the new subject to the local array
-            if (created) {
-                subjects.value.push(created);
-            }
+            // Add to local data
+            subjects.value.push(created);
 
-            toast.add({ severity: 'success', summary: 'Success', detail: 'Subject Created', life: 3000 });
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Subject created successfully',
+                life: 3000
+            });
         }
 
-        // Reset form and close dialog
+        // Close the dialog and reset form
         subjectDialog.value = false;
-        subject.value = {
-            id: null,
-            name: '',
-            grade: '',
-            description: ''
-        };
-        submitted.value = false;
-
-        // Refresh the subjects list
-        await loadSubjects();
+        resetSubjectForm();
     } catch (error) {
         console.error('Error saving subject:', error);
-        let errorMessage = 'Failed to save subject';
-
-        if (error.response?.data?.message) {
-            errorMessage = error.response.data.message;
-        } else if (error.response?.data?.errors) {
-            // Format validation errors
-            errorMessage = Object.values(error.response.data.errors).flat().join(', ');
-        }
-
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: errorMessage,
+            detail: 'Failed to save subject: ' + (error.message || 'Unknown error'),
             life: 3000
         });
+    } finally {
         submitted.value = false;
     }
+};
+
+const openNew = () => {
+    subject.value = {
+        id: null,
+        name: '',
+        description: ''
+    };
+    submitted.value = false;
+    subjectDialog.value = true;
+};
+
+const editSubject = (editSubject) => {
+    subject.value = { ...editSubject };
+    subjectDialog.value = true;
+};
+
+const confirmDeleteSubject = (subjectToDelete) => {
+    subject.value = subjectToDelete;
+    deleteSubjectDialog.value = true;
 };
 
 const deleteSubject = async () => {
     try {
         await SubjectService.deleteSubject(subject.value.id);
-        await loadSubjects();
+        subjects.value = subjects.value.filter(s => s.id !== subject.value.id);
+
         deleteSubjectDialog.value = false;
-        if (showSubjectDetails.value) {
-            closeDetailsModal();
-        }
 
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: 'Subject Deleted',
+            detail: 'Subject deleted successfully',
             life: 3000
         });
     } catch (error) {
@@ -271,80 +197,28 @@ const deleteSubject = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to delete subject',
+            detail: 'Failed to delete subject: ' + (error.message || 'Unknown error'),
             life: 3000
         });
     }
 };
 
-const hideDialog = () => {
-    subjectDialog.value = false;
-    submitted.value = false;
-};
-
-const openNew = () => {
-    // Reset form fields first
+const resetSubjectForm = () => {
     subject.value = {
         id: null,
         name: '',
-        grade: null,
         description: ''
     };
-
     submitted.value = false;
-
-    // Use nextTick to ensure DOM is updated after form reset
-    nextTick(() => {
-        // Reset animations for any fields
-        const fields = document.querySelectorAll('.animated-field');
-        fields.forEach(field => {
-            field.style.animation = 'none';
-            // Trigger reflow to reset animations
-            setTimeout(() => {
-                field.style.animation = '';
-            }, 10);
-        });
-
-        console.log('Opening dialog with reset form');
-        subjectDialog.value = true;
-    });
 };
 
-const editSubject = (subj) => {
-    // Make a copy of the subject data with proper grade structure
-    subject.value = {
-        ...subj,
-        // If the grade is already in the correct format (an object), use it,
-        // otherwise create a proper grade object
-        grade: typeof subj.grade === 'object' ? subj.grade : subj.grade
-    };
-
-    // If we're in the details modal, switch to edit mode
-    if (showSubjectDetails.value) {
-        detailsEditMode.value = true;
-    } else {
-        // Otherwise open the details modal first, then enable edit mode
-        openDetailsModal(subj);
-        nextTick(() => {
-            detailsEditMode.value = true;
-        });
-    }
-};
-
-const confirmDelete = (subj) => {
-    subject.value = { ...subj };
-    deleteSubjectDialog.value = true;
-};
-
-const openDetailsModal = (subj) => {
-    // Set the current subject
-    subject.value = { ...subj };
+// View subject details
+const viewSubjectDetails = (subjectData) => {
+    subject.value = { ...subjectData };
+    detailsEditMode.value = false;
 
     // Show the modal with animation
     showSubjectDetails.value = true;
-
-    // Reset edit mode
-    detailsEditMode.value = false;
 
     // Apply the animation class
     nextTick(() => {
@@ -355,74 +229,45 @@ const openDetailsModal = (subj) => {
     });
 };
 
-const closeDetailsModal = () => {
-    // Add out class to animate closing
-    if (modalContainer.value) {
-        modalContainer.value.classList.add('out');
-    }
+// Toggle edit mode in details
+const toggleEditMode = () => {
+    detailsEditMode.value = !detailsEditMode.value;
+};
 
-    // Remove body class
-    document.body.classList.remove('modal-active');
+// Save edited details
+const saveDetailsEdit = async () => {
+    try {
+        const updated = await SubjectService.updateSubject(subject.value.id, {
+            name: subject.value.name,
+            description: subject.value.description
+        });
 
-    // Reset state after animation
-    setTimeout(() => {
-        showSubjectDetails.value = false;
-        detailsEditMode.value = false;
-        if (modalContainer.value) {
-            modalContainer.value.classList.remove('six', 'out');
+        // Update in local array
+        const index = subjects.value.findIndex(s => s.id === subject.value.id);
+        if (index !== -1) {
+            subjects.value[index] = { ...updated };
         }
-    }, 300);
-};
 
-const filterSubjects = () => {
-    // Implement the search functionality
-    console.log('Filtering subjects...');
-};
+        detailsEditMode.value = false;
 
-const clearSearch = () => {
-    searchQuery.value = '';
-    filterSubjects();
-};
-
-onMounted(async () => {
-    await loadGrades();
-    await loadSubjects();
-});
-
-// Add a watcher for dialog visibility
-watch(subjectDialog, (newValue) => {
-    console.log('Subject dialog visibility changed:', newValue);
-    if (newValue) {
-        // Dialog opened
-        nextTick(() => {
-            const formContainer = document.querySelector('.dialog-form-container');
-            if (formContainer) {
-                const style = window.getComputedStyle(formContainer);
-                console.log('Form container visibility:', {
-                    display: style.display,
-                    opacity: style.opacity,
-                    zIndex: style.zIndex,
-                    overflow: style.overflow,
-                    visibility: style.visibility
-                });
-            } else {
-                console.log('Form container element not found');
-            }
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Subject updated successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error updating subject:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update subject: ' + (error.message || 'Unknown error'),
+            life: 3000
         });
     }
-});
+};
 
-// Add a watcher to refresh grades when dialog closes
-watch(subjectDialog, async (newValue, oldValue) => {
-    if (!newValue && oldValue) {
-        // Dialog is closing, refresh grades
-        await loadGrades();
-    }
-});
-
-// Ensure grades are loaded when component mounts
 onMounted(async () => {
-    await loadGrades();
     await loadSubjects();
 });
 </script>
@@ -447,23 +292,13 @@ onMounted(async () => {
                 <div class="search-container">
                     <div class="search-input-wrapper">
                         <i class="pi pi-search search-icon"></i>
-                        <input type="text" placeholder="Search subjects..." class="search-input" v-model="searchQuery" @input="filterSubjects" />
-                        <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch">
+                        <input type="text" placeholder="Search subjects..." class="search-input" v-model="searchQuery" />
+                        <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''">
                             <i class="pi pi-times"></i>
                         </button>
                     </div>
                 </div>
                 <div class="nav-right">
-                    <div class="grade-filter">
-                        <Select
-                            v-model="selectedGrade"
-                            :options="grades"
-                            optionLabel="label"
-                            placeholder="Filter by Grade"
-                            @change="filterSubjects"
-                            class="p-inputtext-sm"
-                        />
-                    </div>
                     <Button label="Add Subject" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
             </div>
@@ -476,7 +311,7 @@ onMounted(async () => {
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="subject in filteredSubjects" :key="subject.id" class="subject-card" :style="cardStyles[subject.id]" @click="openDetailsModal(subject)">
+                <div v-for="subject in filteredSubjects" :key="subject.id" class="subject-card" :style="cardStyles[subject.id]" @click="viewSubjectDetails(subject)">
                     <!-- Floating symbols -->
                     <span class="symbol"></span>
                     <span class="symbol"></span>
@@ -486,10 +321,9 @@ onMounted(async () => {
 
                     <div class="card-content">
                         <h1 class="subject-title">{{ subject.name }}</h1>
-                        <div class="grade-badge">{{ subject.grade }}</div>
                         <div class="card-actions">
                             <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editSubject(subject)" />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDelete(subject)" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDeleteSubject(subject)" />
                         </div>
                     </div>
                 </div>
@@ -500,164 +334,127 @@ onMounted(async () => {
                 <p>No subjects found. Click "Add Subject" to create one.</p>
             </div>
         </div>
+    </div>
 
-        <!-- Sketch Style Modal -->
-        <div v-if="showSubjectDetails" ref="modalContainer" id="modal-container">
-            <div class="modal-background" @click="closeDetailsModal">
-                <div class="modal" @click.stop>
-                    <div class="modal-header">
-                        <h2>{{ detailsEditMode ? 'Edit Subject' : 'Subject Details' }}</h2>
-                        <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="closeDetailsModal" aria-label="Close" />
-                    </div>
-
-                    <!-- View Mode -->
-                    <div v-if="!detailsEditMode" class="modal-content">
-                        <div class="subject-details">
-                            <div class="detail-row">
-                                <label>Name:</label>
-                                <span>{{ subject.name }}</span>
-                            </div>
-                            <div class="detail-row">
-                                <label>Grade:</label>
-                                <span>{{ subject.grade }}</span>
-                            </div>
-                            <div class="detail-row description">
-                                <label>Description:</label>
-                                <p>{{ subject.description || 'No description available.' }}</p>
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
-                            <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(subject)" />
-                        </div>
-                    </div>
-
-                    <!-- Edit Mode -->
-                    <div v-else class="modal-content">
-                        <div class="edit-form">
-                            <div class="field">
-                                <label for="name">Name</label>
-                                <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
-                                <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
-                            </div>
-                            <div class="field">
-                                <label for="grade">Grade</label>
-                                <div class="select-wrapper">
-                                    <Select
-                                        id="grade"
-                                        v-model="subject.grade"
-                                        :options="grades"
-                                        optionLabel="name"
-                                        placeholder="Select a grade"
-                                        :class="{ 'p-invalid': submitted && !subject.grade }"
-                                        appendTo="body"
-                                    />
-                                </div>
-                                <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
-                            </div>
-                            <div class="field">
-                                <label for="description">Description</label>
-                                <Textarea id="description" v-model="subject.description" rows="3" placeholder="Add a description" />
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
-                            <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSubject" />
-                        </div>
-                    </div>
-
-                    <!-- Modal SVG for sketch animation -->
-                    <svg class="modal-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
-                        <rect x="0" y="0" fill="none" width="100%" height="100%" rx="12" ry="12"></rect>
-                    </svg>
+    <!-- Sketch Style Modal -->
+    <div v-if="showSubjectDetails" ref="modalContainer" id="modal-container">
+        <div class="modal-background" @click="showSubjectDetails = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h2>{{ detailsEditMode ? 'Edit Subject' : 'Subject Details' }}</h2>
+                    <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="showSubjectDetails = false" aria-label="Close" />
                 </div>
+
+                <!-- View Mode -->
+                <div v-if="!detailsEditMode" class="modal-content">
+                    <div class="subject-details">
+                        <div class="detail-row">
+                            <label>Name:</label>
+                            <span>{{ subject.name }}</span>
+                        </div>
+                        <div class="detail-row description">
+                            <label>Description:</label>
+                            <p>{{ subject.description || 'No description available.' }}</p>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="toggleEditMode" />
+                        <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDeleteSubject(subject)" />
+                    </div>
+                </div>
+
+                <!-- Edit Mode -->
+                <div v-else class="modal-content">
+                    <div class="edit-form">
+                        <div class="field">
+                            <label for="name">Name</label>
+                            <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
+                            <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
+                        </div>
+                        <div class="field">
+                            <label for="description">Description</label>
+                            <Textarea id="description" v-model="subject.description" rows="3" placeholder="Add a description" />
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="toggleEditMode" />
+                        <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveDetailsEdit" />
+                    </div>
+                </div>
+
+                <!-- Modal SVG for sketch animation -->
+                <svg class="modal-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
+                    <rect x="0" y="0" fill="none" width="100%" height="100%" rx="12" ry="12"></rect>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Dialog (used only for adding new) -->
+    <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid subject-dialog" :style="{ width: '500px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
+        <div class="dialog-form-container p-5">
+            <!-- Floating particles -->
+            <div class="dialog-particle"></div>
+            <div class="dialog-particle"></div>
+            <div class="dialog-particle"></div>
+
+            <div class="field animated-field p-5">
+                <label for="name">
+                    <i class="pi pi-book mr-2"></i>Subject Name
+                </label>
+                <InputText
+                    id="name"
+                    v-model="subject.name"
+                    required
+                    placeholder="Enter subject name"
+                    :class="{ 'p-invalid': submitted && !subject.name }"
+                />
+                <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
+            </div>
+
+            <div class="field animated-field p-5">
+                <label for="description">
+                    <i class="pi pi-info-circle mr-2"></i>Description
+                </label>
+                <Textarea
+                    id="description"
+                    v-model="subject.description"
+                    rows="3"
+                    placeholder="Enter a short description of the subject"
+                    autoResize
+                />
             </div>
         </div>
 
-        <!-- Add/Edit Dialog (used only for adding new) -->
-        <Dialog v-model:visible="subjectDialog" :header="subject.id ? 'Edit Subject' : 'Add Subject'" modal class="p-fluid subject-dialog" :style="{ width: '500px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
-            <div class="dialog-form-container p-5">
-                <!-- Floating particles -->
-                <div class="dialog-particle"></div>
-                <div class="dialog-particle"></div>
-                <div class="dialog-particle"></div>
-
-                <div class="field animated-field">
-                    <label for="name">
-                        <i class="pi pi-book mr-2"></i>Subject Name
-                    </label>
-                    <InputText
-                        id="name"
-                        v-model="subject.name"
-                        required
-                        placeholder="Enter subject name"
-                        :class="{ 'p-invalid': submitted && !subject.name }"
-                    />
-                    <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
-                </div>
-
-                <div class="field animated-field">
-                    <label for="grade">
-                        <i class="pi pi-tag mr-2"></i>Grade Level
-                    </label>
-                    <div class="select-wrapper">
-                        <Select
-                            id="grade"
-                            v-model="subject.grade"
-                            :options="grades"
-                            optionLabel="name"
-                            placeholder="Select a grade"
-                            :class="{ 'p-invalid': submitted && !subject.grade }"
-                            appendTo="body"
-                        />
-                    </div>
-                    <small class="p-error" v-if="submitted && !subject.grade">Grade is required.</small>
-                </div>
-
-                <div class="field animated-field">
-                    <label for="description">
-                        <i class="pi pi-info-circle mr-2"></i>Description
-                    </label>
-                    <Textarea
-                        id="description"
-                        v-model="subject.description"
-                        rows="3"
-                        placeholder="Enter a short description of the subject"
-                        autoResize
-                    />
-                </div>
+        <template #footer>
+            <div class="dialog-footer-buttons p-5">
+                <Button
+                    label="Cancel"
+                    icon="pi pi-times"
+                    class="p-button-text cancel-button"
+                    @click="subjectDialog = false"
+                />
+                <Button
+                    label="Save"
+                    icon="pi pi-check"
+                    class="p-button-raised p-button-primary save-button-custom"
+                    @click="saveSubject"
+                />
             </div>
+        </template>
+    </Dialog>
 
-            <template #footer>
-                <div class="dialog-footer-buttons">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        class="p-button-text cancel-button"
-                        @click="hideDialog"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        class="p-button-raised p-button-primary save-button-custom"
-                        @click="saveSubject"
-                    />
-                </div>
-            </template>
-        </Dialog>
-
-        <!-- Delete Dialog -->
-        <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
-            <div class="confirmation-content">
-                <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
-                <span>Are you sure you want to delete this subject?</span>
-            </div>
-            <template #footer>
-                <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteSubjectDialog = false" />
-                <Button label="Yes" icon="pi pi-check" class="p-button-danger" @click="deleteSubject()" />
-            </template>
-        </Dialog>
-    </div>
+    <!-- Delete Dialog -->
+    <Dialog v-model:visible="deleteSubjectDialog" header="Confirm" modal :style="{ width: '450px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
+        <div class="confirmation-content">
+            <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
+            <span>Are you sure you want to delete this subject?</span>
+        </div>
+        <template #footer>
+            <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteSubjectDialog = false" />
+            <Button label="Yes" icon="pi pi-check" class="p-button-danger" @click="deleteSubject" />
+        </template>
+    </Dialog>
 </template>
 
 <style scoped>
@@ -921,17 +718,6 @@ onMounted(async () => {
     font-weight: 700;
     text-align: center;
     margin-bottom: 0.5rem;
-}
-
-.grade-badge {
-    background: rgba(74, 135, 213, 0.25) !important;
-    color: #1a365d !important;
-    box-shadow: 0 0 10px rgba(74, 135, 213, 0.3);
-    position: absolute;
-    bottom: 1rem;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-weight: 600;
 }
 
 .card-content {
@@ -1388,322 +1174,6 @@ onMounted(async () => {
     }
 }
 
-:deep(.p-inputtext),
-:deep(.p-dropdown),
-:deep(.p-dropdown-panel),
-:deep(.p-textarea),
-:deep(.p-inputnumber) {
-    width: 100%;
-    padding: 0.5rem 0.5rem;
-    border: 1px solid #d0d5dd;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-    font-size: 0.875rem;
-    height: auto;
-    line-height: 1.5;
-}
-
-:deep(.p-dropdown-panel) {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-/* Enhanced dialog styles */
-.subject-dialog {
-    z-index: 1100 !important;
-    border-radius: 16px;
-    overflow: visible !important;
-}
-
-.subject-dialog .p-dialog-content {
-    display: block !important;
-    min-height: 200px !important;
-    background: rgba(18, 24, 40, 0.85) !important;
-    color: #fff !important;
-    border-radius: 0 0 16px 16px;
-    padding: 0 !important;
-    opacity: 1 !important;
-    overflow: visible !important;
-}
-
-.subject-dialog .p-dialog-header {
-    background: rgba(30, 41, 59, 0.9) !important;
-    color: #fff !important;
-    border-radius: 16px 16px 0 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.dialog-form-container {
-    position: relative;
-    z-index: 10;
-    padding: 1.5rem !important;
-    background: transparent;
-    overflow: visible;
-}
-
-.dialog-particle {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 50%;
-    z-index: 1;
-    pointer-events: none;
-}
-
-.dialog-particle:nth-child(1) {
-    top: 20px;
-    left: 20px;
-    animation: float 8s infinite ease-in-out;
-}
-
-.dialog-particle:nth-child(2) {
-    bottom: 40px;
-    right: 30px;
-    width: 50px;
-    height: 50px;
-    animation: float 10s infinite ease-in-out;
-}
-
-.dialog-particle:nth-child(3) {
-    top: 50%;
-    left: 50%;
-    width: 30px;
-    height: 30px;
-    animation: float 7s infinite ease-in-out;
-}
-
-/* Single media query for responsiveness */
-@media (max-width: 768px) {
-    .modal {
-        width: 95%;
-        padding: 20px;
-    }
-
-    :deep(.add-subject-dialog) {
-        width: 95vw !important;
-    }
-
-    .animated-field {
-        gap: 0.35rem;
-    }
-}
-
-/* Enhanced Add Subject Dialog styles */
-:deep(.add-subject-dialog) {
-    box-shadow:
-        0 15px 35px rgba(50, 50, 93, 0.1),
-        0 5px 15px rgba(0, 0, 0, 0.07);
-}
-
-:deep(.add-subject-dialog .p-dialog-header) {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    color: white;
-    padding: 1.5rem;
-}
-
-:deep(.add-subject-dialog .p-dialog-title) {
-    font-weight: 700;
-    font-size: 1.35rem;
-    letter-spacing: 0.5px;
-    position: relative;
-    display: inline-block;
-    animation: titlePulse 2s infinite alternate;
-}
-
-:deep(.add-subject-dialog .p-dialog-content) {
-    padding: 2rem;
-    background: white;
-}
-
-.add-subject-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.animated-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    opacity: 0;
-    transform: translateY(20px);
-    animation: fieldFadeIn 0.5s ease forwards;
-    position: relative;
-}
-
-.animated-field:nth-child(1) {
-    animation-delay: 0.1s;
-}
-
-.animated-field:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.animated-field:nth-child(3) {
-    animation-delay: 0.3s;
-}
-
-.animated-field:nth-child(4) {
-    animation-delay: 0.4s;
-}
-
-.animated-field label {
-    font-weight: 600;
-    color: #4b5563;
-    font-size: 0.9rem;
-    position: relative;
-    display: inline-block;
-}
-
-.animated-field label::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 0;
-    height: 2px;
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
-    transition: width 0.3s ease;
-}
-
-.animated-field:hover label::after {
-    width: 100%;
-}
-
-:deep(.animated-field .p-inputtext:focus),
-:deep(.animated-field .p-dropdown:focus),
-:deep(.animated-field .p-textarea:focus),
-:deep(.animated-field .p-inputnumber:focus) {
-    border-color: #8b5cf6;
-    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
-}
-
-:deep(.add-subject-dialog .p-dialog-footer) {
-    background: #f9fafb;
-    padding: 1rem 2rem;
-    border-top: 1px solid #f3f4f6;
-}
-
-.dialog-footer-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-}
-
-:deep(.cancel-button) {
-    transition: all 0.3s ease;
-    color: #6b7280;
-}
-
-:deep(.cancel-button:hover) {
-    background-color: #f3f4f6 !important;
-    transform: translateY(-2px);
-}
-
-:deep(.save-button) {
-    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
-    border: none !important;
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
-}
-
-:deep(.save-button:hover) {
-    background: linear-gradient(135deg, #3c7dd4, #5a96e3) !important;
-    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
-}
-
-:deep(.animated-field .p-dropdown:hover),
-:deep(.animated-field .p-inputtext:hover),
-:deep(.animated-field .p-textarea:hover),
-:deep(.animated-field .p-inputnumber:hover) {
-    border-color: #93c5fd;
-}
-
-:deep(.animated-field .p-inputnumber) {
-    border: 2px solid #e5e7eb;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    animation: floatingInput 3s ease-in-out infinite;
-}
-
-:deep(.animated-field .p-inputnumber-buttons-stacked .p-button.p-inputnumber-button) {
-    background: linear-gradient(135deg, #93c5fd, #60a5fa);
-    color: #1e3a8a;
-    border: none;
-}
-
-:deep(.animated-field .p-inputnumber-buttons-stacked .p-button.p-inputnumber-button:hover) {
-    background: linear-gradient(135deg, #60a5fa, #3b82f6);
-}
-
-:deep(.animated-field .p-dropdown-panel) {
-    background: #f0f8ff;
-}
-
-:deep(.animated-field .p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight) {
-    background: linear-gradient(135deg, rgba(74, 135, 213, 0.2), rgba(107, 157, 232, 0.2));
-    color: #1a365d;
-}
-
-/* Dialog button fixes */
-:deep(.p-dialog-footer .p-button.p-component.p-button-text:not(.p-button-danger)) {
-    color: #1a365d !important;
-}
-
-:deep(.cancel-button) {
-    color: #1a365d !important;
-}
-
-/* Animation for card content during hover */
-.subject-card:hover .card-content {
-    transform: scale(1.02);
-    transition: transform 0.3s ease;
-}
-
-.card-content {
-    transition: transform 0.3s ease;
-}
-.grade-filter {
-    margin-right: 1rem;
-}
-.grade-filter :deep(.p-dropdown) {
-    background: rgba(211, 233, 255, 0.8) !important;
-    border: 1px solid rgba(74, 135, 213, 0.3) !important;
-    border-radius: 8px !important; min-width: 150px;
-}
-.grade-filter :deep(.p-dropdown-label) {
-    color: #1a365d !important; font-weight: 500;
-}
-.grade-filter :deep(.p-dropdown-trigger) {
-    color: #4a87d5 !important;
-}
-grade-filter :deep(.p-dropdown:hover) {
-    border-color: rgba(74, 135, 213, 0.6) !important;
-    box-shadow: 0 0 0 1px rgba(74, 135, 213, 0.2) !important;
-}
-/* Style the grade filter dropdown to match theme */
-:deep(.grade-filter) {
-    background: rgba(211, 233, 255, 0.8) !important;
-    border: 1px solid rgba(74, 135, 213, 0.3) !important;
-    border-radius: 8px !important;
-    color: #1a365d !important;
-    margin-right: 1rem;
-}
-
-/* Style the add button to match theme */
-:deep(.add-button) {
-    border-radius: 8px !important;
-    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
-    border: none !important;
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
-    transition: all 0.3s ease !important;
-}
-
-:deep(.add-button:hover) {
-    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
-    transform: translateY(-2px) !important;
-}
-
-/* Search bar styles */
 .search-container {
     flex: 1;
     display: flex;
@@ -1774,336 +1244,103 @@ grade-filter :deep(.p-dropdown:hover) {
     background: rgba(74, 135, 213, 0.1);
 }
 
-/* Card interaction animations */
-.subject-card:hover .symbol {
-    color: rgba(26, 54, 93, 0.6);
+/* Style the add button to match theme */
+:deep(.add-button) {
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
+    transition: all 0.3s ease !important;
 }
 
-
-.subject-card:hover::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at center, rgba(74, 135, 213, 0.1), transparent 70%);
-    pointer-events: none;
-    z-index: 1;
-    animation: pulse-light 1.5s infinite alternate;
-}
-
-@keyframes pulse-light {
-    0% {
-        opacity: 0;
-    }
-    100% {
-        opacity: 1;
-    }
-}
-
-/* Restore button styles */
-:deep(.p-button) {
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease,
-        background-color 0.2s ease !important;
-}
-
-:deep(.p-button:hover:not(.p-disabled)) {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
-}
-
-/* Update card action buttons */
-.card-actions .p-button {
-    color: #1a365d !important;
-    background: rgba(211, 233, 255, 0.5) !important;
-}
-
-.card-actions .p-button:hover {
-    background: rgba(211, 233, 255, 0.8) !important;
-}
-
-.card-actions .p-button.p-button-danger {
-    color: #c53030 !important;
-}
-
-.card-actions .p-button.p-button-danger:hover {
-    background: rgba(254, 215, 215, 0.8) !important;
-}
-
-/* Update loading state to match theme */
-.loading-container {
-    color: #1a365d;
-}
-
-:deep(.p-progressspinner .p-progressspinner-circle) {
-    stroke: #4a87d5 !important;
-}
-
-/* Update form controls */
-:deep(.p-inputtext:enabled:focus),
-:deep(.p-select:enabled:focus) {
-    border-color: #4a87d5;
-    box-shadow: 0 0 0 1px rgba(74, 135, 213, 0.25);
-}
-
-:deep(.p-select-panel .p-select-items .p-select-item.p-highlight) {
-    background: rgba(74, 135, 213, 0.1);
-    color: #1a365d;
-}
-
-:deep(.p-select:not(.p-disabled).p-focus),
-:deep(.p-inputtext:enabled:hover) {
-    border-color: #4a87d5;
-}
-
-/* Fix dialog form container - remove margin */
-.dialog-form-container.mt-4 {
-    margin-top: 0 !important;
-}
-
-/* Fix dialog content visibility issue */
-.dialog-particle {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background: rgba(74, 135, 213, 0.2);
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 0; /* Lower z-index so it doesn't overlay form content */
-    animation: particleFloat 15s infinite linear;
+:deep(.add-button:hover) {
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
+    transform: translateY(-2px) !important;
 }
 
 .dialog-form-container {
     position: relative;
-    z-index: 5 !important;
-    margin-top: 0 !important;
-    padding: 1rem !important;
-    background: transparent !important;
+    z-index: 10;
+    padding: 1.5rem !important;
+    background: transparent;
+    overflow: visible;
 }
 
-:deep(.subject-dialog) {
-    z-index: 1000 !important;
-    overflow: visible !important;
-}
-
-:deep(.subject-dialog .p-dialog-content) {
-    padding: 2rem !important;
-    background: linear-gradient(170deg, #f0f8ff 0%, #e0f2ff 100%) !important;
-    background-size: 200% 200% !important;
-    animation: gradientBG 15s ease infinite !important;
-    position: relative;
+.dialog-particle {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
     z-index: 1;
-    overflow: visible !important;
+    pointer-events: none;
 }
 
-@keyframes gradientBG {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
+.dialog-particle:nth-child(1) {
+    top: 20px;
+    left: 20px;
+    animation: float 8s infinite ease-in-out;
 }
 
-/* Form field styles */
-.dialog-form-container .field label {
-    font-weight: 600;
-    font-size: 1rem;
-    color: #1a365d;
-    margin-bottom: 0.5rem;
-    display: block;
-    transition: all 0.3s ease;
+.dialog-particle:nth-child(2) {
+    bottom: 40px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    animation: float 10s infinite ease-in-out;
+}
+
+.dialog-particle:nth-child(3) {
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    animation: float 7s infinite ease-in-out;
+}
+
+.animated-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fieldFadeIn 0.5s ease forwards;
     position: relative;
 }
 
-.dialog-form-container .field label::after {
-    content: '';
-    position: absolute;
-    bottom: -5px;
-    left: 0;
-    width: 0;
-    height: 2px;
-    background: linear-gradient(90deg, #4a87d5, #6b9de8);
-    transition: width 0.3s ease;
+.animated-field:nth-child(1) {
+    animation-delay: 0.1s;
 }
 
-.dialog-form-container .field:hover label::after {
-    width: 100%;
+.animated-field:nth-child(2) {
+    animation-delay: 0.2s;
 }
 
-.dialog-form-container input,
-.dialog-form-container textarea,
-.dialog-form-container .p-inputnumber,
-.dialog-form-container .p-select {
-    border: 2px solid rgba(74, 135, 213, 0.2);
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 10px rgba(74, 135, 213, 0.1);
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(5px);
-    width: 100%;
-}
-
-.dialog-form-container input:focus,
-.dialog-form-container textarea:focus,
-.dialog-form-container .p-inputnumber:focus,
-.dialog-form-container .p-select:focus {
-    border-color: #4a87d5;
-    box-shadow:
-        0 0 0 2px rgba(74, 135, 213, 0.1),
-        0 8px 16px rgba(74, 135, 213, 0.15);
-    transform: translateY(-2px);
-    background: white;
-}
-
-.dialog-form-container input:hover,
-.dialog-form-container textarea:hover,
-.dialog-form-container .p-inputnumber:hover,
-.dialog-form-container .p-select:hover {
-    border-color: #4a87d5;
-    box-shadow: 0 6px 12px rgba(74, 135, 213, 0.15);
-}
-
-/* Dialog footer styles */
-:deep(.p-dialog .p-dialog-footer) {
-    background: linear-gradient(to top, #e0f2ff, #f0f8ff);
-    padding: 1.5rem 2rem;
-    border-top: 1px solid rgba(74, 135, 213, 0.2);
-    position: relative;
-}
-
-:deep(.p-dialog .p-dialog-footer::before) {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.8),
-        transparent
-    );
-}
-
-/* Button styles */
 .dialog-footer-buttons {
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    position: relative;
-    z-index: 50;
 }
 
-.cancel-button {
-    position: relative;
-    overflow: hidden;
-    border-radius: 10px !important;
-    background: rgba(211, 233, 255, 0.8) !important;
-    color: #1a365d !important;
-    border: 1px solid rgba(74, 135, 213, 0.2) !important;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05) !important;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-    transform: scale(1);
+:deep(.cancel-button) {
+    transition: all 0.3s ease;
+    color: #6b7280;
 }
 
-.cancel-button:hover {
-    background: rgba(224, 242, 255, 0.9) !important;
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08) !important;
+:deep(.cancel-button:hover) {
+    background-color: #f3f4f6 !important;
+    transform: translateY(-2px);
 }
 
-.save-button {
-    position: relative;
-    overflow: hidden;
-    border-radius: 10px !important;
+:deep(.save-button-custom) {
     background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
     border: none !important;
-    box-shadow:
-        0 4px 15px rgba(74, 135, 213, 0.3),
-        0 0 0 2px rgba(74, 135, 213, 0.1) !important;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
 }
 
-.save-button:hover {
+:deep(.save-button-custom:hover) {
     background: linear-gradient(135deg, #3c7dd4, #5a96e3) !important;
-    transform: translateY(-3px) scale(1.05);
-    box-shadow:
-        0 8px 20px rgba(74, 135, 213, 0.4),
-        0 0 0 2px rgba(74, 135, 213, 0.2) !important;
-}
-
-/* Button shine animation */
-.save-button::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: linear-gradient(
-        transparent,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent,
-        transparent
-    );
-    transform: rotate(45deg);
-    animation: buttonShine 3s infinite;
-}
-
-@keyframes buttonShine {
-    0% {
-        top: -50%;
-        left: -50%;
-    }
-    30%, 100% {
-        top: 150%;
-        left: 150%;
-    }
-}
-
-/* Select panel styles */
-:deep(.p-select-panel) {
-    position: absolute !important;
-    z-index: 9999 !important;
-    border-radius: 12px;
-    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(74, 135, 213, 0.2);
-    background: white;
-    min-width: 100%;
-    max-height: 300px;
-    overflow: auto;
-}
-
-:deep(.p-select-panel .p-select-items) {
-    padding: 0.5rem;
-}
-
-:deep(.p-select-panel .p-select-item) {
-    padding: 0.75rem 1rem;
-    margin: 0.25rem 0;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-:deep(.p-select-panel .p-select-item:hover) {
-    background: rgba(74, 135, 213, 0.1);
-}
-
-/* Dialog mask blur effect */
-:deep(.p-dialog-mask) {
-    backdrop-filter: blur(5px);
-    background-color: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
 }
 
 @keyframes fieldFadeIn {
@@ -2117,52 +1354,53 @@ grade-filter :deep(.p-dropdown:hover) {
     }
 }
 
-/* Style for the select wrapper to ensure proper dropdown display */
-.select-wrapper {
-    position: relative;
-    z-index: 100;
+@keyframes pulse-light {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
-/* Additional styles for overlay panels */
-:deep(.p-component-overlay) {
-    z-index: 9999 !important;
+/* Single media query for responsiveness */
+@media (max-width: 768px) {
+    .modal {
+        width: 95%;
+        padding: 20px;
+    }
 }
 
-.field {
-    position: relative;
-    z-index: 20;
-    margin-bottom: 1.5rem;
+/* Enhanced subject dialog */
+:deep(.subject-dialog) {
+    box-shadow:
+        0 15px 35px rgba(50, 50, 93, 0.1),
+        0 5px 15px rgba(0, 0, 0, 0.07);
+    overflow: visible !important;
 }
 
-.animated-field label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #fff;
-    font-weight: 500;
+:deep(.subject-dialog .p-dialog-header) {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    padding: 1.5rem;
 }
 
-.p-inputtext, .p-inputnumber, .p-dropdown, .p-calendar {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.1) !important;
-    color: #1a365d !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    border-radius: 8px !important;
-    transition: all 0.3s ease;
+:deep(.subject-dialog .p-dialog-content) {
+    background: rgba(18, 24, 40, 0.85) !important;
+    color: #fff !important;
+    padding: 0 !important;
 }
 
-.p-inputtext:enabled:focus,
-.p-inputnumber:enabled:focus,
-.p-dropdown:enabled:focus,
-.p-calendar:enabled:focus,
-.p-select:enabled:focus {
-    box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.4) !important;
-    border-color: #64b5f6 !important;
+.subject-description {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    flex-grow: 1;
 }
 
-.save-button-custom {
-    background: linear-gradient(135deg, #7c4dff, #448aff) !important;
-    border: none !important;
-    box-shadow: 0 4px 12px rgba(124, 77, 255, 0.3) !important;
-    transition: all 0.3s ease !important;
+.status-badge {
+    display: inline-block;
+    font-weight: 600;
 }
 </style>

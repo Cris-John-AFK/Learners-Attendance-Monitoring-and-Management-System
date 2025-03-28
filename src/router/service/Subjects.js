@@ -4,10 +4,10 @@ import { AttendanceService } from './Students';
 
 // Mock data
 const mockSubjects = [
-    { id: 1, name: 'Mathematics', grade: 'Grade 1', description: 'Basic arithmetic and numbers', credits: 3 },
-    { id: 2, name: 'Mathematics', grade: 'Grade 2', description: 'Intermediate arithmetic', credits: 3 },
-    { id: 3, name: 'Mathematics', grade: 'Grade 3', description: 'Advanced arithmetic and basic algebra', credits: 3 },
-    { id: 4, name: 'English', grade: 'Grade 1', description: 'Basic reading and writing', credits: 3 }
+    { id: 1, name: 'Mathematics', description: 'Basic arithmetic and numbers', credits: 3 },
+    { id: 2, name: 'Mathematics', description: 'Intermediate arithmetic', credits: 3 },
+    { id: 3, name: 'Mathematics', description: 'Advanced arithmetic and basic algebra', credits: 3 },
+    { id: 4, name: 'English', description: 'Basic reading and writing', credits: 3 }
     // Add more mock subjects as needed
 ];
 
@@ -185,25 +185,6 @@ export const SubjectService = {
         }));
     },
 
-    // Get all grades associated with subjects
-    async getSubjectGrades() {
-        try {
-            const subjects = await this.getSubjects();
-            // Extract unique grades from subjects
-            const grades = [...new Set(subjects.map((subject) => subject.grade))];
-            return grades;
-        } catch (error) {
-            console.error('Error getting subject grades:', error);
-            return [];
-        }
-    },
-
-    // Get sections by both grade and subject
-    async getSectionsByGradeAndSubject(gradeName, subjectName) {
-        const allSections = await this.getSectionsByGrade(gradeName);
-        return allSections.filter((section) => section.subject === subjectName);
-    },
-
     // Create a new subject - Updated to use API
     async createSubject(subject) {
         try {
@@ -256,6 +237,10 @@ export const SubjectService = {
     async deleteSubject(id) {
         try {
             const response = await axios.delete(`${API_URL}/subjects/${id}`);
+
+            // Invalidate cache after deleting a subject
+            this.clearCache();
+
             return response.data;
         } catch (error) {
             console.error('Error deleting subject:', error);
@@ -284,51 +269,45 @@ export const SubjectService = {
         return true;
     },
 
-    // Get unique subjects (one per name) - Updated to use API
+    // Get unique subjects (by name)
     async getUniqueSubjects() {
         try {
-            // Make API call to get unique subjects
             const response = await axios.get(`${API_URL}/subjects/unique`);
             return response.data;
         } catch (error) {
             console.error('Error getting unique subjects:', error);
 
-            // Fallback to client-side filtering
-            const allSubjects = await this.getSubjects();
-            const uniqueSubjects = [];
-            const subjectNames = new Set();
+            // Fallback - Get all subjects and filter unique ones
+            const subjects = await this.getSubjects();
 
-            for (const subject of allSubjects) {
-                if (!subjectNames.has(subject.name)) {
-                    subjectNames.add(subject.name);
-                    uniqueSubjects.push(subject);
+            // Create a map to track seen subject names
+            const seen = new Map();
+
+            // Filter to unique subject names
+            const uniqueSubjects = subjects.filter((subject) => {
+                if (seen.has(subject.name)) {
+                    return false;
                 }
-            }
+                seen.set(subject.name, true);
+                return true;
+            });
 
             return uniqueSubjects;
         }
     },
 
-    // Get subjects by grade - Updated to use API
-    async getSubjectsByGrade(gradeId) {
+    // Toggle subject active status
+    async toggleSubjectStatus(id) {
         try {
-            // Format gradeId if needed
-            const grade = gradeId.startsWith('Grade ') ? gradeId : `Grade ${gradeId}`;
+            const response = await axios.patch(`${API_URL}/subjects/${id}/toggle-status`);
 
-            // Make API call to get subjects by grade
-            const response = await axios.get(`${API_URL}/subjects/grade/${encodeURIComponent(grade)}`);
+            // Invalidate cache
+            this.clearCache();
+
             return response.data;
         } catch (error) {
-            console.error('Error getting subjects by grade:', error);
-
-            // Fallback to client-side filtering
-            const allSubjects = await this.getSubjects();
-            return allSubjects.filter((subject) => {
-                const subjectGrade = subject.grade || subject.gradeId;
-                if (subjectGrade === gradeId) return true;
-                if (subjectGrade === `Grade ${gradeId}`) return true;
-                return false;
-            });
+            console.error('Error toggling subject status:', error);
+            return { success: false, error: error.message };
         }
     }
 };

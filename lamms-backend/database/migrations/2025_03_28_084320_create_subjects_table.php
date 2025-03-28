@@ -6,21 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public function up()
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
     {
         Schema::create('subjects', function (Blueprint $table) {
-            $table->string('id')->primary();
+            $table->id();
             $table->string('name');
+            $table->string('code')->unique();
             $table->text('description')->nullable();
+            $table->integer('credits')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-
-            // Add a unique constraint on name to prevent duplicates
-            $table->unique('name');
+            $table->softDeletes();
         });
     }
 
-    public function down()
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
     {
         Schema::dropIfExists('subjects');
     }

@@ -144,40 +144,46 @@ const saveSection = async () => {
     submitted.value = true;
 
     if (!section.value.name?.trim() || !section.value.grade) {
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
             detail: 'Please fill in all required fields',
-            life: 3000
-        });
+                life: 3000
+            });
         return;
     }
 
     try {
+        // Extract the grade_id from the grade object
+        const gradeId = typeof section.value.grade === 'object' ? section.value.grade.id : section.value.grade;
+
+        // Only include fields that the backend expects
         const sectionData = {
             name: section.value.name.trim(),
-            grade: section.value.grade,
+            grade_id: gradeId,
             description: section.value.description?.trim() || ''
         };
+
+        console.log('Sending section data:', sectionData);
 
         if (section.value.id) {
             // Update existing section
             await SectionService.updateSection(section.value.id, sectionData);
-            toast.add({
+        toast.add({
                 severity: 'success',
                 summary: 'Success',
                 detail: 'Section updated successfully',
-                life: 3000
-            });
+            life: 3000
+        });
         } else {
             // Create new section
             await SectionService.createSection(sectionData);
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
                 detail: 'Section created successfully',
-                life: 3000
-            });
+            life: 3000
+        });
         }
 
         sectionDialog.value = false;
@@ -186,11 +192,26 @@ const saveSection = async () => {
         await loadSections(); // Refresh the sections list
     } catch (error) {
         console.error('Error saving section:', error);
+
+        // Extract and display validation errors if available
+        let errorMessage = 'Failed to save section';
+
+        if (error.response?.data?.errors) {
+            console.log('Validation errors:', error.response.data.errors);
+            // Format validation errors into readable message
+            const validationErrors = Object.values(error.response.data.errors)
+                .flat()
+                .join(', ');
+            errorMessage = `Validation errors: ${validationErrors}`;
+        } else if (error.response?.data?.message) {
+            errorMessage = error.response.data.message;
+        }
+
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to save section',
-            life: 3000
+            detail: errorMessage,
+            life: 5000
         });
     }
 };
@@ -361,8 +382,8 @@ onMounted(async () => {
                         <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch">
                             <i class="pi pi-times"></i>
                         </button>
+            </div>
                     </div>
-                </div>
                 <div class="nav-right">
                     <div class="grade-filter">
                         <Select
@@ -373,16 +394,16 @@ onMounted(async () => {
                             @change="filterSections"
                             class="p-inputtext-sm"
                         />
-                    </div>
-                    <Button label="Add Section" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
-            </div>
+                    <Button label="Add Section" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
+        </div>
+                </div>
 
-            <!-- Loading State -->
-            <div v-if="loading" class="loading-container">
-                <ProgressSpinner />
-                <p>Loading sections...</p>
-            </div>
+                <!-- Loading State -->
+                <div v-if="loading" class="loading-container">
+                    <ProgressSpinner />
+                    <p>Loading sections...</p>
+                </div>
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
@@ -403,13 +424,13 @@ onMounted(async () => {
                         </div>
                     </div>
                 </div>
-            </div>
+                </div>
 
-            <!-- Empty State -->
+                <!-- Empty State -->
             <div v-if="filteredSections.length === 0 && !loading" class="empty-state">
-                <p>No sections found. Click "Add Section" to create one.</p>
+                    <p>No sections found. Click "Add Section" to create one.</p>
             </div>
-        </div>
+                </div>
 
         <!-- Sketch Style Modal -->
         <div v-if="showSectionDetails" ref="modalContainer" id="modal-container">
@@ -418,7 +439,7 @@ onMounted(async () => {
                     <div class="modal-header">
                         <h2>{{ detailsEditMode ? 'Edit Section' : 'Section Details' }}</h2>
                         <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="closeDetailsModal" aria-label="Close" />
-                    </div>
+                                </div>
 
                     <!-- View Mode -->
                     <div v-if="!detailsEditMode" class="modal-content">
@@ -426,16 +447,16 @@ onMounted(async () => {
                             <div class="detail-row">
                                 <label>Name:</label>
                                 <span>{{ section.name }}</span>
-                            </div>
+                                </div>
                             <div class="detail-row">
                                 <label>Grade:</label>
                                 <span>{{ section.grade?.name || 'No Grade' }}</span>
-                            </div>
+                                </div>
                             <div class="detail-row description">
                                 <label>Description:</label>
                                 <p>{{ section.description || 'No description available.' }}</p>
                             </div>
-                        </div>
+                            </div>
                         <div class="modal-actions">
                             <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
                             <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(section)" />
@@ -449,7 +470,7 @@ onMounted(async () => {
                                 <label for="name">Name</label>
                                 <InputText id="name" v-model="section.name" required placeholder="Enter section name" :class="{ 'p-invalid': submitted && !section.name }" />
                                 <small class="p-error" v-if="submitted && !section.name">Name is required.</small>
-                            </div>
+                </div>
                             <div class="field">
                                 <label for="grade">Grade</label>
                                 <div class="select-wrapper">
@@ -462,14 +483,14 @@ onMounted(async () => {
                                         :class="{ 'p-invalid': submitted && !section.grade }"
                                         appendTo="body"
                                     />
-                                </div>
+            </div>
                                 <small class="p-error" v-if="submitted && !section.grade">Grade is required.</small>
-                            </div>
+                </div>
                             <div class="field">
                                 <label for="description">Description</label>
                                 <Textarea id="description" v-model="section.description" rows="3" placeholder="Add a description" />
-                            </div>
-                        </div>
+                </div>
+                </div>
                         <div class="modal-actions">
                             <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
                             <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSection" />
@@ -535,8 +556,8 @@ onMounted(async () => {
                         placeholder="Enter a short description of the section"
                         autoResize
                     />
+                    </div>
                 </div>
-            </div>
 
             <template #footer>
                 <div class="dialog-footer-buttons">
@@ -552,7 +573,7 @@ onMounted(async () => {
                         class="p-button-raised p-button-primary save-button-custom"
                         @click="saveSection"
                     />
-                </div>
+                    </div>
             </template>
         </Dialog>
 
@@ -561,12 +582,12 @@ onMounted(async () => {
             <div class="confirmation-content">
                 <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                 <span>Are you sure you want to delete this section?</span>
-            </div>
+                </div>
             <template #footer>
                 <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteSectionDialog = false" />
                 <Button label="Yes" icon="pi pi-check" class="p-button-danger" @click="deleteSection()" />
             </template>
-        </Dialog>
+    </Dialog>
     </div>
 </template>
 
@@ -1329,7 +1350,7 @@ onMounted(async () => {
 }
 
 /* Dialog Styles */
-:deep(.section-dialog) {
+    :deep(.section-dialog) {
     z-index: 1100 !important;
     border-radius: 16px;
     overflow: visible !important;
@@ -1367,7 +1388,7 @@ onMounted(async () => {
 .dialog-footer-buttons {
     display: flex;
     justify-content: flex-end;
-    gap: 1rem;
+        gap: 1rem;
     position: relative;
     z-index: 50;
 }

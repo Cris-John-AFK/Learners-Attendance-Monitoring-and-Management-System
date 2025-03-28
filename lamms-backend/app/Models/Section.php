@@ -14,6 +14,7 @@ class Section extends Model
         'name',
         'grade_id',
         'description',
+        'capacity',
         'is_active'
     ];
 
@@ -21,11 +22,26 @@ class Section extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'capacity' => 'integer'
     ];
 
     public function grade()
     {
         return $this->belongsTo(Grade::class);
+    }
+
+    public function teachers()
+    {
+        return $this->belongsToMany(Teacher::class, 'teacher_section_subject')
+            ->withPivot('subject_id', 'is_primary', 'is_active')
+            ->withTimestamps();
+    }
+
+    public function subjects()
+    {
+        return $this->belongsToMany(Subject::class, 'teacher_section_subject')
+            ->withPivot('teacher_id', 'is_primary', 'is_active')
+            ->withTimestamps();
     }
 
     /**
