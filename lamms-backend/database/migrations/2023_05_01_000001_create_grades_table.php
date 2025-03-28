@@ -6,13 +6,17 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public function up()
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
     {
-        Schema::create('subjects', function (Blueprint $table) {
-            $table->string('id')->primary();
+        Schema::create('grades', function (Blueprint $table) {
+            $table->id();
             $table->string('name');
-            $table->text('description')->nullable();
+            $table->string('code')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->integer('display_order')->default(0);
             $table->timestamps();
 
             // Add a unique constraint on name to prevent duplicates
@@ -20,8 +24,11 @@ return new class extends Migration
         });
     }
 
-    public function down()
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
     {
-        Schema::dropIfExists('subjects');
+        Schema::dropIfExists('grades');
     }
 };

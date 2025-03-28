@@ -5,7 +5,6 @@ import { GradesService } from '@/router/service/GradesService';
 import { SubjectService } from '@/router/service/Subjects';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
@@ -29,8 +28,7 @@ const subject = ref({
     id: null,
     name: '',
     grade: '',
-    description: '',
-    credits: 3
+    description: ''
 });
 const submitted = ref(false);
 
@@ -159,22 +157,35 @@ const loadSubjects = async () => {
 const saveSubject = async () => {
     try {
         // Validation
-        if (!subject.value.name || !subject.value.grade || !subject.value.credits) {
+        if (!subject.value.name || !subject.value.grade) {
             toast.add({ severity: 'error', summary: 'Error', detail: 'Please fill in all required fields', life: 3000 });
             return;
         }
 
-        // Format the grade value properly
-        let formattedSubject = { ...subject.value };
+        // Format the subject data for the API
+        let formattedSubject = {
+            name: subject.value.name,
+            description: subject.value.description
+        };
 
-        if (typeof formattedSubject.grade === 'object' && formattedSubject.grade !== null) {
-            console.log('Grade is an object:', formattedSubject.grade);
-            formattedSubject.grade = formattedSubject.grade.name;
-            formattedSubject.grade_id = formattedSubject.grade.id;
+        // Handle grade selection and grade_ids
+        if (typeof subject.value.grade === 'object' && subject.value.grade !== null) {
+            console.log('Selected grade object:', subject.value.grade);
+            formattedSubject.grade_ids = [subject.value.grade.id];
+            formattedSubject.grade = subject.value.grade.name;
+        } else {
+            // If grade is not an object, try to find the grade object from grades list
+            const gradeObj = grades.value.find(g => g.name === subject.value.grade);
+            if (gradeObj) {
+                formattedSubject.grade_ids = [gradeObj.id];
+                formattedSubject.grade = gradeObj.name;
+            } else {
+                toast.add({ severity: 'error', summary: 'Error', detail: 'Invalid grade selected', life: 3000 });
+                return;
+            }
         }
 
-        console.log('Saving subject with data:', formattedSubject);
-
+        console.log('Saving subject with formatted data:', formattedSubject);
         submitted.value = true;
 
         if (subject.value.id) {
@@ -199,31 +210,43 @@ const saveSubject = async () => {
             const created = await SubjectService.createSubject(formattedSubject);
             console.log('Subject created:', created);
 
-            // Force refresh of subjects to ensure we have latest data
-            await loadSubjects();
+            // Add the new subject to the local array
+            if (created) {
+                subjects.value.push(created);
+            }
 
             toast.add({ severity: 'success', summary: 'Success', detail: 'Subject Created', life: 3000 });
         }
 
-        hideDialog();
+        // Reset form and close dialog
+        subjectDialog.value = false;
+        subject.value = {
+            id: null,
+            name: '',
+            grade: '',
+            description: ''
+        };
+        submitted.value = false;
+
+        // Refresh the subjects list
+        await loadSubjects();
     } catch (error) {
         console.error('Error saving subject:', error);
         let errorMessage = 'Failed to save subject';
 
-        if (error.response && error.response.data) {
-            if (error.response.data.errors) {
-                // Format validation errors
-                const validationErrors = Object.values(error.response.data.errors).flat().join(', ');
-                errorMessage = `Validation error: ${validationErrors}`;
-            } else if (error.response.data.message) {
-                errorMessage = error.response.data.message;
-            }
-        } else if (error.message) {
-            errorMessage = error.message;
+        if (error.response?.data?.message) {
+            errorMessage = error.response.data.message;
+        } else if (error.response?.data?.errors) {
+            // Format validation errors
+            errorMessage = Object.values(error.response.data.errors).flat().join(', ');
         }
 
-        toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 3000 });
-    } finally {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 3000
+        });
         submitted.value = false;
     }
 };
@@ -265,8 +288,7 @@ const openNew = () => {
         id: null,
         name: '',
         grade: null,
-        description: '',
-        credits: 3
+        description: ''
     };
 
     submitted.value = false;
@@ -499,10 +521,6 @@ onMounted(async () => {
                                 <label>Grade:</label>
                                 <span>{{ subject.grade }}</span>
                             </div>
-                            <div class="detail-row">
-                                <label>Credits:</label>
-                                <span>{{ subject.credits }}</span>
-                            </div>
                             <div class="detail-row description">
                                 <label>Description:</label>
                                 <p>{{ subject.description || 'No description available.' }}</p>
@@ -540,10 +558,6 @@ onMounted(async () => {
                             <div class="field">
                                 <label for="description">Description</label>
                                 <Textarea id="description" v-model="subject.description" rows="3" placeholder="Add a description" />
-                            </div>
-                            <div class="field">
-                                <label for="credits">Credits</label>
-                                <InputNumber id="credits" v-model="subject.credits" :min="1" :max="10" placeholder="1-10" />
                             </div>
                         </div>
                         <div class="modal-actions">
@@ -611,22 +625,6 @@ onMounted(async () => {
                         placeholder="Enter a short description of the subject"
                         autoResize
                     />
-                </div>
-
-                <div class="field animated-field">
-                    <label for="credits">
-                        <i class="pi pi-star mr-2"></i>Credits
-                    </label>
-                    <div class="p-inputgroup credits-group">
-                        <InputNumber
-                            id="credits"
-                            v-model="subject.credits"
-                            :min="1"
-                            :max="10"
-                            placeholder="1-10"
-                            showButtons
-                        />
-                    </div>
                 </div>
             </div>
 
