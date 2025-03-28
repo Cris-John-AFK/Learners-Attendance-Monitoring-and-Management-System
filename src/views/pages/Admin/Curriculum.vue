@@ -1,7 +1,7 @@
 <script setup>
 import CustomDialog from '@/components/CustomDialog.vue';
-import SakaiCard from '@/components/SakaiCard.vue';
 import { GradeService } from '@/router/service/Grades';
+import { SubjectService } from '@/router/service/Subjects';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
@@ -19,6 +19,8 @@ const curriculumDialog = ref(false);
 const deleteCurriculumDialog = ref(false);
 const selectedCurriculum = ref(null);
 const archiveDialog = ref(false);
+const archiveConfirmDialog = ref(false);
+const selectedCurriculumToArchive = ref(null);
 const curriculum = ref({
     id: null,
     name: '',
@@ -27,15 +29,20 @@ const curriculum = ref({
     status: 'Active'
 });
 const submitted = ref(false);
-const yearRanges = ref([
-    { start: '2023', end: '2024' },
-    { start: '2024', end: '2025' },
-    { start: '2025', end: '2026' },
-    { start: '2026', end: '2027' },
-    { start: '2027', end: '2028' }
-]);
+const years = ref(['2023', '2024', '2025', '2026', '2027', '2028']);
+const availableEndYears = computed(() => {
+    if (!curriculum.value.yearRange.start) return years.value;
+    const startIdx = years.value.indexOf(curriculum.value.yearRange.start);
+    return years.value.slice(startIdx + 1);
+});
 
-// Search functionality
+const handleStartYearChange = () => {
+    // Reset end year if it's less than or equal to start year
+    if (curriculum.value.yearRange.end && parseInt(curriculum.value.yearRange.end) <= parseInt(curriculum.value.yearRange.start)) {
+        curriculum.value.yearRange.end = '';
+    }
+};
+
 const searchYear = ref('');
 const availableYears = computed(() => {
     const years = new Set();
@@ -70,12 +77,8 @@ const isEditMode = ref(false);
 const editingSectionDetail = ref(null);
 
 const getRandomGradient = () => {
-    const colors = ['#ff9a9e', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
-
-    const color1 = colors[Math.floor(Math.random() * colors.length)];
-    const color2 = colors[Math.floor(Math.random() * colors.length)];
-
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
+    const gradients = ['linear-gradient(45deg, #FF8008 0%, #FFC837 100%)', 'linear-gradient(45deg, #00C6FF 0%, #0072FF 100%)', 'linear-gradient(45deg, #834d9b 0%, #d04ed6 100%)'];
+    return gradients[Math.floor(Math.random() * gradients.length)];
 };
 
 // Mock data for curriculums
@@ -89,19 +92,15 @@ const mockCurriculums = [
 
 const filteredCurriculums = computed(() => {
     let filtered = curriculums.value;
-    
+
     // Filter by year if searchYear is set
     if (searchYear.value) {
-        filtered = filtered.filter((c) => 
-            c.yearRange.start === searchYear.value || 
-            c.yearRange.end === searchYear.value ||
-            `${c.yearRange.start}-${c.yearRange.end}` === searchYear.value
-        );
+        filtered = filtered.filter((c) => c.yearRange.start === searchYear.value || c.yearRange.end === searchYear.value || `${c.yearRange.start}-${c.yearRange.end}` === searchYear.value);
     }
-    
+
     // Only show active curriculums in the main view
-    filtered = filtered.filter(c => c.status === 'Active');
-    
+    filtered = filtered.filter((c) => c.status === 'Active');
+
     return filtered;
 });
 
@@ -119,11 +118,34 @@ const openArchiveDialog = () => {
     archiveDialog.value = true;
 };
 
+const openArchiveConfirmation = (curr) => {
+    selectedCurriculumToArchive.value = curr;
+    archiveConfirmDialog.value = true;
+};
+
+const handleArchiveConfirm = () => {
+    if (selectedCurriculumToArchive.value) {
+        const curr = selectedCurriculumToArchive.value;
+        const index = curriculums.value.findIndex((c) => c.id === curr.id);
+        if (index !== -1) {
+            curriculums.value[index].status = 'Archived';
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Curriculum archived successfully',
+                life: 3000
+            });
+        }
+    }
+    archiveConfirmDialog.value = false;
+    selectedCurriculumToArchive.value = null;
+};
+
 const archiveCurriculum = (curr) => {
-    const index = curriculums.value.findIndex(c => c.id === curr.id);
+    const index = curriculums.value.findIndex((c) => c.id === curr.id);
     if (index !== -1) {
         curriculums.value[index].status = 'Archived';
-        
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -135,10 +157,10 @@ const archiveCurriculum = (curr) => {
 };
 
 const restoreCurriculum = (curr) => {
-    const index = curriculums.value.findIndex(c => c.id === curr.id);
+    const index = curriculums.value.findIndex((c) => c.id === curr.id);
     if (index !== -1) {
         curriculums.value[index].status = 'Active';
-        
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -251,10 +273,16 @@ async function fetchGrades() {
 
 async function fetchSubjects() {
     try {
-        const allSubjects = await GradeService.getSubjectsByGrade('all');
-        subjects.value = [...new Set(allSubjects.map((subject) => subject.name))];
+        const data = await SubjectService.getSubjects();
+        subjects.value = data;
     } catch (error) {
-        console.error('Error fetching subjects:', error);
+        console.error('Error loading subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load subjects',
+            life: 3000
+        });
     }
 }
 
@@ -449,75 +477,77 @@ function closeAddSectionDialog() {
             <h2 class="text-2xl font-semibold">Curriculum Management</h2>
             <div class="flex gap-3">
                 <div class="p-inputgroup">
-                    <Dropdown v-model="searchYear" :options="availableYears" placeholder="Search by Year" class="w-full" appendTo="body">
-                        <template #value="slotProps">
-                            <div v-if="slotProps.value" class="flex align-items-center">
-                                <span>{{ slotProps.value }}</span>
-                            </div>
-                            <span v-else>Search by Year</span>
-                        </template>
-                    </Dropdown>
+                    <Dropdown v-model="searchYear" :options="availableYears" placeholder="Filter by Year" class="w-48" />
                     <Button icon="pi pi-times" @click="clearSearch" v-if="searchYear" class="p-button-secondary" />
                 </div>
-                <Button label="Add New Curriculum" icon="pi pi-plus" class="p-button-success" @click="openNew" />
-                <Button label="Archive" icon="pi pi-archive" class="p-button-warning" @click="openArchiveDialog" />
+                <Button label="New Curriculum" icon="pi pi-plus" @click="openNew" />
+                <Button label="Archive" icon="pi pi-archive" @click="openArchiveDialog" />
             </div>
         </div>
 
-        <div v-if="loading" class="flex justify-center my-8">
-            <i class="pi pi-spin pi-spinner text-4xl text-blue-500"></i>
-        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div v-for="(curr, index) in filteredCurriculums" :key="curr.id" class="curriculum-card group cursor-pointer" @click="openGradeLevelManagement(curr)">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                    <!-- Gradient Header with Icon -->
+                    <div class="h-32 relative" :style="{ background: cardStyles[index].background }">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="icon-burst relative">
+                                <i class="pi pi-book text-white text-4xl z-10 relative"></i>
+                            </div>
+                        </div>
+                    </div>
 
-        <div v-else class="card-container">
-            <SakaiCard v-for="(curr, index) in filteredCurriculums" :key="curr.id" class="custom-card" :style="cardStyles[index]" @click="openGradeLevelManagement(curr)">
-                <div class="card-header">
-                    <h1 class="curriculum-name">{{ curr.name }}</h1>
-                    <p class="year-info">{{ curr.yearRange.start }}-{{ curr.yearRange.end }}</p>
+                    <!-- Card Content -->
+                    <div class="p-6 text-center">
+                        <h3 class="text-xl font-bold mb-2 text-gray-800">{{ curr.name }}</h3>
+                        <p class="text-gray-600 mb-4">{{ curr.yearRange.start }} - {{ curr.yearRange.end }}</p>
+                        <p class="text-gray-500 text-sm mb-4">{{ curr.description }}</p>
+
+                        <!-- Action Buttons -->
+                        <div class="flex justify-center gap-2">
+                            <Button
+                                :label="curr.status === 'Active' ? 'Archive' : 'Restore'"
+                                :class="curr.status === 'Active' ? 'p-button-warning' : 'p-button-success'"
+                                @click.stop="curr.status === 'Active' ? openArchiveConfirmation(curr) : restoreCurriculum(curr)"
+                                size="small"
+                            />
+                            <Button label="Skip" class="p-button-secondary" size="small" @click.stop />
+                        </div>
+                    </div>
                 </div>
-            </SakaiCard>
+            </div>
         </div>
     </div>
 
     <!-- Add Curriculum Dialog -->
-    <CustomDialog v-model:visible="curriculumDialog" :style="{ width: '500px' }" header="Add Curriculum" :modal="true" class="p-fluid curriculum-dialog">
-        <div class="field mb-4">
-            <label for="name" class="font-medium mb-2 block">Curriculum Name</label>
-            <InputText id="name" v-model="curriculum.name" required autofocus :class="{ 'p-invalid': submitted && !curriculum.name }" placeholder="Enter curriculum name" class="w-full p-inputtext-lg" />
-            <small class="p-error" v-if="submitted && !curriculum.name">Curriculum name is required.</small>
-        </div>
+    <CustomDialog v-model:visible="curriculumDialog" :header="curriculum.id ? 'Edit Curriculum' : 'New Curriculum'" :modal="true" class="p-fluid">
+        <div class="p-4">
+            <div class="formgrid grid">
+                <div class="field col-12">
+                    <label for="name">Name</label>
+                    <InputText id="name" v-model="curriculum.name" required autofocus :class="{ 'p-invalid': submitted && !curriculum.name }" />
+                    <small class="p-error" v-if="submitted && !curriculum.name">Name is required.</small>
+                </div>
 
-        <div class="field mb-4">
-            <label for="yearRange" class="font-medium mb-2 block">Academic Year</label>
-            <div class="flex gap-2">
-                <Dropdown
-                    id="startYear"
-                    v-model="curriculum.yearRange.start"
-                    :options="['2023', '2024', '2025', '2026', '2027', '2028']"
-                    placeholder="Select Start Year"
-                    required
-                    :class="{ 'p-invalid': submitted && !curriculum.yearRange.start }"
-                    class="w-full p-inputtext-lg"
-                    appendTo="body"
-                />
-                <Dropdown
-                    id="endYear"
-                    v-model="curriculum.yearRange.end"
-                    :options="['2024', '2025', '2026', '2027', '2028', '2029']"
-                    placeholder="Select End Year"
-                    required
-                    :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }"
-                    class="w-full p-inputtext-lg"
-                    appendTo="body"
-                />
+                <div class="field col-6">
+                    <label for="startYear">Start Year</label>
+                    <Dropdown id="startYear" v-model="curriculum.yearRange.start" :options="years" placeholder="Select Start Year" @change="handleStartYearChange" :class="{ 'p-invalid': submitted && !curriculum.yearRange.start }" />
+                    <small class="p-error" v-if="submitted && !curriculum.yearRange.start">Start Year is required.</small>
+                </div>
+
+                <div class="field col-6">
+                    <label for="endYear">End Year</label>
+                    <Dropdown id="endYear" v-model="curriculum.yearRange.end" :options="availableEndYears" placeholder="Select End Year" :disabled="!curriculum.yearRange.start" :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }" />
+                    <small class="p-error" v-if="submitted && !curriculum.yearRange.end">End Year is required.</small>
+                </div>
+
+                <div class="field col-12">
+                    <label for="description">Description</label>
+                    <InputText id="description" v-model="curriculum.description" required :class="{ 'p-invalid': submitted && !curriculum.description }" />
+                    <small class="p-error" v-if="submitted && !curriculum.description">Description is required.</small>
+                </div>
             </div>
-            <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)">Academic year is required.</small>
         </div>
-
-        <div class="field mb-4">
-            <label for="status" class="font-medium mb-2 block">Status</label>
-            <Dropdown id="status" v-model="curriculum.status" :options="['Active', 'Planned', 'Archived']" placeholder="Select Status" class="w-full p-inputtext-lg" appendTo="body" />
-        </div>
-
         <template #footer>
             <div class="flex justify-end gap-2">
                 <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="curriculumDialog = false" />
@@ -541,6 +571,7 @@ function closeAddSectionDialog() {
                     <template #body="slotProps">
                         <div class="flex space-x-2">
                             <Button icon="pi pi-search" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
+                            <Button icon="pi pi-eye" class="p-button-text" />
                             <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Grade Level" aria-label="Delete Grade Level" />
                         </div>
                     </template>
@@ -567,35 +598,33 @@ function closeAddSectionDialog() {
     </CustomDialog>
 
     <!-- Subject Details Dialog -->
-    <CustomDialog v-model:visible="showSubjectDetailsDialog" :header="`Subject Details - ${selectedSubjectDetails?.name}`" modal class="w-11/12 max-w-6xl" :maximizable="true">
-        <div class="p-4 space-y-4">
+    <CustomDialog v-model:visible="showSubjectDetailsDialog" :header="`Subject Details - ${selectedGrade?.name || ''}`" modal class="max-w-4xl w-full">
+        <div class="p-4">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">Schedule Details</h3>
+                <h3 class="text-xl font-semibold">Schedule Details</h3>
                 <Button label="Add Schedule" icon="pi pi-plus" class="p-button-success" @click="openAddSectionDialog" />
             </div>
 
-            <DataTable
-                :value="sectionDetails.filter((d) => d.section?.name === selectedSubjectDetails?.name)"
-                class="p-datatable-striped"
-                responsiveLayout="stack"
-                :rows="10"
-                :rowsPerPageOptions="[5, 10, 20, 50]"
-                paginator
-                paginatorTemplate="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-                currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
-                :resizableColumns="true"
-                columnResizeMode="fit"
-                showGridlines
-                :scrollable="true"
-                scrollHeight="400px"
-            >
-                <Column field="id" header="ID" sortable style="min-width: 100px" />
-                <Column field="subjectName" header="Subject" sortable style="min-width: 150px" />
-                <Column header="Actions" style="min-width: 100px">
-                    <template #body="slotProps">
+            <DataTable :value="sectionDetails" stripedRows>
+                <Column field="id" header="ID">
+                    <template #body="{ data }">
+                        <span class="font-medium">{{ data.id }}</span>
+                    </template>
+                </Column>
+                <Column header="Subject">
+                    <template #body="{ data }">
+                        <div v-if="typeof data.subjectName === 'object'">
+                            <div class="font-medium">{{ data.subjectName.name }}</div>
+                            <div class="text-sm text-gray-500">{{ data.subjectName.description }}</div>
+                        </div>
+                        <div v-else>{{ data.subjectName }}</div>
+                    </template>
+                </Column>
+                <Column header="Actions" :exportable="false" style="min-width: 8rem">
+                    <template #body="{ data }">
                         <div class="flex gap-2">
-                            <Button icon="pi pi-pencil" class="p-button-text p-button-warning" @click="editSectionDetail(slotProps.data)" tooltip="Edit Schedule" />
-                            <Button icon="pi pi-trash" class="p-button-text p-button-danger" @click="deleteSectionDetail(slotProps.data)" tooltip="Delete Schedule" />
+                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editSectionDetail(data)" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger" @click="deleteSectionDetail(data)" />
                         </div>
                     </template>
                 </Column>
@@ -603,208 +632,143 @@ function closeAddSectionDialog() {
         </div>
     </CustomDialog>
 
-    <!-- Add Schedule Dialog -->
-    <CustomDialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="max-w-md w-full rounded-lg">
-        <div class="p-4 space-y-4">
+    <!-- Add/Edit Section Dialog -->
+    <CustomDialog v-model:visible="showAddSectionDialog" :header="isEditMode ? 'Edit Schedule' : 'Add Schedule'" modal class="p-fluid">
+        <div class="p-4">
             <div class="field">
-                <label class="block text-gray-700 font-medium">Subject</label>
-                <Dropdown v-model="newSectionData.subjectName" :options="subjects" placeholder="Select Subject" class="w-full" appendTo="body" />
-            </div>
-
-            <div class="flex justify-end gap-2 mt-4">
-                <Button label="Cancel" class="p-button-secondary" @click="closeAddSectionDialog" />
-                <Button :label="isEditMode ? 'Update' : 'Save'" class="p-button-success" @click="addNewSection" :disabled="!validateSectionData()" />
+                <label for="subject">Subject</label>
+                <Dropdown id="subject" v-model="newSectionData.subjectName" :options="subjects" optionLabel="name" placeholder="Select a Subject" class="w-full" :class="{ 'p-invalid': submitted && !newSectionData.subjectName }">
+                    <template #option="slotProps">
+                        <div>
+                            <div>{{ slotProps.option.name }}</div>
+                            <div class="text-sm text-gray-500">{{ slotProps.option.description }}</div>
+                        </div>
+                    </template>
+                </Dropdown>
+                <small class="p-error" v-if="submitted && !newSectionData.subjectName">Subject is required.</small>
             </div>
         </div>
+        <template #footer>
+            <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="closeAddSectionDialog" />
+            <Button :label="isEditMode ? 'Update' : 'Add'" icon="pi pi-check" @click="addNewSection" />
+        </template>
     </CustomDialog>
 
-    <!-- Archive Dialog -->
+    <!-- Archive List Dialog -->
     <CustomDialog v-model:visible="archiveDialog" header="Archive Curriculum" :modal="true" class="max-w-4xl w-full rounded-lg">
         <div class="p-4">
             <h3 class="text-xl font-semibold mb-4">Archive Curriculum</h3>
-            
-            <DataTable :value="curriculums" stripedRows class="p-datatable-sm" v-model:selection="selectedCurriculum" 
-                selectionMode="single" dataKey="id" :paginator="true" :rows="5" 
+
+            <DataTable
+                :value="curriculums"
+                stripedRows
+                class="p-datatable-sm"
+                v-model:selection="selectedCurriculum"
+                selectionMode="single"
+                dataKey="id"
+                :paginator="true"
+                :rows="5"
                 paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-                :rowsPerPageOptions="[5, 10, 25]">
+                :rowsPerPageOptions="[5, 10, 25]"
+            >
                 <Column selectionMode="single" headerStyle="width: 3rem"></Column>
                 <Column field="name" header="Name" sortable></Column>
                 <Column header="Year Range" sortable>
-                    <template #body="slotProps">
-                        {{ slotProps.data.yearRange.start }}-{{ slotProps.data.yearRange.end }}
-                    </template>
+                    <template #body="slotProps"> {{ slotProps.data.yearRange.start }}-{{ slotProps.data.yearRange.end }} </template>
                 </Column>
                 <Column field="status" header="Status" sortable>
                     <template #body="slotProps">
-                        <Tag :severity="slotProps.data.status === 'Active' ? 'success' : 'warning'" 
-                            :value="slotProps.data.status" />
+                        <Tag :severity="slotProps.data.status === 'Active' ? 'success' : 'warning'" :value="slotProps.data.status" />
                     </template>
                 </Column>
                 <Column header="Actions">
                     <template #body="slotProps">
                         <div class="flex gap-2">
-                            <Button v-if="slotProps.data.status === 'Active'" 
-                                icon="pi pi-archive" 
-                                class="p-button-rounded p-button-warning p-button-sm" 
-                                @click="archiveCurriculum(slotProps.data)" 
-                                tooltip="Archive" />
-                            <Button v-else 
-                                icon="pi pi-refresh" 
-                                class="p-button-rounded p-button-success p-button-sm" 
-                                @click="restoreCurriculum(slotProps.data)" 
-                                tooltip="Restore" />
+                            <Button v-if="slotProps.data.status === 'Active'" icon="pi pi-archive" class="p-button-rounded p-button-warning p-button-sm" @click="openArchiveConfirmation(slotProps.data)" tooltip="Archive" />
+                            <Button v-else icon="pi pi-refresh" class="p-button-rounded p-button-success p-button-sm" @click="restoreCurriculum(slotProps.data)" tooltip="Restore" />
                         </div>
                     </template>
                 </Column>
             </DataTable>
-            
+
             <div class="flex justify-end gap-2 mt-4">
                 <Button label="Close" class="p-button-text" @click="archiveDialog = false" />
             </div>
         </div>
     </CustomDialog>
+
+    <!-- Archive Confirmation Dialog -->
+    <CustomDialog v-model:visible="archiveConfirmDialog" modal header="Archive Confirmation" :style="{ width: '450px' }" class="p-4">
+        <div class="text-center mb-6">
+            <i class="pi pi-exclamation-triangle text-5xl text-yellow-500 mb-4"></i>
+            <p class="text-lg">Are you sure you want to archive this curriculum?</p>
+            <p class="text-sm text-gray-600 mt-2">This action can be reversed later.</p>
+        </div>
+        <div class="flex justify-center gap-3">
+            <Button label="Yes, Archive" icon="pi pi-check" class="p-button-warning" @click="handleArchiveConfirm" />
+            <Button label="No, Cancel" icon="pi pi-times" class="p-button-secondary" @click="archiveConfirmDialog = false" />
+        </div>
+    </CustomDialog>
 </template>
 
 <style scoped>
-.card-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    transition: all 0.3s ease;
+.curriculum-card {
+    transition: transform 0.3s ease;
 }
 
-.custom-card {
-    width: 200px;
-    height: 250px;
-    border-radius: 10px;
-    overflow: hidden;
+.curriculum-card:hover {
+    transform: translateY(-5px);
+}
+
+.icon-burst {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
     display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    text-align: center;
-    background: #f0f0f0;
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
-    color: white;
-    font-weight: bold;
-    position: relative;
-    animation: card-appear 0.5s ease-out forwards;
-    padding: 15px;
+    align-items: center;
     justify-content: center;
+    position: relative;
 }
 
-@keyframes card-appear {
+.icon-burst::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='rgba(255,255,255,0.5)' d='M50 0 L52 48 L98 50 L52 52 L50 100 L48 52 L2 50 L48 48z'/%3E%3C/svg%3E") no-repeat center/contain;
+    animation: rotate 20s linear infinite;
+}
+
+@keyframes rotate {
     from {
-        opacity: 0;
-        transform: translateY(20px);
+        transform: rotate(0deg);
     }
     to {
-        opacity: 1;
-        transform: translateY(0);
+        transform: rotate(360deg);
     }
 }
 
-.custom-card:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+/* PrimeVue Button Customization */
+:deep(.p-button) {
+    border-radius: 20px;
+    padding: 0.5rem 1.5rem;
 }
 
-.curriculum-name {
-    margin: 0;
-    text-align: center;
-    word-break: break-word;
-    overflow-wrap: break-word;
-    white-space: normal;
-    font-size: 24px;
-    font-weight: 700;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    margin-bottom: 10px;
-    line-height: 1.2;
+:deep(.p-button.p-button-sm) {
+    padding: 0.3rem 1rem;
+    font-size: 0.875rem;
 }
 
-.year-info {
-    margin: 10px 0 0;
-    font-size: 18px;
-    font-weight: 600;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+/* Card Shadow */
+.shadow-lg {
+    box-shadow:
+        0 10px 15px -3px rgba(0, 0, 0, 0.1),
+        0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-.card-header {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    width: 100%;
-}
-
-:deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
-    background-color: #f9fafb;
-}
-:deep(.p-datatable-thead th) {
-    background-color: #e5e7eb;
-    font-weight: bold;
-}
-:deep(.p-dialog) {
-    border-radius: 12px;
-    z-index: 1000;
-}
-:deep(.p-dialog-mask) {
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(3px);
-}
-:deep(.p-button-success) {
-    background-color: #22c55e;
-    border: none;
-}
-:deep(.p-button-success:hover) {
-    background-color: #16a34a;
-}
-
-:deep(.p-datatable) {
-    font-size: 0.95rem;
-}
-
-:deep(.p-datatable .p-datatable-header) {
-    background-color: #f8fafc;
-    padding: 1rem;
-}
-
-:deep(.p-datatable .p-datatable-thead > tr > th) {
-    background-color: #f1f5f9;
-    color: #334155;
-    padding: 0.75rem;
-    font-weight: 600;
-    text-align: left;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr) {
-    background-color: #ffffff;
-    transition: background-color 0.2s;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr:hover) {
-    background-color: #f1f5f9;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr > td) {
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-}
-
-:deep(.p-paginator) {
-    padding: 1rem;
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-}
-
-:deep(.p-dialog.w-11\/12) {
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-:deep(.p-dialog-content) {
-    padding: 0 !important;
+.shadow-xl {
+    box-shadow:
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 </style>
