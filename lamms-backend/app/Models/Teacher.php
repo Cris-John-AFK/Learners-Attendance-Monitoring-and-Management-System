@@ -34,7 +34,7 @@ class Teacher extends Authenticatable
         'is_head_teacher' => 'boolean'
     ];
 
-    protected $appends = ['full_name'];
+    protected $appends = ['full_name', 'primary_assignment', 'subject_assignments'];
 
     public function user()
     {
@@ -61,17 +61,41 @@ class Teacher extends Authenticatable
         return $this->assignments()->where('is_primary', true)->get();
     }
 
+    public function getPrimaryAssignmentAttribute()
+    {
+        return $this->assignments()
+            ->where('is_active', true)
+            ->where(function($query) {
+                $query->where('is_primary', true)
+                    ->orWhere('role', 'primary');
+            })
+            ->with(['section.grade', 'subject'])
+            ->first();
+    }
+
+    public function getSubjectAssignmentsAttribute()
+    {
+        return $this->assignments()
+            ->where('is_active', true)
+            ->where(function($query) {
+                $query->where('is_primary', false)
+                    ->where('role', '!=', 'primary');
+            })
+            ->with(['section.grade', 'subject'])
+            ->get();
+    }
+
     public function sections()
     {
         return $this->belongsToMany(Section::class, 'teacher_section_subject')
-            ->withPivot('subject_id', 'is_primary', 'is_active')
+            ->withPivot('subject_id', 'is_primary', 'is_active', 'role')
             ->withTimestamps();
     }
 
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'teacher_section_subject')
-            ->withPivot('section_id', 'is_primary', 'is_active')
+            ->withPivot('section_id', 'is_primary', 'is_active', 'role')
             ->withTimestamps();
     }
 
@@ -101,7 +125,18 @@ class Teacher extends Authenticatable
     {
         return $this->assignments()
             ->where('section_id', $sectionId)
-            ->where('is_primary', true)
+            ->where(function($query) {
+                $query->where('is_primary', true)
+                    ->orWhere('role', 'primary');
+            })
             ->exists();
+    }
+
+    /**
+     * Get the status of a teacher (active/inactive)
+     */
+    public function getStatusAttribute()
+    {
+        return $this->user->is_active ? 'active' : 'inactive';
     }
 }

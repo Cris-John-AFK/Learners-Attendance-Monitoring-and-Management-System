@@ -17,13 +17,42 @@ class TeacherSectionSubject extends Model
         'section_id',
         'subject_id',
         'is_primary',
-        'is_active'
+        'is_active',
+        'role'
     ];
 
     protected $casts = [
         'is_primary' => 'boolean',
         'is_active' => 'boolean'
     ];
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            // Ensure consistency between role and is_primary
+            if ($model->role === 'primary') {
+                $model->is_primary = true;
+            }
+            if ($model->is_primary === true && $model->role !== 'primary') {
+                $model->role = 'primary';
+            }
+        });
+
+        static::updating(function ($model) {
+            // Ensure consistency between role and is_primary
+            if ($model->role === 'primary') {
+                $model->is_primary = true;
+            }
+            if ($model->is_primary === true && $model->role !== 'primary') {
+                $model->role = 'primary';
+            }
+        });
+    }
 
     /**
      * Get the teacher that owns the assignment.
@@ -59,8 +88,17 @@ class TeacherSectionSubject extends Model
             'section' => $this->section->name,
             'subject' => $this->subject->name,
             'is_primary' => $this->is_primary,
-            'is_active' => $this->is_active
+            'is_active' => $this->is_active,
+            'role' => $this->role
         ];
+    }
+
+    /**
+     * Check if this is a primary teacher assignment.
+     */
+    public function isPrimaryAssignment()
+    {
+        return $this->is_primary || $this->role === 'primary';
     }
 
     /**
@@ -76,7 +114,27 @@ class TeacherSectionSubject extends Model
      */
     public function scopePrimary($query)
     {
-        return $query->where('is_primary', true);
+        return $query->where(function($q) {
+            $q->where('is_primary', true)
+              ->orWhere('role', 'primary');
+        });
+    }
+
+    /**
+     * Scope to get assignments by role
+     */
+    public function scopeByRole($query, $role)
+    {
+        return $query->where('role', $role);
+    }
+
+    /**
+     * Scope to get subject-only assignments (non-primary)
+     */
+    public function scopeSubjectsOnly($query)
+    {
+        return $query->where('is_primary', false)
+                     ->where('role', '!=', 'primary');
     }
 
     /**
@@ -92,7 +150,7 @@ class TeacherSectionSubject extends Model
      */
     public function isPrimary()
     {
-        return $this->is_primary;
+        return $this->is_primary || $this->role === 'primary';
     }
 
     /**
@@ -110,7 +168,16 @@ class TeacherSectionSubject extends Model
      */
     public function togglePrimary()
     {
-        $this->is_primary = !$this->is_primary;
+        $wasPrimary = $this->isPrimary();
+        $this->is_primary = !$wasPrimary;
+
+        // Update role to match is_primary status
+        if (!$wasPrimary) {
+            $this->role = 'primary';
+        } else {
+            $this->role = 'subject';
+        }
+
         $this->save();
         return $this;
     }

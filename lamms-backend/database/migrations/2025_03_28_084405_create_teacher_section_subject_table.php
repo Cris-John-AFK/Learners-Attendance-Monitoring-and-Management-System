@@ -18,6 +18,7 @@ return new class extends Migration
             $table->foreignId('subject_id')->constrained()->onDelete('cascade');
             $table->boolean('is_primary')->default(false);
             $table->boolean('is_active')->default(true);
+            $table->string('role')->default('teacher');
             $table->timestamps();
             $table->softDeletes();
 
