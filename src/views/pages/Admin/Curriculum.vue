@@ -452,9 +452,8 @@ function addNewSection() {
                 gradeSubjects.value[gradeName][index] = newSection;
             }
         } else {
-            // Add new subject
+            // Add new subject - only add to sectionDetails
             sectionDetails.value.push(newSection);
-            gradeSubjects.value[gradeName].push(newSection);
         }
 
         closeAddSectionDialog();
@@ -610,7 +609,7 @@ function closeAddSectionDialog() {
                     <template #body="slotProps">
                         <div class="flex space-x-2">
                             <Button icon="pi pi-folder-plus" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
-                            <Button icon="pi pi-eye" class="p-button-text" />
+
                             <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Grade Level" aria-label="Delete Grade Level" />
                         </div>
                     </template>
