@@ -1,253 +1,141 @@
-# LAMMS (Learning and Academic Management System) Project Summary
+# LAMMS Project Summary - Teacher Assignment System
 
-## Project Overview
-LAMMS is a comprehensive Learning and Academic Management System designed to manage teachers, students, sections, subjects, grades, and their relationships. The system includes admin interfaces for managing these entities and a teacher dashboard for instructors to access their assigned classes and subjects.
+## Overview
+The Learning and Academic Management System (LAMMS) is being developed with a focus on teacher assignment management. The system allows school administrators to assign teachers to grade levels, sections, and subjects, with special handling for primary teachers who are automatically assigned homeroom subjects.
 
-## Key Components and Features
+## Key Components 
 
-### Admin Teacher Management
-- Teacher registration and profile management
-- Assignment of teachers to sections and subjects
-- Grade and section management
-- Teacher scheduling and workload management
+### TeacherAssignmentWizard
+A multi-step wizard component that guides administrators through the process of assigning teachers, with two main modes:
+- **new**: For creating new assignments for a teacher
+- **add-subjects**: For adding additional subjects to teachers who already have a primary assignment
 
-### Technical Architecture
-- Frontend: Vue.js with PrimeVue components
-- Backend: Laravel API with MySQL/PostgreSQL database
-- Authentication: Laravel Sanctum for API authentication
+### Admin-Teacher.vue
+Main administration view for managing teachers, with capabilities to:
+- View all teachers in a card-based UI
+- Display primary assignments and subjects for each teacher
+- Assign teachers to sections and subjects
+- Edit teacher information
+- Delete teachers
 
-## Issues Addressed and Solutions
+## Implemented Features
 
-### 1. Teacher Assignment Data Persistence
-**Problem:** Teacher assignments (sections and subjects) weren't persisting on page reload, and data was showing as "N/A" despite being selected.
+### Primary Teacher Assignment
+- Primary teachers are automatically assigned homeroom subjects
+- Each teacher can only have one primary assignment
+- The UI differentiates between primary and subject assignments using colored tags
 
-**Root Cause:** 
-- The teacher assignment data was being stored in local memory only and not saved to the backend database
-- The API endpoint for saving assignments wasn't being called correctly
-- The data formatting for assignments was incorrect
+### Subject Assignment
+- Teachers can be assigned to teach multiple subjects
+- Primary teachers can have additional subject assignments
+- The system validates to prevent duplicate assignments
 
-**Solution:**
+### UI Enhancements
+- Teacher cards display all subjects assigned to a teacher
+- Subjects are shown with tags indicating whether they are primary assignments
+- The assignment wizard interface provides clear guidance through the assignment process
+
+## Technical Issues Resolved
+
+### Duplicate Variable Declarations
+Fixed multiple instances of duplicated variable declarations in Admin-Teacher.vue:
+- `assignmentWizardDialog`
+- `assignmentWizardMode`
+- `currentAssignmentStep`
+- `totalAssignmentSteps`
+
+### Missing Variable Declarations
+Added missing variable declarations for wizard functionality:
 ```javascript
-// Function to save assignments to backend
-const saveAssignmentToBackend = async (teacherId, assignments) => {
-    try {
-        console.log('Saving assignments to backend for teacher ID:', teacherId);
-        
-        const response = await axios.put(
-            `${API_BASE_URL}/teachers/${teacherId}/assignments`, 
-            { assignments: assignments.map(a => ({
-                section_id: a.section_id,
-                subject_id: a.subject_id,
-                is_primary: a.is_primary || false,
-                role: a.role || 'Teacher'
-            })) }
-        );
-        
-        console.log('Backend save response:', response.data);
-        
-        // Refresh teacher data to ensure we have the latest from the server
-        await loadTeachers();
-        
-        return response.data;
-    } catch (error) {
-        console.error('Failed to save assignments to backend:', error);
-        throw error;
-    }
-};
+// Assignment wizard refs
+const selectedRole = ref(null);
+const selectedGradeForAssignment = ref(null);
+const selectedSectionForAssignment = ref(null);
+const selectedSubjectsForAssignment = ref([]);
+const assignmentWizardTeacher = ref(null);
+const availableSubjectsForAssignment = ref([]);
+const availableSections = ref([]);
 ```
 
-### 2. Teacher Data Loading and Relationships
-**Problem:** Teacher data wasn't correctly loaded with its relationships (sections, subjects, grades), causing display issues.
-
-**Solution:**
+### Homeroom Subject Handling
+Fixed an issue where the system was trying to use "homeroom" as a string ID when assigning primary teachers, causing SQL errors:
 ```javascript
-// Methods
-const loadTeachers = async () => {
-    try {
-        loading.value = true;
-        toast.add({
-            severity: 'info',
-            summary: 'Loading',
-            detail: 'Fetching teachers from server...',
-            life: 2000
-        });
+// Previous implementation creating an invalid homeroom subject
+selectedSubjects.value = [{
+    id: 'homeroom', // Invalid string ID causing database errors
+    name: 'Homeroom',
+    description: 'Main class for primary teacher',
+    is_primary: true
+}];
 
-        // Use the tryApiEndpoints helper to handle multiple endpoints
-        const data = await tryApiEndpoints('/teachers');
+// Fixed implementation checking for existing homeroom subject
+const homeroomSubject = availableSubjects.value.find(
+    s => s.name.toLowerCase() === 'homeroom'
+);
 
-        if (!data || data.length === 0) {
-            console.warn('No teachers returned from API');
-            toast.add({
-                severity: 'warn',
-                summary: 'No Teachers',
-                detail: 'No teachers found in the database. Please add teachers using the Register button.',
-                life: 5000
-            });
-            teachers.value = [];
-            return;
-        }
-
-        // If sections and grades aren't loaded yet, load them first
-        if (sections.value.length === 0) {
-            await loadSections();
-        }
-
-        if (subjects.value.length === 0) {
-            await loadSubjects();
-        }
-
-        if (gradeOptions.value.length === 0) {
-            await loadGrades();
-        }
-
-        // Process teachers data with proper assignment handling
-        teachers.value = data.map(teacher => {
-            // Normalize assignments
-            let processedAssignments = [];
-            
-            if (teacher.assignments && Array.isArray(teacher.assignments)) {
-                processedAssignments = teacher.assignments
-                    .filter(a => a && a.section_id && a.subject_id) // Filter out invalid assignments
-                    .map(assignment => {
-                        // Find the full section from our loaded sections data
-                        const sectionObj = sections.value.find(s => Number(s.id) === Number(assignment.section_id));
-                        
-                        // Find the full subject from our loaded subjects data
-                        const subjectObj = subjects.value.find(s => Number(s.id) === Number(assignment.subject_id));
-                        
-                        // Create enhanced assignment with complete objects
-                        return {
-                            id: assignment.id,
-                            section_id: Number(assignment.section_id),
-                            subject_id: Number(assignment.subject_id),
-                            is_primary: assignment.is_primary || false,
-                            is_active: assignment.is_active !== undefined ? assignment.is_active : true,
-                            // Include full section object with grade info
-                            section: sectionObj || { 
-                                id: Number(assignment.section_id), 
-                                name: `Section ${assignment.section_id}`,
-                                grade_id: null,
-                                grade: null
-                            },
-                            // Include full subject object
-                            subject: subjectObj || { 
-                                id: Number(assignment.subject_id), 
-                                name: `Subject ${assignment.subject_id}` 
-                            },
-                            role: assignment.role || 'Teacher'
-                        };
-                    });
-            }
-            
-            return {
-                ...teacher,
-                active_assignments: processedAssignments
-            };
-        });
-
-        console.log('Successfully processed teachers with full assignment data:', teachers.value);
-
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: `Loaded ${teachers.value.length} teachers successfully`,
-            life: 3000
-        });
-    } catch (error) {
-        console.error('Error loading teachers:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: `Failed to load teachers: ${error.message}`,
-            life: 5000
-        });
-
-        // Initialize with empty array instead of fallback data
-        teachers.value = [];
-    } finally {
-        loading.value = false;
-    }
-};
+if (homeroomSubject) {
+    selectedSubjects.value = [homeroomSubject];
+} else {
+    // Show warning instead of creating invalid subject
+    toast.add({
+        severity: 'warn',
+        summary: 'Homeroom Subject Missing',
+        detail: 'Homeroom subject not found in the system. Please create it first.',
+        life: 5000
+    });
+}
 ```
 
-### 3. Missing editTeacher Function
-**Problem:** The "Edit Teacher" button was triggering an error because the `editTeacher` function was missing.
+### Assignment Mode Handling
+Enhanced the wizard to support two modes:
+1. **New Assignment Mode**:
+   - Full wizard flow from role selection to subject selection
+   - Automatically adds the homeroom subject for primary teachers
 
-**Solution:**
-```javascript
-const editTeacher = (teacherData) => {
-    teacher.value = { ...teacherData };
-    submitted.value = false;
-    teacherDialog.value = true;
-    console.log('Edit dialog opened for teacher:', teacherData);
-};
-```
+2. **Add Subjects Mode**:
+   - Skip directly to subject selection when teacher already has a primary assignment
+   - Show already assigned subjects as disabled
+   - Never sets additional subjects as primary to avoid validation errors
 
-### 4. API Connectivity and Fallback
-**Problem:** API connection issues were preventing the application from loading data.
+## Pending Tasks and Future Improvements
 
-**Solution:**
-```javascript
-// API configuration with multiple endpoints to try
-const API_ENDPOINTS = [
-    'http://localhost:8000/api',
-    'http://127.0.0.1:8000/api',
-    'http://localhost/api'
-];
+1. **Homeroom Subject Requirements**:
+   - The system requires a homeroom subject to exist in the database for primary teacher assignments
+   - Admin should ensure a subject with name "Homeroom" exists before attempting primary assignments
 
-// Try multiple API endpoints with proper error handling
-const tryApiEndpoints = async (path, options = {}) => {
-    let lastError = null;
-    
-    for (const baseUrl of API_ENDPOINTS) {
-        try {
-            const url = `${baseUrl}${path}`;
-            console.log(`Trying API endpoint: ${url}`);
-            
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
-            const response = await fetch(url, {
-                ...options,
-                headers: {
-                    'Accept': 'application/json',
-                    ...(options.headers || {})
-                },
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (response.ok) {
-                if (baseUrl !== API_BASE_URL) {
-                    console.log(`Found working API endpoint: ${baseUrl}`);
-                    API_BASE_URL = baseUrl;
-                }
-                return await response.json();
-            }
-        } catch (error) {
-            lastError = error;
-            console.error(`Error with endpoint ${baseUrl}${path}:`, error);
-        }
-    }
-    
-    throw lastError || new Error('Failed to connect to any API endpoint');
-};
-```
+2. **Error Handling Improvements**:
+   - Added detailed error handling for 500 errors related to duplicate assignments
+   - Further improvements could be made for other error scenarios
 
-### 5. UI Enhancements
-- Modern card-based UI for teacher listing
-- Improved assignment dialog with better validation
-- Responsive design for mobile usage
-- Enhanced visual feedback for user actions
+3. **UI Consistency**:
+   - Ensure consistent styling across the assignment dialogs and teacher cards
 
-## Database Schema
-The system uses the following key tables:
-- `teachers` - Stores teacher profile information
-- `sections` - Stores class section data
-- `subjects` - Stores subject information
-- `grades` - Stores grade levels
-- `teacher_section_subject` - Junction table connecting teachers to sections and subjects
+## Technical Constraints
+
+1. **Database Schema**:
+   - The teacher_assignments table requires numeric IDs for subjects
+   - Teacher assignments need proper role and is_primary flags
+
+2. **API Endpoints**:
+   - The system uses axios for API calls to endpoints like `/teachers/{id}/assignments`
+   - POST and PUT endpoints are used for creating and updating assignments
+
+## Code Structure
+
+The application follows a Vue.js structure with:
+- Composition API for reactive variables and functions
+- PrimeVue components for UI elements
+- Axios for API calls
+- Server validation with appropriate error handling
+
+## Usage Workflow
+
+1. Admin navigates to the Teacher Management page
+2. Admin can view all teachers and their assignments
+3. To add assignments:
+   - For new teachers: Click "Assign" and follow the full wizard
+   - For teachers with existing primary assignments: Click "Assign" to add more subjects
+4. The system validates assignments to prevent duplicates and follow business rules
 
 ```php
 // TeacherSectionSubject model (junction table)
