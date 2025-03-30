@@ -252,12 +252,14 @@ class TeacherController extends Controller
         $validator = Validator::make($request->all(), [
             'assignments' => 'required|array',
             'assignments.*.section_id' => 'required|exists:sections,id',
-            'assignments.*.subject_id' => 'required|exists:subjects,id',
+            'assignments.*.subject_id' => 'nullable|exists:subjects,id', // Changed from required to nullable
             'assignments.*.is_primary' => 'boolean',
-            'assignments.*.role' => 'string|in:primary,subject,special_education,assistant'
+            'assignments.*.role' => 'string|in:primary,subject,special_education,assistant,co_teacher,counselor' // Added co_teacher and counselor
         ]);
 
         if ($validator->fails()) {
+            Log::error('Validation failed for teacher assignments: ' . json_encode($validator->errors()));
+            Log::error('Request data: ' . json_encode($request->all()));
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
@@ -306,24 +308,47 @@ class TeacherController extends Controller
             $assignmentsToCreate = [];
             $processedIds = [];
 
-            foreach ($processedAssignments as $assignment) {
-                // Check if this has an ID and it exists in our current assignments
-                if (!empty($assignment['id']) && in_array($assignment['id'], $existingAssignmentIds)) {
-                    $assignmentsToUpdate[] = $assignment;
-                    $processedIds[] = $assignment['id'];
-                } else {
-                    // Either no ID or ID not found in our assignments - create as new
-                    $assignmentsToCreate[] = [
+        // Update the duplicate subject-section validation check
+        foreach ($processedAssignments as $assignment) {
+            // Skip if not a subject teacher role
+            if ($assignment['is_primary'] === true || $assignment['role'] === 'primary') {
+                continue;
+            }
+
+            // Special handling for Homeroom subject
+            if (strtolower($assignment['subject_name'] ?? '') === 'homeroom') {
+                $query = TeacherSectionSubject::where('section_id', $assignment['section_id'])
+                    ->where('subject_id', $assignment['subject_id'])
+                    ->where('teacher_id', '!=', $teacher->id);
+
+                // Exclude the current assignment if we're updating
+                if (!empty($assignment['id'])) {
+                    $query->where('id', '!=', $assignment['id']);
+                }
+
+                $existingAssignment = $query->first();
+
+                if ($existingAssignment) {
+                    // Get teacher info for better error messages
+                    $existingTeacher = Teacher::find($existingAssignment->teacher_id);
+                    $teacherName = $existingTeacher ? $existingTeacher->full_name : 'Another teacher';
+
+                    DB::rollBack();
+                    return response()->json([
+                        'message' => "Homeroom is already assigned to {$teacherName} for this section. Only one teacher can be assigned the Homeroom subject per section.",
                         'section_id' => $assignment['section_id'],
                         'subject_id' => $assignment['subject_id'],
-                        'is_primary' => $assignment['is_primary'],
-                        'is_active' => true,
-                        'role' => $assignment['role'],
-                        'teacher_id' => $teacher->id
-                    ];
+                        'existing_teacher' => $existingTeacher ? [
+                            'id' => $existingTeacher->id,
+                            'name' => $existingTeacher->full_name
+                        ] : null
+                    ], 422);
                 }
             }
 
+            // For non-homeroom subjects, allow multiple sections to have the same subject
+            // No validation needed here
+        }
             // Get IDs for assignments to delete (ones that exist but are not in our processed list)
             $idsToDelete = array_diff($existingAssignmentIds, $processedIds);
 

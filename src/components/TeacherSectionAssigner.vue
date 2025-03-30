@@ -108,20 +108,34 @@ const loadAvailableSections = async () => {
         loading.value = true;
 
         // Get all sections
-        const response = await axios.get(`${props.apiBaseUrl}/sections/active`);
+        let response;
+        try {
+            response = await axios.get(`${props.apiBaseUrl}/sections/active`);
+        } catch (apiError) {
+            console.error('Error calling /sections/active endpoint:', apiError);
 
-        if (!response.data) {
-            throw new Error('Failed to load sections');
+            // Fallback to regular sections endpoint
+            console.log('Trying fallback to /sections endpoint...');
+            response = await axios.get(`${props.apiBaseUrl}/sections`);
+        }
+
+        if (!response || !response.data) {
+            throw new Error('Failed to load sections data');
         }
 
         const allSections = response.data;
+        console.log('Loaded sections:', allSections.length);
 
         // Get sections this teacher is already assigned to
         const assignedSectionIds = currentAssignments.value.map(a => a.section_id);
+        console.log('Already assigned section IDs:', assignedSectionIds);
 
         // Filter out sections the teacher is already assigned to
         availableSections.value = allSections
-            .filter(section => !assignedSectionIds.includes(Number(section.id)))
+            .filter(section => {
+                const sectionId = Number(section.id);
+                return !assignedSectionIds.includes(sectionId);
+            })
             .map(section => ({
                 id: section.id,
                 name: section.name,
@@ -129,12 +143,18 @@ const loadAvailableSections = async () => {
                 display_name: `${section.name} (${section.grade?.name || 'Unknown Grade'})`
             }));
 
+        console.log('Available sections for assignment:', availableSections.value.length);
+
     } catch (error) {
         console.error('Error loading sections:', error);
+
+        // Create basic list to prevent UI from breaking
+        availableSections.value = [];
+
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load sections',
+            detail: 'Failed to load sections. Please try again later.',
             life: 3000
         });
     } finally {
@@ -156,72 +176,101 @@ const saveAssignment = async () => {
 
     try {
         loading.value = true;
+        const teacherId = props.teacher.id;
+        const sectionId = selectedSection.value.id;
+        const role = selectedRole.value.value;
 
-        // Get current teacher data
-        const teacherResponse = await axios.get(
-            `${props.apiBaseUrl}/teachers/${props.teacher.id}`
-        );
+        console.log(`Adding section ${sectionId} to teacher ${teacherId} with role ${role}`);
 
-        if (!teacherResponse.data) {
-            throw new Error('Failed to load current teacher data');
+        // Use the specific assignments endpoint instead of updating the entire teacher
+        try {
+            // Get current teacher data with assignments
+            const teacherResponse = await axios.get(
+                `${props.apiBaseUrl}/teachers/${teacherId}`
+            );
+
+            if (!teacherResponse.data) {
+                throw new Error('Failed to load current teacher data');
+            }
+
+            const currentTeacherData = teacherResponse.data;
+            const currentAssignmentsFromServer = currentTeacherData.assignments || [];
+
+            // Log existing assignments for debugging
+            console.log('Current assignments:', currentAssignmentsFromServer);
+
+            // Create new assignment with proper types - explicitly set subject_id to null
+            const newAssignment = {
+                teacher_id: Number(teacherId),
+                section_id: Number(sectionId),
+                subject_id: null, // Explicitly null, not undefined
+                is_primary: false,
+                is_active: true,
+                role: role
+            };
+
+            console.log('New assignment to add:', newAssignment);
+
+            // Combine with existing assignments
+            const updatedAssignments = [
+                ...currentAssignmentsFromServer.map(a => ({
+                    id: a.id,
+                    teacher_id: Number(a.teacher_id || teacherId),
+                    section_id: Number(a.section_id),
+                    subject_id: a.subject_id ? Number(a.subject_id) : null, // Ensure null if not present
+                    is_primary: Boolean(a.is_primary),
+                    is_active: a.is_active !== false,
+                    role: a.role || 'subject'
+                })),
+                newAssignment
+            ];
+
+            console.log('All assignments being sent:', updatedAssignments);
+
+            // Send only the assignments array in the update
+            const response = await axios.put(
+                `${props.apiBaseUrl}/teachers/${teacherId}/assignments`,
+                { assignments: updatedAssignments }
+            );
+
+            console.log('Assignment response:', response.data);
+
+            // Success notification
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: `Teacher assigned to ${selectedSection.value.name} as ${selectedRole.value.name}`,
+                life: 3000
+            });
+
+            // Close dialog and notify parent component
+            closeDialog();
+            setTimeout(() => {
+                emit('section-assigned', props.teacher.id);
+            }, 500);
+        } catch (error) {
+            console.error('Assignment API error:', error);
+
+            let errorMessage = 'Failed to update assignments';
+            if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.response?.data?.errors) {
+                errorMessage = 'Validation error: ' +
+                    Object.values(error.response.data.errors).flat().join(', ');
+            }
+
+            throw new Error(errorMessage);
         }
-
-        const currentTeacherData = teacherResponse.data;
-        const currentAssignmentsFromServer = currentTeacherData.assignments || [];
-
-        // Create new assignment
-        const newAssignment = {
-            section_id: selectedSection.value.id,
-            subject_id: null, // No subject assigned initially
-            is_primary: false,
-            role: selectedRole.value.value
-        };
-
-        // Add to existing assignments
-        const updatedAssignments = [...currentAssignmentsFromServer, newAssignment];
-
-        // Create the payload
-        const payload = {
-            ...currentTeacherData,
-            assignments: updatedAssignments
-        };
-
-        // Remove unnecessary fields
-        delete payload.created_at;
-        delete payload.updated_at;
-
-        // Send the update
-        const updateResponse = await axios.put(
-            `${props.apiBaseUrl}/teachers/${props.teacher.id}`,
-            payload
-        );
-
-        // Success notification
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: `Teacher assigned to ${selectedSection.value.name} as ${selectedRole.value.name}`,
-            life: 3000
-        });
-
-        // Close dialog and notify parent component
-        closeDialog();
-        setTimeout(() => {
-            emit('section-assigned', props.teacher.id);
-        }, 500);
     } catch (error) {
         console.error('Error assigning section:', error);
 
-        let errorMessage = 'Failed to assign section';
-        if (error.response && error.response.data && error.response.data.message) {
-            errorMessage = error.response.data.message;
-        }
+        let errorMessage = error.message || 'Failed to assign section';
 
         toast.add({
             severity: 'error',
             summary: 'Error',
             detail: errorMessage,
-            life: 3000
+            life: 4000
         });
     } finally {
         loading.value = false;

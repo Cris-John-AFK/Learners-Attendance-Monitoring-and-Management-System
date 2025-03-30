@@ -4,7 +4,7 @@ import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 // Props
 const props = defineProps({
@@ -35,7 +35,7 @@ const primaryAssignment = ref(null);
 const loadingSubjects = ref(new Set());
 const availableSections = ref([]);
 const selectedSectionId = ref(null);
-
+const homeroom_assignments = ref([]);
 // Watch for dialog visibility
 watch(() => props.visible, async (newValue) => {
     if (newValue) {
@@ -54,7 +54,18 @@ const resetState = () => {
     selectedSectionId.value = null;
     loading.value = false;
 };
-
+// Add this method
+const loadHomeroomAssignments = async () => {
+    try {
+        // Fetch all homeroom assignments
+        const response = await axios.get(`${props.apiBaseUrl}/subjects/homeroom/assignments`);
+        if (response.data) {
+            homeroom_assignments.value = response.data;
+        }
+    } catch (error) {
+        console.error('Error loading homeroom assignments:', error);
+    }
+};
 const closeDialog = () => {
     emit('update:visible', false);
     // Give the parent component time to refresh data
@@ -190,13 +201,29 @@ const loadAvailableSubjects = async () => {
             .filter(id => id); // Filter out null/undefined
 
         // Process subjects for display
-        availableSubjects.value = allSubjects.map(subject => ({
-            ...subject,
-            alreadyAssigned: currentSectionSubjectIds.includes(Number(subject.id)),
-            isPrimary: currentSectionAssignments.some(a =>
-                a.subject_id === Number(subject.id) && (a.is_primary || a.role === 'primary')
-            )
-        }));
+        availableSubjects.value = allSubjects.map(subject => {
+            const isHomeroom = subject.name.toLowerCase() === 'homeroom';
+            const alreadyAssigned = currentSectionSubjectIds.includes(Number(subject.id));
+
+            // If it's homeroom, check if any teacher has it assigned
+            let isHomeroomAssigned = false;
+            if (isHomeroom) {
+                // Check if this subject is already assigned to this section (by any teacher)
+                isHomeroomAssigned = homeroom_assignments.some(
+                    a => a.section_id === selectedSectionId.value &&
+                         a.subject_id === Number(subject.id)
+                );
+            }
+
+            return {
+                ...subject,
+                alreadyAssigned: alreadyAssigned,
+                disabled: isHomeroom && isHomeroomAssigned && !alreadyAssigned,
+                isPrimary: currentSectionAssignments.some(a =>
+                    a.subject_id === Number(subject.id) && (a.is_primary || a.role === 'primary')
+                )
+            };
+        });
 
     } catch (error) {
         console.error('Error loading subjects:', error);
@@ -433,6 +460,15 @@ const getSubjectIcon = (subjectName) => {
 
     return iconMapping[subjectName] || 'pi-book';
 };
+// Call this in your onMounted hook
+onMounted(async () => {
+    await loadHomeroomAssignments();
+    // If the dialog is visible when mounted, load the teacher data
+    if (props.visible) {
+        resetState();
+        await loadTeacherData();
+    }
+});
 </script>
 
 <template>
@@ -537,12 +573,18 @@ const getSubjectIcon = (subjectName) => {
             <!-- Available Subjects -->
             <h3 class="text-lg font-medium mb-2">Available Subjects</h3>
             <div class="border rounded-md mb-4 bg-white overflow-hidden shadow-sm">
-                <div v-for="subject in availableSubjects.filter(s => !s.alreadyAssigned && !s.isPrimary)"
+                <div
+                    v-for="subject in availableSubjects.filter(s => !s.alreadyAssigned && !s.isPrimary)"
                     :key="subject.id"
-                    @click="toggleSubjectSelection(subject)"
+                    :class="{
+                        'selected-subject': selectedSubjects.some(s => s.id === subject.id),
+                        'already-assigned': subject.alreadyAssigned,
+                        'primary': subject.isPrimary,
+                        'disabled': subject.disabled
+                    }"
+                    @click="!subject.disabled && toggleSubjectSelection(subject)"
                     class="flex items-center cursor-pointer relative overflow-hidden border-b last:border-b-0 subject-item selectable-subject"
-                    :class="{'selected-subject': selectedSubjects.some(s => s.id === subject.id)}">
-
+                >
                     <!-- Selection checkmark with prominent animation -->
                     <div class="select-checkbox mr-3"
                          :class="{'selected': selectedSubjects.some(s => s.id === subject.id)}">
@@ -555,6 +597,11 @@ const getSubjectIcon = (subjectName) => {
                     </div>
 
                     <span class="subject-name">{{ subject.name }}</span>
+
+                    <!-- Disabled message for Homeroom -->
+                    <div v-if="subject.disabled" class="disabled-message ml-auto">
+                        (Already assigned to another teacher)
+                    </div>
 
                     <!-- Selection animation -->
                     <div class="selection-ripple"
@@ -984,5 +1031,21 @@ const getSubjectIcon = (subjectName) => {
     100% {
         background-position: 0% 50%;
     }
+}
+
+.subject-item.disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    background-color: #f5f5f5;
+}
+
+.subject-item.disabled:hover {
+    background-color: #f0f0f0;
+}
+
+.disabled-message {
+    font-size: 0.8rem;
+    color: #888;
+    font-style: italic;
 }
 </style>
