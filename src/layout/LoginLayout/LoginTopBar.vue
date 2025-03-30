@@ -6,7 +6,13 @@
             <router-link to="/enrollment" class="layout-topbar-logo">
                 <img src="/demo/images/logo.png" alt="Logo" />
 
-                <span>NCS</span>
+                <span>NAAWAN CENTRAL SCHOOL</span>
+            </router-link>
+        </div>
+        <div class="my-account-container">
+            <router-link to="/my-account" class="my-account-button">
+                <i class="pi pi-user mr-2"></i>
+                MY ACCOUNT
             </router-link>
         </div>
     </div>
@@ -96,6 +102,31 @@ img {
 
 .account-btn i {
     font-size: 16px;
+}
+
+.my-account-container {
+    display: flex;
+    align-items: center;
+}
+
+.my-account-button {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background-color: #495057;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+    font-weight: 500;
+}
+
+.my-account-button:hover {
+    background-color: #343a40;
+}
+
+.my-account-button i {
+    font-size: 1.2rem;
 }
 
 /* Responsive adjustments */

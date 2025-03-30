@@ -398,12 +398,12 @@ async function openSubjectDetails(section) {
         loading.value = true;
         selectedGrade.value = section;
         selectedSubjectDetails.value = section;
-        
+
         // Initialize subjects array for this grade if not exists
         if (!gradeSubjects.value[section.name]) {
             gradeSubjects.value[section.name] = [];
         }
-        
+
         // Load subjects for this grade
         sectionDetails.value = gradeSubjects.value[section.name];
         showSubjectDetailsDialog.value = true;
@@ -432,31 +432,30 @@ function generateId() {
 function addNewSection() {
     if (validateSectionData()) {
         const gradeName = selectedGrade.value.name;
-        
+
         // Initialize grade subjects if not exists
         if (!gradeSubjects.value[gradeName]) {
             gradeSubjects.value[gradeName] = [];
         }
-        
+
         const newSection = {
             id: generateId(),
             subjectName: newSectionData.value.subjectName,
             gradeName: gradeName
         };
-        
+
         if (isEditMode.value) {
             // Update existing subject
-            const index = sectionDetails.value.findIndex(d => d.id === editingSectionDetail.value.id);
+            const index = sectionDetails.value.findIndex((d) => d.id === editingSectionDetail.value.id);
             if (index !== -1) {
                 sectionDetails.value[index] = newSection;
                 gradeSubjects.value[gradeName][index] = newSection;
             }
         } else {
-            // Add new subject
+            // Add new subject - only add to sectionDetails
             sectionDetails.value.push(newSection);
-            gradeSubjects.value[gradeName].push(newSection);
         }
-        
+
         closeAddSectionDialog();
         toast.add({
             severity: 'success',
@@ -473,12 +472,12 @@ function validateSectionData() {
 
 function deleteSectionDetail(detail) {
     const gradeName = selectedGrade.value.name;
-    const index = sectionDetails.value.findIndex(d => d.id === detail.id);
+    const index = sectionDetails.value.findIndex((d) => d.id === detail.id);
     if (index !== -1) {
         // Remove from both arrays
         sectionDetails.value.splice(index, 1);
         gradeSubjects.value[gradeName].splice(index, 1);
-        
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -531,7 +530,7 @@ function closeAddSectionDialog() {
                     <div class="h-32 relative" :style="{ background: cardStyles[index].background }">
                         <div class="absolute inset-0 flex items-center justify-center">
                             <div class="icon-burst relative">
-                                <i class="pi pi-book text-white text-4xl z-10 relative"></i>
+                                <img src="/demo/images/logo.png" alt="NCS Logo" class="w-16 h-16 object-contain z-10 relative" />
                             </div>
                         </div>
                     </div>
@@ -610,7 +609,7 @@ function closeAddSectionDialog() {
                     <template #body="slotProps">
                         <div class="flex space-x-2">
                             <Button icon="pi pi-folder-plus" class="p-button-text" @click="openSubjectDetails(slotProps.data)" tooltip="View Subject Details" aria-label="View Subject Details" />
-                            <Button icon="pi pi-eye" class="p-button-text" />
+
                             <Button icon="pi pi-trash" class="p-button-text" @click="deleteSection(slotProps.data)" tooltip="Delete Grade Level" aria-label="Delete Grade Level" />
                         </div>
                     </template>
