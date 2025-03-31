@@ -1,22 +1,15 @@
 ﻿<script setup>
 import axios from 'axios';
 import Button from 'primevue/button';
-import Checkbox from 'primevue/checkbox';
-import Column from 'primevue/column';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 // TODO: Dropdown is deprecated since PrimeVue v4. Consider migrating to Select component
-import TeacherAssignmentWizard from '@/components/TeacherAssignmentWizard.vue';
-import TeacherSubjectAdder from '@/components/TeacherSubjectAdder.vue';
-import Badge from 'primevue/badge';
 import { default as Dropdown } from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import Tag from 'primevue/tag';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 // Add import for the new TeacherSectionAssigner component
-import TeacherSectionAssigner from '@/components/TeacherSectionAssigner.vue';
+import ProgressSpinner from 'primevue/progressspinner';
 
 // API configuration with multiple endpoints to try
 const API_ENDPOINTS = [
@@ -109,10 +102,7 @@ const teacher = ref({
     password: '',
     phone_number: '',
     address: '',
-    date_of_birth: null,
-    gender: null,
-    is_head_teacher: false,
-    is_active: true
+    gender: null
 });
 
 const assignment = ref({
@@ -1281,10 +1271,7 @@ const openNewTeacherDialog = () => {
         password: '',
         phone_number: '',
         address: '',
-        date_of_birth: null,
-        gender: null,
-        is_head_teacher: false,
-        is_active: true
+        gender: null
     };
     submitted.value = false;
     teacherDialog.value = true;
@@ -2372,11 +2359,48 @@ const handleSubjectAdded = async (teacherId) => {
         life: 3000
     });
 };
+
+const confirmArchiveTeacher = (teacher) => {
+    confirm.require({
+        message: `Are you sure you want to archive ${teacher.first_name} ${teacher.last_name}?`,
+        header: 'Confirm Archive',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        accept: () => archiveTeacher(teacher),
+        reject: () => {
+            // Do nothing if rejected
+        }
+    });
+};
+
+const archiveTeacher = async (teacher) => {
+    try {
+        loading.value = true;
+        const response = await axios.put(`${API_BASE_URL}/teachers/${teacher.id}/archive`);
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher archived successfully',
+            life: 3000
+        });
+        await loadTeachers();
+    } catch (error) {
+        console.error('Error archiving teacher:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Failed to archive teacher: ${error.message}`,
+            life: 5000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
 </script>
 
 <template>
     <div class="admin-teacher-wrapper">
-        <!-- Enhanced Background Animation -->
+        <!-- Background shapes remain unchanged -->
         <div class="background-shapes">
             <div class="shape circle"></div>
             <div class="shape square"></div>
@@ -2386,7 +2410,7 @@ const handleSubjectAdded = async (teacherId) => {
             <div class="shape circle-2"></div>
             <div class="shape square-2"></div>
             <div class="shape triangle-2"></div>
-                </div>
+        </div>
 
         <div class="content-wrapper">
             <!-- Header Section -->
@@ -2396,284 +2420,95 @@ const handleSubjectAdded = async (teacherId) => {
                     <p class="subtitle">Manage and organize your teaching staff</p>
                 </div>
                 <Button label="Register Teacher" icon="pi pi-plus" class="p-button-primary" @click="openNewTeacherDialog" />
-                </div>
+            </div>
 
-            <!-- Search and Filter Section -->
+            <!-- Search Section -->
             <div class="search-section">
                 <span class="p-input-icon-left search-box">
                     <InputText v-model="searchQuery" placeholder="Search teachers..." class="modern-search" />
                 </span>
-                <!-- Removed filter actions -->
             </div>
 
             <!-- Teachers Cards -->
-            <div class="teacher-cards-container">
-                <div v-if="filteredTeachers.length === 0 && !loading" class="empty-message">
-                    <i class="pi pi-users" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
-                    <h3>No Teachers Found</h3>
-                    <p v-if="searchQuery">No teachers match your search criteria.</p>
-                    <p v-else>No teachers exist in the database yet.</p>
-                    <Button label="Register New Teacher" icon="pi pi-plus" class="p-button-primary mt-3" @click="openNewTeacherDialog" />
-                </div>
-
-                <div v-if="loading" class="loading-message">
-                    <i class="pi pi-spin pi-spinner" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+            <div class="teachers-container">
+                <div v-if="loading" class="loading-container">
+                    <ProgressSpinner />
                     <p>Loading teachers...</p>
                 </div>
-
-                <div v-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
+                <div v-else-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
                     <div v-for="teacher in filteredTeachers" :key="teacher.id" class="teacher-card">
                         <div class="teacher-card-header">
                             <div class="teacher-info">
                                 <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
-                                <div v-if="teacher.is_head_teacher" class="teacher-role">Head Teacher</div>
                             </div>
-                            <Tag :value="teacher.is_active ? 'ACTIVE' : 'INACTIVE'"
-                                :severity="teacher.is_active ? 'success' : 'danger'" />
-                </div>
+                        </div>
 
                         <div class="teacher-card-body">
-                            <!-- Primary Assignment -->
-                            <div class="primary-assignment">
-                                <h4>Primary Assignment</h4>
-                                <div v-if="!teacher.primary_assignment && findPrimaryAssignments(teacher).length === 0" class="not-assigned">
-                                    <span class="badge-muted">Not assigned</span>
+                            <!-- Homeroom Section -->
+                            <div class="homeroom-section">
+                                <h4>Homeroom</h4>
+                                <div v-if="teacher.primary_assignment" class="assignment-info">
+                                    <div class="section-info">
+                                        <span class="section-name">{{ teacher.primary_assignment.section?.name || 'Not assigned' }}</span>
+                                        <span class="grade-level">Grade {{ teacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
+                                    </div>
                                 </div>
-                                <div v-else class="assignment-details">
-                                    <div class="teacher-detail">
-                                        <span class="detail-label">Grade:</span>
-                                        <span class="grade-badge">
-                                            {{ teacher.primary_assignment?.section?.grade?.name ||
-                                              (findPrimaryAssignments(teacher)[0]?.section?.grade?.name || 'Not assigned') }}
-                                        </span>
-                                    </div>
-                                    <div class="teacher-detail">
-                                        <span class="detail-label">Section:</span>
-                                        <span class="section-badge">
-                                            {{ teacher.primary_assignment?.section?.name ||
-                                               (findPrimaryAssignments(teacher)[0]?.section?.name || 'Not assigned') }}
-                                        </span>
-                                    </div>
+                                <div v-else class="not-assigned">
+                                    No homeroom assigned
                                 </div>
                             </div>
 
-                            <!-- Subject Assignments -->
-                            <div class="subject-assignments">
+                            <!-- Teaching Subjects Section -->
+                            <div class="teaching-subjects-section">
                                 <h4>Teaching Subjects</h4>
-                                <div v-if="!teacher.subject_assignments && findSubjectAssignments(teacher).length === 0" class="not-assigned">
-                                    <span class="badge-muted">No subjects assigned</span>
-                                </div>
-                                <div v-else class="assignment-details">
-                                    <div class="teacher-detail">
-                                        <span class="detail-label">Subjects:</span>
-                                        <div class="subjects-list">
-                                            <span v-if="getAllTeacherAssignments(teacher).length === 0" class="badge-muted">
-                                                No subjects assigned
-                                            </span>
-                                            <div v-else class="subject-tags">
-                                                <Tag v-for="(assignment, index) in getAllTeacherAssignments(teacher)"
-                                                    :key="assignment.subject_id + '-' + index"
-                                                    :value="assignment.subject?.name || 'Unknown Subject'"
-                                                    :severity="assignment.is_primary || assignment.role === 'primary' ? 'success' : 'info'"
-                                                    class="subject-tag" />
-                                            </div>
-                                        </div>
+                                <div v-if="teacher.subject_assignments && teacher.subject_assignments.length > 0" class="subjects-list">
+                                    <div v-for="assignment in teacher.subject_assignments" :key="assignment.id" class="subject-item">
+                                        <span class="subject-name">{{ assignment.subject?.name }}</span>
+                                        <span class="section-name">{{ assignment.section?.name }}</span>
                                     </div>
+                                </div>
+                                <div v-else class="not-assigned">
+                                    No subjects assigned
                                 </div>
                             </div>
                         </div>
 
                         <div class="teacher-card-actions">
-                            <!-- First row of buttons -->
                             <div class="action-buttons-row">
                                 <Button class="action-btn details-btn"
                                     @click="viewTeacher(teacher)"
                                     v-tooltip.top="'View Details'">
                                     <i class="pi pi-eye"></i>
-                                <span>Details</span>
-                            </Button>
+                                    <span>Details</span>
+                                </Button>
 
                                 <Button class="action-btn edit-btn"
                                     @click="editTeacher(teacher)"
                                     v-tooltip.top="'Edit Teacher'">
-                                <i class="pi pi-pencil"></i>
-                                <span>Edit</span>
-                            </Button>
-
-                                <Button class="action-btn delete-btn"
-                                    @click="confirmDeleteTeacher(teacher)"
-                                    v-tooltip.top="'Delete Teacher'">
-                                <i class="pi pi-trash"></i>
-                                <span>Delete</span>
-                            </Button>
-                            </div>
-
-                            <!-- Second row of buttons -->
-                            <div class="action-buttons-row">
-                                <Button class="action-btn assign-section-btn"
-                                    @click="showSectionAssigner(teacher)"
-                                    v-tooltip.top="'Assign to Section'">
-                                    <i class="pi pi-users"></i>
-                                    <span>Assign</span>
+                                    <i class="pi pi-pencil"></i>
+                                    <span>Edit</span>
                                 </Button>
 
-                                <Button class="action-btn add-subject-btn"
-                                    @click="showSubjectAdder(teacher)"
-                                    v-tooltip.top="'Add Teaching Subjects'">
-                                    <i class="pi pi-book"></i>
-                                    <span>Add Subjects</span>
+                                <Button class="action-btn archive-btn"
+                                    @click="confirmArchiveTeacher(teacher)"
+                                    v-tooltip.top="'Archive Teacher'">
+                                    <i class="pi pi-folder"></i>
+                                    <span>Archive</span>
                                 </Button>
-                            </div>
-                        </div>
-                </div>
-                </div>
-            </div>
-                </div>
-                </div>
-
-        <!-- Teacher Assignment Wizard -->
-<TeacherAssignmentWizard
-    v-model:visible="assignmentWizardDialog"
-    :teacher="selectedTeacher"
-    :apiBaseUrl="apiBaseUrl"
-    :mode="assignmentWizardMode"
-    :existingAssignments="selectedTeacher.active_assignments || []"
-    @assignment-complete="handleAssignmentComplete" />
-
-<TeacherSubjectAdder
-    v-model:visible="subjectAdderDialog"
-    :teacher="selectedTeacher"
-    :apiBaseUrl="apiBaseUrl"
-    @subject-added="handleAssignmentComplete" />
-
-<!-- All Dialogs go here, unchanged -->
-
-        <!-- Teacher Details Dialog -->
-        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
-            <div class="p-fluid" v-if="selectedTeacher">
-                <div class="teacher-details-header">
-                    <div class="teacher-avatar">
-                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
-                </div>
-                    <div class="teacher-details-name">
-                        <!-- Teacher info with refresh button -->
-                        <div class="teacher-info-header">
-                            <div class="name-status">
-                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
-                                <Tag :value="selectedTeacher.is_active ? 'ACTIVE' : 'INACTIVE'"
-                                     :severity="selectedTeacher.is_active ? 'success' : 'danger'" />
-                            </div>
-                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
-                                <i class="pi pi-refresh"></i>
-                                Refresh Data
-                            </button>
-                        </div>
-                        <div class="teacher-status">
-                            <Tag :value="selectedTeacher.is_active ? 'ACTIVE' : 'INACTIVE'"
-                                :severity="selectedTeacher.is_active ? 'success' : 'danger'" />
-                            <span v-if="selectedTeacher.is_head_teacher" class="head-teacher-badge">Head Teacher</span>
-                </div>
-            </div>
-                </div>
-
-                <div class="teacher-details-info">
-                    <div class="info-section">
-                        <div class="info-row">
-                            <div class="info-label">Email</div>
-                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Phone</div>
-                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
-                        </div>
-
-                        <!-- Primary Assignment Section -->
-                        <div class="primary-assignment-section">
-                            <h3>Primary Assignment</h3>
-                            <div v-if="!selectedTeacher.primary_assignment && findPrimaryAssignments(selectedTeacher).length === 0" class="no-primary">
-                                <span class="no-assignment-text">No primary assignment yet</span>
-                            </div>
-                            <div v-else class="primary-assignment-details">
-                                <div class="info-row">
-                                    <div class="info-label">Grade Level</div>
-                                    <div class="info-value grade-badge-details">
-                                        {{ selectedTeacher.primary_assignment?.section?.grade?.name ||
-                                            (findPrimaryAssignments(selectedTeacher)[0]?.section?.grade?.name || 'Not assigned') }}
-                                    </div>
-                                </div>
-                                <div class="info-row">
-                                    <div class="info-label">Section</div>
-                                    <div class="info-value section-badge-details">
-                                        {{ selectedTeacher.primary_assignment?.section?.name ||
-                                            (findPrimaryAssignments(selectedTeacher)[0]?.section?.name || 'Not assigned') }}
-                                    </div>
-                                </div>
-                                <div class="info-row">
-                                    <div class="info-label">Subject</div>
-                                    <div class="info-value subject-badge-details">
-                                        {{ selectedTeacher.primary_assignment?.subject?.name ||
-                                            (findPrimaryAssignments(selectedTeacher)[0]?.subject?.name || 'Not assigned') }}
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <div class="teacher-details-subjects">
-                    <h3>Subject Assignments</h3>
-                    <div v-if="(!selectedTeacher.subject_assignments || selectedTeacher.subject_assignments.length === 0) &&
-                        !selectedTeacher.primary_assignment && findPrimaryAssignments(selectedTeacher).length === 0 &&
-                        findSubjectAssignments(selectedTeacher).length === 0" class="no-subjects">
-                        No subject assignments for this teacher yet.
-                    </div>
-                    <DataTable v-else :value="getAllTeacherAssignments(selectedTeacher)"
-                        :rows="10" scrollable scrollHeight="200px" class="subjects-table">
-                        <Column header="Subject">
-                            <template #body="slotProps">
-                                <div class="subject-name" :class="{'primary-subject': slotProps.data.is_primary || slotProps.data.role === 'primary'}">
-                                    {{ slotProps.data.subject?.name || 'Unknown Subject' }}
-                                    <Badge v-if="slotProps.data.is_primary || slotProps.data.role === 'primary'" value="Primary" severity="success" />
-                                </div>
-                            </template>
-                        </Column>
-                        <Column header="Section">
-                            <template #body="slotProps">
-                                <div>{{ slotProps.data.section?.name || 'Unknown Section' }}</div>
-                            </template>
-                        </Column>
-                        <Column header="Grade">
-                            <template #body="slotProps">
-                                <div>{{ slotProps.data.section?.grade?.name || 'Unknown Grade' }}</div>
-                            </template>
-                        </Column>
-                        <Column header="Role">
-                            <template #body="slotProps">
-                                <Tag
-                                    :value="slotProps.data.role || 'subject'"
-                                    :severity="slotProps.data.is_primary || slotProps.data.role === 'primary' ? 'success' : 'info'" />
-                            </template>
-                        </Column>
-                        <Column header="Actions">
-                            <template #body="slotProps">
-                                <Button icon="pi pi-trash"
-                                    class="p-button-rounded p-button-danger p-button-sm mr-2"
-                                    @click="confirmDeleteAssignment(slotProps.data)"
-                                    v-tooltip.top="'Remove Assignment'" />
-                            </template>
-                        </Column>
-                    </DataTable>
+                <div v-else class="no-data-message">
+                    <i class="pi pi-info-circle"></i>
+                    <p>No teachers found</p>
                 </div>
             </div>
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="teacherDetailsDialog = false" text />
-            </template>
-        </Dialog>
+        </div>
 
-        <!-- Teacher Registration Dialog -->
+        <!-- Teacher Registration/Edit Dialog -->
         <Dialog v-model:visible="teacherDialog" :header="dialogTitle" :style="{ width: '700px' }" :modal="true" class="registration-dialog">
             <div class="p-fluid">
-                <!-- Form Grid Layout -->
                 <div class="form-grid p-5">
                     <div class="field">
                         <label for="first_name">First Name*</label>
@@ -2699,6 +2534,11 @@ const handleSubjectAdded = async (teacherId) => {
                     </div>
 
                     <div class="field">
+                        <label for="address">Address</label>
+                        <InputText id="address" v-model="teacher.address" />
+                    </div>
+
+                    <div class="field">
                         <label for="username">Username*</label>
                         <InputText id="username" v-model="teacher.username" required :class="{ 'p-invalid': submitted && !teacher.username }" />
                         <small class="p-error" v-if="submitted && !teacher.username">Username is required.</small>
@@ -2706,266 +2546,95 @@ const handleSubjectAdded = async (teacherId) => {
 
                     <div class="field">
                         <label for="password">Password*</label>
-                        <InputText id="password" v-model="teacher.password" type="password" required :class="{ 'p-invalid': submitted && !teacher.password }" />
+                        <Password id="password" v-model="teacher.password" required :class="{ 'p-invalid': submitted && !teacher.password }" :feedback="false" />
                         <small class="p-error" v-if="submitted && !teacher.password">Password is required.</small>
                     </div>
 
                     <div class="field">
-                        <label for="address">Address</label>
-                        <InputText id="address" v-model="teacher.address" />
-                    </div>
-
-                    <div class="field">
-                        <label for="gender">Gender</label>
-                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" />
-                    </div>
-
-                    <div class="p-field-checkbox">
-                        <label for="is_head_teacher" class="checkbox-label">Head Teacher</label>
-                        <input type="checkbox" id="is_head_teacher" v-model="teacher.is_head_teacher" />
-                    </div>
-
-                    <div class="p-field-checkbox">
-                        <label for="is_active" class="checkbox-label">Active Status</label>
-                        <input type="checkbox" id="is_active" v-model="teacher.is_active" />
+                        <label for="gender">Gender*</label>
+                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" :class="{ 'p-invalid': submitted && !teacher.gender }" />
+                        <small class="p-error" v-if="submitted && !teacher.gender">Gender is required.</small>
                     </div>
                 </div>
             </div>
 
             <template #footer>
-                <div class="dialog-footer-buttons p-5">
-                    <Button label="Cancel" icon="pi pi-times" @click="hideDialog" class="p-button-text cancel-button" />
-                    <Button label="Save" icon="pi pi-check" @click="saveTeacher" class="p-button-raised p-button-primary save-button-custom" />
-                </div>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
             </template>
         </Dialog>
 
-        <!-- Keep all other existing dialogs unchanged -->
-
-        <!-- Subject Schedule Dialog -->
-        <Dialog v-model:visible="scheduleDialog"
-            :header="`Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`"
-            modal
-            :style="{ width: '80vw', maxWidth: '1000px' }"
-            class="schedule-dialog">
-            <div v-if="selectedSubjectForSchedule" class="p-fluid">
-                <div class="schedule-header mb-4">
-                    <div class="flex justify-content-between align-items-center">
-                        <h4 class="m-0">
-                            Manage class schedule for {{ selectedSubjectForSchedule.name }}
-                        </h4>
-                        <Tag :value="scheduleData.length ? `${scheduleData.length} Classes Scheduled` : 'No Classes'"
-                            :severity="scheduleData.length ? 'success' : 'warning'" />
-            </div>
-                    <div class="text-500 mt-2">
-                        Add, edit, and remove class schedules for this subject. These schedules will be used for notifications and attendance taking.
-                </div>
-                </div>
-
-                <!-- Schedule Form -->
-                <div class="schedule-form p-3 mb-4 border-1 surface-border border-round">
-                    <h5 class="mb-3">Add New Schedule</h5>
-                    <div class="formgrid grid">
-                        <div class="field col-12 md:col-3">
-                            <label for="day">Day of Week*</label>
-                            <Dropdown id="day" v-model="newScheduleItem.day"
-                                :options="daysOfWeek"
-                                placeholder="Select Day"
-                                class="w-full" />
-                </div>
-                        <div class="field col-12 md:col-3">
-                            <label for="time">Time Slot*</label>
-                            <Dropdown id="time" v-model="newScheduleItem.timeSlot"
-                                :options="timeSlots"
-                                placeholder="Select Time"
-                                class="w-full" />
-            </div>
-                        <div class="field col-12 md:col-3">
-                            <label for="section">Section*</label>
-                            <Dropdown id="section" v-model="newScheduleItem.section_id"
-                                :options="filteredSections"
-                                optionLabel="name"
-                                optionValue="id"
-                                placeholder="Select Section"
-                                class="w-full"
-                                @click="loadSectionsForSchedule" />
+        <!-- Teacher Details Dialog -->
+        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
+            <div class="p-fluid" v-if="selectedTeacher">
+                <div class="teacher-details-header">
+                    <div class="teacher-avatar">
+                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
+                    </div>
+                    <div class="teacher-details-name">
+                        <div class="teacher-info-header">
+                            <div class="name-status">
+                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
+                            </div>
+                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
+                                <i class="pi pi-refresh"></i>
+                                Refresh Data
+                            </button>
                         </div>
-                        <div class="field col-12 md:col-2">
-                            <label for="room">Room</label>
-                            <InputText id="room" v-model="newScheduleItem.room" placeholder="Room number" />
                     </div>
-                        <div class="field col-12 md:col-1 flex align-items-end">
-                            <Button label="Add"
-                                icon="pi pi-plus"
-                                class="p-button-success w-full"
-                                @click="saveScheduleItem" />
                 </div>
-                </div>
-            </div>
 
-                <!-- Schedule Table -->
-                <div class="schedule-table">
-                    <h5 class="mb-3">Current Schedule</h5>
-                    <DataTable :value="scheduleData"
-                        responsiveLayout="scroll"
-                        class="p-datatable-sm"
-                        :paginator="scheduleData.length > 10"
-                        :rows="10"
-                        emptyMessage="No schedules found. Add one using the form above.">
-
-                        <Column field="day" header="Day" sortable></Column>
-                        <Column field="timeSlot" header="Time" sortable></Column>
-                        <Column field="section_name" header="Section"></Column>
-                        <Column field="room" header="Room"></Column>
-
-                        <Column header="Actions" style="width: 8rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-trash"
-                                        class="p-button-rounded p-button-danger p-button-sm"
-                                        @click="removeScheduleItem(slotProps.data)"
-                                        v-tooltip.top="'Remove'" />
+                <div class="teacher-details-info">
+                    <div class="info-section">
+                        <div class="info-row">
+                            <div class="info-label">Email</div>
+                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
                         </div>
-                            </template>
-                        </Column>
-                    </DataTable>
-                </div>
-
-                <!-- Weekly View -->
-                <div v-if="scheduleData.length > 0" class="weekly-schedule mt-4">
-                    <h5 class="mb-3">Weekly View</h5>
-                    <div class="schedule-grid border-1 surface-border">
-                        <div class="schedule-header grid">
-                            <div class="col-2 font-bold p-2 border-right-1 surface-border">Time</div>
-                            <div v-for="day in daysOfWeek.slice(0, 6)" :key="day" class="col-2 font-bold p-2 border-right-1 surface-border">{{ day }}</div>
-                </div>
-
-                        <div v-for="time in timeSlots" :key="time" class="schedule-row grid">
-                            <div class="col-2 p-2 border-top-1 border-right-1 surface-border time-label">{{ time }}</div>
-                            <div v-for="day in daysOfWeek.slice(0, 6)" :key="`${time}-${day}`"
-                                class="col-2 p-2 border-top-1 border-right-1 surface-border schedule-cell">
-                                <div v-for="item in scheduleData.filter(i => i.day === day && i.timeSlot === time)"
-                                    :key="item.id"
-                                    class="schedule-item p-2 border-round mb-1"
-                                    style="background-color: #e0f2fe; color: #0369a1;">
-                                    {{ item.section_name }}
-                                    <div class="text-xs">{{ item.room }}</div>
+                        <div class="info-row">
+                            <div class="info-label">Phone</div>
+                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Address</div>
+                            <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Gender</div>
+                            <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
+                        </div>
                     </div>
-                    </div>
+
+                    <!-- Homeroom Section -->
+                    <div class="homeroom-section">
+                        <h3>Homeroom</h3>
+                        <div v-if="selectedTeacher.primary_assignment" class="assignment-info">
+                            <div class="section-info">
+                                <span class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'Not assigned' }}</span>
+                                <span class="grade-level">Grade {{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
                             </div>
                         </div>
+                        <div v-else class="no-assignment">
+                            No homeroom assigned
+                        </div>
                     </div>
-                </div>
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="scheduleDialog = false" class="p-button-text" />
-                <Button label="Save Schedule" icon="pi pi-save" @click="saveScheduleToBackend" class="p-button-primary" />
-            </template>
-        </Dialog>
 
-        <!-- Assignment Dialog -->
-        <Dialog v-model:visible="assignmentDialogVisible" :header="`Assign Subject to Teacher`" modal :style="{ width: '450px' }" class="assignment-dialog">
-            <div class="p-fluid compact-form">
-                <!-- Display validation errors if any -->
-                <div v-if="assignmentErrors.length > 0" class="assignment-error-container mb-3">
-                    <div class="error-header">
-                        <i class="pi pi-exclamation-triangle"></i>
-                        <span>Error</span>
-                    </div>
-                    <ul class="error-list">
-                        <li v-for="(error, index) in assignmentErrors" :key="index" class="error-item">
-                            {{ error }}
-                        </li>
-                    </ul>
-                    <div class="error-actions" v-if="editedTeacher">
-                        <button @click="forceRefreshTeacher(editedTeacher.id)" class="refresh-error-btn">
-                            <i class="pi pi-refresh"></i> Refresh Teacher Data
-                        </button>
-                    </div>
-                </div>
-
-                <div class="compact-field">
-                    <label for="grade">Grade Level*</label>
-                    <Dropdown id="grade" v-model="assignmentGrade"
-                        :options="gradeOptions"
-                        optionLabel="name"
-                        optionValue="id"
-                        placeholder="Select Grade"
-                        @change="handleGradeChange"
-                        :class="{ 'p-invalid': assignmentErrors.length > 0 }" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="section">Section*</label>
-                    <Dropdown id="section" v-model="assignment.section_id"
-                        :options="filteredSections"
-                        optionLabel="name"
-                        optionValue="id"
-                        placeholder="Select Section"
-                        @change="handleSectionChange"
-                        :class="{ 'p-invalid': assignmentErrors.length > 0 }"
-                        :disabled="!assignmentGrade" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="subject">Subject*</label>
-                    <Dropdown id="subject" v-model="assignment.subject_id"
-                        :options="subjectOptions"
-                        optionLabel="name"
-                        optionValue="id"
-                        placeholder="Select Subject"
-                        :class="{ 'p-invalid': assignmentErrors.length > 0 }"
-                        :disabled="!assignment.section_id" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="role">Teacher Role*</label>
-                    <Dropdown id="role" v-model="assignment.role"
-                        :options="teacherRoleOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Select Role"
-                        @change="handleRoleChange"
-                        :class="{ 'p-invalid': assignmentErrors.length > 0 }" />
-                </div>
-
-                <div class="compact-field field-checkbox">
-                    <div class="p-field-checkbox">
-                        <Checkbox id="isPrimary" v-model="assignment.is_primary"
-                            :binary="true"
-                            :disabled="assignment.role === 'primary'" />
-                        <label for="isPrimary" class="ml-2">Primary Teacher</label>
-                        <small class="help-text">This will be automatically checked when 'Primary' role is selected.</small>
+                    <!-- Teaching Subjects Section -->
+                    <div class="teaching-subjects-section">
+                        <h3>Teaching Subjects</h3>
+                        <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-list">
+                            <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
+                                <span class="subject-name">{{ assignment.subject?.name }}</span>
+                                <span class="section-name">{{ assignment.section?.name }}</span>
+                            </div>
+                        </div>
+                        <div v-else class="no-assignment">
+                            No subjects assigned
+                        </div>
                     </div>
                 </div>
             </div>
-            <template #footer>
-                <div class="dialog-footer">
-                    <button type="button" class="custom-cancel-btn" @click="hideAssignmentDialog">
-                        Cancel
-                    </button>
-                    <button type="button" class="custom-save-btn" @click="saveAssignment">
-                        Assign
-                    </button>
-                </div>
-            </template>
         </Dialog>
-
-    <!-- Add the new components at the bottom of the template -->
-    <!-- TeacherSectionAssigner Dialog -->
-    <TeacherSectionAssigner
-        v-model:visible="sectionAssignerVisible"
-        :teacher="selectedTeacher"
-        :apiBaseUrl="apiBaseUrl"
-        @section-assigned="handleSectionAssigned"
-    />
-
-    <!-- TeacherSubjectAdder Dialog -->
-    <TeacherSubjectAdder
-        v-model:visible="subjectAdderVisible"
-        :teacher="selectedTeacher"
-        :apiBaseUrl="apiBaseUrl"
-        @subject-added="handleSubjectAdded"
-    />
+    </div>
 </template>
 
 <style scoped>
@@ -2978,24 +2647,145 @@ const handleSubjectAdded = async (teacherId) => {
     animation: gradientShift 15s ease infinite;
 }
 
-/* Help text styling for form elements */
-.help-text {
-    display: block;
-    font-size: 0.75rem;
+.teacher-management-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+}
+
+.teacher-management-title {
+    color: var(--primary-color);
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+.teacher-management-subtitle {
     color: #64748b;
-    margin-top: 0.25rem;
+    margin: 0.5rem 0 0 0;
+    font-size: 1rem;
+}
+
+.search-container {
+    margin: 1rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.teacher-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem;
+    margin: 0 auto;
+    max-width: 1400px;
+}
+
+.teacher-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.teacher-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.teacher-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a237e;
+    margin-bottom: 1rem;
+}
+
+.section-label {
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.section-content {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.no-assignment {
+    color: #94a3b8;
     font-style: italic;
 }
 
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+}
 
+.action-button {
+    padding: 0.5rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
 
-/* Help text styling for form elements */
-.help-text {
-    display: block;
-    font-size: 0.75rem;
-    color: #64748b;
-    margin-top: 0.25rem;
-    font-style: italic;
+.details-button {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.edit-button {
+    background-color: #f59e0b;
+    color: white;
+}
+
+.archive-button {
+    background-color: #10b981;
+    color: white;
+}
+
+.action-button:hover {
+    opacity: 0.9;
+}
+
+/* Registration Dialog Styles */
+.registration-dialog :deep(.p-dialog-content) {
+    padding: 0;
+}
+
+.registration-dialog .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .teacher-cards-container {
+        grid-template-columns: 1fr;
+    }
+
+    .registration-dialog .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .teacher-management-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
 }
 
 @keyframes gradientShift {
@@ -5168,5 +4958,126 @@ const handleSubjectAdded = async (teacherId) => {
     background-color: #5e35b1 !important;
     border-color: #5e35b1 !important;
     width: 100px !important;
+}
+
+.homeroom-section, .teaching-subjects-section {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+}
+
+.homeroom-section h4, .teaching-subjects-section h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-700);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px dashed var(--surface-200);
+}
+
+.section-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.section-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.grade-level {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.subjects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.subject-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-radius: 6px;
+}
+
+.subject-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.not-assigned {
+    color: #64748b;
+    font-style: italic;
+    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-radius: 6px;
+}
+
+.assignment-info {
+    padding: 0.5rem 0;
+}
+
+.assignment-info .section-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.assignment-info .section-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.assignment-info .grade-level {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.no-assignment {
+    color: #64748b;
+    font-style: italic;
+    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-radius: 6px;
+}
+
+.no-data-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.no-data-message i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.no-data-message p {
+    color: #64748b;
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.loading-container p {
+    color: #64748b;
 }
 </style>
