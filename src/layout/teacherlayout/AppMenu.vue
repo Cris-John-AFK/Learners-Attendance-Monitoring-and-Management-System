@@ -9,14 +9,9 @@ const model = ref([
         items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/teacher' }]
     },
     {
-        label: 'Subjects',
+        label: 'Homeroom Subjects',
         icon: 'pi pi-fw pi-briefcase',
         items: [
-            {
-                label: 'Homeroom',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/homeroom'
-            },
             {
                 label: 'Mother Tongue',
                 icon: 'pi pi-fw pi-book',
@@ -78,4 +73,6 @@ const model = ref([
     </ul>
 </template>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+// Removed specific styling since it's now in the central teacher-fonts.css file
+</style>

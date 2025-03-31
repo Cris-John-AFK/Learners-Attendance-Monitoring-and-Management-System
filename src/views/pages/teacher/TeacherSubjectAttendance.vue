@@ -161,7 +161,7 @@ const route = useRoute();
 const subjectName = ref('Subject');
 
 // Modal states
-const showAttendanceModal = ref(true); // Show immediately when page loads
+const showAttendanceModal = ref(false); // Changed from true to false so it doesn't show automatically
 const showRollCall = ref(false);
 const showRemarks = ref(false);
 const isCameraLoading = ref(true);
