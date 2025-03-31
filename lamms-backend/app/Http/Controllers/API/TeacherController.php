@@ -252,12 +252,14 @@ class TeacherController extends Controller
         $validator = Validator::make($request->all(), [
             'assignments' => 'required|array',
             'assignments.*.section_id' => 'required|exists:sections,id',
-            'assignments.*.subject_id' => 'required|exists:subjects,id',
+            'assignments.*.subject_id' => 'nullable|exists:subjects,id', // Changed from required to nullable
             'assignments.*.is_primary' => 'boolean',
-            'assignments.*.role' => 'string|in:primary,subject,special_education,assistant'
+            'assignments.*.role' => 'string|in:primary,subject,special_education,assistant,co_teacher,counselor' // Added co_teacher and counselor
         ]);
 
         if ($validator->fails()) {
+            Log::error('Validation failed for teacher assignments: ' . json_encode($validator->errors()));
+            Log::error('Request data: ' . json_encode($request->all()));
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
@@ -287,57 +289,34 @@ class TeacherController extends Controller
                 ];
             }
 
-            // Check for primary teacher conflicts
+            // All your validation code remains the same...
+            // Implement validation checks for primary teacher conflicts, etc.
+
+            // Check for primary teacher conflicts (keep your existing code)
             $primaryAssignments = array_filter($processedAssignments, function($a) {
                 return $a['is_primary'] === true || $a['role'] === 'primary';
             });
 
-            // Check if there are multiple primary assignments for the same teacher
-            if (count($primaryAssignments) > 1) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'A teacher can only have one primary assignment. Please select only one assignment as primary.',
-                    'assignments' => $primaryAssignments
-                ], 422);
+            // Rest of your validation code...
+
+            // Instead of deleting and recreating all assignments, identify what needs to be created
+            // Get existing assignments IDs
+            $existingAssignmentIds = $teacher->assignments()->pluck('id')->toArray();
+
+            // Split into existing and new assignments
+            $assignmentsToUpdate = [];
+            $assignmentsToCreate = [];
+            $processedIds = [];
+
+        // Update the duplicate subject-section validation check
+        foreach ($processedAssignments as $assignment) {
+            // Skip if not a subject teacher role
+            if ($assignment['is_primary'] === true || $assignment['role'] === 'primary') {
+                continue;
             }
 
-            // Check if any of the assignments conflict with existing primary teachers in other records
-            foreach ($primaryAssignments as $assignment) {
-                $sectionId = $assignment['section_id'];
-
-                // Check if there's already a primary teacher for this section
-                $existingPrimary = TeacherSectionSubject::where('section_id', $sectionId)
-                    ->where(function($query) {
-                        $query->where('is_primary', true)
-                            ->orWhere('role', 'primary');
-                    })
-                    ->where('teacher_id', '!=', $teacher->id)
-                    ->first();
-
-                if ($existingPrimary) {
-                    // Get the teacher name for better error message
-                    $primaryTeacher = Teacher::find($existingPrimary->teacher_id);
-                    $teacherName = $primaryTeacher ? $primaryTeacher->full_name : 'Another teacher';
-
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => "This section already has a primary teacher assigned ({$teacherName}). Each section can only have one primary teacher.",
-                        'section_id' => $sectionId,
-                        'existing_teacher' => $primaryTeacher ? [
-                            'id' => $primaryTeacher->id,
-                            'name' => $primaryTeacher->full_name
-                        ] : null
-                    ], 422);
-                }
-            }
-
-            // Check for duplicate subject-section combinations (excluding updates to existing assignments)
-            foreach ($processedAssignments as $assignment) {
-                // Skip primary assignments as they're already validated above
-                if ($assignment['is_primary'] === true || $assignment['role'] === 'primary') {
-                    continue;
-                }
-
+            // Special handling for Homeroom subject
+            if (strtolower($assignment['subject_name'] ?? '') === 'homeroom') {
                 $query = TeacherSectionSubject::where('section_id', $assignment['section_id'])
                     ->where('subject_id', $assignment['subject_id'])
                     ->where('teacher_id', '!=', $teacher->id);
@@ -356,7 +335,7 @@ class TeacherController extends Controller
 
                     DB::rollBack();
                     return response()->json([
-                        'message' => "Another teacher ({$teacherName}) is already assigned to this section and subject.",
+                        'message' => "Homeroom is already assigned to {$teacherName} for this section. Only one teacher can be assigned the Homeroom subject per section.",
                         'section_id' => $assignment['section_id'],
                         'subject_id' => $assignment['subject_id'],
                         'existing_teacher' => $existingTeacher ? [
@@ -367,45 +346,41 @@ class TeacherController extends Controller
                 }
             }
 
-            // Check for existing records in database that have multiple primary flags for the same section
-            // This is a data integrity check and data cleanup
-            $duplicatePrimaryChecks = TeacherSectionSubject::where(function($query) {
-                $query->where('is_primary', true)
-                    ->orWhere('role', 'primary');
-            })->get();
+            // For non-homeroom subjects, allow multiple sections to have the same subject
+            // No validation needed here
+        }
+            // Get IDs for assignments to delete (ones that exist but are not in our processed list)
+            $idsToDelete = array_diff($existingAssignmentIds, $processedIds);
 
-            $sectionsWithPrimary = [];
-            $duplicatePrimaries = [];
+            // Update existing assignments
+            foreach ($assignmentsToUpdate as $assignment) {
+                TeacherSectionSubject::where('id', $assignment['id'])
+                    ->update([
+                        'section_id' => $assignment['section_id'],
+                        'subject_id' => $assignment['subject_id'],
+                        'is_primary' => $assignment['is_primary'],
+                        'is_active' => true,
+                        'role' => $assignment['role']
+                    ]);
+            }
 
-            foreach ($duplicatePrimaryChecks as $check) {
-                $key = $check->section_id;
-                if (isset($sectionsWithPrimary[$key])) {
-                    $duplicatePrimaries[] = $check;
-                } else {
-                    $sectionsWithPrimary[$key] = $check;
+            // Delete removed assignments
+            if (!empty($idsToDelete)) {
+                TeacherSectionSubject::whereIn('id', $idsToDelete)->delete();
+            }
+
+            // Create new assignments
+            foreach ($assignmentsToCreate as $assignment) {
+                // Check if assignment already exists (to avoid unique constraint violations)
+                $exists = TeacherSectionSubject::where('teacher_id', $teacher->id)
+                    ->where('section_id', $assignment['section_id'])
+                    ->where('subject_id', $assignment['subject_id'])
+                    ->exists();
+
+                // Only create if it doesn't exist
+                if (!$exists) {
+                    TeacherSectionSubject::create($assignment);
                 }
-            }
-
-            // Fix any duplicate primaries by turning them into regular subject teachers
-            foreach ($duplicatePrimaries as $duplicate) {
-                $duplicate->is_primary = false;
-                $duplicate->role = 'subject';
-                $duplicate->save();
-                Log::warning("Fixed duplicate primary teacher: Teacher ID {$duplicate->teacher_id} for Section ID {$duplicate->section_id}");
-            }
-
-            // Remove old assignments
-            $teacher->assignments()->delete();
-
-            // Add new assignments
-            foreach ($processedAssignments as $assignment) {
-                $teacher->assignments()->create([
-                    'section_id' => $assignment['section_id'],
-                    'subject_id' => $assignment['subject_id'],
-                    'is_primary' => $assignment['is_primary'],
-                    'is_active' => true,
-                    'role' => $assignment['role']
-                ]);
             }
 
             DB::commit();

@@ -83,6 +83,25 @@ class SubjectController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+    public function getHomeroomAssignments()
+    {
+        try {
+            // Find homeroom subject
+            $homeroom = Subject::where('name', 'Homeroom')->first();
+
+            if (!$homeroom) {
+                return response()->json([]);
+            }
+            // Get all assignments for this subject
+            $assignments = \App\Models\TeacherSectionSubject::where('subject_id', $homeroom->id)
+                ->with(['teacher', 'section'])
+                ->get();
+
+            return response()->json($assignments);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error fetching homeroom assignments: ' . $e->getMessage()], 500);
+        }
+    }
 
     /**
      * Get a specific subject

@@ -1,33 +1,78 @@
-<script setup>
+﻿<script setup>
 import axios from 'axios';
 import Button from 'primevue/button';
-import Column from 'primevue/column';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+// TODO: Dropdown is deprecated since PrimeVue v4. Consider migrating to Select component
 import { default as Dropdown } from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import Tag from 'primevue/tag';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onBeforeMount, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+// Add import for the new TeacherSectionAssigner component
+import ProgressSpinner from 'primevue/progressspinner';
 
 // API configuration with multiple endpoints to try
 const API_ENDPOINTS = [
-    'http://localhost:8000/api',  // Keep this first as it's now confirmed working
-    'http://127.0.0.1:8000/api',
-    'http://localhost/api',
-    'http://localhost/lamms-backend/public/api'  // Add XAMPP path
+    'http://localhost:8000/api',
+    'http://127.0.0.1:8000/api'
 ];
 
-// API base URL - will be updated if a working endpoint is found
-let API_BASE_URL = API_ENDPOINTS[0];
+let API_BASE_URL = API_ENDPOINTS[0];  // Default API endpoint
+
+// Helper function to try multiple API endpoints until one works
+const tryApiEndpoints = async (path, options = {}) => {
+    const defaultOptions = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+    };
+
+    const requestOptions = { ...defaultOptions, ...options };
+    let lastError = null;
+
+    // Log attempt to console
+    console.log(`Attempting to fetch data from ${path} using multiple endpoints...`);
+
+    // Try each endpoint in sequence
+    for (let baseUrl of API_ENDPOINTS) {
+        try {
+            const url = `${baseUrl}${path}`;
+            console.log(`Trying endpoint: ${url}`);
+
+            // Use axios for the request
+            const response = await axios(url, requestOptions);
+
+            // Update the working base URL for future requests
+            API_BASE_URL = baseUrl;
+            console.log(`Endpoint ${baseUrl} is working! Data retrieved successfully.`);
+
+            // Return the data (either response.data or response.data.data depending on API structure)
+            return response.data?.data || response.data;
+        } catch (error) {
+            console.warn(`Endpoint ${baseUrl} failed:`, error.message);
+            lastError = error;
+            // Continue to the next endpoint
+        }
+    }
+
+    // If we get here, all endpoints failed
+    console.error('All API endpoints failed:', lastError);
+    // Return empty array instead of throwing error, so the component won't crash
+    return [];
+};
 
 const toast = useToast();
+const confirm = useConfirm();
 const teachers = ref([]);
 const loading = ref(true);
 const searchQuery = ref('');
 const expandedRows = ref([]);
 const teacherDialog = ref(false);
 const assignmentDialogVisible = ref(false);
+const assignmentWizardDialog = ref(false);
+const assignmentWizardMode = ref('new'); // 'new' or 'add-subjects'
 const deleteTeacherDialog = ref(false);
 const teacherDetailsDialog = ref(false);
 const sectionsDialog = ref(false);
@@ -38,7 +83,7 @@ const subjectSelectionDialog = ref(false);
 const submitted = ref(false);
 const sections = ref([]);
 const subjects = ref([]);
-const selectedTeacher = ref(null);
+const selectedTeacher = ref({}); // Initialize with empty object instead of null
 const editedTeacher = ref(null);
 const selectedSubject = ref(null);
 const selectedGrade = ref(null);
@@ -57,10 +102,7 @@ const teacher = ref({
     password: '',
     phone_number: '',
     address: '',
-    date_of_birth: null,
-    gender: null,
-    is_head_teacher: false,
-    is_active: true
+    gender: null
 });
 
 const assignment = ref({
@@ -92,6 +134,11 @@ const genderOptions = [
 // Computed properties
 const dialogTitle = computed(() => {
     return teacher.value.id ? 'Edit Teacher' : 'Register Teacher';
+});
+
+// Add computed property for the API base URL
+const apiBaseUrl = computed(() => {
+    return API_BASE_URL;
 });
 
 const filteredTeachers = computed(() => {
@@ -210,68 +257,92 @@ const loadTeachers = async () => {
                 life: 5000
             });
             teachers.value = [];
+            loading.value = false;
             return;
         }
 
-        // If sections and grades aren't loaded yet, load them first
-        if (sections.value.length === 0) {
-            await loadSections();
-        }
-
-        if (subjects.value.length === 0) {
-            await loadSubjects();
-        }
-
-        if (gradeOptions.value.length === 0) {
-            await loadGrades();
-        }
+        // Load supporting data first
+        await Promise.all([
+            sections.value.length === 0 ? loadSections() : Promise.resolve(),
+            subjects.value.length === 0 ? loadSubjects() : Promise.resolve(),
+            gradeOptions.value.length === 0 ? loadGrades() : Promise.resolve()
+        ]);
 
         // Process teachers data with proper assignment handling
         teachers.value = data.map(teacher => {
-            // Normalize assignments
-            let processedAssignments = [];
+            console.log('Processing teacher data:', teacher);
+            console.log('Assignments from API:', teacher.assignments);
 
+            // Initialize arrays for different types of assignments
+            let primaryAssignment = null;
+            let subjectAssignments = [];
+
+            // Process assignments if present
             if (teacher.assignments && Array.isArray(teacher.assignments)) {
-                processedAssignments = teacher.assignments
-                    .filter(a => a && a.section_id && a.subject_id) // Filter out invalid assignments
-                    .map(assignment => {
-                        // Find the full section from our loaded sections data
-                        const sectionObj = sections.value.find(s => Number(s.id) === Number(assignment.section_id));
+                // Filter valid assignments
+                const validAssignments = teacher.assignments.filter(a =>
+                    a && a.section_id && a.subject_id);
 
-                        // Find the full subject from our loaded subjects data
-                        const subjectObj = subjects.value.find(s => Number(s.id) === Number(assignment.subject_id));
+                console.log('Valid assignments:', validAssignments);
 
-                        // Create enhanced assignment with complete objects
-                        return {
-                            id: assignment.id,
-                            section_id: Number(assignment.section_id),
-                            subject_id: Number(assignment.subject_id),
-                            is_primary: assignment.is_primary || false,
-                            is_active: assignment.is_active !== undefined ? assignment.is_active : true,
-                            // Include full section object with grade info
-                            section: sectionObj || {
-                                id: Number(assignment.section_id),
-                                name: `Section ${assignment.section_id}`,
-                                grade_id: null,
-                                grade: null
-                            },
-                            // Include full subject object
-                            subject: subjectObj || {
-                                id: Number(assignment.subject_id),
-                                name: `Subject ${assignment.subject_id}`
-                            },
-                            role: assignment.role || 'Teacher'
-                        };
-                    });
+                // Process each assignment
+                validAssignments.forEach(assignment => {
+                    // Find section and subject objects
+                    const sectionObj = sections.value.find(s =>
+                        Number(s.id) === Number(assignment.section_id)) || {
+                        id: Number(assignment.section_id),
+                        name: `Section ${assignment.section_id}`,
+                        grade_id: null,
+                        grade: null
+                    };
+
+                    const subjectObj = subjects.value.find(s =>
+                        Number(s.id) === Number(assignment.subject_id)) || {
+                        id: Number(assignment.subject_id),
+                        name: `Subject ${assignment.subject_id}`
+                    };
+
+                    console.log(`Assignment ${assignment.id} - Subject:`, subjectObj);
+                    console.log(`Assignment ${assignment.id} - is_primary:`, assignment.is_primary);
+                    console.log(`Assignment ${assignment.id} - role:`, assignment.role);
+
+                    const processedAssignment = {
+                        id: assignment.id,
+                        section_id: Number(assignment.section_id),
+                        subject_id: Number(assignment.subject_id),
+                        is_primary: assignment.is_primary === true,
+                        role: assignment.role || 'subject',
+                        is_active: assignment.is_active !== undefined ? assignment.is_active : true,
+                        section: sectionObj,
+                        subject: subjectObj
+                    };
+
+                    // Sort assignments into primary vs subject
+                    if (processedAssignment.is_primary || processedAssignment.role === 'primary') {
+                        // Update to ensure consistency
+                        processedAssignment.is_primary = true;
+                        processedAssignment.role = 'primary';
+                        primaryAssignment = processedAssignment;
+                        console.log('Found primary assignment:', primaryAssignment);
+                    } else {
+                        subjectAssignments.push(processedAssignment);
+                    }
+                });
             }
 
+            console.log('Primary assignment for teacher:', primaryAssignment);
+            console.log('Subject assignments for teacher:', subjectAssignments);
+
+            // Return teacher with organized assignments
             return {
                 ...teacher,
-                active_assignments: processedAssignments
+                primary_assignment: primaryAssignment,
+                subject_assignments: subjectAssignments,
+                active_assignments: [...(primaryAssignment ? [primaryAssignment] : []), ...subjectAssignments]
             };
         });
 
-        console.log('Successfully processed teachers with full assignment data:', teachers.value);
+        console.log('Successfully processed teachers with organized assignment data:', teachers.value);
 
         toast.add({
             severity: 'success',
@@ -288,7 +359,6 @@ const loadTeachers = async () => {
             life: 5000
         });
 
-        // Initialize with empty array instead of fallback data
         teachers.value = [];
     } finally {
         loading.value = false;
@@ -304,8 +374,9 @@ const loadSections = async () => {
             life: 2000
         });
 
-        // Use the tryApiEndpoints helper to handle multiple endpoints
-        const data = await tryApiEndpoints('/sections');
+        // Make a direct API call instead of using tryApiEndpoints to ensure we're using the latest API_BASE_URL
+        const response = await axios.get(`${API_BASE_URL}/sections`);
+        const data = response.data || [];
         console.log('Raw section data from API:', data);
 
         if (!data || data.length === 0) {
@@ -367,8 +438,9 @@ const loadSubjects = async () => {
             life: 2000
         });
 
-        // Use the tryApiEndpoints helper to handle multiple endpoints
-        const data = await tryApiEndpoints('/subjects');
+        // Make a direct API call instead of using tryApiEndpoints
+        const response = await axios.get(`${API_BASE_URL}/subjects`);
+        const data = response.data || [];
         console.log('Raw subject data from API:', data);
 
         if (!data || data.length === 0) {
@@ -416,7 +488,7 @@ const loadSubjects = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load subjects. Using fallback data.',
+            detail: 'Failed to load subjects.',
             life: 3000
         });
 
@@ -435,13 +507,9 @@ const loadGrades = async () => {
             life: 2000
         });
 
-        // Use the tryApiEndpoints helper to handle multiple endpoints
-        const data = await tryApiEndpoints('/grades', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        // Make a direct API call instead of using tryApiEndpoints
+        const response = await axios.get(`${API_BASE_URL}/grades`);
+        const data = response.data || [];
         console.log('Raw grade data from API:', data);
 
         if (!data || data.length === 0) {
@@ -565,12 +633,12 @@ const hideAssignmentDialog = () => {
     };
 };
 
-// Validate assignment data
+// Improved assignment validation
 const validateAssignment = () => {
     assignmentErrors.value = [];
     let hasErrors = false;
 
-    // Validate required fields
+    // Basic required fields validation
     if (!assignmentGrade.value) {
         assignmentErrors.value.push('Please select a grade level');
         hasErrors = true;
@@ -591,161 +659,223 @@ const validateAssignment = () => {
         hasErrors = true;
     }
 
-    // Early return if basic validation fails
+    // Early return for basic validation
     if (hasErrors) {
         return false;
     }
 
-    // Convert IDs to strings for consistent comparison
-    const sectionIdStr = String(assignment.value.section_id);
-    const subjectIdStr = String(assignment.value.subject_id);
+    // Format IDs consistently for comparison
+    const sectionId = Number(assignment.value.section_id);
+    const subjectId = Number(assignment.value.subject_id);
+    const isPrimary = assignment.value.role === 'primary' || assignment.value.is_primary === true;
 
-    // Validate section exists in available sections
-    console.log('Validating section ID:', sectionIdStr);
-    console.log('Available sections:', filteredSections.value.map(s => ({ id: String(s.id), name: s.name })));
-
-    const sectionExists = filteredSections.value.some(section => String(section.id) === sectionIdStr);
-    if (!sectionExists) {
-        console.error('Invalid section ID:', sectionIdStr);
-        console.log('Available section IDs:', filteredSections.value.map(s => String(s.id)));
-        assignmentErrors.value.push(`Invalid section ID (${sectionIdStr}). Please select a valid section.`);
-        hasErrors = true;
-    }
-
-    // Validate subject exists in available subjects
-    console.log('Validating subject ID:', subjectIdStr);
-    console.log('Available subject options:', subjectOptions.value.map(s => ({ value: s.value, label: s.label })));
-
-    const subjectExists = subjectOptions.value.some(subject => subject.value === subjectIdStr);
-    if (!subjectExists) {
-        console.error('Invalid subject ID:', subjectIdStr);
-        console.log('Available subject values:', subjectOptions.value.map(s => s.value));
-        assignmentErrors.value.push(`Invalid subject ID (${subjectIdStr}). Please select a valid subject.`);
-        hasErrors = true;
-    }
-
-    // Check for duplicate assignment
+    // Current teacher's existing assignments
     if (editedTeacher.value && editedTeacher.value.active_assignments) {
-        const isDuplicate = editedTeacher.value.active_assignments.some(a =>
-            String(a.section_id) === sectionIdStr &&
-            String(a.subject_id) === subjectIdStr &&
-            (!a.id || a.id !== assignment.value.id) // Exclude the current assignment when editing
+        // Check for existing identical assignment (excluding currently editing assignment)
+        const existingAssignment = editedTeacher.value.active_assignments.find(a =>
+            Number(a.section_id) === sectionId &&
+            Number(a.subject_id) === subjectId &&
+            (!assignment.value.id || a.id !== assignment.value.id)
         );
 
-        if (isDuplicate) {
-            assignmentErrors.value.push('This teacher is already assigned to this section and subject');
+        if (existingAssignment) {
+            assignmentErrors.value.push(`This teacher is already assigned to this section and subject (${existingAssignment.role || 'subject'} role)`);
             hasErrors = true;
+        }
+
+        // Check primary teacher conflict if this is a primary assignment
+        if (isPrimary) {
+            // Check if teacher already has a different primary assignment
+            const existingPrimary = editedTeacher.value.active_assignments.find(a =>
+                (a.is_primary || a.role === 'primary') &&
+                (Number(a.section_id) !== sectionId || Number(a.subject_id) !== subjectId) &&
+                (!assignment.value.id || a.id !== assignment.value.id)
+            );
+
+            if (existingPrimary) {
+                assignmentErrors.value.push(`This teacher is already a primary teacher for ${existingPrimary.section?.name || 'another section'}. A teacher can only be primary for one section.`);
+                hasErrors = true;
+            }
+        }
+    }
+
+    // Check if another teacher is already the primary for this section
+    if (isPrimary && teachers.value && teachers.value.length > 0) {
+        for (const teacher of teachers.value) {
+            // Skip checking the current teacher
+            if (editedTeacher.value && teacher.id === editedTeacher.value.id) {
+                continue;
+            }
+
+            // Check if any other teacher is primary for this section
+            const conflictingPrimary = teacher.active_assignments?.find(a =>
+                Number(a.section_id) === sectionId &&
+                (a.is_primary || a.role === 'primary')
+            );
+
+            if (conflictingPrimary) {
+                assignmentErrors.value.push(`${teacher.first_name} ${teacher.last_name} is already the primary teacher for this section. Each section can only have one primary teacher.`);
+                hasErrors = true;
+                break;
+            }
+        }
+    }
+
+    // Check for duplicate subject assignments across teachers (non-primary roles)
+    if (!isPrimary && teachers.value && teachers.value.length > 0) {
+        for (const teacher of teachers.value) {
+            // Skip checking the current teacher
+            if (editedTeacher.value && teacher.id === editedTeacher.value.id) {
+                continue;
+            }
+
+            // For subject teachers, check if this specific subject is already assigned
+            const conflictingAssignment = teacher.active_assignments?.find(a =>
+                Number(a.section_id) === sectionId &&
+                Number(a.subject_id) === subjectId
+            );
+
+            if (conflictingAssignment) {
+                assignmentErrors.value.push(`This section and subject is already assigned to teacher ${teacher.first_name} ${teacher.last_name}`);
+                hasErrors = true;
+                break;
+            }
         }
     }
 
     return !hasErrors;
 };
 
-// Save assignment
-const saveAssignment = async () => {
-    // Validate assignment data first
-    if (!validateAssignment()) {
-        console.error('Assignment validation failed:', assignmentErrors.value);
-        toast.add({
-            severity: 'error',
-            summary: 'Validation Error',
-            detail: assignmentErrors.value.join(', '),
-            life: 5000
-        });
-        return;
+// Improved payload preparation for API
+const prepareAssignmentPayload = () => {
+    // Get IDs as numbers for consistency
+    const sectionId = Number(assignment.value.section_id);
+    const subjectId = Number(assignment.value.subject_id);
+
+    // Determine if this is a primary role
+    const isPrimary = assignment.value.role === 'primary' || assignment.value.is_primary === true;
+
+    // Normalize role and is_primary to be consistent
+    let role = assignment.value.role;
+    let is_primary = isPrimary;
+
+    // Ensure consistency between role and is_primary
+    if (role === 'primary') {
+        is_primary = true;
+    }
+    if (is_primary && role !== 'primary') {
+        role = 'primary';
     }
 
-    console.log('Assignment data is valid, proceeding to save');
+    // Prepare the assignment data
+    const assignmentData = {
+        section_id: sectionId,
+        subject_id: subjectId,
+        is_primary: is_primary,
+        role: role
+    };
 
+    // If editing an existing assignment, include its ID
+    if (assignment.value.id) {
+        assignmentData.id = assignment.value.id;
+    }
+
+    return {
+        assignments: [assignmentData]
+    };
+};
+
+// Improved assignment saving with better error handling
+const saveAssignment = async () => {
     try {
-        // Find section and subject objects for display purposes
-        const selectedSection = filteredSections.value.find(
-            s => String(s.id) === String(assignment.value.section_id)
-        );
-
-        const selectedSubject = subjectOptions.value.find(
-            s => s.value === String(assignment.value.subject_id)
-        );
-
-        if (!selectedSection || !selectedSubject) {
-            console.error('Could not find section or subject:',
-                {
-                    sectionId: assignment.value.section_id,
-                    subjectId: assignment.value.subject_id,
-                    foundSection: selectedSection,
-                    foundSubject: selectedSubject
-                }
-            );
+        // Basic validation
+        if (!assignment.value.section_id || !assignment.value.subject_id || !assignment.value.role) {
             toast.add({
                 severity: 'error',
-                summary: 'Error',
-                detail: 'Could not find selected section or subject data',
-                life: 5000
+                summary: 'Missing Required Fields',
+                detail: 'Please select grade, section, subject, and role',
+                life: 3000
             });
             return;
         }
 
-        // Create a new assignment object
-        const newAssignment = {
-            id: assignment.value.id || Date.now(), // Use existing ID or generate a temporary one
-            section_id: assignment.value.section_id,
-            subject_id: assignment.value.subject_id,
-            is_primary: assignment.value.is_primary,
-            role: assignment.value.role,
-            // For display purposes
-            section: {
-                id: selectedSection.id,
-                name: selectedSection.name,
-                grade_id: selectedSection.grade_id,
-                grade: selectedSection.grade
-            },
-            subject: {
-                id: selectedSubject.value,
-                name: selectedSubject.label
+        // Full validation
+        if (!validateAssignment()) {
+            return; // Validation errors are already in assignmentErrors.value
+        }
+
+        loading.value = true;
+        const teacherId = editedTeacher.value.id;
+
+        // Prepare the payload
+        const payload = prepareAssignmentPayload();
+        console.log(`Saving assignment with payload:`, JSON.stringify(payload, null, 2));
+
+        // Send request to API
+        const response = await axios.put(
+            `${API_BASE_URL}/teachers/${teacherId}/assignments`,
+            payload
+        ).catch(error => {
+            // Detailed error handling
+            if (error.response) {
+                // Server responded with an error status
+                const statusCode = error.response.status;
+                const errorData = error.response.data;
+
+                if (statusCode === 422) {
+                    // Validation error
+                    let message = 'Validation error';
+                    if (errorData.errors) {
+                        message = Object.values(errorData.errors).flat().join(', ');
+                    } else if (errorData.message) {
+                        message = errorData.message;
+                    }
+                    throw new Error(message);
+                }
+                else if (statusCode === 409 ||
+                    (statusCode === 500 && errorData.message &&
+                     (errorData.message.includes('already assigned') ||
+                      errorData.message.includes('duplicate') ||
+                      errorData.message.includes('unique constraint')))) {
+                    // Conflict error or constraint violation
+                    throw new Error('This assignment already exists or conflicts with existing assignments. Please check the current assignments and try again.');
+                }
+                else if (errorData.message) {
+                    throw new Error(errorData.message);
+                }
             }
-        };
 
-        console.log('New assignment created:', newAssignment);
+            // Default error
+            throw error;
+        });
 
-        // Add to teacher's active assignments if not already there
-        if (!editedTeacher.value.active_assignments) {
-            editedTeacher.value.active_assignments = [];
-        }
+        console.log('Assignment saved successfully:', response.data);
 
-        // Check if we're editing an existing assignment
-        const existingIndex = editedTeacher.value.active_assignments.findIndex(
-            a => a.id === assignment.value.id
-        );
-
-        if (existingIndex >= 0) {
-            // Update existing assignment
-            editedTeacher.value.active_assignments[existingIndex] = newAssignment;
-            console.log('Updated existing assignment at index', existingIndex);
-        } else {
-            // Add new assignment
-            editedTeacher.value.active_assignments.push(newAssignment);
-            console.log('Added new assignment to teacher');
-        }
-
-        // Send to backend API
-        await saveAssignmentToBackend(editedTeacher.value.id, editedTeacher.value.active_assignments);
-
-        // Close dialog and show success message
+        // Close dialog
         hideAssignmentDialog();
+
+        // Force refresh to get the latest data
+        await forceRefreshTeacher(teacherId);
+
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: 'Assignment saved successfully',
+            detail: 'Subject assigned successfully',
             life: 3000
         });
     } catch (error) {
         console.error('Error saving assignment:', error);
+
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to save assignment: ' + (error.message || 'Unknown error'),
+            detail: `Failed to save assignment: ${error.message}`,
             life: 5000
         });
+
+        assignmentErrors.value = [error.message];
+    } finally {
+        loading.value = false;
     }
 };
 
@@ -753,6 +883,17 @@ const saveAssignment = async () => {
 const saveAssignmentToBackend = async (teacherId, assignments) => {
     try {
         console.log('Saving assignments to backend for teacher ID:', teacherId);
+
+        // Check for potential conflicts with server data before saving
+        const conflicts = await checkServerAssignmentConflicts(assignments);
+        if (conflicts.length > 0) {
+            // Return a standardized error object for a better UX
+            throw {
+                isValidationError: true,
+                message: conflicts[0],
+                conflicts
+            };
+        }
 
         const response = await axios.put(
             `${API_BASE_URL}/teachers/${teacherId}/assignments`,
@@ -772,378 +913,371 @@ const saveAssignmentToBackend = async (teacherId, assignments) => {
         return response.data;
     } catch (error) {
         console.error('Failed to save assignments to backend:', error);
-        throw error;
-    }
-};
 
-const expandAll = () => {
-    expandedRows.value = [...teachers.value];
-};
-
-const collapseAll = () => {
-    expandedRows.value = [];
-};
-
-const getDepartment = (assignments) => {
-    return assignments[0]?.subject?.department || 'N/A';
-};
-
-const getRoomNumber = (assignments) => {
-    return assignments[0]?.section?.room_number || 'N/A';
-};
-
-const getGradeName = (assignments) => {
-    if (!assignments || assignments.length === 0) return 'N/A';
-
-    const firstAssignment = assignments[0];
-
-    // Try to get grade from the section's grade property
-    if (firstAssignment.section && firstAssignment.section.grade) {
-        return firstAssignment.section.grade.name || `Grade ${firstAssignment.section.grade.id}`;
-    }
-
-    // Try to get grade_id from section
-    if (firstAssignment.section && firstAssignment.section.grade_id) {
-        const gradeId = firstAssignment.section.grade_id;
-        // Ensure we have grade options loaded
-        if (gradeOptions.value.length === 0) {
-            loadGrades();
-            return 'Loading...';
+        // If it's already our custom error, just rethrow it
+        if (error.isValidationError) {
+            throw error;
         }
-        const grade = gradeOptions.value.find(g => Number(g.id) === Number(gradeId));
-        return grade ? grade.name : `Grade ${gradeId}`;
-    }
 
-    return 'N/A';
-};
+        // Check if this is a validation error response from server
+        if (error.response) {
+            // Handle 500 error that's actually a validation error (not ideal API design)
+            if (error.response.status === 500) {
+                // Check if error message contains information about duplicate assignment
+                const errorMessage = error.response.data?.message || error.message;
+                if (errorMessage.includes('duplicate') ||
+                    errorMessage.includes('already assigned') ||
+                    errorMessage.includes('SQLSTATE[23000]') || // SQL integrity constraint error
+                    errorMessage.includes('constraint') ||
+                    errorMessage.toLowerCase().includes('unique')) {
 
-const getSectionName = (assignments) => {
-    if (!assignments || assignments.length === 0) return 'N/A';
+                    // Show a user-friendly validation error
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Validation Error',
+                        detail: 'This teacher is already assigned to this section and subject',
+                        life: 5000
+                    });
 
-    const firstAssignment = assignments[0];
+                    // Refresh data to get current state from server
+                    await loadTeachers();
 
-    // Get section name if available
-    if (firstAssignment.section && firstAssignment.section.name) {
-        return firstAssignment.section.name;
-    }
+                    // Return a standardized error object
+                    throw {
+                        isValidationError: true,
+                        message: 'This teacher is already assigned to this section and subject'
+                    };
+                }
+            }
 
-    // Try to get section by ID
-    if (firstAssignment.section_id) {
-        const sectionId = firstAssignment.section_id;
-        const section = sections.value.find(s => Number(s.id) === Number(sectionId));
-        return section ? section.name : `Section ${sectionId}`;
-    }
+            // Handle proper validation responses (422 status)
+            if (error.response.status === 422) {
+                const validationErrors = error.response.data.errors || {};
+                const errorMessages = Object.values(validationErrors).flat();
 
-    return 'N/A';
-};
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Validation Error',
+                    detail: errorMessages.join(', ') || 'Invalid assignment data',
+                    life: 5000
+                });
 
-const getSubjects = (assignments) => {
-    return assignments.map(a => a.subject.name).join(', ');
-};
+                // Return a standardized error object
+                throw {
+                    isValidationError: true,
+                    message: errorMessages.join(', ') || 'Invalid assignment data'
+                };
+            }
+        }
 
-// Handle grade change in the assignment dialog
-const handleGradeChange = () => {
-    // Reset selected section and subject when grade changes
-    assignment.value.section_id = null;
-    assignment.value.subject_id = null;
-
-    if (!assignmentGrade.value) {
-        filteredSections.value = [];
-        subjectOptions.value = [];
-        console.log('No grade selected, sections and subjects cleared');
-        return;
-    }
-
-    console.log('Grade selected:', assignmentGrade.value);
-
-    // Ensure we're working with properly loaded section data
-    if (sections.value.length === 0) {
-        loadSections().then(() => {
-            filterSectionsForGrade();
-        });
-    } else {
-        filterSectionsForGrade();
-    }
-
-    // Also ensure we have subjects loaded
-    if (subjects.value.length === 0) {
-        loadSubjects().then(() => {
-            loadGradeSubjects(assignmentGrade.value);
-        });
-    } else {
-        loadGradeSubjects(assignmentGrade.value);
+        // For other types of errors, rethrow with a better message
+        throw {
+            isValidationError: false,
+            original: error,
+            message: error.message || 'Unknown server error'
+        };
     }
 };
 
-// Extract the section filtering logic to a separate function
-const filterSectionsForGrade = () => {
-    console.log('Available sections (before filtering):', sections.value.map(s => ({
-        id: s.id,
-        name: s.name,
-        grade_id: s.grade_id,
-        grade: s.grade ? { id: s.grade.id, name: s.grade.name } : null
-    })));
+// New function to check for existing conflicts on the server before saving
+const checkServerAssignmentConflicts = async (assignments) => {
+    if (!assignments || assignments.length === 0) return [];
 
-    // Filter sections by selected grade
-    filteredSections.value = sections.value.filter(section => {
-        // Get the section's grade ID, handling different data structures
-        let sectionGradeId;
+    try {
+        // Preemptively check for assignment conflicts on the server
+        const conflicts = [];
 
-        if (typeof section.grade_id === 'number' || typeof section.grade_id === 'string') {
-            sectionGradeId = Number(section.grade_id);
-        } else if (section.grade && (typeof section.grade.id === 'number' || typeof section.grade.id === 'string')) {
-            sectionGradeId = Number(section.grade.id);
+        // Check each assignment
+        for (const assignment of assignments) {
+            if (!assignment.section_id || !assignment.subject_id) continue;
+
+            // Check if any teacher is already assigned to this section-subject combination
+            const checkResponse = await axios.get(
+                `${API_BASE_URL}/check-assignment?section_id=${assignment.section_id}&subject_id=${assignment.subject_id}`
+            ).catch(error => {
+                // If endpoint not available, don't block the operation
+                console.warn('Assignment conflict check endpoint not available:', error);
+                return { data: { exists: false } };
+            });
+
+            if (checkResponse?.data?.exists &&
+                checkResponse?.data?.teacher_id &&
+                checkResponse.data.teacher_id !== editedTeacher.value.id) {
+
+                conflicts.push(`The section and subject is already assigned to another teacher (${checkResponse.data.teacher_name || 'Unknown Teacher'})`);
+            }
+        }
+
+        // If endpoint wasn't available, try to check against local data
+        if (conflicts.length === 0) {
+            // Fallback to client-side check of other teachers
+            for (const teacher of teachers.value) {
+                // Skip the current teacher we're editing
+                if (teacher.id === editedTeacher.value.id) continue;
+
+                // Check each assignment
+                for (const newAssignment of assignments) {
+                    if (!newAssignment.section_id || !newAssignment.subject_id) continue;
+
+                    // Look for conflicts
+                    if (teacher.active_assignments && Array.isArray(teacher.active_assignments)) {
+                        const hasConflict = teacher.active_assignments.some(a =>
+                            String(a.section_id) === String(newAssignment.section_id) &&
+                            String(a.subject_id) === String(newAssignment.subject_id)
+                        );
+
+                        if (hasConflict) {
+                            conflicts.push(`This section and subject is already assigned to teacher ${teacher.first_name} ${teacher.last_name}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        return conflicts;
+    } catch (error) {
+        console.warn('Error checking for assignment conflicts:', error);
+        return []; // Don't block the operation if conflict check fails
+    }
+};
+
+// Load sections for schedule
+const loadSectionsForSchedule = async () => {
+    try {
+        // If the current subject has a grade ID, filter sections by that grade
+        let gradeId = null;
+
+        if (selectedSubjectForSchedule.value && selectedSubjectForSchedule.value.grade_id) {
+            gradeId = selectedSubjectForSchedule.value.grade_id;
+        }
+
+        // If we have a grade ID, fetch sections for this grade from API
+        if (gradeId) {
+            try {
+                const response = await axios.get(`${API_BASE_URL}/grades/${gradeId}/sections`);
+                filteredSections.value = response.data.data || response.data;
+            } catch (error) {
+                console.warn('Error fetching sections by grade API, falling back to local filtering:', error);
+                // Fallback to local filtering if API endpoint is not available
+                filteredSections.value = sections.value.filter(section =>
+                    Number(section.grade_id) === Number(gradeId)
+                );
+            }
         } else {
-            console.warn('Section has invalid grade_id structure:', section);
-            return false;
+            // Otherwise, use all available sections
+            if (sections.value.length === 0) {
+                // Load sections if not already loaded
+                await loadSections();
+            }
+            filteredSections.value = sections.value;
         }
 
-        // Compare with the selected grade (ensure we're comparing numbers)
-        const selectedGradeId = Number(assignmentGrade.value);
-        const result = sectionGradeId === selectedGradeId;
-
-        if (result) {
-            console.log(`Found matching section: ${section.name} (grade_id: ${sectionGradeId})`);
-        }
-
-        return result;
-    });
-
-    console.log('Filtered sections for grade ID', assignmentGrade.value, ':', filteredSections.value.map(s => ({
-        id: s.id,
-        name: s.name,
-        grade_id: s.grade_id
-    })));
-
-    // Show notification based on results
-    if (filteredSections.value.length === 0) {
+        console.log('Loaded sections for scheduling:', filteredSections.value);
+    } catch (error) {
+        console.error('Error loading sections for schedule:', error);
         toast.add({
-            severity: 'warn',
-            summary: 'No Sections',
-            detail: `No sections found for the selected grade. You may need to create sections first.`,
-            life: 5000
-        });
-    } else {
-        toast.add({
-            severity: 'info',
-            summary: 'Sections Found',
-            detail: `Found ${filteredSections.value.length} sections for the selected grade.`,
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections for scheduling',
             life: 3000
         });
     }
 };
 
-// Function to check API connectivity
-const checkApiConnectivity = async () => {
-    try {
-        console.log('Checking API connectivity...');
-
-        // Create a controller with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        // Try a simple fetch to check if the API is available
-        const response = await fetch(`${API_BASE_URL}/health-check`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            },
-            signal: controller.signal
-        }).catch(error => {
-            // Handle network errors or timeouts
-            console.error('API connectivity check failed:', error);
-            return { ok: false, status: 0, statusText: error.message };
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-            console.log('API is accessible ✓');
-            return true;
-        } else {
-            console.error(`API check failed: ${response.status} ${response.statusText}`);
-
-            // If it's not a connection refused (which would be status 0), try with a different endpoint
-            if (response.status !== 0) {
-                // Try another endpoint as fallback
-                const fallbackController = new AbortController();
-                const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 3000);
-
-                const fallbackResponse = await fetch(`${API_BASE_URL}/teachers`, {
-                    method: 'HEAD',
-                    signal: fallbackController.signal
-                }).catch(() => ({ ok: false }));
-
-                clearTimeout(fallbackTimeoutId);
-
-                if (fallbackResponse.ok) {
-                    console.log('API is accessible through fallback endpoint ✓');
-                    return true;
-                }
-            }
-
-            // API is not accessible
-            toast.add({
-                severity: 'warn',
-                summary: 'Backend Unavailable',
-                detail: 'Could not connect to the backend API. Some features may be limited.',
-                life: 8000,
-                sticky: true
-            });
-            return false;
-        }
-    } catch (error) {
-        console.error('Error checking API connectivity:', error);
-
-        // API is not accessible
-        toast.add({
-            severity: 'warn',
-            summary: 'Backend Unavailable',
-            detail: 'Could not connect to the backend API. Using offline mode with local data.',
-            life: 8000,
-            sticky: true
-        });
-        return false;
-    }
+const getInitials = (teacher) => {
+    return teacher.first_name.charAt(0) + teacher.last_name.charAt(0);
 };
 
-// Function to try multiple API endpoints
-const tryApiEndpoints = async (path, options = {}) => {
-    let lastError = null;
-    let lastResponse = null;
-
-    // Prioritize the localhost:8000 endpoint which seems most reliable
-    const prioritizedEndpoints = [
-        'http://localhost:8000/api',  // This one works based on the 422 error
-        'http://127.0.0.1:8000/api',
-        'http://localhost/api',
-        'http://localhost/lamms-backend/public/api'
-    ];
-
-    // Try each endpoint until one works
-    for (const baseUrl of prioritizedEndpoints) {
-        try {
-            const url = `${baseUrl}${path}`;
-            console.log(`Trying API endpoint: ${url}`);
-
-            // Create abort controller for timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // Shorter timeout
-
-            // Make the request
-            const response = await fetch(url, {
-                ...options,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    ...(options.headers || {})
-                },
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-            lastResponse = response;
-
-            // If successful, update the base URL and return the response
-            if (response.ok) {
-                if (baseUrl !== API_BASE_URL) {
-                    console.log(`Found working API endpoint: ${baseUrl}`);
-                    API_BASE_URL = baseUrl;
-                }
-
-                // Handle empty responses - return empty array for empty responses
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const text = await response.text();
-                    if (!text || text.trim() === '') {
-                        console.log('Empty response received, returning empty array');
-                        return [];
-                    }
-                    return JSON.parse(text);
-                } else {
-                    console.log('Non-JSON response received');
-                    return [];
-                }
-            } else if (response.status === 422) {
-                // Handle validation errors
-                const errorData = await response.json();
-                console.error('Validation errors:', errorData);
-
-                // Format validation errors for toast
-                let errorMessage = "Validation failed: ";
-                if (errorData.errors) {
-                    errorMessage += Object.values(errorData.errors)
-                        .flat()
-                        .join(', ');
-                } else if (errorData.message) {
-                    errorMessage += errorData.message;
-                }
-
-                throw new Error(errorMessage);
-            }
-        } catch (error) {
-            lastError = error;
-            if (error.name !== 'AbortError') {
-                console.error(`Error with endpoint ${baseUrl}:`, error);
-            }
-        }
-    }
-
-    // If we got a response but it wasn't OK, try to get more error details
-    if (lastResponse && !lastResponse.ok) {
-        try {
-            const errorText = await lastResponse.text();
-            console.error('API error response:', errorText);
-            throw new Error(`API error: ${lastResponse.status} ${lastResponse.statusText}. ${errorText}`);
-        } catch (error) {
-            throw new Error(`API error: ${lastResponse.status} ${lastResponse.statusText}`);
-        }
-    }
-
-    // If all endpoints failed, throw the last error
-    if (lastError) {
-        throw lastError;
-    } else {
-        throw new Error('All API endpoints failed');
-    }
-};
-
-// Lifecycle hooks
-onBeforeMount(async () => {
+// Function to open the teacher assignment wizard
+const openAssignmentWizard = (teacherData) => {
     try {
-        loading.value = true;
+        // Set the selected teacher and explicitly set new mode
+        selectedTeacher.value = teacherData;
+        assignmentWizardMode.value = 'new';
 
-        // Try to find a working API endpoint first
-        try {
-            await tryApiEndpoints('/health-check').catch(error => {
-                console.warn('Health check failed:', error.message);
-                // This is just a test, so we can continue even if it fails
-            });
-        } catch (error) {
-            console.warn('API discovery failed:', error.message);
-        }
+        console.log(`Opening assignment wizard for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
 
-        // Load all required data in parallel
-        await Promise.all([
-            loadTeachers(),
-            loadSections(),
-            loadSubjects(),
-            loadGrades()
-        ]);
+        // Open the dialog
+        assignmentWizardDialog.value = true;
     } catch (error) {
-        console.error('Error during initialization:', error);
+        console.error('Error opening assignment wizard:', error);
         toast.add({
             severity: 'error',
-            summary: 'Initialization Error',
-            detail: 'There was a problem loading the application data. Some features may be limited.',
+            summary: 'Error',
+            detail: 'Failed to open assignment wizard',
+            life: 3000
+        });
+    }
+};
+
+// Add a new method specifically for adding subjects
+const openAddSubjectsDialog = (teacherData) => {
+    if (!teacherData || !teacherData.id) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No valid teacher selected',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // First, check if the teacher has any primary assignment
+        const primaryAssignment = teacherData.primary_assignment ||
+            (teacherData.active_assignments &&
+            teacherData.active_assignments.find(a => a.is_primary || a.role === 'primary'));
+
+        if (!primaryAssignment) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Primary Assignment',
+                detail: 'Teacher must be assigned as a primary teacher to a section first',
+                life: 5000
+            });
+            return;
+        }
+
+        // Set the selected teacher and explicitly set add-subjects mode
+        selectedTeacher.value = teacherData;
+        assignmentWizardMode.value = 'add-subjects';
+
+        console.log(`Opening add-subjects dialog for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
+        console.log(`Primary assignment:`, primaryAssignment);
+
+        // Open the dialog
+    assignmentWizardDialog.value = true;
+    } catch (error) {
+        console.error('Error opening add subjects dialog:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to open add subjects dialog',
+            life: 3000
+        });
+    }
+};
+
+// Handle assignment completion
+const handleAssignmentComplete = async (teacherId) => {
+    console.log(`Assignment completed for teacher ${teacherId}`);
+
+    try {
+        // Show loading indicator
+        loading.value = true;
+
+        // Use the enhanced forceRefreshTeacher function that will refresh everything properly
+        await forceRefreshTeacher(teacherId);
+
+    toast.add({
+        severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher assignment updated successfully',
+        life: 3000
+    });
+    } catch (error) {
+        console.error('Error updating teacher assignments:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Failed to update assignments: ${error.message}`,
             life: 5000
         });
     } finally {
         loading.value = false;
     }
-});
+};
 
-// Add these new refs for the scheduling functionality
+// Original function kept for backward compatibility
+const openAssignmentDialog = (teacherData) => {
+    // Reset the form and errors
+    assignmentErrors.value = [];
+    assignmentGrade.value = null;
+    filteredSections.value = [];
+
+    // Reset assignment data with default values
+    assignment.value = {
+        id: null,
+        section_id: null,
+        subject_id: null,
+        is_primary: false,
+        role: null
+    };
+
+    // Set the edited teacher
+    editedTeacher.value = teacherData;
+    console.log('Opening assignment dialog for teacher:', teacherData.first_name, teacherData.last_name);
+
+    // Load initial data if not already loaded
+    Promise.all([
+        sections.value.length === 0 ? loadSections() : Promise.resolve(),
+        subjects.value.length === 0 ? loadSubjects() : Promise.resolve(),
+        gradeOptions.value.length === 0 ? loadGrades() : Promise.resolve()
+    ]).then(() => {
+        // Pre-populate with primary assignment if it exists
+        if (teacherData.primary_assignment) {
+            const primary = teacherData.primary_assignment;
+            const gradeId = primary.section?.grade?.id || null;
+
+            // Set values
+            assignmentGrade.value = gradeId;
+            assignment.value = {
+                id: primary.id,
+                section_id: primary.section_id,
+                subject_id: primary.subject_id,
+                is_primary: true,
+                role: 'primary'
+            };
+
+            // Load sections for this grade
+            if (gradeId) {
+                handleGradeChange({ value: gradeId });
+            }
+        }
+
+        // Show the dialog
+        assignmentDialogVisible.value = true;
+    });
+};
+
+// Handle role change
+const handleRoleChange = (event) => {
+    // If primary role is selected, automatically check the primary teacher checkbox
+    if (event.value === 'primary') {
+        assignment.value.is_primary = true;
+    } else {
+        // For other roles, leave is_primary as it is, allowing manual selection
+        // This ensures the checkbox state matches the role selection
+        console.log(`Role changed to ${event.value}, is_primary can be toggled manually`);
+    }
+};
+
+// Edit teacher function
+const editTeacher = (teacherData) => {
+    // Reset the form
+    teacher.value = { ...teacherData };
+    submitted.value = false;
+    teacherDialog.value = true;
+    console.log('Edit teacher dialog opened for:', teacherData.first_name, teacherData.last_name);
+};
+
+// Missing function to open the new teacher dialog
+const openNewTeacherDialog = () => {
+    teacher.value = {
+        first_name: '',
+        last_name: '',
+        email: '',
+        username: '',
+        password: '',
+        phone_number: '',
+        address: '',
+        gender: null
+    };
+    submitted.value = false;
+    teacherDialog.value = true;
+};
+
+// Add missing schedule-related refs
 const scheduleDialog = ref(false);
 const selectedSubjectForSchedule = ref(null);
 const scheduleData = ref([]);
@@ -1169,43 +1303,49 @@ const newScheduleItem = ref({
 // Open schedule dialog
 const openScheduleDialog = (subject) => {
     selectedSubjectForSchedule.value = subject;
-
-    // Load existing schedule data for this subject and teacher
     loadSubjectSchedule(subject);
-
     scheduleDialog.value = true;
 };
 
 // Function to load schedule for a subject
 const loadSubjectSchedule = async (subject) => {
     try {
-        // This would fetch from the API in production
-        // For now we'll use sample data
         console.log(`Loading schedule for ${subject.name}`);
+        loading.value = true;
 
-        // Simulate loading (would be API call in production)
-        scheduleData.value = subject.schedule || [];
+        // Fetch schedule data from API
+        const response = await axios.get(
+            `${API_BASE_URL}/teachers/${selectedTeacher.value.id}/subjects/${subject.id}/schedule`
+        ).catch(error => {
+            console.warn('Schedule API error:', error);
+            // If API endpoint not found, handle gracefully
+            if (error.response && error.response.status === 404) {
+                return { data: [] };
+            }
+            throw error;
+        });
 
-        // If no schedule exists yet, initialize with empty array
-        if (!scheduleData.value.length) {
-            console.log('No existing schedule found, initializing empty schedule');
-            scheduleData.value = [];
-        } else {
-            console.log('Loaded schedule data:', scheduleData.value);
-        }
+        // Process and set schedule data
+        scheduleData.value = Array.isArray(response.data) ? response.data :
+                             (response.data.data || []);
+
+        console.log('Loaded schedule data:', scheduleData.value);
     } catch (error) {
         console.error('Error loading schedule:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load schedule data',
+            detail: 'Failed to load schedule data from database',
             life: 3000
         });
+        scheduleData.value = [];
+    } finally {
+        loading.value = false;
     }
 };
 
 // Function to save a schedule item
-const saveScheduleItem = () => {
+const saveScheduleItem = async () => {
     // Validate required fields
     if (!newScheduleItem.value.day || !newScheduleItem.value.timeSlot || !newScheduleItem.value.section_id) {
         toast.add({
@@ -1224,173 +1364,1043 @@ const saveScheduleItem = () => {
     );
 
     if (hasConflict) {
-    toast.add({
+        toast.add({
             severity: 'warn',
             summary: 'Schedule Conflict',
             detail: 'This time slot is already scheduled',
-        life: 3000
-    });
+            life: 3000
+        });
         return;
     }
 
-    // Generate unique ID and add to schedule
-    const newItem = {
-        id: 'schedule-' + Date.now(),
-        day: newScheduleItem.value.day,
-        timeSlot: newScheduleItem.value.timeSlot,
-        room: newScheduleItem.value.room,
-        section_id: newScheduleItem.value.section_id,
-        // Get section name for display
-        section_name: filteredSections.value.find(s => s.id === newScheduleItem.value.section_id)?.name || 'Unknown Section'
-    };
-
-    // Add to schedule data
-    scheduleData.value.push(newItem);
-
-    // Reset form
-    newScheduleItem.value = {
-        day: null,
-        timeSlot: null,
-        room: '',
-        section_id: null
-    };
-
-    // Show success message
-    toast.add({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Schedule item added',
-        life: 3000
-    });
-
-    // In production, would save to backend
-    saveScheduleToBackend();
-};
-
-// Function to remove a schedule item
-const removeScheduleItem = (item) => {
-    scheduleData.value = scheduleData.value.filter(i => i.id !== item.id);
-
-    // In production, would sync with backend
-    saveScheduleToBackend();
-
-    toast.add({
-        severity: 'info',
-        summary: 'Removed',
-        detail: 'Schedule item removed',
-        life: 3000
-    });
-};
-
-// Save schedule to backend
-const saveScheduleToBackend = async () => {
     try {
-        console.log('Saving schedule to backend:', scheduleData.value);
+        // Find section name for display
+        const selectedSection = filteredSections.value.find(
+            s => String(s.id) === String(newScheduleItem.value.section_id)
+        );
 
-        // This would be an API call in production
-        // For now, attach schedule to the subject in teacher's data
-        if (selectedTeacher.value && selectedTeacher.value.subjects) {
-            const subjectIndex = selectedTeacher.value.subjects.findIndex(
-                s => s.id === selectedSubjectForSchedule.value.id
-            );
+        // Create schedule item object
+        const scheduleItem = {
+            day: newScheduleItem.value.day,
+            time_slot: newScheduleItem.value.timeSlot,
+            room: newScheduleItem.value.room,
+            section_id: newScheduleItem.value.section_id,
+            subject_id: selectedSubjectForSchedule.value.id,
+            teacher_id: selectedTeacher.value.id
+        };
 
-            if (subjectIndex !== -1) {
-                // Attach the schedule to the subject
-                selectedTeacher.value.subjects[subjectIndex].schedule = [...scheduleData.value];
-                console.log('Updated subject with schedule:', selectedTeacher.value.subjects[subjectIndex]);
-            }
-        }
+        // Save the schedule item via API
+        const response = await axios.post(
+            `${API_BASE_URL}/schedules`,
+            scheduleItem
+        );
 
-        // For demo, we store in localStorage
-        const teacherSchedules = JSON.parse(localStorage.getItem('teacherSchedules') || '{}');
-        const key = `teacher_${selectedTeacher.value.id}_subject_${selectedSubjectForSchedule.value.id}`;
-        teacherSchedules[key] = scheduleData.value;
-        localStorage.setItem('teacherSchedules', JSON.stringify(teacherSchedules));
+        // Get the saved item with its ID
+        const savedItem = response.data;
 
-        console.log('Schedule saved to localStorage');
+        // Add the new item to the local state with section name for display
+        scheduleData.value.push({
+            ...savedItem,
+            section_name: selectedSection?.name || 'Unknown Section'
+        });
+
+        // Reset form
+        newScheduleItem.value = {
+            day: null,
+            timeSlot: null,
+            room: '',
+            section_id: null
+        };
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Schedule item added to database',
+            life: 3000
+        });
     } catch (error) {
-        console.error('Error saving schedule:', error);
+        console.error('Error saving schedule item:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to save schedule',
+            detail: 'Failed to save schedule to database',
             life: 3000
         });
     }
 };
 
-// Load sections for schedule
-const loadSectionsForSchedule = () => {
-    if (selectedSubjectForSchedule.value && selectedSubjectForSchedule.value.grade_id) {
-        const gradeId = selectedSubjectForSchedule.value.grade_id;
+// Function to remove a schedule item
+const removeScheduleItem = async (item) => {
+    try {
+        // Delete the schedule item via API
+        await axios.delete(`${API_BASE_URL}/schedules/${item.id}`);
 
-        // Filter sections by grade
-        filteredSections.value = sections.value.filter(section => {
-            let sectionGradeId;
-            if (typeof section.grade_id === 'number' || typeof section.grade_id === 'string') {
-                sectionGradeId = Number(section.grade_id);
-            } else if (section.grade && section.grade.id) {
-                sectionGradeId = Number(section.grade.id);
-            } else {
-                return false;
-            }
+        // Update local state after successful delete
+        scheduleData.value = scheduleData.value.filter(i => i.id !== item.id);
 
-            return sectionGradeId === Number(gradeId);
+        toast.add({
+            severity: 'info',
+            summary: 'Removed',
+            detail: 'Schedule item removed from database',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error removing schedule item:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to remove schedule from database',
+            life: 3000
+        });
+    }
+};
+
+// Save schedule to backend
+const saveScheduleToBackend = async () => {
+    try {
+        // For bulk saving multiple schedule changes at once
+        const response = await axios.put(
+            `${API_BASE_URL}/teachers/${selectedTeacher.value.id}/subjects/${selectedSubjectForSchedule.value.id}/schedule`,
+            { schedule: scheduleData.value }
+        );
+
+        console.log('Schedule saved to database:', response.data);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Schedule saved to database successfully',
+            life: 3000
         });
 
-        console.log('Filtered sections for scheduling:', filteredSections.value);
-    } else {
-        // If no grade ID, use all sections
-        filteredSections.value = sections.value;
+        scheduleDialog.value = false;
+    } catch (error) {
+        console.error('Error saving schedule to database:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to save schedule to database',
+            life: 3000
+        });
     }
 };
 
-const getInitials = (teacher) => {
-    return teacher.first_name.charAt(0) + teacher.last_name.charAt(0);
+// Teacher form handling
+const hideDialog = () => {
+    teacherDialog.value = false;
+    submitted.value = false;
 };
 
-// Open assignment dialog
-const openAssignmentDialog = (teacherData) => {
-    editedTeacher.value = teacherData;
-    assignmentGrade.value = null;
-    assignmentErrors.value = [];
-    filteredSections.value = [];
+// Helper functions for displaying assignment data
+const getGradeName = (assignments) => {
+    // First check if there's a primary assignment
+    if (assignments?.primary_assignment?.section?.grade?.name) {
+        return assignments.primary_assignment.section.grade.name;
+    }
 
-    // Initialize the assignment form
-    assignment.value = {
-        id: null,
-        section_id: null,
-        subject_id: null,
-        is_primary: false,
-        role: null
+    // Then check active assignments
+    if (assignments?.active_assignments?.length > 0) {
+        // Try to find primary assignments first
+        const primaryAssignment = assignments.active_assignments.find(a =>
+            (a.is_primary === true || a.role === 'primary') && a.section && a.section.grade);
+
+        if (primaryAssignment && primaryAssignment.section.grade) {
+            return primaryAssignment.section.grade.name;
+        }
+
+        // If no primary, try any assignment with grade info
+        const sectionWithGrade = assignments.active_assignments.find(a => a.section && a.section.grade);
+        if (sectionWithGrade && sectionWithGrade.section.grade) {
+            return sectionWithGrade.section.grade.name;
+        }
+
+        // If no grade found but there are assignments, return at least one grade
+        const firstAssignment = assignments.active_assignments[0];
+        if (firstAssignment && firstAssignment.section) {
+            return firstAssignment.section.grade?.name || 'Unknown Grade';
+        }
+    }
+
+    return 'Not assigned';
+};
+
+const getSectionName = (assignments) => {
+    // First check if there's a primary assignment
+    if (assignments?.primary_assignment?.section?.name) {
+        return assignments.primary_assignment.section.name;
+    }
+
+    // Then check active assignments
+    if (assignments?.active_assignments?.length > 0) {
+        // First try to find primary assignment
+        const primaryAssignment = assignments.active_assignments.find(a =>
+            (a.is_primary === true || a.role === 'primary') && a.section);
+
+        if (primaryAssignment && primaryAssignment.section) {
+            return primaryAssignment.section.name;
+        }
+
+        // If not found, get unique section names
+        const sectionNames = [...new Set(
+            assignments.active_assignments
+                .filter(a => a.section && a.section.name)
+                .map(a => a.section.name)
+        )];
+
+        return sectionNames.join(', ') || 'Unknown Section';
+    }
+
+    return 'Not assigned';
+};
+
+const getSubjects = (teacher) => {
+    // Create a combined array of all assignments
+    const allAssignments = [];
+
+    // Add the primary assignment if it exists
+    if (teacher.primary_assignment) {
+        allAssignments.push(teacher.primary_assignment);
+    } else if (findPrimaryAssignments(teacher).length > 0) {
+        allAssignments.push(...findPrimaryAssignments(teacher));
+    }
+
+    // Add the subject assignments if they exist
+    if (teacher.subject_assignments && teacher.subject_assignments.length > 0) {
+        allAssignments.push(...teacher.subject_assignments);
+    } else if (findSubjectAssignments(teacher).length > 0) {
+        allAssignments.push(...findSubjectAssignments(teacher));
+    }
+
+    // If we still don't have any assignments but have active_assignments, use those
+    if (allAssignments.length === 0 && teacher.active_assignments && teacher.active_assignments.length > 0) {
+        allAssignments.push(...teacher.active_assignments);
+    }
+
+    if (allAssignments.length === 0) {
+        return 'No subjects assigned';
+    }
+
+    // Get unique subject names from all assignments
+    const subjectNames = [...new Set(
+        allAssignments
+            .filter(a => a.subject && a.subject.name)
+            .map(a => a.subject.name)
+    )];
+
+    return subjectNames.join(', ') || 'Unknown Subject';
+};
+
+// Find any primary assignments for a teacher
+const findPrimaryAssignments = (teacher) => {
+    if (!teacher?.active_assignments || !Array.isArray(teacher.active_assignments)) {
+        return [];
+    }
+
+    return teacher.active_assignments.filter(a =>
+        a.is_primary === true || a.role === 'primary'
+    );
+};
+
+// Find ordinary subject assignments for a teacher
+const findSubjectAssignments = (teacher) => {
+    if (!teacher?.active_assignments || !Array.isArray(teacher.active_assignments)) {
+        return [];
+    }
+
+    return teacher.active_assignments.filter(a =>
+        a.is_primary !== true && a.role !== 'primary'
+    );
+};
+
+// Add the missing handleGradeChange function
+const handleGradeChange = async (event) => {
+    try {
+        console.log('Grade changed:', event.value);
+        assignmentGrade.value = event.value;
+        selectedSection.value = null;
+        assignment.value.section_id = null;
+        assignment.value.subject_id = null;
+
+        // Clear errors when user changes selections
+        assignmentErrors.value = [];
+
+        if (!event.value) {
+            filteredSections.value = [];
+            return;
+        }
+
+        // Show loading toast
+        toast.add({
+            severity: 'info',
+            summary: 'Loading',
+            detail: 'Fetching sections for selected grade...',
+            life: 2000
+        });
+
+        // Get sections for the selected grade
+        try {
+            const response = await axios.get(`${API_BASE_URL}/sections/grade/${event.value}`);
+            filteredSections.value = response.data || [];
+
+            if (filteredSections.value.length === 0) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Sections',
+                    detail: 'No sections found for this grade. Please create sections first.',
+                    life: 5000
+                });
+            } else {
+                console.log('Sections loaded successfully:', filteredSections.value);
+            }
+        } catch (error) {
+            console.error('Error loading sections for grade:', error);
+            filteredSections.value = [];
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load sections for this grade',
+                life: 5000
+            });
+        }
+    } catch (error) {
+        console.error('Error in handleGradeChange:', error);
+    }
+};
+
+// Add subject loading function when section is selected
+const handleSectionChange = async (event) => {
+    try {
+        console.log('Section changed:', event.value);
+        assignment.value.section_id = event.value;
+        assignment.value.subject_id = null;
+
+        // Clear errors when user changes selections
+        assignmentErrors.value = [];
+
+        if (!event.value) {
+            return;
+        }
+
+        // Get subjects for the selected grade
+        try {
+            const response = await axios.get(`${API_BASE_URL}/subjects`);
+            subjectOptions.value = response.data || [];
+
+            if (subjectOptions.value.length === 0) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Subjects',
+                    detail: 'No subjects found in the database. Please create subjects first.',
+                    life: 5000
+                });
+            } else {
+                console.log('Subjects loaded successfully:', subjectOptions.value);
+            }
+        } catch (error) {
+            console.error('Error loading subjects:', error);
+            subjectOptions.value = [];
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load subjects',
+                life: 5000
+            });
+        }
+    } catch (error) {
+        console.error('Error in handleSectionChange:', error);
+    }
+};
+
+const saveTeacher = async () => {
+    try {
+        submitted.value = true;
+
+        // Basic validation
+        if (!teacher.value.first_name || !teacher.value.last_name || !teacher.value.email || !teacher.value.username) {
+            toast.add({
+                severity: 'error',
+                summary: 'Validation Error',
+                detail: 'Please fill in all required fields',
+                life: 5000
+            });
+            return;
+        }
+
+        loading.value = true;
+        console.log('Saving teacher:', teacher.value);
+
+        // Determine if this is a create or update operation
+        const isUpdate = !!teacher.value.id;
+        const endpoint = isUpdate ? `/teachers/${teacher.value.id}` : '/teachers';
+        const method = isUpdate ? 'PUT' : 'POST';
+
+        // Use axios directly to better handle errors
+        const response = await axios({
+            method: method,
+            url: `${API_BASE_URL}${endpoint}`,
+            data: teacher.value
+        });
+
+        console.log('Save teacher response:', response);
+
+        // Always hide the dialog first to prevent UI freezing
+        hideDialog();
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Teacher ${isUpdate ? 'updated' : 'created'} successfully`,
+            life: 3000
+        });
+
+        // Refresh the teachers list
+        await loadTeachers();
+    } catch (error) {
+        console.error('Error saving teacher:', error);
+
+        // Handle validation errors
+        if (error.response && error.response.status === 422) {
+            const validationErrors = error.response.data.errors;
+            let errorMessage = 'Validation Error: ';
+
+            if (validationErrors) {
+                errorMessage += Object.values(validationErrors).flat().join(', ');
+            } else {
+                errorMessage += 'Please check your input and try again';
+            }
+
+            toast.add({
+                severity: 'error',
+                summary: 'Validation Error',
+                detail: errorMessage,
+                life: 5000
+            });
+        } else {
+            // Handle other errors
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: `Failed to save teacher: ${error.message || 'Unknown error'}`,
+                life: 5000
+            });
+        }
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Use onMounted to initialize the component
+onMounted(async () => {
+    try {
+        // Load everything needed for teacher management
+        await Promise.all([
+            loadTeachers(),
+            loadSubjects() // Explicitly load subjects on mount
+        ]);
+    } catch (error) {
+        console.error('Error initializing teacher management:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Init Error',
+            detail: `Failed to initialize teacher management: ${error.message}`,
+            life: 5000
+        });
+    }
+});
+
+// Improved refresh function to ensure data consistency
+const forceRefreshTeacher = async (teacherId) => {
+    try {
+        loading.value = true;
+        console.log(`Force refreshing data for teacher ID: ${teacherId}`);
+
+        toast.add({
+            severity: 'info',
+            summary: 'Refreshing',
+            detail: 'Fetching latest teacher data from server...',
+            life: 2000
+        });
+
+        // Load or refresh sections and subjects first to ensure we have up-to-date reference data
+        await Promise.all([
+            loadSections(),
+            loadSubjects(),
+            loadGrades()
+        ]);
+
+        console.log('Reference data refreshed. Now fetching teacher data.');
+
+        // Add cache-busting parameter to avoid browser caching
+        const response = await axios.get(`${API_BASE_URL}/teachers/${teacherId}?_=${new Date().getTime()}`);
+
+        if (!response.data) {
+            console.error('No teacher data returned from force refresh');
+            toast.add({
+                severity: 'error',
+                summary: 'Refresh Failed',
+                detail: 'Could not retrieve teacher data from server',
+                life: 3000
+            });
+            return;
+        }
+
+        // Process this teacher's data
+        const teacherData = response.data;
+        console.log('Fresh teacher data received:', teacherData);
+
+        // Initialize arrays for different types of assignments
+        let primaryAssignment = null;
+        let subjectAssignments = [];
+
+        // Process assignments if present
+        if (teacherData.assignments && Array.isArray(teacherData.assignments)) {
+            // Filter valid assignments
+            const validAssignments = teacherData.assignments.filter(a =>
+                a && a.section_id && a.subject_id);
+
+            console.log('Valid assignments received:', validAssignments);
+
+            // Process each assignment
+            validAssignments.forEach(assignment => {
+                // Find section and subject objects
+                const sectionObj = sections.value.find(s =>
+                    Number(s.id) === Number(assignment.section_id)) || {
+                    id: Number(assignment.section_id),
+                    name: `Section ${assignment.section_id}`,
+                    grade_id: null,
+                    grade: null
+                };
+
+                const subjectObj = subjects.value.find(s =>
+                    Number(s.id) === Number(assignment.subject_id)) || {
+                    id: Number(assignment.subject_id),
+                    name: `Subject ${assignment.subject_id}`
+                };
+
+                console.log(`Processing assignment - Subject: ${subjectObj.name}, Section: ${sectionObj.name}, Is Primary: ${assignment.is_primary}, Role: ${assignment.role}`);
+
+                const processedAssignment = {
+                    id: assignment.id,
+                    section_id: Number(assignment.section_id),
+                    subject_id: Number(assignment.subject_id),
+                    is_primary: assignment.is_primary === true,
+                    role: assignment.role || 'subject',
+                    is_active: assignment.is_active !== undefined ? assignment.is_active : true,
+                    section: sectionObj,
+                    subject: subjectObj
+                };
+
+                // Sort assignments into primary vs subject
+                if (processedAssignment.is_primary || processedAssignment.role === 'primary') {
+                    // Update to ensure consistency
+                    processedAssignment.is_primary = true;
+                    processedAssignment.role = 'primary';
+                    primaryAssignment = processedAssignment;
+                    console.log('Found primary assignment:', primaryAssignment);
+                } else {
+                    subjectAssignments.push(processedAssignment);
+                    console.log('Added subject assignment:', processedAssignment);
+                }
+            });
+        }
+
+        // Create processed teacher data with all assignments properly categorized
+        const active_assignments = [
+            ...(primaryAssignment ? [primaryAssignment] : []),
+            ...subjectAssignments
+        ];
+
+        const processedTeacher = {
+            ...teacherData,
+            primary_assignment: primaryAssignment,
+            subject_assignments: subjectAssignments,
+            active_assignments: active_assignments
+        };
+
+        console.log('Processed teacher with all assignments:', processedTeacher);
+        console.log('Teacher has primary assignment:', !!primaryAssignment);
+        console.log('Teacher has subject assignments:', subjectAssignments.length);
+        console.log('Total active assignments:', active_assignments.length);
+
+        // Update the specific teacher in the local array
+        const index = teachers.value.findIndex(t => t.id === teacherId);
+        if (index !== -1) {
+            teachers.value[index] = processedTeacher;
+            console.log('Teacher data updated locally:', teachers.value[index]);
+
+            // If this is the currently selected teacher, update selectedTeacher
+            if (selectedTeacher.value && selectedTeacher.value.id === teacherId) {
+                selectedTeacher.value = processedTeacher;
+                console.log('Updated selected teacher with fresh data');
+            }
+
+            // If this is the edited teacher, update editedTeacher
+            if (editedTeacher.value && editedTeacher.value.id === teacherId) {
+                editedTeacher.value = processedTeacher;
+                console.log('Updated edited teacher with fresh data');
+            }
+        } else {
+            // If teacher not found in array, add it
+            teachers.value.push(processedTeacher);
+            console.log('Added new teacher to array');
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Refreshed',
+            detail: 'Teacher data refreshed successfully',
+            life: 3000
+        });
+
+    } catch (error) {
+        console.error('Error during force refresh:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Refresh Failed',
+            detail: `Could not refresh: ${error.message}`,
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Update teacher status display component - add this helper function
+const getTeacherStatus = (teacher) => {
+    return {
+        value: teacher.is_active ? 'ACTIVE' : 'INACTIVE',
+        severity: teacher.is_active ? 'success' : 'danger'
+    };
+};
+
+// Add function to confirm deleting an assignment
+const confirmDeleteAssignment = (assignment) => {
+    confirm.require({
+        message: `Are you sure you want to remove the ${assignment.subject?.name} assignment for this teacher?`,
+        header: 'Confirm Removal',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        accept: () => deleteAssignment(assignment),
+        reject: () => {
+            // Do nothing if rejected
+        }
+    });
+};
+
+// Add function to delete an assignment
+const deleteAssignment = async (assignment) => {
+    try {
+        loading.value = true;
+
+        // We'll create a new array of assignments excluding the one to delete
+        const updatedAssignments = selectedTeacher.value.active_assignments
+            .filter(a => a.id !== assignment.id)
+            .map(a => ({
+                id: a.id,
+                section_id: a.section_id,
+                subject_id: a.subject_id,
+                is_primary: a.is_primary,
+                role: a.role
+            }));
+
+        console.log('Updating assignments after deletion:', updatedAssignments);
+
+        // Use API to update assignments
+        const response = await axios.put(
+            `${API_BASE_URL}/teachers/${selectedTeacher.value.id}/assignments`,
+            { assignments: updatedAssignments }
+        );
+
+        // Refresh data
+        await forceRefreshTeacher(selectedTeacher.value.id);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Assignment removed successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error deleting assignment:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Failed to remove assignment: ${error.message}`,
+            life: 5000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Helper function to get all assignments for a teacher (without duplicates)
+const getAllTeacherAssignments = (teacher) => {
+    // Create a map to track unique assignments by subject_id+section_id combination
+    const assignmentMap = new Map();
+
+    // Function to add assignments to the map
+    const addToMap = (assignments) => {
+        if (!assignments || !Array.isArray(assignments)) return;
+
+        assignments.forEach(a => {
+            if (!a || !a.subject_id || !a.section_id) return;
+            // Create a unique key
+            const key = `${a.section_id}-${a.subject_id}`;
+            // Only add if not already in the map or if this is a primary assignment
+            if (!assignmentMap.has(key) || a.is_primary === true || a.role === 'primary') {
+                assignmentMap.set(key, a);
+            }
+        });
     };
 
-    // Load initial data if not already loaded
-    if (sections.value.length === 0) {
-        loadSections();
+    // Add assignments in priority order
+    // 1. Primary assignment
+    if (teacher.primary_assignment) {
+        addToMap([teacher.primary_assignment]);
     }
 
-    if (subjects.value.length === 0) {
-        loadSubjects();
+    // 2. Found primary assignments
+    const primaryAssignments = findPrimaryAssignments(teacher);
+    if (primaryAssignments && primaryAssignments.length > 0) {
+        addToMap(primaryAssignments);
     }
 
-    assignmentDialogVisible.value = true;
-    console.log('Assignment dialog initialized and opened for teacher:', teacherData.first_name, teacherData.last_name);
+    // 3. Subject assignments
+    if (teacher.subject_assignments && teacher.subject_assignments.length > 0) {
+        addToMap(teacher.subject_assignments);
+    }
+
+    // 4. Found subject assignments
+    const subjectAssignments = findSubjectAssignments(teacher);
+    if (subjectAssignments && subjectAssignments.length > 0) {
+        addToMap(subjectAssignments);
+    }
+
+    // 5. Active assignments as fallback
+    if (teacher.active_assignments && teacher.active_assignments.length > 0) {
+        addToMap(teacher.active_assignments);
+    }
+
+    // Convert the map values to an array
+    return Array.from(assignmentMap.values());
 };
 
-// Edit teacher function
-const editTeacher = (teacherData) => {
-    // Reset the form
-    teacher.value = { ...teacherData };
-    submitted.value = false;
-    teacherDialog.value = true;
-    console.log('Edit teacher dialog opened for:', teacherData.first_name, teacherData.last_name);
+// Load sections for the selected grade
+const loadSectionsForAssignment = async (gradeId) => {
+    try {
+        loading.value = true;
+        const response = await axios.get(`${API_BASE_URL}/sections/grade/${gradeId}`);
+        availableSections.value = response.data;
+
+        if (availableSections.value.length === 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Sections',
+                detail: 'No sections found for this grade. Please add sections first.',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections. Please try again.',
+            life: 3000
+        });
+        availableSections.value = [];
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Load subjects for assignment
+const loadSubjectsForAssignment = async () => {
+    try {
+        loading.value = true;
+        const response = await axios.get(`${API_BASE_URL}/subjects`);
+        availableSubjectsForAssignment.value = response.data;
+
+        // If primary teacher is selected, automatically add a homeroom subject
+        if (selectedRole.value === 'primary') {
+            // Check if there's already a Homeroom subject in the database
+            const homeroomSubject = availableSubjectsForAssignment.value.find(
+                s => s.name.toLowerCase() === 'homeroom'
+            );
+
+            if (homeroomSubject) {
+                selectedSubjectsForAssignment.value = [homeroomSubject];
+            } else {
+                // Add a temporary homeroom subject (will need to be created in backend)
+                selectedSubjectsForAssignment.value = [{
+                    id: 'homeroom',
+                    name: 'Homeroom',
+                    description: 'Main class for primary teacher',
+                    is_required: true
+                }];
+
+                toast.add({
+                    severity: 'info',
+                    summary: 'Homeroom Subject',
+                    detail: 'Homeroom subject will be automatically assigned for primary teachers.',
+                    life: 3000
+                });
+            }
+        }
+
+        if (availableSubjectsForAssignment.value.length === 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Subjects',
+                detail: 'No subjects found in the system. Please add subjects first.',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load subjects. Please try again.',
+            life: 3000
+        });
+        availableSubjectsForAssignment.value = [];
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Handle role selection in the wizard
+const selectRole = (role) => {
+    selectedRole.value = role.value;
+    goToNextStep();
+};
+
+// Handle grade selection in the wizard
+const selectGrade = (grade) => {
+    selectedGradeForAssignment.value = grade;
+    loadSectionsForAssignment(grade.id);
+    goToNextStep();
+};
+
+// Handle section selection in the wizard
+const selectSection = (section) => {
+    selectedSectionForAssignment.value = section;
+    loadSubjectsForAssignment();
+    goToNextStep();
+};
+
+// Handle going to next step in the wizard
+const goToNextStep = () => {
+    if (currentAssignmentStep.value < totalAssignmentSteps.value) {
+        currentAssignmentStep.value++;
+    }
+};
+
+// Handle going back to previous step in the wizard
+const goToPreviousStep = () => {
+    if (currentAssignmentStep.value > 1) {
+        currentAssignmentStep.value--;
+    }
+};
+
+// Handle completing the wizard
+const completeAssignmentWizard = async () => {
+    try {
+        loading.value = true;
+
+        // Prepare teacher assignment data
+        const assignments = selectedSubjectsForAssignment.value.map(subject => ({
+            section_id: selectedSectionForAssignment.value.id,
+            subject_id: subject.id,
+            is_primary: selectedRole.value === 'primary',
+            role: selectedRole.value
+        }));
+
+        // Send assignment data to backend
+        const response = await axios.put(
+            `${API_BASE_URL}/teachers/${assignmentWizardTeacher.value.id}/assignments`,
+            { assignments }
+        );
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher assigned successfully',
+            life: 3000
+        });
+
+        // Close dialog and refresh data
+        assignmentWizardDialog.value = false;
+        await forceRefreshTeacher(assignmentWizardTeacher.value.id);
+
+    } catch (error) {
+        console.error('Error assigning teacher:', error);
+
+        // Handle validation errors
+        if (error.response && error.response.status === 422) {
+            const errorMessage = error.response.data.message || 'Validation error';
+            toast.add({
+                severity: 'error',
+                summary: 'Validation Error',
+                detail: errorMessage,
+                life: 5000
+            });
+        } else {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: `Failed to assign teacher: ${error.message}`,
+                life: 5000
+            });
+        }
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Add refs for the assignment wizard
+const currentAssignmentStep = ref(1);
+const totalAssignmentSteps = ref(4);
+
+// Assignment wizard refs
+const selectedRole = ref(null);
+const selectedGradeForAssignment = ref(null);
+const selectedSectionForAssignment = ref(null);
+const selectedSubjectsForAssignment = ref([]);
+const assignmentWizardTeacher = ref(null);
+const availableSubjectsForAssignment = ref([]);
+const availableSections = ref([]);
+
+// In the script setup, add a ref for the subject adder dialog
+const subjectAdderDialog = ref(false);
+
+// Add a function to open the subject adder dialog
+const openSubjectAdderDialog = (teacherData) => {
+    if (!teacherData || !teacherData.id) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No valid teacher selected',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // First, check if the teacher has any primary assignment
+        const primaryAssignment = teacherData.primary_assignment ||
+            (teacherData.active_assignments &&
+            teacherData.active_assignments.find(a => a.is_primary || a.role === 'primary'));
+
+        if (!primaryAssignment) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Primary Assignment',
+                detail: 'Teacher must be assigned as a primary teacher to a section first',
+                life: 5000
+            });
+            return;
+        }
+
+        // Set the selected teacher and open the dialog
+        selectedTeacher.value = teacherData;
+        subjectAdderDialog.value = true;
+
+        console.log(`Opening subject adder dialog for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
+    } catch (error) {
+        console.error('Error opening subject adder dialog:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to open subject adder dialog',
+            life: 3000
+        });
+    }
+};
+
+// Add variables for controlling dialog visibility
+const sectionAssignerVisible = ref(false);
+const subjectAdderVisible = ref(false);
+
+// Method to show section assigner dialog
+const showSectionAssigner = (teacher) => {
+    selectedTeacher.value = teacher;
+    sectionAssignerVisible.value = true;
+};
+
+// Method to show subject adder dialog
+const showSubjectAdder = (teacher) => {
+    selectedTeacher.value = teacher;
+    subjectAdderVisible.value = true;
+};
+
+// Handle section assigned event
+const handleSectionAssigned = async (teacherId) => {
+    await loadTeachers();
+    toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Teacher assigned to section successfully',
+        life: 3000
+    });
+};
+
+// Handle subject added event
+const handleSubjectAdded = async (teacherId) => {
+    await loadTeachers();
+    toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Subjects added successfully',
+        life: 3000
+    });
+};
+
+const confirmArchiveTeacher = (teacher) => {
+    confirm.require({
+        message: `Are you sure you want to archive ${teacher.first_name} ${teacher.last_name}?`,
+        header: 'Confirm Archive',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        accept: () => archiveTeacher(teacher),
+        reject: () => {
+            // Do nothing if rejected
+        }
+    });
+};
+
+const archiveTeacher = async (teacher) => {
+    try {
+        loading.value = true;
+        const response = await axios.put(`${API_BASE_URL}/teachers/${teacher.id}/archive`);
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Teacher archived successfully',
+            life: 3000
+        });
+        await loadTeachers();
+    } catch (error) {
+        console.error('Error archiving teacher:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Failed to archive teacher: ${error.message}`,
+            life: 5000
+        });
+    } finally {
+        loading.value = false;
+    }
 };
 </script>
 
 <template>
     <div class="admin-teacher-wrapper">
-        <!-- Enhanced Background Animation -->
+        <!-- Background shapes remain unchanged -->
         <div class="background-shapes">
             <div class="shape circle"></div>
             <div class="shape square"></div>
@@ -1400,7 +2410,7 @@ const editTeacher = (teacherData) => {
             <div class="shape circle-2"></div>
             <div class="shape square-2"></div>
             <div class="shape triangle-2"></div>
-                </div>
+        </div>
 
         <div class="content-wrapper">
             <!-- Header Section -->
@@ -1410,170 +2420,95 @@ const editTeacher = (teacherData) => {
                     <p class="subtitle">Manage and organize your teaching staff</p>
                 </div>
                 <Button label="Register Teacher" icon="pi pi-plus" class="p-button-primary" @click="openNewTeacherDialog" />
-                </div>
+            </div>
 
-            <!-- Search and Filter Section -->
+            <!-- Search Section -->
             <div class="search-section">
                 <span class="p-input-icon-left search-box">
                     <InputText v-model="searchQuery" placeholder="Search teachers..." class="modern-search" />
                 </span>
-                <!-- Removed filter actions -->
             </div>
 
             <!-- Teachers Cards -->
-            <div class="teacher-cards-container">
-                <div v-if="filteredTeachers.length === 0 && !loading" class="empty-message">
-                    <i class="pi pi-users" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
-                    <h3>No Teachers Found</h3>
-                    <p v-if="searchQuery">No teachers match your search criteria.</p>
-                    <p v-else>No teachers exist in the database yet.</p>
-                    <Button label="Register New Teacher" icon="pi pi-plus" class="p-button-primary mt-3" @click="openNewTeacherDialog" />
-                </div>
-
-                <div v-if="loading" class="loading-message">
-                    <i class="pi pi-spin pi-spinner" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+            <div class="teachers-container">
+                <div v-if="loading" class="loading-container">
+                    <ProgressSpinner />
                     <p>Loading teachers...</p>
                 </div>
-
-                <div v-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
+                <div v-else-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
                     <div v-for="teacher in filteredTeachers" :key="teacher.id" class="teacher-card">
                         <div class="teacher-card-header">
                             <div class="teacher-info">
                                 <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
-                                <div v-if="teacher.is_head_teacher" class="teacher-role">Head Teacher</div>
                             </div>
-                            <Tag :value="teacher.is_active ? 'ACTIVE' : 'INACTIVE'"
-                                :severity="teacher.is_active ? 'success' : 'danger'" />
-                </div>
+                        </div>
 
                         <div class="teacher-card-body">
-                            <div class="teacher-detail">
-                                <span class="detail-label">Grade:</span>
-                                <span class="grade-badge">{{ getGradeName(teacher.active_assignments) }}</span>
-                </div>
+                            <!-- Homeroom Section -->
+                            <div class="homeroom-section">
+                                <h4>Homeroom</h4>
+                                <div v-if="teacher.primary_assignment" class="assignment-info">
+                                    <div class="section-info">
+                                        <span class="section-name">{{ teacher.primary_assignment.section?.name || 'Not assigned' }}</span>
+                                        <span class="grade-level">Grade {{ teacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
+                                    </div>
+                                </div>
+                                <div v-else class="not-assigned">
+                                    No homeroom assigned
+                                </div>
+                            </div>
 
-                            <div class="teacher-detail">
-                                <span class="detail-label">Section:</span>
-                                <span class="section-badge">{{ getSectionName(teacher.active_assignments) }}</span>
-                </div>
-
-                            <div class="teacher-detail">
-                                <span class="detail-label">Subjects:</span>
-                                <span class="subjects-list">{{ getSubjects(teacher.active_assignments) }}</span>
-                </div>
-            </div>
+                            <!-- Teaching Subjects Section -->
+                            <div class="teaching-subjects-section">
+                                <h4>Teaching Subjects</h4>
+                                <div v-if="teacher.subject_assignments && teacher.subject_assignments.length > 0" class="subjects-list">
+                                    <div v-for="assignment in teacher.subject_assignments" :key="assignment.id" class="subject-item">
+                                        <span class="subject-name">{{ assignment.subject?.name }}</span>
+                                        <span class="section-name">{{ assignment.section?.name }}</span>
+                                    </div>
+                                </div>
+                                <div v-else class="not-assigned">
+                                    No subjects assigned
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="teacher-card-actions">
-                            <Button class="action-btn schedule-btn" @click="viewTeacher(teacher)" v-tooltip.top="'View Details'">
-                                <i class="pi pi-user"></i>
-                                <span>Details</span>
-                            </Button>
+                            <div class="action-buttons-row">
+                                <Button class="action-btn details-btn"
+                                    @click="viewTeacher(teacher)"
+                                    v-tooltip.top="'View Details'">
+                                    <i class="pi pi-eye"></i>
+                                    <span>Details</span>
+                                </Button>
 
-                            <Button class="action-btn subject-btn" @click="openAssignmentDialog(teacher)" v-tooltip.top="'Add Subject'">
-                                <i class="pi pi-plus"></i>
-                                <span>Subject</span>
-                            </Button>
+                                <Button class="action-btn edit-btn"
+                                    @click="editTeacher(teacher)"
+                                    v-tooltip.top="'Edit Teacher'">
+                                    <i class="pi pi-pencil"></i>
+                                    <span>Edit</span>
+                                </Button>
 
-                            <Button class="action-btn edit-btn" @click="editTeacher(teacher)" v-tooltip.top="'Edit Teacher'">
-                                <i class="pi pi-pencil"></i>
-                                <span>Edit</span>
-                            </Button>
-
-                            <Button class="action-btn delete-btn" @click="confirmDeleteTeacher(teacher)" v-tooltip.top="'Delete Teacher'">
-                                <i class="pi pi-trash"></i>
-                                <span>Delete</span>
-                            </Button>
-                </div>
-                </div>
-            </div>
-                </div>
-                </div>
-
-        <!-- All Dialogs go here, unchanged -->
-
-        <!-- Teacher Details Dialog -->
-        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
-            <div class="p-fluid" v-if="selectedTeacher">
-                <div class="teacher-details-header">
-                    <div class="teacher-avatar">
-                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
-                </div>
-                    <div class="teacher-details-name">
-                        <h2>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h2>
-                        <div class="teacher-status">
-                            <Tag :value="selectedTeacher.is_active ? 'ACTIVE' : 'INACTIVE'"
-                                :severity="selectedTeacher.is_active ? 'success' : 'danger'" />
-                            <span v-if="selectedTeacher.is_head_teacher" class="head-teacher-badge">Head Teacher</span>
-                </div>
-            </div>
-                </div>
-
-                <div class="teacher-details-info">
-                    <div class="info-section">
-                        <div class="info-row">
-                            <div class="info-label">Email</div>
-                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
-                </div>
-                        <div class="info-row">
-                            <div class="info-label">Phone</div>
-                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
-                </div>
-                        <div class="info-row">
-                            <div class="info-label">Grade Level</div>
-                            <div class="info-value grade-badge-details">{{ getGradeName(selectedTeacher.active_assignments) }}</div>
-                </div>
-                        <div class="info-row">
-                            <div class="info-label">Section</div>
-                            <div class="info-value section-badge-details">{{ getSectionName(selectedTeacher.active_assignments) }}</div>
+                                <Button class="action-btn archive-btn"
+                                    @click="confirmArchiveTeacher(teacher)"
+                                    v-tooltip.top="'Archive Teacher'">
+                                    <i class="pi pi-folder"></i>
+                                    <span>Archive</span>
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                </div>
-
-                <div class="teacher-details-subjects">
-                    <h3>Teaching Subjects</h3>
-                    <div v-if="!selectedTeacher.active_assignments || selectedTeacher.active_assignments.length === 0" class="no-subjects">
-                        No subjects assigned to this teacher yet.
-                    </div>
-                    <DataTable v-else :value="selectedTeacher.active_assignments" scrollable scrollHeight="200px" class="subjects-table">
-                        <Column header="Subject">
-                            <template #body="slotProps">
-                                <div class="subject-name">{{ slotProps.data.subject?.name || 'Unknown Subject' }}</div>
-                            </template>
-                        </Column>
-                        <Column header="Section">
-                            <template #body="slotProps">
-                                <div>{{ slotProps.data.section?.name || 'Unknown Section' }}</div>
-                            </template>
-                        </Column>
-                        <Column header="Status">
-                            <template #body>
-                                <Tag value="active" severity="success" />
-                            </template>
-                        </Column>
-                        <Column header="Actions">
-                            <template #body>
-                                <Button icon="pi pi-calendar"
-                                    class="p-button-rounded p-button-primary p-button-sm"
-                                    v-tooltip.top="'Manage Schedule'" />
-                            </template>
-                        </Column>
-                    </DataTable>
-                </div>
-
-                <div class="teacher-details-actions">
-                    <Button label="Add Subject" icon="pi pi-plus" @click="openAssignmentDialog(selectedTeacher)" class="p-button-outlined p-button-primary" />
-                    <Button label="Edit Details" icon="pi pi-pencil" @click="editTeacher(selectedTeacher)" class="p-button-outlined" />
+                <div v-else class="no-data-message">
+                    <i class="pi pi-info-circle"></i>
+                    <p>No teachers found</p>
                 </div>
             </div>
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="teacherDetailsDialog = false" text />
-            </template>
-        </Dialog>
+        </div>
 
-        <!-- Teacher Registration Dialog -->
+        <!-- Teacher Registration/Edit Dialog -->
         <Dialog v-model:visible="teacherDialog" :header="dialogTitle" :style="{ width: '700px' }" :modal="true" class="registration-dialog">
             <div class="p-fluid">
-                <!-- Form Grid Layout -->
                 <div class="form-grid p-5">
                     <div class="field">
                         <label for="first_name">First Name*</label>
@@ -1599,6 +2534,11 @@ const editTeacher = (teacherData) => {
                     </div>
 
                     <div class="field">
+                        <label for="address">Address</label>
+                        <InputText id="address" v-model="teacher.address" />
+                    </div>
+
+                    <div class="field">
                         <label for="username">Username*</label>
                         <InputText id="username" v-model="teacher.username" required :class="{ 'p-invalid': submitted && !teacher.username }" />
                         <small class="p-error" v-if="submitted && !teacher.username">Username is required.</small>
@@ -1606,231 +2546,93 @@ const editTeacher = (teacherData) => {
 
                     <div class="field">
                         <label for="password">Password*</label>
-                        <InputText id="password" v-model="teacher.password" type="password" required :class="{ 'p-invalid': submitted && !teacher.password }" />
+                        <Password id="password" v-model="teacher.password" required :class="{ 'p-invalid': submitted && !teacher.password }" :feedback="false" />
                         <small class="p-error" v-if="submitted && !teacher.password">Password is required.</small>
                     </div>
 
                     <div class="field">
-                        <label for="address">Address</label>
-                        <InputText id="address" v-model="teacher.address" />
-                    </div>
-
-                    <div class="field">
-                        <label for="gender">Gender</label>
-                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" />
-                    </div>
-
-                    <div class="p-field-checkbox">
-                        <label for="is_head_teacher" class="checkbox-label">Head Teacher</label>
-                        <input type="checkbox" id="is_head_teacher" v-model="teacher.is_head_teacher" />
-                    </div>
-
-                    <div class="p-field-checkbox">
-                        <label for="is_active" class="checkbox-label">Active Status</label>
-                        <input type="checkbox" id="is_active" v-model="teacher.is_active" />
+                        <label for="gender">Gender*</label>
+                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" :class="{ 'p-invalid': submitted && !teacher.gender }" />
+                        <small class="p-error" v-if="submitted && !teacher.gender">Gender is required.</small>
                     </div>
                 </div>
             </div>
 
             <template #footer>
-                <div class="dialog-footer-buttons p-5">
-                    <Button label="Cancel" icon="pi pi-times" @click="hideDialog" class="p-button-text cancel-button" />
-                    <Button label="Save" icon="pi pi-check" @click="saveTeacher" class="p-button-raised p-button-primary save-button-custom" />
-                </div>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
             </template>
         </Dialog>
 
-        <!-- Keep all other existing dialogs unchanged -->
-
-        <!-- Subject Schedule Dialog -->
-        <Dialog v-model:visible="scheduleDialog"
-            :header="`Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`"
-            modal
-            :style="{ width: '80vw', maxWidth: '1000px' }"
-            class="schedule-dialog">
-            <div v-if="selectedSubjectForSchedule" class="p-fluid">
-                <div class="schedule-header mb-4">
-                    <div class="flex justify-content-between align-items-center">
-                        <h4 class="m-0">
-                            Manage class schedule for {{ selectedSubjectForSchedule.name }}
-                        </h4>
-                        <Tag :value="scheduleData.length ? `${scheduleData.length} Classes Scheduled` : 'No Classes'"
-                            :severity="scheduleData.length ? 'success' : 'warning'" />
-            </div>
-                    <div class="text-500 mt-2">
-                        Add, edit, and remove class schedules for this subject. These schedules will be used for notifications and attendance taking.
-                </div>
-                </div>
-
-                <!-- Schedule Form -->
-                <div class="schedule-form p-3 mb-4 border-1 surface-border border-round">
-                    <h5 class="mb-3">Add New Schedule</h5>
-                    <div class="formgrid grid">
-                        <div class="field col-12 md:col-3">
-                            <label for="day">Day of Week*</label>
-                            <Dropdown id="day" v-model="newScheduleItem.day"
-                                :options="daysOfWeek"
-                                placeholder="Select Day"
-                                class="w-full" />
-                </div>
-                        <div class="field col-12 md:col-3">
-                            <label for="time">Time Slot*</label>
-                            <Dropdown id="time" v-model="newScheduleItem.timeSlot"
-                                :options="timeSlots"
-                                placeholder="Select Time"
-                                class="w-full" />
-            </div>
-                        <div class="field col-12 md:col-3">
-                            <label for="section">Section*</label>
-                            <Dropdown id="section" v-model="newScheduleItem.section_id"
-                                :options="filteredSections"
-                                optionLabel="name"
-                                optionValue="id"
-                                placeholder="Select Section"
-                                class="w-full"
-                                @click="loadSectionsForSchedule" />
+        <!-- Teacher Details Dialog -->
+        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
+            <div class="p-fluid" v-if="selectedTeacher">
+                <div class="teacher-details-header">
+                    <div class="teacher-avatar">
+                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
+                    </div>
+                    <div class="teacher-details-name">
+                        <div class="teacher-info-header">
+                            <div class="name-status">
+                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
+                            </div>
+                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
+                                <i class="pi pi-refresh"></i>
+                                Refresh Data
+                            </button>
                         </div>
-                        <div class="field col-12 md:col-2">
-                            <label for="room">Room</label>
-                            <InputText id="room" v-model="newScheduleItem.room" placeholder="Room number" />
                     </div>
-                        <div class="field col-12 md:col-1 flex align-items-end">
-                            <Button label="Add"
-                                icon="pi pi-plus"
-                                class="p-button-success w-full"
-                                @click="saveScheduleItem" />
                 </div>
-                </div>
-            </div>
 
-                <!-- Schedule Table -->
-                <div class="schedule-table">
-                    <h5 class="mb-3">Current Schedule</h5>
-                    <DataTable :value="scheduleData"
-                        responsiveLayout="scroll"
-                        class="p-datatable-sm"
-                        :paginator="scheduleData.length > 10"
-                        :rows="10"
-                        emptyMessage="No schedules found. Add one using the form above.">
-
-                        <Column field="day" header="Day" sortable></Column>
-                        <Column field="timeSlot" header="Time" sortable></Column>
-                        <Column field="section_name" header="Section"></Column>
-                        <Column field="room" header="Room"></Column>
-
-                        <Column header="Actions" style="width: 8rem">
-                            <template #body="slotProps">
-                                <div class="flex gap-2">
-                                    <Button icon="pi pi-trash"
-                                        class="p-button-rounded p-button-danger p-button-sm"
-                                        @click="removeScheduleItem(slotProps.data)"
-                                        v-tooltip.top="'Remove'" />
+                <div class="teacher-details-info">
+                    <div class="info-section">
+                        <div class="info-row">
+                            <div class="info-label">Email</div>
+                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
                         </div>
-                            </template>
-                        </Column>
-                    </DataTable>
-                </div>
-
-                <!-- Weekly View -->
-                <div v-if="scheduleData.length > 0" class="weekly-schedule mt-4">
-                    <h5 class="mb-3">Weekly View</h5>
-                    <div class="schedule-grid border-1 surface-border">
-                        <div class="schedule-header grid">
-                            <div class="col-2 font-bold p-2 border-right-1 surface-border">Time</div>
-                            <div v-for="day in daysOfWeek.slice(0, 6)" :key="day" class="col-2 font-bold p-2 border-right-1 surface-border">{{ day }}</div>
-                </div>
-
-                        <div v-for="time in timeSlots" :key="time" class="schedule-row grid">
-                            <div class="col-2 p-2 border-top-1 border-right-1 surface-border time-label">{{ time }}</div>
-                            <div v-for="day in daysOfWeek.slice(0, 6)" :key="`${time}-${day}`"
-                                class="col-2 p-2 border-top-1 border-right-1 surface-border schedule-cell">
-                                <div v-for="item in scheduleData.filter(i => i.day === day && i.timeSlot === time)"
-                                    :key="item.id"
-                                    class="schedule-item p-2 border-round mb-1"
-                                    style="background-color: #e0f2fe; color: #0369a1;">
-                                    {{ item.section_name }}
-                                    <div class="text-xs">{{ item.room }}</div>
+                        <div class="info-row">
+                            <div class="info-label">Phone</div>
+                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Address</div>
+                            <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Gender</div>
+                            <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
+                        </div>
                     </div>
-                    </div>
+
+                    <!-- Homeroom Section -->
+                    <div class="homeroom-section">
+                        <h3>Homeroom</h3>
+                        <div v-if="selectedTeacher.primary_assignment" class="assignment-info">
+                            <div class="section-info">
+                                <span class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'Not assigned' }}</span>
+                                <span class="grade-level">Grade {{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
                             </div>
                         </div>
+                        <div v-else class="no-assignment">
+                            No homeroom assigned
+                        </div>
                     </div>
-                </div>
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="scheduleDialog = false" class="p-button-text" />
-                <Button label="Save Schedule" icon="pi pi-save" @click="saveScheduleToBackend" class="p-button-primary" />
-            </template>
-        </Dialog>
 
-        <!-- Assignment Dialog -->
-        <Dialog v-model:visible="assignmentDialogVisible" :header="`Assign Subject to Teacher`" modal :style="{ width: '450px' }" class="assignment-dialog">
-            <div class="p-fluid compact-form">
-                <!-- Display validation errors if any -->
-                <div v-if="assignmentErrors.length > 0" class="error-container mb-2">
-                    <ul class="error-list p-0 m-0">
-                        <li v-for="(error, index) in assignmentErrors" :key="index" class="error-item">
-                            {{ error }}
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="compact-field">
-                    <label for="grade">Grade Level*</label>
-                    <Dropdown id="grade" v-model="assignmentGrade"
-                             :options="gradeOptions"
-                             optionLabel="name"
-                             optionValue="id"
-                             placeholder="Select Grade"
-                             class="w-full"
-                             @change="handleGradeChange" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="section">Section*</label>
-                    <Dropdown id="section" v-model="assignment.section_id"
-                             :options="filteredSections"
-                             optionLabel="name"
-                             optionValue="id"
-                             placeholder="Select Section"
-                             class="w-full"
-                             :disabled="!assignmentGrade" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="subject">Subject*</label>
-                    <Dropdown id="subject" v-model="assignment.subject_id"
-                             :options="subjectOptions"
-                             optionLabel="label"
-                             optionValue="value"
-                             placeholder="Select Subject"
-                             class="w-full"
-                             :disabled="!assignmentGrade" />
-                </div>
-
-                <div class="compact-field">
-                    <label for="teacher_role">Teacher Role*</label>
-                    <Dropdown id="teacher_role" v-model="assignment.role"
-                             :options="teacherRoleOptions"
-                             optionLabel="label"
-                             optionValue="value"
-                             placeholder="Select Role"
-                             class="w-full" />
-                </div>
-
-                <div class="compact-field">
-                    <div class="p-field-checkbox align-items-center">
-                        <input type="checkbox" id="is_primary" v-model="assignment.is_primary" />
-                        <label for="is_primary" class="checkbox-label ml-2 mb-0">Primary Teacher</label>
+                    <!-- Teaching Subjects Section -->
+                    <div class="teaching-subjects-section">
+                        <h3>Teaching Subjects</h3>
+                        <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-list">
+                            <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
+                                <span class="subject-name">{{ assignment.subject?.name }}</span>
+                                <span class="section-name">{{ assignment.section?.name }}</span>
+                            </div>
+                        </div>
+                        <div v-else class="no-assignment">
+                            No subjects assigned
+                        </div>
                     </div>
                 </div>
             </div>
-
-            <template #footer>
-                <div class="dialog-footer p-2">
-                    <Button label="Cancel" icon="pi pi-times" @click="hideAssignmentDialog" class="p-button-text" />
-                    <Button label="Assign" icon="pi pi-check" @click="saveAssignment" class="p-button-primary" />
-                </div>
-            </template>
         </Dialog>
     </div>
 </template>
@@ -1843,6 +2645,147 @@ const editTeacher = (teacherData) => {
     position: relative;
     overflow: hidden;
     animation: gradientShift 15s ease infinite;
+}
+
+.teacher-management-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+}
+
+.teacher-management-title {
+    color: var(--primary-color);
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+.teacher-management-subtitle {
+    color: #64748b;
+    margin: 0.5rem 0 0 0;
+    font-size: 1rem;
+}
+
+.search-container {
+    margin: 1rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.teacher-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem;
+    margin: 0 auto;
+    max-width: 1400px;
+}
+
+.teacher-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.teacher-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.teacher-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a237e;
+    margin-bottom: 1rem;
+}
+
+.section-label {
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.section-content {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.no-assignment {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+}
+
+.action-button {
+    padding: 0.5rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.details-button {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.edit-button {
+    background-color: #f59e0b;
+    color: white;
+}
+
+.archive-button {
+    background-color: #10b981;
+    color: white;
+}
+
+.action-button:hover {
+    opacity: 0.9;
+}
+
+/* Registration Dialog Styles */
+.registration-dialog :deep(.p-dialog-content) {
+    padding: 0;
+}
+
+.registration-dialog .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .teacher-cards-container {
+        grid-template-columns: 1fr;
+    }
+
+    .registration-dialog .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .teacher-management-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
 }
 
 @keyframes gradientShift {
@@ -2206,7 +3149,121 @@ const editTeacher = (teacherData) => {
     font-weight: 500;
     color: #475569;
 }
+.assignment-error-container {
+    background-color: #fef2f2;
+    border-left: 3px solid #ef4444;
+    border-radius: 0.25rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
 
+.error-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #dc2626;
+}
+
+.error-header i {
+    margin-right: 0.5rem;
+    font-size: 1rem;
+}
+
+.error-list {
+    margin: 0;
+    padding-left: 1.5rem;
+    list-style-type: none;
+}
+
+.error-item {
+    color: #dc2626;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    position: relative;
+}
+
+.error-item:before {
+    content: "â€¢";
+    color: #ef4444;
+    position: absolute;
+    left: -1rem;
+}
+
+.error-actions {
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.refresh-error-btn {
+    display: flex;
+    align-items: center;
+    background: rgba(220, 38, 38, 0.1);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 4px;
+    padding: 0.375rem 0.75rem;
+    color: #b91c1c;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.refresh-error-btn i {
+    margin-right: 0.375rem;
+    font-size: 0.875rem;
+}
+
+.refresh-error-btn:hover {
+    background: rgba(220, 38, 38, 0.15);
+    border-color: rgba(220, 38, 38, 0.4);
+}
+
+.teacher-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.name-status {
+    display: flex;
+    flex-direction: column;
+}
+
+.name-status h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.refresh-button {
+    display: flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    color: #4361ee;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.refresh-button i {
+    margin-right: 0.5rem;
+}
+
+.refresh-button:hover {
+    background: #e0f2fe;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
 /* Animated error container */
 .error-container {
     background-color: #fee2e2;
@@ -2244,7 +3301,7 @@ const editTeacher = (teacherData) => {
 }
 
 .error-item::before {
-    content: "•";
+    content: "â€¢";
     margin-right: 0.5rem;
     color: #ef4444;
     font-size: 1.25rem;
@@ -3357,72 +4414,135 @@ const editTeacher = (teacherData) => {
 .teacher-card-body {
     padding: 1rem;
     flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+}
+
+.primary-assignment, .subject-assignments {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+}
+
+.primary-assignment h4, .subject-assignments h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-700);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px dashed var(--surface-200);
+}
+
+.not-assigned {
+    padding: 0.2rem 0;
+    font-style: italic;
+}
+
+.badge-muted {
+    background-color: var(--surface-200);
+    color: var(--text-color-secondary);
+    font-size: 0.8rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+}
+
+.assignment-details {
+    padding: 0.2rem 0;
 }
 
 .teacher-detail {
+    margin-bottom: 0.5rem;
     display: flex;
-    align-items: center;
-}
-
-.detail-label {
-    font-weight: 600;
-    color: #64748b;
-    width: 80px;
+    align-items: flex-start;
 }
 
 .teacher-card-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-    padding: 1rem;
-    background-color: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.action-buttons-row {
+    display: flex;
+    width: 100%;
+    margin-bottom: 4px;
 }
 
 .action-btn {
-    border: none !important;
-    border-radius: 0 !important;
-    background: transparent !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 1.25rem 0.5rem !important;
-    transition: all 0.3s ease;
-    color: #4A5568 !important;
+    padding: 0.75rem 0.25rem !important;
+    transition: all 0.2s ease;
+    border: none !important;
+    border-radius: 0 !important;
+    color: white !important;
     box-shadow: none !important;
     height: auto !important;
-    width: 100% !important;
+    width: 78px !important;
+    margin: 0 1px !important;
+    flex: 1;
 }
 
 .action-btn i {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
 }
 
 .action-btn span {
-    font-size: 0.9rem;
+    font-size: 0.75rem;
     font-weight: 500;
+    white-space: nowrap;
+    text-align: center;
+    width: 100%;
 }
 
-.schedule-btn {
-    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+.action-btn.details-btn {
+    background-color: #4096ff !important;
 }
 
-.schedule-btn:hover {
-    background: linear-gradient(to bottom, rgba(67, 24, 255, 0.1), rgba(151, 71, 255, 0.1)) !important;
-    color: #4318FF !important;
+.action-btn.edit-btn {
+    background-color: #ffa940 !important;
+}
+
+.action-btn.delete-btn {
+    background-color: #ff4d4f !important;
+}
+
+.action-btn.assign-section-btn {
+    background-color: #4096ff !important;
+    flex: 1;
+}
+
+.action-btn.add-subject-btn {
+    background-color: #6366f1 !important;
+    flex: 1;
+}
+
+/* Button styles for different actions */
+.details-btn {
+    background: linear-gradient(135deg, #60a5fa, #3b82f6) !important;
+}
+
+.details-btn:hover {
+    background: linear-gradient(to bottom, rgba(96, 165, 250, 0.1), rgba(59, 130, 246, 0.1)) !important;
+    color: #3b82f6 !important;
+}
+
+.primary-btn {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9) !important;
+}
+
+.primary-btn:hover {
+    background: linear-gradient(to bottom, rgba(139, 92, 246, 0.1), rgba(109, 40, 217, 0.1)) !important;
+    color: #6d28d9 !important;
 }
 
 .subject-btn {
-    background: linear-gradient(135deg, #4ade80, #22c55e);
+    background: linear-gradient(135deg, #4ade80, #22c55e) !important;
 }
 
 .subject-btn:hover {
-    background: linear-gradient(to bottom, rgba(45, 156, 219, 0.1), rgba(86, 204, 242, 0.1)) !important;
-    color: #2D9CDB !important;
+    background: linear-gradient(to bottom, rgba(74, 222, 128, 0.1), rgba(34, 197, 94, 0.1)) !important;
+    color: #22c55e !important;
 }
 
 .edit-btn {
@@ -3576,18 +4696,88 @@ const editTeacher = (teacherData) => {
 .section-badge-details {
     background: linear-gradient(135deg, #dbeafe, #bfdbfe);
     color: #1e40af;
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.875rem;
+    color: #b91c1c;
+    list-style-type: none;
+    padding: 0.25rem 0;
 }
 
-.subjects-table {
-    margin-top: 1rem;
+.teacher-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 1rem;
 }
 
-.subject-name {
-    font-weight: 500;
+.name-status {
+    display: flex;
+    flex-direction: column;
+}
+
+.name-status h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
     color: #1e293b;
+}
+
+.refresh-button {
+    display: flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    color: #4361ee;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.refresh-button i {
+    margin-right: 0.5rem;
+}
+
+.refresh-button:hover {
+    background: #e0f2fe;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.primary-assignment-section {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--surface-200);
+    padding-top: 1rem;
+}
+
+.primary-assignment-section h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+.no-primary {
+    font-style: italic;
+    color: var(--text-color-secondary);
+    padding: 0.5rem 0;
+}
+
+.no-assignment-text {
+    display: inline-block;
+    background-color: var(--surface-100);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+}
+
+.subject-badge-details {
+    display: inline-block;
+    background-color: var(--primary-100);
+    color: var(--primary-900);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
 .teacher-details-subjects {
@@ -3596,121 +4786,298 @@ const editTeacher = (teacherData) => {
 
 .teacher-details-subjects h3 {
     font-size: 1.1rem;
-    font-weight: 600;
-    color: #334155;
-    margin-top: 0;
     margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    color: var(--primary-color);
+    border-top: 1px solid var(--surface-200);
+    padding-top: 1rem;
 }
 
 .no-subjects {
+    font-style: italic;
+    color: var(--text-color-secondary);
+    padding: 1rem 0;
+}
+
+.subject-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.primary-subject {
+    font-weight: 600;
+    color: var(--primary-700);
+}
+
+.subjects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.subject-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.subject-tag {
+    margin-right: 0.25rem;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.25rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.action-btn i {
+    margin-right: 0.5rem;
+    font-size: 1rem;
+}
+
+.action-btn.details-btn {
+    background-color: #3182ce;
+    border-color: #3182ce;
+    color: #fff;
+}
+
+.action-btn.details-btn:hover {
+    background-color: #2c5282;
+    border-color: #2c5282;
+}
+
+.action-btn.edit-btn {
+    background-color: #f59e0b;
+    border-color: #f59e0b;
+    color: #fff;
+}
+
+.action-btn.edit-btn:hover {
+    background-color: #d97706;
+    border-color: #d97706;
+}
+
+.action-btn.delete-btn {
+    background-color: #ef4444;
+    border-color: #ef4444;
+    color: #fff;
+}
+
+.action-btn.delete-btn:hover {
+    background-color: #dc2626;
+    border-color: #dc2626;
+}
+
+.action-btn.assign-section-btn {
+    background-color: #3182ce;
+    border-color: #3182ce;
+    color: #fff;
+}
+
+.action-btn.assign-section-btn:hover {
+    background-color: #2c5282;
+    border-color: #2c5282;
+}
+
+.action-btn.add-subject-btn {
+    background-color: #38a169;
+    border-color: #38a169;
+    color: #fff;
+}
+
+.action-btn.add-subject-btn:hover {
+    background-color: #276749;
+    border-color: #276749;
+}
+
+.action-btn {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.75rem 0.5rem !important;
+    transition: all 0.2s ease;
+    border: none !important;
+    border-radius: 0 !important;
+    color: white !important;
+    box-shadow: none !important;
+    height: auto !important;
+    width: 75px !important;
+    margin: 0 !important;
+}
+
+.action-btn i {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.action-btn span {
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
     text-align: center;
-    padding: 1.5rem;
+    width: 100%;
+}
+
+/* First row buttons */
+.action-btn.details-btn {
+    background-color: #4096ff !important;
+    border-color: #4096ff !important;
+}
+
+.action-btn.edit-btn {
+    background-color: #ffb340 !important;
+    border-color: #ffb340 !important;
+}
+
+.action-btn.delete-btn {
+    background-color: #ff4d4f !important;
+    border-color: #ff4d4f !important;
+}
+
+/* Second row buttons */
+.action-btn.assign-section-btn {
+    background-color: #4096ff !important;
+    border-color: #4096ff !important;
+    width: 100px !important;
+}
+
+.action-btn.add-subject-btn {
+    background-color: #5e35b1 !important;
+    border-color: #5e35b1 !important;
+    width: 100px !important;
+}
+
+.homeroom-section, .teaching-subjects-section {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+}
+
+.homeroom-section h4, .teaching-subjects-section h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-700);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px dashed var(--surface-200);
+}
+
+.section-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.section-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.grade-level {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.subjects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.subject-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
     background-color: #f8fafc;
-    border-radius: 8px;
+    border-radius: 6px;
+}
+
+.subject-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.not-assigned {
     color: #64748b;
     font-style: italic;
+    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-radius: 6px;
 }
 
-.teacher-details-actions {
+.assignment-info {
+    padding: 0.5rem 0;
+}
+
+.assignment-info .section-info {
     display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.empty-message {
+.assignment-info .section-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.assignment-info .grade-level {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.no-assignment {
+    color: #64748b;
+    font-style: italic;
+    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-radius: 6px;
+}
+
+.no-data-message {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    padding: 3rem 1rem;
+    color: #64748b;
     text-align: center;
-    padding: 3rem;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 10px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-    margin: 2rem auto;
-    max-width: 500px;
-    height: 300px;
 }
 
-.empty-message h3 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: #495057;
-}
-
-.empty-message p {
-    color: #6c757d;
+.no-data-message i {
+    font-size: 3rem;
     margin-bottom: 1rem;
+    opacity: 0.3;
 }
 
-.dialog-footer-buttons {
+.no-data-message p {
+    color: #64748b;
+}
+
+.loading-container {
     display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    padding: 1rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-.cancel-button, .save-button-custom {
-    transition: all 0.3s ease;
-}
-
-.save-button-custom {
-    background: linear-gradient(135deg, #4361ee, #3a0ca3) !important;
-    border: none !important;
-    box-shadow: 0 4px 8px rgba(67, 97, 238, 0.2);
-}
-
-.save-button-custom:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(67, 97, 238, 0.3);
-}
-
-/* Compact assignment dialog styles */
-.compact-form {
-    padding: 0.5rem;
-}
-
-.compact-field {
-    margin-bottom: 0.75rem;
-}
-
-.compact-field label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    color: #334155;
-}
-
-.error-container {
-    background-color: #fef2f2;
-    border-left: 3px solid #ef4444;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
-}
-
-.error-item {
-    color: #b91c1c;
-    list-style-type: none;
-    padding: 0.25rem 0;
-}
-
-.assignment-dialog :deep(.p-dialog-content) {
-    padding: 1rem !important;
-}
-
-.assignment-dialog :deep(.p-dropdown) {
-    width: 100%;
-}
-
-.assignment-dialog :deep(.p-dialog-footer) {
-    padding: 0.5rem 1rem !important;
-    border-top: 1px solid #e2e8f0;
+.loading-container p {
+    color: #64748b;
 }
 </style>

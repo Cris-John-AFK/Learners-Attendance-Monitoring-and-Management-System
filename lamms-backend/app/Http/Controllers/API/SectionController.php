@@ -5,8 +5,10 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Section;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Schema;
 
 class SectionController extends Controller
 {
@@ -35,10 +37,37 @@ class SectionController extends Controller
      */
     public function getActiveSections()
     {
-        $sections = Section::with('grade')
-            ->active()
-            ->get();
-        return response()->json($sections);
+        try {
+            Log::info('Fetching active sections');
+
+            // Check if the table exists
+            if (!Schema::hasTable('sections')) {
+                Log::error('Sections table does not exist');
+                return response()->json(['message' => 'Sections table does not exist'], 500);
+            }
+
+            // Check if the is_active column exists
+            if (!Schema::hasColumn('sections', 'is_active')) {
+                Log::error('is_active column does not exist in sections table');
+                return response()->json(['message' => 'is_active column does not exist'], 500);
+            }
+
+            // Query with logging
+            Log::info('Querying active sections with grade relationship');
+            $sections = Section::with('grade')
+                ->where('is_active', true)
+                ->get();
+
+            Log::info('Found ' . $sections->count() . ' active sections');
+            return response()->json($sections);
+        } catch (\Exception $e) {
+            Log::error('Error fetching active sections: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            return response()->json([
+                'message' => 'Failed to load active sections: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

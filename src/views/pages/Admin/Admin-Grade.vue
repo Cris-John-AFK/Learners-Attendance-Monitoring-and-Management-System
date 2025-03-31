@@ -1,15 +1,12 @@
 <script setup>
 import { GradesService } from '@/router/service/GradesService';
 import Button from 'primevue/button';
-import Column from 'primevue/column';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputSwitch from 'primevue/inputswitch';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
-import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { onMounted, ref, watch } from 'vue';
 
@@ -206,93 +203,55 @@ onMounted(() => {
             <div class="geometric-shape diamond"></div>
         </div>
 
-        <Toast />
-
         <div class="admin-grade-container">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h2 class="grade-title">Grade Level Management</h2>
-                        <p class="grade-subtitle">Manage elementary grade levels (Kinder to Grade 6)</p>
+            <!-- Top Section -->
+            <div class="top-nav-bar">
+                <div class="nav-left">
+                    <h2 class="text-2xl font-semibold">Grade Level Management</h2>
+                </div>
+                <div class="search-container">
+                    <div class="search-input-wrapper">
+                        <i class="pi pi-search search-icon"></i>
+                        <input type="text" placeholder="Search grades..." class="search-input" v-model="filters.global.value" />
+                        <button v-if="filters.global.value" class="clear-search-btn" @click="filters.global.value = ''">
+                            <i class="pi pi-times"></i>
+                        </button>
                     </div>
-                    <Button label="Add New Grade" icon="pi pi-plus" class="add-button" @click="openNew" />
                 </div>
-
-                <div class="search-container mb-4">
-                    <span class="p-input-icon-left w-full">
-                        <i class="pi pi-search" />
-                        <InputText v-model="filters.global.value" placeholder="Search grades..." class="search-input w-full" />
-                    </span>
+                <div class="nav-right">
+                    <Button label="Add New Grade" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
+            </div>
 
-                <DataTable
-                    v-model:filters="filters"
-                    :value="grades"
-                    v-model:selection="selectedGrades"
-                    dataKey="id"
-                    :paginator="true"
-                    :rows="10"
-                    filterDisplay="menu"
-                    :loading="loading"
-                    :rowsPerPageOptions="[5, 10, 25]"
-                    paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
-                    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} grades"
-                    responsiveLayout="scroll"
-                    class="grade-table"
-                    stripedRows
-                    :rowHover="true"
-                >
-                    <template #empty>
-                        <div class="empty-state">
-                            <div class="empty-icon">
-                                <i class="pi pi-book"></i>
-                            </div>
-                            <h3>No Grades Found</h3>
-                            <p>Click "Add New Grade" to create your first grade level.</p>
-                            <Button label="Add New Grade" icon="pi pi-plus" class="p-button-primary" @click="openNew" />
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
+                <p>Loading grades...</p>
+            </div>
+
+            <!-- Cards Grid -->
+            <div v-else class="cards-grid">
+                <div v-for="grade in grades" :key="grade.id" class="subject-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }">
+                    <!-- Floating symbols -->
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+
+                    <div class="card-content">
+                        <h1 class="subject-title">{{ grade.name }}</h1>
+                        <div class="card-actions">
+                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editGrade(grade)" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDeleteGrade(grade)" />
                         </div>
-                    </template>
-                    <template #loading>
-                        <div class="loading-state">
-                            <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
-                            <p>Loading grades...</p>
-                        </div>
-                    </template>
-                    <Column field="code" header="Code" sortable style="min-width: 10rem">
-                        <template #body="slotProps">
-                            <span class="grade-code">{{ slotProps.data.code }}</span>
-                        </template>
-                    </Column>
-                    <Column field="name" header="Name" sortable style="min-width: 14rem">
-                        <template #body="slotProps">
-                            <span class="grade-name">{{ slotProps.data.name }}</span>
-                        </template>
-                    </Column>
-                    <Column field="is_active" header="Status" sortable style="min-width: 10rem">
-                        <template #body="slotProps">
-                            <span :class="'grade-badge status-' + (slotProps.data.is_active ? 'active' : 'inactive')">
-                                {{ slotProps.data.is_active ? 'Active' : 'Inactive' }}
-                            </span>
-                        </template>
-                    </Column>
-                    <Column header="Actions" :exportable="false" style="min-width: 12rem">
-                        <template #body="slotProps">
-                            <div class="action-buttons">
-                                <Button icon="pi pi-pencil" rounded outlined severity="primary" @click="editGrade(slotProps.data)" tooltip="Edit" tooltipOptions="{ position: 'top' }" />
-                                <Button icon="pi pi-trash" rounded outlined severity="danger" @click="confirmDeleteGrade(slotProps.data)" tooltip="Delete" tooltipOptions="{ position: 'top' }" />
-                                <Button
-                                    :icon="slotProps.data.is_active ? 'pi pi-eye-slash' : 'pi pi-eye'"
-                                    rounded
-                                    outlined
-                                    :severity="slotProps.data.is_active ? 'warning' : 'success'"
-                                    @click="toggleGradeStatus(slotProps.data)"
-                                    :tooltip="slotProps.data.is_active ? 'Deactivate' : 'Activate'"
-                                    :tooltipOptions="{ position: 'top' }"
-                                />
-                            </div>
-                        </template>
-                    </Column>
-                </DataTable>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="grades.length === 0 && !loading" class="empty-state">
+                <p>No grades found. Click "Add New Grade" to create one.</p>
             </div>
         </div>
 
@@ -403,6 +362,11 @@ onMounted(() => {
     opacity: 0.4;
     z-index: 0;
     border-radius: 0 0 24px 0;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
 }
 
 /* Base styles for all geometric shapes */
@@ -531,53 +495,221 @@ onMounted(() => {
     }
 }
 
-.card {
-    background: rgba(255, 255, 255, 0.8);
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-}
-
-.card-header {
+.top-nav-bar {
+    border-bottom: 1px solid rgba(74, 135, 213, 0.2);
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
 }
 
-.grade-title {
+.top-nav-bar .nav-left h2 {
     color: #1a365d;
     font-size: 2rem;
-    font-weight: 700;
+    font-weight: 600;
     margin: 0;
-    text-shadow: 0 2px 4px rgba(74, 135, 213, 0.2);
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.3);
     letter-spacing: 0.5px;
 }
 
-.grade-subtitle {
-    color: #4a5568;
-    margin: 0.25rem 0 0 0;
-    font-size: 1.1rem;
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: #1a365d;
 }
 
-/* Search container */
-.search-container {
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2.5rem;
+    padding: 0.5rem;
+}
+
+.subject-card {
+    height: 220px;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    transition: all 0.4s ease;
     position: relative;
-    margin-bottom: 1.5rem;
+    border: 1px solid rgba(74, 135, 213, 0.3);
 }
 
-/* Add button styling */
+.subject-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15), 0 0 25px rgba(74, 135, 213, 0.4);
+    border: 1px solid rgba(74, 135, 213, 0.5);
+}
+
+.subject-card .symbol {
+    position: absolute;
+    color: rgba(26, 54, 93, 0.5);
+    font-family: 'Courier New', monospace;
+    pointer-events: none;
+    z-index: 1;
+    animation: float-symbol 8s linear infinite;
+    font-weight: bold;
+}
+
+.subject-card:nth-child(3n) .symbol {
+    animation-duration: 10s;
+}
+
+.subject-card:nth-child(3n+1) .symbol {
+    animation-duration: 7s;
+}
+
+.subject-card .symbol:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
+.subject-card .symbol:nth-child(2) { top: 30%; left: 80%; animation-delay: 1s; }
+.subject-card .symbol:nth-child(3) { top: 70%; left: 30%; animation-delay: 2s; }
+.subject-card .symbol:nth-child(4) { top: 60%; left: 70%; animation-delay: 3s; }
+.subject-card .symbol:nth-child(5) { top: 20%; left: 50%; animation-delay: 4s; }
+
+/* Math symbol content variations */
+.subject-card:nth-child(7n) .symbol:nth-child(1)::after { content: "K"; font-size: 18px; }
+.subject-card:nth-child(7n) .symbol:nth-child(2)::after { content: "1"; font-size: 20px; }
+.subject-card:nth-child(7n) .symbol:nth-child(3)::after { content: "2"; font-size: 24px; }
+.subject-card:nth-child(7n) .symbol:nth-child(4)::after { content: "3"; font-size: 20px; }
+.subject-card:nth-child(7n) .symbol:nth-child(5)::after { content: "4"; font-size: 18px; }
+
+.subject-card:nth-child(7n+1) .symbol:nth-child(1)::after { content: "5"; font-size: 16px; }
+.subject-card:nth-child(7n+1) .symbol:nth-child(2)::after { content: "6"; font-size: 16px; }
+.subject-card:nth-child(7n+1) .symbol:nth-child(3)::after { content: "K1"; font-size: 14px; }
+.subject-card:nth-child(7n+1) .symbol:nth-child(4)::after { content: "K2"; font-size: 16px; }
+.subject-card:nth-child(7n+1) .symbol:nth-child(5)::after { content: "G1"; font-size: 16px; }
+
+@keyframes float-symbol {
+    0% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+    }
+    80% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100px) translateX(20px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+.card-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.subject-title {
+    color: #1a365d;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4);
+    font-size: 1.75rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.card-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.subject-card:hover .card-actions {
+    opacity: 1;
+}
+
+.search-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 1.5rem;
+}
+
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    background: rgba(211, 233, 255, 0.8);
+    border-radius: 10px;
+    border: 1px solid rgba(74, 135, 213, 0.3);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.search-input-wrapper:focus-within {
+    border-color: rgba(74, 135, 213, 0.6);
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.2);
+}
+
+.search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    height: 42px;
+    padding: 0 1rem;
+    color: #1a365d;
+    font-size: 0.95rem;
+    width: 100%;
+}
+
+.search-input::placeholder {
+    color: rgba(26, 54, 93, 0.6);
+}
+
+.search-input:focus {
+    outline: none;
+}
+
+.search-icon {
+    color: rgba(26, 54, 93, 0.6);
+    margin-left: 1rem;
+}
+
+.clear-search-btn {
+    background: transparent;
+    border: none;
+    color: rgba(26, 54, 93, 0.6);
+    cursor: pointer;
+    margin-right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+    color: #1a365d;
+    background: rgba(74, 135, 213, 0.1);
+}
+
 :deep(.add-button) {
+    border-radius: 8px !important;
     background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
     border: none !important;
     box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
     transition: all 0.3s ease !important;
-    padding: 0.75rem 1.25rem !important;
-    border-radius: 12px !important;
 }
 
 :deep(.add-button:hover) {
@@ -585,222 +717,7 @@ onMounted(() => {
     transform: translateY(-2px) !important;
 }
 
-/* Search input styling */
-.search-input {
-    background: rgba(211, 233, 255, 0.8);
-    border: 1px solid rgba(74, 135, 213, 0.3);
-    border-radius: 12px;
-    transition: all 0.3s ease;
-    padding: 0.75rem 0.75rem 0.75rem 2.5rem;
-    font-size: 1rem;
-}
-
-.search-input:focus {
-    box-shadow: 0 0 0 2px rgba(74, 135, 213, 0.3);
-    border-color: rgba(74, 135, 213, 0.5);
-    background: white;
-}
-
-:deep(.p-input-icon-left > i) {
-    left: 1rem;
-    color: #4a87d5;
-}
-
-/* Grade table styling */
-.grade-table {
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.p-datatable-wrapper) {
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 16px;
-    overflow: hidden;
-}
-
-:deep(.p-datatable-header) {
-    background: rgba(74, 135, 213, 0.1);
-    border: none;
-}
-
-:deep(.p-datatable-thead > tr > th) {
-    background: rgba(74, 135, 213, 0.15);
-    color: #1a365d;
-    font-weight: 600;
-    border-bottom: 2px solid rgba(74, 135, 213, 0.2);
-    padding: 1rem;
-    text-transform: uppercase;
-    font-size: 0.9rem;
-    letter-spacing: 0.05rem;
-}
-
-:deep(.p-datatable-tbody > tr) {
-    background: rgba(255, 255, 255, 0.7);
-    transition: all 0.2s ease;
-}
-
-:deep(.p-datatable-tbody > tr:hover) {
-    background: rgba(74, 135, 213, 0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-:deep(.p-datatable-tbody > tr > td) {
-    padding: 1rem;
-    border-bottom: 1px solid rgba(74, 135, 213, 0.1);
-}
-
-:deep(.p-datatable-tbody > tr:nth-child(even)) {
-    background-color: rgba(235, 244, 254, 0.7);
-}
-
-:deep(.p-paginator) {
-    background: rgba(255, 255, 255, 0.7);
-    border: none;
-    padding: 1rem;
-    border-radius: 0 0 16px 16px;
-}
-
-/* Cell content styling */
-.grade-code {
-    font-weight: 600;
-    font-size: 1.1rem;
-    color: #2c5282;
-}
-
-.grade-name {
-    font-weight: 500;
-}
-
-.grade-description {
-    color: #4a5568;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.display-order {
-    font-weight: 600;
-    color: #4a5568;
-}
-
-/* Status badge styling */
-.grade-badge {
-    padding: 0.4rem 1rem;
-    border-radius: 100px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-}
-
-.grade-badge.status-active {
-    background-color: rgba(72, 187, 120, 0.2);
-    color: #2f855a;
-}
-
-.grade-badge.status-active::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background-color: #2f855a;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.grade-badge.status-inactive {
-    background-color: rgba(229, 62, 62, 0.2);
-    color: #c53030;
-}
-
-.grade-badge.status-inactive::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background-color: #c53030;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-/* Action buttons styling */
-.action-buttons {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-:deep(.action-buttons .p-button) {
-    width: 2.5rem;
-    height: 2.5rem;
-}
-
-:deep(.action-buttons .p-button:hover) {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* Empty state styling */
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 2rem;
-    color: #4a5568;
-    text-align: center;
-    gap: 1rem;
-}
-
-.empty-icon {
-    background: rgba(74, 135, 213, 0.1);
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1rem;
-}
-
-.empty-icon i {
-    font-size: 2.5rem;
-    color: #4a87d5;
-}
-
-.empty-state h3 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #2d3748;
-    margin: 0;
-}
-
-.empty-state p {
-    font-size: 1.1rem;
-    margin: 0.5rem 0 1.5rem 0;
-}
-
-/* Loading state styling */
-.loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem;
-    color: #4a5568;
-    gap: 1.5rem;
-}
-
-.loading-state p {
-    font-size: 1.1rem;
-}
-
-/* Grade dialog styling */
+/* Keep existing dialog styles */
 .grade-dialog {
     border-radius: 20px;
     overflow: hidden;
@@ -985,30 +902,14 @@ onMounted(() => {
         padding: 1rem;
     }
 
-    .card {
-        padding: 1.25rem;
-    }
-
-    .card-header {
+    .header-section {
         flex-direction: column;
         align-items: flex-start;
+        gap: 1rem;
     }
 
-    .grade-title {
-        font-size: 1.5rem;
-    }
-
-    .action-buttons {
-        gap: 0.25rem;
-    }
-
-    :deep(.action-buttons .p-button) {
-        width: 2rem;
-        height: 2rem;
-    }
-
-    :deep(.p-datatable-tbody > tr > td) {
-        padding: 0.75rem 0.5rem;
+    .grade-cards-container {
+        grid-template-columns: 1fr;
     }
 }
 

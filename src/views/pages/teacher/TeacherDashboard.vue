@@ -3,7 +3,6 @@ import { GradeService } from '@/router/service/Grades';
 import { StudentAttendanceService } from '@/router/service/StudentAttendanceService';
 import { AttendanceService } from '@/router/service/Students';
 import { SubjectService } from '@/router/service/Subjects';
-import { TeacherService } from '@/router/service/TeacherService';
 import Button from 'primevue/button';
 import Chart from 'primevue/chart';
 import Checkbox from 'primevue/checkbox';
@@ -76,22 +75,116 @@ for (let i = 0; i < 3; i++) {
 // Add this to your variable declarations
 const isDebugMode = ref(false); // Set to true manually when debugging
 
+// Add mock data constants after the imports
+const MOCK_TEACHER = {
+    id: 1,
+    name: 'Maria Santos',
+    email: 'maria.santos@school.edu',
+    assignedGrades: [
+        { gradeId: 3, subjects: ['Mathematics', 'Science'] },
+        { gradeId: 4, subjects: ['Mathematics'] }
+    ]
+};
+
+const MOCK_SUBJECTS = [
+    { id: 1, name: 'Mathematics', grade: 'Grade 3', originalSubject: { id: 1, name: 'Mathematics' } },
+    { id: 2, name: 'Science', grade: 'Grade 3', originalSubject: { id: 2, name: 'Science' } },
+    { id: 3, name: 'Mathematics', grade: 'Grade 4', originalSubject: { id: 3, name: 'Mathematics' } }
+];
+
+const MOCK_STUDENTS = [
+    { id: 101, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang', absences: 2, severity: 'normal' },
+    { id: 102, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang', absences: 4, severity: 'warning' },
+    { id: 103, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang', absences: 6, severity: 'critical' },
+    { id: 104, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon', absences: 1, severity: 'normal' },
+    { id: 105, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon', absences: 3, severity: 'warning' },
+    { id: 106, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon', absences: 0, severity: 'normal' },
+    { id: 107, name: 'Andres Bonifacio', gradeLevel: 4, section: 'Matapat', absences: 2, severity: 'normal' },
+    { id: 108, name: 'Melchora Aquino', gradeLevel: 4, section: 'Matapat', absences: 5, severity: 'critical' },
+    { id: 109, name: 'Lapu-Lapu', gradeLevel: 4, section: 'Matapat', absences: 3, severity: 'warning' },
+    { id: 110, name: 'Gregorio Del Pilar', gradeLevel: 4, section: 'Matapat', absences: 1, severity: 'normal' }
+];
+
+const MOCK_ATTENDANCE_SUMMARY = {
+    totalStudents: 10,
+    studentsWithWarning: 3,
+    studentsWithCritical: 2,
+    averageAttendance: 85
+};
+
+const MOCK_ATTENDANCE_CHART_DATA = {
+    labels: ['Jan 1-7', 'Jan 8-14', 'Jan 15-21', 'Jan 22-28'],
+    datasets: [
+        {
+            label: 'Present',
+            backgroundColor: '#4CAF50',
+            data: [8, 9, 7, 8]
+        },
+        {
+            label: 'Absent',
+            backgroundColor: '#F44336',
+            data: [2, 1, 2, 2]
+        },
+        {
+            label: 'Late',
+            backgroundColor: '#FFC107',
+            data: [1, 1, 1, 1]
+        }
+    ]
+};
+
 // Load teacher data and subjects
 onMounted(async () => {
     loading.value = true;
     try {
-        // Ensure StudentAttendanceService methods exist
-        ensureStudentAttendanceService();
+        // Use mock data instead of real API calls
+        currentTeacher.value = MOCK_TEACHER;
+        teacherSubjects.value = MOCK_SUBJECTS;
+        availableSubjects.value = MOCK_SUBJECTS.map(subject => ({
+            id: subject.id,
+            name: `${subject.name} (${subject.grade})`,
+            grade: subject.grade,
+            originalSubject: subject
+        }));
 
-        // In a real application, this would get the current logged-in teacher
-        // For now, we'll use a hardcoded ID (e.g., first teacher in our data)
-        currentTeacher.value = TeacherService.getTeachers()[0];
-
-        if (currentTeacher.value) {
-            await loadTeacherSubjects();
-            await loadAttendanceData();
-            await prepareChartData();
+        // Set default selected subject
+        if (availableSubjects.value.length > 0) {
+            selectedSubject.value = availableSubjects.value[0];
         }
+
+        // Set mock attendance data
+        attendanceSummary.value = MOCK_ATTENDANCE_SUMMARY;
+        studentsWithAbsenceIssues.value = MOCK_STUDENTS;
+        attendanceChartData.value = MOCK_ATTENDANCE_CHART_DATA;
+
+        // Prepare chart options
+        chartOptions.value = {
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        font: { size: 12 },
+                        padding: 20
+                    }
+                },
+                title: {
+                    display: true,
+                    text: `Attendance Trends: ${selectedSubject.value?.name}`,
+                    font: { size: 16, weight: 'bold' },
+                    padding: { top: 10, bottom: 20 }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: 10
+                }
+            }
+        };
     } catch (error) {
         console.error('Error loading teacher dashboard:', error);
     } finally {

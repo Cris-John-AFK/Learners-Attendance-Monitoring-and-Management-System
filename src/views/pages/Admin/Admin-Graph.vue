@@ -14,14 +14,6 @@
         </div>
     </div>
 
-    <div class="card-container">
-        <SakaiCard v-for="(grade, index) in grades" :key="grade.id" class="custom-card" :style="cardStyles[index]" @click="showSections(grade.name)">
-            <div class="card-header">
-                <h1 class="grade-name">{{ grade.name }}</h1>
-            </div>
-        </SakaiCard>
-    </div>
-
     <Dialog v-model:visible="showModal" modal header="Section Attendance Overview" :style="{ width: '80vw' }">
         <div v-if="sectionLoading" class="loading-container">
             <ProgressSpinner />
@@ -39,14 +31,11 @@
 
 <script setup>
 import AttendanceChart from '@/components/Admin/AttendanceChart.vue';
-import SakaiCard from '@/components/SakaiCard.vue';
 import { GradeService } from '@/router/service/Grades';
 import Dialog from 'primevue/dialog';
 import ProgressSpinner from 'primevue/progressspinner';
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
-// Now this will be populated from GradeService
-const grades = ref([]);
 const loading = ref(true);
 const sectionLoading = ref(false);
 
@@ -80,8 +69,6 @@ const loadGradeData = async () => {
             loading.value = false;
             return;
         }
-
-        grades.value = gradesData;
 
         // Update the labels in the default chart data
         defaultGradeChartData.value.labels = gradesData.map((g) => g.name);
@@ -147,21 +134,6 @@ const showSections = (gradeName) => {
     }, 300);
 };
 
-const getRandomGradient = () => {
-    const colors = ['#ff9a9e', '#fad0c4', '#fbc2eb', '#a6c1ee', '#ffdde1', '#ee9ca7', '#ff758c', '#ff7eb3', '#c3cfe2', '#d4fc79', '#96e6a1', '#84fab0', '#8fd3f4', '#a18cd1'];
-
-    const color1 = colors[Math.floor(Math.random() * colors.length)];
-    const color2 = colors[Math.floor(Math.random() * colors.length)];
-
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
-};
-
-const cardStyles = computed(() =>
-    grades.value.map(() => ({
-        background: getRandomGradient()
-    }))
-);
-
 onMounted(async () => {
     console.log('Admin-Graph component mounted');
     await loadGradeData();
@@ -184,54 +156,6 @@ onMounted(async () => {
     width: 100%;
     max-width: 1000px;
     height: 400px;
-}
-
-.card-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 0 20px 20px 20px;
-}
-
-.custom-card {
-    width: 200px;
-    height: 250px;
-    border-radius: 10px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    text-align: center;
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
-    color: white;
-    font-weight: bold;
-}
-
-.custom-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.card-header {
-    color: white;
-    padding: 12px 15px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-weight: bold;
-    height: 100%;
-}
-
-.grade-name {
-    font-size: 26px;
-    margin: 0;
 }
 
 .loading-container {
