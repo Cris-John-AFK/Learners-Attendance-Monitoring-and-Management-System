@@ -27,19 +27,9 @@ const templateName = ref('');
 const savedTemplates = ref([]);
 const selectedTemplate = ref(null);
 
-// Custom layout configuration
-const layoutType = ref('grid'); // 'grid' or 'custom'
+// Layout configuration options
 const showTeacherDesk = ref(true);
 const showStudentIds = ref(true);
-const sectionCount = ref(3);
-const sectionConfigs = ref([
-    { rows: 5, columns: 2, addExtraSeat: false },
-    { rows: 5, columns: 2, addExtraSeat: false },
-    { rows: 5, columns: 2, addExtraSeat: true }
-]);
-const customSections = ref([]);
-const extraSeats = ref([]);
-const customDragPosition = ref(null);
 const currentGrade = ref('3');
 
 // Student and attendance data
@@ -65,6 +55,11 @@ const attendanceStatuses = [
     { name: 'Excused', color: '#2196f3', icon: 'pi pi-info-circle' }
 ];
 
+// Add these variables to the script setup
+const autoScrollSpeed = ref(0);
+const autoScrollInterval = ref(null);
+const scrollThreshold = 100; // px from the edge of the viewport to start scrolling
+
 // Toggle edit mode
 const toggleEditMode = () => {
     isEditMode.value = !isEditMode.value;
@@ -87,17 +82,10 @@ const saveCurrentLayout = () => {
     localStorage.setItem(
         'currentLayout',
         JSON.stringify({
-            layoutType: layoutType.value,
             grid: {
                 rows: rows.value,
                 columns: columns.value,
                 seatPlan: seatPlan.value
-            },
-            custom: {
-                sectionCount: sectionCount.value,
-                sectionConfigs: sectionConfigs.value,
-                customSections: customSections.value,
-                extraSeats: extraSeats.value
             },
             showTeacherDesk: showTeacherDesk.value,
             showStudentIds: showStudentIds.value
@@ -137,105 +125,50 @@ const initializeSeatPlan = () => {
         grid.push(row);
     }
     seatPlan.value = grid;
-};
 
-// Set the layout type
-const setLayoutType = (type) => {
-    layoutType.value = type;
-    if (type === 'custom') {
-        initializeCustomLayout();
-    }
-};
-
-// Initialize the custom layout structure
-const initializeCustomLayout = () => {
-    customSections.value = [];
-    extraSeats.value = [];
-
-    for (let s = 0; s < sectionCount.value; s++) {
-        const config = sectionConfigs.value[s] || { rows: 5, columns: 2, addExtraSeat: false };
-        const section = [];
-
-        for (let i = 0; i < config.rows; i++) {
-            const row = [];
-            for (let j = 0; j < config.columns; j++) {
-                row.push({
-                    section: s,
-                    row: i,
-                    col: j,
-                    studentId: null,
-                    status: null,
-                    isOccupied: false
-                });
-            }
-            section.push(row);
-        }
-
-        customSections.value.push(section);
-
-        if (config.addExtraSeat) {
-            extraSeats.value[s] = {
-                section: s,
-                studentId: null,
-                status: null,
-                isOccupied: false
-            };
-        }
-    }
-
-    // Recalculate unassigned students after initializing the layout
+    // Recalculate unassigned students when grid size changes
     calculateUnassignedStudents();
-};
-
-// Update the section count and configurations
-const updateSections = () => {
-    // Ensure we have the right number of section configs
-    while (sectionConfigs.value.length < sectionCount.value) {
-        sectionConfigs.value.push({ rows: 5, columns: 2, addExtraSeat: false });
-    }
-
-    while (sectionConfigs.value.length > sectionCount.value) {
-        sectionConfigs.value.pop();
-    }
-};
-
-// Apply the custom layout configuration
-const applyCustomLayout = () => {
-    initializeCustomLayout();
-};
-
-// Get student at custom seat
-const getCustomStudentAtSeat = (sectionIndex, rowIndex, colIndex) => {
-    if (!customSections.value[sectionIndex] || !customSections.value[sectionIndex][rowIndex] || !customSections.value[sectionIndex][rowIndex][colIndex]) return null;
-
-    const studentId = customSections.value[sectionIndex][rowIndex][colIndex].studentId;
-    return getStudentById(studentId);
-};
-
-// Get student at extra seat
-const getExtraSeatStudent = (sectionIndex) => {
-    if (!extraSeats.value[sectionIndex]) return null;
-    const studentId = extraSeats.value[sectionIndex].studentId;
-    return getStudentById(studentId);
 };
 
 // Update seat plan with changes to row/column count
 watch([rows, columns], () => {
-    if (isEditMode.value && layoutType.value === 'grid') {
+    if (isEditMode.value) {
+        // Save current student assignments
+        const currentAssignments = [];
+
+        // Extract current assignments from the existing seat plan
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            for (let j = 0; j < seatPlan.value[i].length; j++) {
+                const seat = seatPlan.value[i][j];
+                if (seat.isOccupied && seat.studentId) {
+                    currentAssignments.push({
+                        studentId: seat.studentId,
+                        status: seat.status,
+                        row: i,
+                        col: j
+                    });
+                }
+            }
+        }
+
+        // Initialize new seat plan with updated dimensions
         initializeSeatPlan();
+
+        // Restore assignments where possible in the new grid
+        for (const assignment of currentAssignments) {
+            // Only restore if the row and column exist in the new grid
+            if (assignment.row < rows.value && assignment.col < columns.value) {
+                const seat = seatPlan.value[assignment.row][assignment.col];
+                seat.studentId = assignment.studentId;
+                seat.status = assignment.status;
+                seat.isOccupied = true;
+            }
+        }
+
+        // Recalculate unassigned students with the updated seat plan
+        calculateUnassignedStudents();
     }
 });
-
-// Watch for changes to sectionConfigs
-watch(
-    sectionConfigs,
-    () => {
-        if (isEditMode.value && layoutType.value === 'custom') {
-            initializeCustomLayout();
-        }
-    },
-    { deep: true }
-);
 
 // Get student initials
 const getStudentInitials = (student) => {
@@ -271,32 +204,11 @@ const getStudentAtSeat = (row, col) => {
 const getStudentStatus = (student) => {
     if (!student) return null;
 
-    // Try standard grid layout
-    if (layoutType.value === 'grid') {
-        // Find the seat with this student
-        for (const row of seatPlan.value) {
-            for (const seat of row) {
-                if (seat.studentId === student.id) {
-                    return seat.status;
-                }
-            }
-        }
-    }
-    // Try custom layout
-    else if (layoutType.value === 'custom') {
-        // Check all sections
-        for (let s = 0; s < customSections.value.length; s++) {
-            for (let r = 0; r < customSections.value[s].length; r++) {
-                for (let c = 0; c < customSections.value[s][r].length; c++) {
-                    if (customSections.value[s][r][c].studentId === student.id) {
-                        return customSections.value[s][r][c].status;
-                    }
-                }
-            }
-
-            // Check extra seat
-            if (extraSeats.value[s] && extraSeats.value[s].studentId === student.id) {
-                return extraSeats.value[s].status;
+    // Find the seat with this student
+    for (const row of seatPlan.value) {
+        for (const seat of row) {
+            if (seat.studentId === student.id) {
+                return seat.status;
             }
         }
     }
@@ -304,13 +216,77 @@ const getStudentStatus = (student) => {
     return null;
 };
 
-// Drag and drop functionality for grid layout
+// Start auto-scroll based on mouse position
+const handleDragOver = (event) => {
+    if (!isDragging.value) return;
+
+    const { clientY } = event;
+    const { innerHeight } = window;
+
+    // Calculate distance from top and bottom of viewport
+    const distanceFromTop = clientY;
+    const distanceFromBottom = innerHeight - clientY;
+
+    // Clear any existing interval
+    clearAutoScroll();
+
+    // Auto-scroll up if near the top
+    if (distanceFromTop < scrollThreshold) {
+        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromTop) / 5));
+        startAutoScroll(-scrollSpeed);
+    }
+    // Auto-scroll down if near the bottom
+    else if (distanceFromBottom < scrollThreshold) {
+        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromBottom) / 5));
+        startAutoScroll(scrollSpeed);
+    }
+};
+
+// Start auto-scrolling with the given speed
+const startAutoScroll = (speed) => {
+    autoScrollSpeed.value = speed;
+
+    if (!autoScrollInterval.value) {
+        autoScrollInterval.value = setInterval(() => {
+            window.scrollBy(0, autoScrollSpeed.value);
+        }, 16); // ~60fps
+    }
+};
+
+// Clear auto-scroll interval
+const clearAutoScroll = () => {
+    if (autoScrollInterval.value) {
+        clearInterval(autoScrollInterval.value);
+        autoScrollInterval.value = null;
+    }
+};
+
+// Modify the startDrag function to initialize drag state
 const startDrag = (student, position) => {
     isDragging.value = true;
     draggedStudent.value = student;
     draggedPosition.value = position;
+
+    // Add global event listeners
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('dragend', clearAutoScroll);
+    document.addEventListener('drop', clearAutoScroll);
 };
 
+// Modify the existing cancelDrag and dropOnSeat functions to clean up
+const cancelDrag = () => {
+    isDragging.value = false;
+    draggedStudent.value = null;
+    draggedPosition.value = null;
+    clearAutoScroll();
+
+    // Remove global event listeners
+    document.removeEventListener('dragover', handleDragOver);
+    document.removeEventListener('dragend', clearAutoScroll);
+    document.removeEventListener('drop', clearAutoScroll);
+};
+
+// Update the other drop functions to also clean up
 const dropOnSeat = (rowIndex, colIndex) => {
     if (!draggedStudent.value) return;
 
@@ -319,17 +295,6 @@ const dropOnSeat = (rowIndex, colIndex) => {
         const { row, col } = draggedPosition.value;
         seatPlan.value[row][col].studentId = null;
         seatPlan.value[row][col].isOccupied = false;
-    } else if (customDragPosition.value) {
-        if (customDragPosition.value.isExtra) {
-            // Was in an extra seat
-            extraSeats.value[customDragPosition.value.section].studentId = null;
-            extraSeats.value[customDragPosition.value.section].isOccupied = false;
-        } else {
-            // Was in a custom seat
-            const { section, row, col } = customDragPosition.value;
-            customSections.value[section][row][col].studentId = null;
-            customSections.value[section][row][col].isOccupied = false;
-        }
     }
 
     // Assign student to new seat
@@ -337,72 +302,8 @@ const dropOnSeat = (rowIndex, colIndex) => {
     seatPlan.value[rowIndex][colIndex].isOccupied = true;
 
     // Reset drag state
-    isDragging.value = false;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    customDragPosition.value = null;
-
-    // Update unassigned students
-    calculateUnassignedStudents();
-
-    toast.add({
-        severity: 'success',
-        summary: 'Student Assigned',
-        detail: `${draggedStudent.value.name} has been assigned to seat (Row ${rowIndex + 1}, Col ${colIndex + 1})`,
-        life: 3000
-    });
-};
-
-// Custom layout drag and drop functions
-const startDragCustom = (student, position) => {
-    isDragging.value = true;
-    draggedStudent.value = student;
-    customDragPosition.value = position;
-};
-
-const startDragExtra = (student, position) => {
-    isDragging.value = true;
-    draggedStudent.value = student;
-    customDragPosition.value = position;
-};
-
-const dropOnCustomSeat = (sectionIndex, rowIndex, colIndex) => {
-    if (!draggedStudent.value) return;
-
-    // Clear the previous seat if student was already placed
-    if (customDragPosition.value) {
-        if (customDragPosition.value.isExtra) {
-            // Was in an extra seat
-            extraSeats.value[customDragPosition.value.section].studentId = null;
-            extraSeats.value[customDragPosition.value.section].isOccupied = false;
-        } else if (draggedPosition.value) {
-            // Was in a standard grid seat
-            const { row, col } = draggedPosition.value;
-            seatPlan.value[row][col].studentId = null;
-            seatPlan.value[row][col].isOccupied = false;
-        } else {
-            // Was in another custom seat
-            const { section, row, col } = customDragPosition.value;
-            customSections.value[section][row][col].studentId = null;
-            customSections.value[section][row][col].isOccupied = false;
-        }
-    } else if (draggedPosition.value) {
-        // Coming from standard grid seat
-        const { row, col } = draggedPosition.value;
-        seatPlan.value[row][col].studentId = null;
-        seatPlan.value[row][col].isOccupied = false;
-    }
-
-    // Assign to new seat
-    customSections.value[sectionIndex][rowIndex][colIndex].studentId = draggedStudent.value.id;
-    customSections.value[sectionIndex][rowIndex][colIndex].isOccupied = true;
-
-    // Reset drag state
-    isDragging.value = false;
     const studentName = draggedStudent.value.name;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    customDragPosition.value = null;
+    cancelDrag();
 
     // Update unassigned students
     calculateUnassignedStudents();
@@ -410,56 +311,7 @@ const dropOnCustomSeat = (sectionIndex, rowIndex, colIndex) => {
     toast.add({
         severity: 'success',
         summary: 'Student Assigned',
-        detail: `${studentName} has been assigned to section ${sectionIndex + 1}, seat (${rowIndex + 1}, ${colIndex + 1})`,
-        life: 3000
-    });
-};
-
-const dropOnExtraSeat = (sectionIndex) => {
-    if (!draggedStudent.value || !extraSeats.value[sectionIndex]) return;
-
-    // Clear the previous seat if student was already placed
-    if (customDragPosition.value) {
-        if (customDragPosition.value.isExtra) {
-            // Was in an extra seat
-            extraSeats.value[customDragPosition.value.section].studentId = null;
-            extraSeats.value[customDragPosition.value.section].isOccupied = false;
-        } else if (draggedPosition.value) {
-            // Was in a standard grid seat
-            const { row, col } = draggedPosition.value;
-            seatPlan.value[row][col].studentId = null;
-            seatPlan.value[row][col].isOccupied = false;
-        } else {
-            // Was in another custom seat
-            const { section, row, col } = customDragPosition.value;
-            customSections.value[section][row][col].studentId = null;
-            customSections.value[section][row][col].isOccupied = false;
-        }
-    } else if (draggedPosition.value) {
-        // Coming from standard grid seat
-        const { row, col } = draggedPosition.value;
-        seatPlan.value[row][col].studentId = null;
-        seatPlan.value[row][col].isOccupied = false;
-    }
-
-    // Assign to extra seat
-    extraSeats.value[sectionIndex].studentId = draggedStudent.value.id;
-    extraSeats.value[sectionIndex].isOccupied = true;
-
-    // Reset drag state
-    isDragging.value = false;
-    const studentName = draggedStudent.value.name;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    customDragPosition.value = null;
-
-    // Update unassigned students
-    calculateUnassignedStudents();
-
-    toast.add({
-        severity: 'success',
-        summary: 'Student Assigned',
-        detail: `${studentName} has been assigned to extra seat in section ${sectionIndex + 1}`,
+        detail: `${studentName} has been assigned to seat (Row ${rowIndex + 1}, Col ${colIndex + 1})`,
         life: 3000
     });
 };
@@ -473,34 +325,13 @@ const dropToUnassigned = () => {
         const { row, col } = draggedPosition.value;
         seatPlan.value[row][col].studentId = null;
         seatPlan.value[row][col].isOccupied = false;
-    } else if (customDragPosition.value) {
-        if (customDragPosition.value.isExtra) {
-            // Extra seat
-            extraSeats.value[customDragPosition.value.section].studentId = null;
-            extraSeats.value[customDragPosition.value.section].isOccupied = false;
-        } else {
-            // Custom seat
-            const { section, row, col } = customDragPosition.value;
-            customSections.value[section][row][col].studentId = null;
-            customSections.value[section][row][col].isOccupied = false;
-        }
     }
 
     // Reset drag state
-    isDragging.value = false;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    customDragPosition.value = null;
+    cancelDrag();
 
     // Update unassigned students
     calculateUnassignedStudents();
-};
-
-const cancelDrag = () => {
-    isDragging.value = false;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    customDragPosition.value = null;
 };
 
 // Toggle attendance status for a seat
@@ -509,38 +340,6 @@ const toggleAttendanceStatus = (rowIndex, colIndex) => {
     if (!seat.isOccupied) return;
 
     // Find the current status index
-    const currentStatusIndex = attendanceStatuses.findIndex((status) => status.name === seat.status);
-
-    // Move to next status, or to Present if no status yet
-    const nextIndex = currentStatusIndex === -1 ? 0 : (currentStatusIndex + 1) % attendanceStatuses.length;
-    seat.status = attendanceStatuses[nextIndex].name;
-
-    // Save attendance record
-    saveAttendanceRecord(seat.studentId, seat.status);
-};
-
-// Toggle attendance status for custom seat
-const toggleCustomAttendanceStatus = (sectionIndex, rowIndex, colIndex) => {
-    const seat = customSections.value[sectionIndex][rowIndex][colIndex];
-    if (!seat.isOccupied) return;
-
-    // Find current status index
-    const currentStatusIndex = attendanceStatuses.findIndex((status) => status.name === seat.status);
-
-    // Move to next status, or to Present if no status yet
-    const nextIndex = currentStatusIndex === -1 ? 0 : (currentStatusIndex + 1) % attendanceStatuses.length;
-    seat.status = attendanceStatuses[nextIndex].name;
-
-    // Save attendance record
-    saveAttendanceRecord(seat.studentId, seat.status);
-};
-
-// Toggle attendance status for extra seat
-const toggleExtraSeatStatus = (sectionIndex) => {
-    const seat = extraSeats.value[sectionIndex];
-    if (!seat || !seat.isOccupied) return;
-
-    // Find current status index
     const currentStatusIndex = attendanceStatuses.findIndex((status) => status.name === seat.status);
 
     // Move to next status, or to Present if no status yet
@@ -562,58 +361,17 @@ const showRemarksDialog = (row, col, status) => {
     showRemarks.value = true;
 };
 
-// Show remarks dialog for custom seat
-const showRemarksCustomDialog = (sectionIndex, rowIndex, colIndex) => {
-    const seat = customSections.value[sectionIndex][rowIndex][colIndex];
-    if (!seat.isOccupied) return;
-
-    selectedStudent.value = getStudentById(seat.studentId);
-    remarks.value = ''; // Clear previous remarks
-    pendingStatus.value = seat.status || 'Absent';
-    showRemarks.value = true;
-};
-
-// Show remarks dialog for extra seat
-const showRemarksExtraSeat = (sectionIndex) => {
-    const seat = extraSeats.value[sectionIndex];
-    if (!seat || !seat.isOccupied) return;
-
-    selectedStudent.value = getStudentById(seat.studentId);
-    remarks.value = ''; // Clear previous remarks
-    pendingStatus.value = seat.status || 'Absent';
-    showRemarks.value = true;
-};
-
 // Save attendance with remarks
 const saveWithRemarks = async () => {
     if (!selectedStudent.value || !pendingStatus.value) return;
 
     await saveAttendanceRecord(selectedStudent.value.id, pendingStatus.value, remarks.value);
 
-    // Update UI based on layout type
-    if (layoutType.value === 'grid') {
-        // Find the student in the grid
-        for (const row of seatPlan.value) {
-            for (const seat of row) {
-                if (seat.studentId === selectedStudent.value.id) {
-                    seat.status = pendingStatus.value;
-                }
-            }
-        }
-    } else {
-        // Find in custom sections
-        for (let s = 0; s < customSections.value.length; s++) {
-            for (let r = 0; r < customSections.value[s].length; r++) {
-                for (let c = 0; c < customSections.value[s][r].length; c++) {
-                    if (customSections.value[s][r][c].studentId === selectedStudent.value.id) {
-                        customSections.value[s][r][c].status = pendingStatus.value;
-                    }
-                }
-            }
-
-            // Check extra seats
-            if (extraSeats.value[s] && extraSeats.value[s].studentId === selectedStudent.value.id) {
-                extraSeats.value[s].status = pendingStatus.value;
+    // Find the student in the grid
+    for (const row of seatPlan.value) {
+        for (const seat of row) {
+            if (seat.studentId === selectedStudent.value.id) {
+                seat.status = pendingStatus.value;
             }
         }
     }
@@ -679,7 +437,6 @@ const saveAsTemplate = () => {
     const template = {
         id: Date.now().toString(),
         name: templateName.value,
-        layoutType: layoutType.value,
         showTeacherDesk: showTeacherDesk.value,
         showStudentIds: showStudentIds.value,
 
@@ -687,12 +444,6 @@ const saveAsTemplate = () => {
         rows: rows.value,
         columns: columns.value,
         seatPlan: JSON.parse(JSON.stringify(seatPlan.value)),
-
-        // Custom layout data
-        sectionCount: sectionCount.value,
-        sectionConfigs: JSON.parse(JSON.stringify(sectionConfigs.value)),
-        customSections: JSON.parse(JSON.stringify(customSections.value)),
-        extraSeats: JSON.parse(JSON.stringify(extraSeats.value)),
 
         // Template metadata
         createdAt: new Date().toISOString(),
@@ -721,79 +472,30 @@ const saveAsTemplate = () => {
 
 // Load a saved template
 const loadTemplate = (template) => {
-    // Apply layout type first
-    layoutType.value = template.layoutType || 'grid';
+    // Apply layout options
     showTeacherDesk.value = template.showTeacherDesk !== undefined ? template.showTeacherDesk : true;
     showStudentIds.value = template.showStudentIds !== undefined ? template.showStudentIds : true;
 
-    if (layoutType.value === 'grid') {
-        // Apply grid layout
-        rows.value = template.rows || 6;
-        columns.value = template.columns || 6;
+    // Apply grid layout
+    rows.value = template.rows || 6;
+    columns.value = template.columns || 6;
 
-        // Reset and initialize seat plan with template data
-        initializeSeatPlan();
+    // Reset and initialize seat plan with template data
+    initializeSeatPlan();
 
-        // Apply student assignments if present
-        if (template.seatPlan) {
-            for (let i = 0; i < Math.min(template.seatPlan.length, seatPlan.value.length); i++) {
-                for (let j = 0; j < Math.min(template.seatPlan[i].length, seatPlan.value[i].length); j++) {
-                    const sourceSeat = template.seatPlan[i][j];
-                    const targetSeat = seatPlan.value[i][j];
+    // Apply student assignments if present
+    if (template.seatPlan) {
+        for (let i = 0; i < Math.min(template.seatPlan.length, seatPlan.value.length); i++) {
+            for (let j = 0; j < Math.min(template.seatPlan[i].length, seatPlan.value[i].length); j++) {
+                const sourceSeat = template.seatPlan[i][j];
+                const targetSeat = seatPlan.value[i][j];
 
-                    // Copy seat properties, but ensure student actually exists
-                    if (sourceSeat.studentId && getStudentById(sourceSeat.studentId)) {
-                        targetSeat.studentId = sourceSeat.studentId;
-                        targetSeat.isOccupied = true;
-                    }
+                // Copy seat properties, but ensure student actually exists
+                if (sourceSeat.studentId && getStudentById(sourceSeat.studentId)) {
+                    targetSeat.studentId = sourceSeat.studentId;
+                    targetSeat.isOccupied = true;
                 }
             }
-        }
-    } else {
-        // Apply custom layout
-        sectionCount.value = template.sectionCount || 3;
-
-        // Apply section configurations
-        if (template.sectionConfigs) {
-            sectionConfigs.value = JSON.parse(JSON.stringify(template.sectionConfigs));
-        }
-
-        // Initialize the custom layout
-        initializeCustomLayout();
-
-        // Apply student assignments if present
-        if (template.customSections) {
-            for (let s = 0; s < Math.min(template.customSections.length, customSections.value.length); s++) {
-                for (let i = 0; i < Math.min(template.customSections[s].length, customSections.value[s].length); i++) {
-                    for (let j = 0; j < Math.min(template.customSections[s][i].length, customSections.value[s][i].length); j++) {
-                        const sourceSeat = template.customSections[s][i][j];
-                        const targetSeat = customSections.value[s][i][j];
-
-                        // Copy seat properties, but ensure student actually exists
-                        if (sourceSeat.studentId && getStudentById(sourceSeat.studentId)) {
-                            targetSeat.studentId = sourceSeat.studentId;
-                            targetSeat.isOccupied = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Apply extra seat assignments
-        if (template.extraSeats) {
-            // Loop through each extra seat in the template
-            Object.keys(template.extraSeats).forEach((seatIndex) => {
-                const s = parseInt(seatIndex);
-                if (extraSeats.value[s]) {
-                    const sourceExtraSeat = template.extraSeats[s];
-
-                    // Copy seat properties, but ensure student actually exists
-                    if (sourceExtraSeat.studentId && getStudentById(sourceExtraSeat.studentId)) {
-                        extraSeats.value[s].studentId = sourceExtraSeat.studentId;
-                        extraSeats.value[s].isOccupied = true;
-                    }
-                }
-            });
         }
     }
 
@@ -851,33 +553,11 @@ const calculateUnassignedStudents = () => {
     // Create a set of all assigned student IDs
     const assignedIds = new Set();
 
-    // Check standard grid layout
-    if (layoutType.value === 'grid') {
-        for (const row of seatPlan.value) {
-            for (const seat of row) {
-                if (seat.studentId) {
-                    assignedIds.add(seat.studentId);
-                }
-            }
-        }
-    }
-    // Check custom layout
-    else if (layoutType.value === 'custom') {
-        // Check regular seats
-        for (const section of customSections.value) {
-            for (const row of section) {
-                for (const seat of row) {
-                    if (seat.studentId) {
-                        assignedIds.add(seat.studentId);
-                    }
-                }
-            }
-        }
-
-        // Check extra seats
-        for (const extraSeat of extraSeats.value) {
-            if (extraSeat && extraSeat.studentId) {
-                assignedIds.add(extraSeat.studentId);
+    // Check all seats in the grid layout
+    for (const row of seatPlan.value) {
+        for (const seat of row) {
+            if (seat.studentId) {
+                assignedIds.add(seat.studentId);
             }
         }
     }
@@ -930,14 +610,8 @@ const updateSeatPlanStatuses = (records) => {
         // Get the most recent record
         const latestRecord = sortedRecords[0];
 
-        // Update seat status based on layout type
-        if (layoutType.value === 'grid') {
-            // Update status in grid layout
-            updateStudentStatusInGrid(studentId, latestRecord.status);
-        } else {
-            // Update status in custom layout
-            updateStudentStatusInCustomLayout(studentId, latestRecord.status);
-        }
+        // Update status in grid layout
+        updateStudentStatusInGrid(studentId, latestRecord.status);
     }
 };
 
@@ -953,27 +627,6 @@ const updateStudentStatusInGrid = (studentId, status) => {
     }
 };
 
-// Helper to update status in custom layout
-const updateStudentStatusInCustomLayout = (studentId, status) => {
-    // Check regular seats
-    for (let s = 0; s < customSections.value.length; s++) {
-        for (let i = 0; i < customSections.value[s].length; i++) {
-            for (let j = 0; j < customSections.value[s][i].length; j++) {
-                if (customSections.value[s][i][j].studentId === studentId) {
-                    customSections.value[s][i][j].status = status;
-                    return;
-                }
-            }
-        }
-
-        // Check extra seats
-        if (extraSeats.value[s] && extraSeats.value[s].studentId === studentId) {
-            extraSeats.value[s].status = status;
-            return;
-        }
-    }
-};
-
 // Format date for display
 const formatDate = (dateString) => {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -982,32 +635,12 @@ const formatDate = (dateString) => {
 
 // Mark all students as present
 const markAllPresent = () => {
-    if (layoutType.value === 'grid') {
-        // Mark all seats in the grid as Present
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                if (seatPlan.value[i][j].isOccupied) {
-                    seatPlan.value[i][j].status = 'Present';
-                    saveAttendanceRecord(seatPlan.value[i][j].studentId, 'Present');
-                }
-            }
-        }
-    } else {
-        // Mark all seats in custom sections as Present
-        for (let s = 0; s < customSections.value.length; s++) {
-            for (let i = 0; i < customSections.value[s].length; i++) {
-                for (let j = 0; j < customSections.value[s][i].length; j++) {
-                    if (customSections.value[s][i][j].isOccupied) {
-                        customSections.value[s][i][j].status = 'Present';
-                        saveAttendanceRecord(customSections.value[s][i][j].studentId, 'Present');
-                    }
-                }
-            }
-
-            // Mark extra seats if occupied
-            if (extraSeats.value[s] && extraSeats.value[s].isOccupied) {
-                extraSeats.value[s].status = 'Present';
-                saveAttendanceRecord(extraSeats.value[s].studentId, 'Present');
+    // Mark all seats in the grid as Present
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            if (seatPlan.value[i][j].isOccupied) {
+                seatPlan.value[i][j].status = 'Present';
+                saveAttendanceRecord(seatPlan.value[i][j].studentId, 'Present');
             }
         }
     }
@@ -1022,32 +655,12 @@ const markAllPresent = () => {
 
 // Mark all students as absent
 const markAllAbsent = () => {
-    if (layoutType.value === 'grid') {
-        // Mark all seats in the grid as Absent
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                if (seatPlan.value[i][j].isOccupied) {
-                    seatPlan.value[i][j].status = 'Absent';
-                    saveAttendanceRecord(seatPlan.value[i][j].studentId, 'Absent');
-                }
-            }
-        }
-    } else {
-        // Mark all seats in custom sections as Absent
-        for (let s = 0; s < customSections.value.length; s++) {
-            for (let i = 0; i < customSections.value[s].length; i++) {
-                for (let j = 0; j < customSections.value[s][i].length; j++) {
-                    if (customSections.value[s][i][j].isOccupied) {
-                        customSections.value[s][i][j].status = 'Absent';
-                        saveAttendanceRecord(customSections.value[s][i][j].studentId, 'Absent');
-                    }
-                }
-            }
-
-            // Mark extra seats if occupied
-            if (extraSeats.value[s] && extraSeats.value[s].isOccupied) {
-                extraSeats.value[s].status = 'Absent';
-                saveAttendanceRecord(extraSeats.value[s].studentId, 'Absent');
+    // Mark all seats in the grid as Absent
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            if (seatPlan.value[i][j].isOccupied) {
+                seatPlan.value[i][j].status = 'Absent';
+                saveAttendanceRecord(seatPlan.value[i][j].studentId, 'Absent');
             }
         }
     }
@@ -1062,29 +675,11 @@ const markAllAbsent = () => {
 
 // Reset all attendance statuses
 const resetAttendance = () => {
-    if (layoutType.value === 'grid') {
-        // Reset all statuses in the grid
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                if (seatPlan.value[i][j].isOccupied) {
-                    seatPlan.value[i][j].status = null;
-                }
-            }
-        }
-    } else {
-        // Reset all statuses in custom sections
-        for (let s = 0; s < customSections.value.length; s++) {
-            for (let i = 0; i < customSections.value[s].length; i++) {
-                for (let j = 0; j < customSections.value[s][i].length; j++) {
-                    if (customSections.value[s][i][j].isOccupied) {
-                        customSections.value[s][i][j].status = null;
-                    }
-                }
-            }
-
-            // Reset extra seats if occupied
-            if (extraSeats.value[s] && extraSeats.value[s].isOccupied) {
-                extraSeats.value[s].status = null;
+    // Reset all statuses in the grid
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            if (seatPlan.value[i][j].isOccupied) {
+                seatPlan.value[i][j].status = null;
             }
         }
     }
@@ -1169,9 +764,6 @@ onMounted(async () => {
         // Initialize an empty seat plan for grid layout
         initializeSeatPlan();
 
-        // Initialize custom layout
-        initializeCustomLayout();
-
         // Set all students as unassigned initially
         unassignedStudents.value = [...students.value];
 
@@ -1181,9 +773,8 @@ onMounted(async () => {
         // Load saved templates
         await loadSavedTemplates();
 
-        // Use default (grid) layout if no templates exist
+        // Use default layout if no templates exist
         if (savedTemplates.value.length === 0) {
-            layoutType.value = 'grid';
             toast.add({
                 severity: 'info',
                 summary: 'Welcome to Seat Plan Attendance',
@@ -1217,26 +808,23 @@ onMounted(async () => {
 
             <div class="flex flex-wrap gap-2">
                 <Calendar v-model="currentDate" dateFormat="yy-mm-dd" showIcon class="calendar-input" />
-                <Button icon="pi pi-cog" outlined class="p-button-rounded" @click="showSeatEditor = true" />
             </div>
         </div>
 
-        <!-- Layout selection tabs -->
-        <div class="mb-4 layout-tabs">
-            <div class="flex border-b border-gray-200">
-                <button class="px-4 py-2 text-md font-medium" :class="{ 'border-b-2 border-blue-500 text-blue-600': layoutType === 'grid' }" @click="setLayoutType('grid')">Standard Grid</button>
-                <button class="px-4 py-2 text-md font-medium" :class="{ 'border-b-2 border-blue-500 text-blue-600': layoutType === 'custom' }" @click="setLayoutType('custom')">Custom Layout</button>
-            </div>
-        </div>
+        <!-- Action Buttons -->
+        <div class="action-buttons flex flex-wrap gap-2 mb-4">
+            <Button icon="pi pi-pencil" class="p-button-success" @click="toggleEditMode" :class="{ 'p-button-outlined': !isEditMode }"> Edit Seats </Button>
 
-        <!-- Action buttons -->
-        <div class="flex flex-wrap gap-2 mb-4">
-            <Button label="Edit Seats" icon="pi pi-pencil" @click="toggleEditMode" :class="{ 'p-button-success': isEditMode }" />
-            <Button label="Save as Template" icon="pi pi-save" @click="showTemplateSaveDialog = true" />
-            <Button label="Load Template" icon="pi pi-folder-open" @click="showTemplateManager = true" />
-            <Button label="Mark All Present" icon="pi pi-check" class="p-button-success" @click="markAllPresent" />
-            <Button label="Mark All Absent" icon="pi pi-times" class="p-button-danger" @click="markAllAbsent" />
-            <Button label="Reset" icon="pi pi-refresh" class="p-button-secondary" @click="resetAttendance" />
+            <Button icon="pi pi-save" label="Save as Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" />
+
+            <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
+
+            <!-- Attendance Actions -->
+            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
+
+            <Button icon="pi pi-times-circle" label="Mark All Absent" class="p-button-danger" @click="markAllAbsent" />
+
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAttendance" />
         </div>
 
         <!-- Edit Mode Notice -->
@@ -1245,172 +833,91 @@ onMounted(async () => {
             Edit mode active. Drag students from the unassigned list to assign them to seats. Click "Edit Seats" again to save.
         </div>
 
-        <!-- Standard Grid Layout -->
-        <div v-if="layoutType === 'grid'" class="grid-layout mb-6">
-            <!-- Teacher's desk -->
-            <div v-if="showTeacherDesk" class="teachers-desk mb-6 bg-gray-100 p-3 text-center rounded-lg">
-                <span class="font-semibold">Teacher's Desk</span>
+        <!-- Layout Configuration -->
+        <div class="layout-config bg-white rounded-lg shadow-sm border mb-4">
+            <h3 class="text-lg font-medium px-4 pt-4 pb-2">Layout Configuration</h3>
+            <div class="grid grid-cols-2 gap-4 px-4 pb-4">
+                <!-- Row and Column configuration -->
+                <div class="config-group">
+                    <div class="flex flex-col">
+                        <label for="rowsInput" class="mb-2 font-medium text-sm">Rows:</label>
+                        <InputNumber id="rowsInput" v-model="rows" :min="1" :max="10" class="w-full" :disabled="!isEditMode" showButtons inputClass="w-full" />
+                    </div>
+                </div>
+
+                <div class="config-group">
+                    <div class="flex flex-col">
+                        <label for="columnsInput" class="mb-2 font-medium text-sm">Columns:</label>
+                        <InputNumber id="columnsInput" v-model="columns" :min="1" :max="10" class="w-full" :disabled="!isEditMode" showButtons inputClass="w-full" />
+                    </div>
+                </div>
             </div>
 
-            <!-- Seating grid -->
-            <div class="seat-grid" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)` }">
-                <div v-for="(row, rowIndex) in seatPlan" :key="rowIndex" class="seat-row">
-                    <div
-                        v-for="(seat, colIndex) in row"
-                        :key="colIndex"
-                        class="seat-cell"
-                        :class="{
-                            occupied: seat.isOccupied,
-                            'edit-mode': isEditMode,
-                            'dragging-over': isDragging && !seat.isOccupied,
-                            [seat.status?.toLowerCase()]: seat.status
-                        }"
-                        @click="isEditMode ? null : toggleAttendanceStatus(rowIndex, colIndex)"
-                        @dragover.prevent="isEditMode && !seat.isOccupied ? $event.preventDefault() : null"
-                        @drop="isEditMode ? dropOnSeat(rowIndex, colIndex) : null"
-                    >
-                        <div v-if="seat.isOccupied" class="student-info">
-                            <div class="student-initials">
-                                {{ getStudentInitials(getStudentById(seat.studentId)) }}
-                            </div>
-                            <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
-                            <div v-if="showStudentIds" class="student-id">ID: {{ seat.studentId }}</div>
-                            <div v-if="seat.status" class="status-indicator" :style="{ backgroundColor: getStatusColor(seat.status) }">
-                                <i :class="getStatusIcon(seat.status)"></i>
-                                {{ seat.status }}
-                            </div>
-                        </div>
-                        <div v-else-if="isEditMode" class="empty-seat">
-                            <span>Empty</span>
-                        </div>
-                    </div>
+            <!-- Additional options -->
+            <div class="flex items-center px-4 py-3 border-t border-gray-100">
+                <div class="flex items-center mr-6">
+                    <Checkbox id="teacherDesk" v-model="showTeacherDesk" :binary="true" :disabled="!isEditMode" />
+                    <label for="teacherDesk" class="ml-2 text-sm">Show Teacher's Desk</label>
+                </div>
+
+                <div class="flex items-center">
+                    <Checkbox id="studentIds" v-model="showStudentIds" :binary="true" :disabled="!isEditMode" />
+                    <label for="studentIds" class="ml-2 text-sm">Show Student IDs</label>
                 </div>
             </div>
         </div>
 
-        <!-- Custom Layout -->
-        <div v-else class="custom-layout mb-6">
-            <!-- Teacher's desk -->
-            <div v-if="showTeacherDesk" class="teachers-desk mb-6 bg-gray-100 p-3 text-center rounded-lg">
-                <span class="font-semibold">Teacher's Desk</span>
-            </div>
-
-            <!-- Section configuration in edit mode -->
-            <div v-if="isEditMode" class="section-config p-3 bg-gray-50 rounded-lg mb-4">
-                <h3 class="text-lg font-semibold mb-2">Layout Configuration</h3>
-
-                <div class="flex flex-wrap gap-4 mb-3">
-                    <div class="field">
-                        <label class="block mb-1">Sections</label>
-                        <InputNumber v-model="sectionCount" :min="1" :max="5" @update:modelValue="updateSections" />
-                    </div>
-
-                    <div class="flex gap-3">
-                        <Checkbox v-model="showTeacherDesk" binary id="teacherDesk" />
-                        <label for="teacherDesk">Show Teacher's Desk</label>
-                    </div>
-
-                    <div class="flex gap-3">
-                        <Checkbox v-model="showStudentIds" binary id="studentIds" />
-                        <label for="studentIds">Show Student IDs</label>
-                    </div>
-                </div>
-
-                <h4 class="font-medium mb-2">Section Configurations</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div v-for="(config, index) in sectionConfigs.slice(0, sectionCount)" :key="index" class="section-config-item p-3 border rounded-lg">
-                        <h5 class="font-medium mb-2">Section {{ index + 1 }}</h5>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="field">
-                                <label class="block mb-1 text-sm">Rows</label>
-                                <InputNumber v-model="config.rows" :min="1" :max="8" class="w-full" />
-                            </div>
-
-                            <div class="field">
-                                <label class="block mb-1 text-sm">Columns</label>
-                                <InputNumber v-model="config.columns" :min="1" :max="6" class="w-full" />
-                            </div>
-                        </div>
-
-                        <div class="flex gap-2 mt-2">
-                            <Checkbox v-model="config.addExtraSeat" binary :id="'extraSeat' + index" />
-                            <label :for="'extraSeat' + index" class="text-sm">Add Extra Seat</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <Button label="Apply Layout" icon="pi pi-check" @click="applyCustomLayout" />
+        <!-- Seating grid layout -->
+        <div class="seating-grid-container mt-4">
+            <!-- Teacher's desk at the top (if enabled) -->
+            <div v-if="showTeacherDesk" class="teacher-desk mb-6">
+                <div class="teacher-desk-label bg-blue-50 p-3 text-center rounded-lg border border-blue-200 shadow-sm font-medium">
+                    <i class="pi pi-user mr-2"></i>
+                    Teacher's Desk
                 </div>
             </div>
 
-            <!-- Custom sections display -->
-            <div class="custom-sections">
-                <div v-for="(section, sectionIndex) in customSections" :key="sectionIndex" class="custom-section mb-6">
-                    <h3 class="font-semibold mb-2">Section {{ sectionIndex + 1 }}</h3>
-
-                    <div class="section-grid" :style="{ gridTemplateColumns: `repeat(${sectionConfigs[sectionIndex].columns}, 1fr)` }">
-                        <div v-for="(row, rowIndex) in section" :key="rowIndex" class="seat-row">
-                            <div
-                                v-for="(seat, colIndex) in row"
-                                :key="colIndex"
-                                class="seat-cell"
-                                :class="{
-                                    occupied: seat.isOccupied,
-                                    'edit-mode': isEditMode,
-                                    'dragging-over': isDragging && !seat.isOccupied,
-                                    [seat.status?.toLowerCase()]: seat.status
-                                }"
-                                @click="isEditMode ? null : toggleCustomAttendanceStatus(sectionIndex, rowIndex, colIndex)"
-                                @dragover.prevent="isEditMode && !seat.isOccupied ? $event.preventDefault() : null"
-                                @drop="isEditMode ? dropOnCustomSeat(sectionIndex, rowIndex, colIndex) : null"
-                            >
-                                <div v-if="seat.isOccupied" class="student-info">
-                                    <div class="student-initials">
-                                        {{ getStudentInitials(getStudentById(seat.studentId)) }}
-                                    </div>
-                                    <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
-                                    <div v-if="showStudentIds" class="student-id">ID: {{ seat.studentId }}</div>
-                                    <div v-if="seat.status" class="status-indicator" :style="{ backgroundColor: getStatusColor(seat.status) }">
-                                        <i :class="getStatusIcon(seat.status)"></i>
-                                        {{ seat.status }}
-                                    </div>
-                                </div>
-                                <div v-else-if="isEditMode" class="empty-seat">
-                                    <span>Empty</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Extra seat for this section if enabled -->
+            <!-- Seating grid -->
+            <div class="seating-grid">
+                <div v-for="(row, rowIndex) in seatPlan" :key="rowIndex" class="seat-row flex justify-center mb-3">
                     <div
-                        v-if="extraSeats[sectionIndex]"
-                        class="extra-seat mt-2"
-                        :class="{
-                            occupied: extraSeats[sectionIndex].isOccupied,
-                            'edit-mode': isEditMode,
-                            'dragging-over': isDragging && !extraSeats[sectionIndex].isOccupied,
-                            [extraSeats[sectionIndex].status?.toLowerCase()]: extraSeats[sectionIndex].status
-                        }"
-                        @click="isEditMode ? null : toggleExtraSeatStatus(sectionIndex)"
-                        @dragover.prevent="isEditMode && !extraSeats[sectionIndex].isOccupied ? $event.preventDefault() : null"
-                        @drop="isEditMode ? dropOnExtraSeat(sectionIndex) : null"
+                        v-for="(seat, colIndex) in row"
+                        :key="`${rowIndex}-${colIndex}`"
+                        class="seat-container mx-2"
+                        @click="!isEditMode && seat.isOccupied ? toggleAttendanceStatus(rowIndex, colIndex) : null"
+                        @dragover.prevent="isEditMode"
+                        @drop="isEditMode ? dropOnSeat(rowIndex, colIndex) : null"
                     >
-                        <div v-if="extraSeats[sectionIndex].isOccupied" class="student-info">
-                            <div class="student-initials">
-                                {{ getStudentInitials(getStudentById(extraSeats[sectionIndex].studentId)) }}
+                        <div
+                            class="seat p-3 rounded-lg border select-none"
+                            :class="{
+                                'bg-white border-gray-300 shadow-sm': !seat.isOccupied,
+                                'bg-blue-50 border-blue-200 shadow': seat.isOccupied && !seat.status,
+                                'drop-target': isEditMode && !seat.isOccupied,
+                                'student-present': seat.status === 'Present',
+                                'student-absent': seat.status === 'Absent',
+                                'student-late': seat.status === 'Late',
+                                'student-excused': seat.status === 'Excused'
+                            }"
+                        >
+                            <div v-if="seat.isOccupied" class="student-info">
+                                <div
+                                    class="student-initials"
+                                    :class="{
+                                        'initials-present': seat.status === 'Present',
+                                        'initials-absent': seat.status === 'Absent',
+                                        'initials-late': seat.status === 'Late',
+                                        'initials-excused': seat.status === 'Excused'
+                                    }"
+                                >
+                                    {{ getStudentInitials(getStudentById(seat.studentId)) }}
+                                </div>
+                                <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
+                                <div v-if="showStudentIds" class="student-id">ID: {{ seat.studentId }}</div>
                             </div>
-                            <div class="student-name">{{ getStudentById(extraSeats[sectionIndex].studentId)?.name }}</div>
-                            <div v-if="showStudentIds" class="student-id">ID: {{ extraSeats[sectionIndex].studentId }}</div>
-                            <div v-if="extraSeats[sectionIndex].status" class="status-indicator" :style="{ backgroundColor: getStatusColor(extraSeats[sectionIndex].status) }">
-                                <i :class="getStatusIcon(extraSeats[sectionIndex].status)"></i>
-                                {{ extraSeats[sectionIndex].status }}
+                            <div v-else-if="isEditMode" class="empty-seat">
+                                <span>Empty</span>
                             </div>
-                        </div>
-                        <div v-else class="extra-label">
-                            <span>Extra Seat</span>
                         </div>
                     </div>
                 </div>
@@ -1476,7 +983,6 @@ onMounted(async () => {
 
             <DataTable v-else :value="savedTemplates">
                 <Column field="name" header="Template Name"></Column>
-                <Column field="layoutType" header="Layout Type"></Column>
                 <Column field="createdAt" header="Created On">
                     <template #body="slotProps">
                         {{ formatDate(slotProps.data.createdAt) }}
@@ -1529,148 +1035,138 @@ onMounted(async () => {
     </div>
 </template>
 
-<style scoped>
-.attendance-container {
-    max-width: 1200px;
+<style>
+.teacher-route {
+    --seat-width: 130px;
+    --seat-height: 110px;
+}
+
+.seating-grid-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.teacher-desk {
+    max-width: 300px;
+    margin: 0 auto 2rem;
+}
+
+.teacher-desk-label {
+    width: 100%;
+}
+
+.seating-grid {
+    width: max-content;
     margin: 0 auto;
 }
 
-/* Seat grid styling */
-.seat-grid {
-    display: grid;
-    gap: 10px;
+.seat-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
 }
 
-.section-grid {
-    display: grid;
-    gap: 10px;
-    margin-bottom: 20px;
+.seat-container {
+    width: var(--seat-width);
+    min-width: var(--seat-width);
+    margin: 0 0.5rem;
 }
 
-.seat-cell {
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    padding: 10px;
-    height: 100px;
+.seat {
+    height: var(--seat-height);
+    width: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    position: relative;
+    text-align: center;
     transition: all 0.2s;
 }
 
-.seat-cell.edit-mode {
-    cursor: pointer;
-    background-color: #f8f9fa;
-}
-
-.seat-cell.occupied {
-    background-color: #e8f4fc;
-    border-color: #90caf9;
-}
-
-.seat-cell.dragging-over {
-    background-color: #e3f2fd;
-    box-shadow: 0 0 0 2px #2196f3;
+.drop-target {
+    border: 2px dashed #4caf50 !important;
+    background-color: rgba(76, 175, 80, 0.1) !important;
 }
 
 .student-info {
     width: 100%;
-    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    text-align: center;
 }
 
 .student-initials {
-    width: 36px;
-    height: 36px;
-    background-color: #2196f3;
+    width: 40px;
+    height: 40px;
+    background-color: #3f51b5;
     color: white;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    margin-bottom: 5px;
+    margin-bottom: 0.5rem;
+}
+
+.initials-present {
+    background-color: #4caf50;
+}
+
+.initials-absent {
+    background-color: #f44336;
+}
+
+.initials-late {
+    background-color: #ff9800;
+}
+
+.initials-excused {
+    background-color: #2196f3;
+}
+
+.student-present {
+    background-color: rgba(76, 175, 80, 0.1);
+    border-color: #4caf50;
+}
+
+.student-absent {
+    background-color: rgba(244, 67, 54, 0.1);
+    border-color: #f44336;
+}
+
+.student-late {
+    background-color: rgba(255, 152, 0, 0.1);
+    border-color: #ff9800;
+}
+
+.student-excused {
+    background-color: rgba(33, 150, 243, 0.1);
+    border-color: #2196f3;
 }
 
 .student-name {
-    font-weight: 500;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+    max-width: 120px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    width: 100%;
 }
 
 .student-id {
     font-size: 0.75rem;
     color: #666;
-    margin-top: 2px;
-}
-
-.status-indicator {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 10px;
-    color: white;
-}
-
-.seat-cell.present {
-    background-color: rgba(76, 175, 80, 0.1);
-    border-color: #4caf50;
-}
-
-.seat-cell.absent {
-    background-color: rgba(244, 67, 54, 0.1);
-    border-color: #f44336;
-}
-
-.seat-cell.late {
-    background-color: rgba(255, 152, 0, 0.1);
-    border-color: #ff9800;
-}
-
-.seat-cell.excused {
-    background-color: rgba(33, 150, 243, 0.1);
-    border-color: #2196f3;
+    margin-bottom: 0.25rem;
 }
 
 .empty-seat {
-    color: #aaa;
-    font-size: 0.8rem;
+    color: #999;
+    font-style: italic;
 }
 
-.extra-seat {
-    border: 1px dashed #ccc;
-    border-radius: 6px;
-    padding: 10px;
-    height: 80px;
-    width: 120px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background-color: #f5f5f5;
-    margin-left: 20px;
-    position: relative;
-}
-
-.extra-seat.occupied {
-    background-color: #fff8e1;
-    border-color: #ffc107;
-    border-style: solid;
-}
-
-.extra-label {
-    color: #777;
-    font-size: 0.8rem;
+.unassigned-section {
+    margin-top: 2rem;
 }
 
 .student-card {
@@ -1678,52 +1174,12 @@ onMounted(async () => {
 }
 
 .student-card:hover {
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.student-avatar {
-    font-size: 0.8rem;
-}
-
-.status-option {
-    display: flex;
-    align-items: center;
-    border: 1px solid;
-    transition: all 0.2s;
-}
-
-.status-option:hover {
-    opacity: 0.9;
-}
-
-.unassign-dropzone {
-    background-color: #f5f5f5;
-    transition: all 0.2s;
-}
-
-.unassign-dropzone:hover {
-    background-color: #e0e0e0;
-}
-
-/* Responsive adjustments */
-@media screen and (max-width: 768px) {
-    .seat-cell {
-        height: 80px;
-        padding: 5px;
-    }
-
-    .student-initials {
-        width: 28px;
-        height: 28px;
-        font-size: 0.7rem;
-    }
-
-    .student-name {
-        font-size: 0.8rem;
-    }
-
-    .layout-tabs {
-        overflow-x: auto;
-    }
+/* Dialog styling */
+:deep(.p-dialog-content) {
+    padding: 1.5rem;
 }
 </style>
