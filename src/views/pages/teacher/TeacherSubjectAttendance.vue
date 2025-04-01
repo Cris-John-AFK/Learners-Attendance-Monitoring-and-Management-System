@@ -53,7 +53,7 @@ const draggedPosition = ref(null);
 
 // Status menu and panel refs
 const statusMenu = ref(null);
-const remarksPanel = ref(null);
+const remarksPanel = ref([]);
 const selectedSeat = ref(null);
 const studentsWithRemarks = ref([]);
 
@@ -106,6 +106,9 @@ const currentStudentIndex = ref(0);
 const currentStudent = ref(null);
 const scannedStudents = ref([]);
 let codeReader = null;
+
+// Rename to avoid conflict
+const showAttendanceDialog = ref(false);
 
 // Toggle edit mode
 const toggleEditMode = () => {
@@ -418,39 +421,44 @@ const updateStudentStatus = (rowIndex, colIndex, status) => {
 };
 
 // Save attendance with remarks
-const saveAttendanceWithRemarks = () => {
-    if (!selectedStudentForRemarks.value || !selectedSeat.value) return;
-
+const saveAttendanceWithRemarks = (status, remarks = '') => {
     const { rowIndex, colIndex } = selectedSeat.value;
     const seat = seatPlan.value[rowIndex][colIndex];
 
-    // Update the status
-    seat.status = pendingStatus.value;
+    // Update seat status
+    seat.status = status;
 
-    // Save the attendance record with remarks
-    saveAttendanceRecord(selectedStudentForRemarks.value.id, pendingStatus.value, attendanceRemarks.value);
-
-    // Add to students with remarks
-    const existingIndex = studentsWithRemarks.value.findIndex((s) => s.id === selectedStudentForRemarks.value.id);
-
-    const remarkData = {
-        id: selectedStudentForRemarks.value.id,
-        name: selectedStudentForRemarks.value.name,
-        status: pendingStatus.value,
-        remarks: attendanceRemarks.value,
+    // Save to attendance records
+    const recordKey = `${seat.studentId}-${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: seat.studentId,
+        date: currentDate.value,
+        status,
+        remarks,
         timestamp: new Date().toISOString()
     };
 
-    if (existingIndex >= 0) {
-        studentsWithRemarks.value[existingIndex] = remarkData;
-    } else {
-        studentsWithRemarks.value.push(remarkData);
+    // Update remarks panel if there are remarks
+    if (remarks) {
+        updateRemarksPanel(seat.studentId, status, remarks);
     }
 
-    // Close the dialog
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Attendance Marked',
+        detail: `Student marked as ${status}`,
+        life: 3000
+    });
+
+    // Close dialogs and reset values
+    showAttendanceDialog.value = false;
     showRemarksDialog.value = false;
-    selectedStudentForRemarks.value = null;
-    pendingStatus.value = null;
+    selectedSeat.value = null;
+    attendanceRemarks.value = '';
 };
 
 // Update the saveAttendanceRecord function to include remarks
@@ -1222,6 +1230,66 @@ const sortedUnassignedStudents = computed(() => {
         return a.name.localeCompare(b.name);
     });
 });
+
+// Function to show attendance dialog when clicking a seat
+const handleSeatClick = (rowIndex, colIndex) => {
+    if (!isEditMode.value && seatPlan.value[rowIndex][colIndex].isOccupied) {
+        selectedSeat.value = { rowIndex, colIndex };
+        showAttendanceDialog.value = true;
+    }
+};
+
+// Function to set attendance status
+const setAttendanceStatus = (status) => {
+    if (!selectedSeat.value) return;
+
+    // If status is Absent or Excused, show remarks dialog
+    if (status === 'Absent' || status === 'Excused') {
+        pendingStatus.value = status;
+        showAttendanceDialog.value = false;
+        showRemarksDialog.value = true;
+        return;
+    }
+
+    saveAttendanceWithRemarks(status);
+};
+
+// Add new function to save attendance with remarks
+const saveRemarks = () => {
+    if (!attendanceRemarks.value.trim()) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please enter remarks',
+            life: 3000
+        });
+        return;
+    }
+
+    saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
+};
+
+// Add function to update remarks panel
+const updateRemarksPanel = (studentId, status, remarks) => {
+    const student = getStudentById(studentId);
+    if (!student) return;
+
+    // Add or update remarks
+    const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === studentId);
+    const remarkItem = {
+        studentId,
+        studentName: student.name,
+        status,
+        remarks,
+        timestamp: new Date().toISOString()
+    };
+
+    if (existingIndex >= 0) {
+        remarksPanel.value[existingIndex] = remarkItem;
+    } else {
+        remarksPanel.value.push(remarkItem);
+    }
+};
 </script>
 
 <template>
@@ -1299,7 +1367,7 @@ const sortedUnassignedStudents = computed(() => {
 
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
-                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
+                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1" @click="!isEditMode ? handleSeatClick(rowIndex, colIndex) : null">
                                 <div
                                     :class="[
                                         'seat p-3 border rounded-lg',
@@ -1421,6 +1489,73 @@ const sortedUnassignedStudents = computed(() => {
                 <Button label="Load" icon="pi pi-check" class="p-button-success" :disabled="!selectedTemplate" @click="loadTemplate(selectedTemplate)" />
             </template>
         </Dialog>
+
+        <!-- Add the Attendance Dialog -->
+        <Dialog v-model:visible="showAttendanceDialog" header="Mark Attendance" :modal="true" :style="{ width: '400px' }">
+            <div class="grid grid-cols-2 gap-4 p-4">
+                <Button class="attendance-btn present-btn p-button-outlined" @click="setAttendanceStatus('Present')">
+                    <i class="pi pi-check-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Present</span>
+                </Button>
+
+                <Button class="attendance-btn late-btn p-button-outlined" @click="setAttendanceStatus('Late')">
+                    <i class="pi pi-clock text-3xl mb-2"></i>
+                    <span class="font-semibold">Late</span>
+                </Button>
+
+                <Button class="attendance-btn absent-btn p-button-outlined" @click="setAttendanceStatus('Absent')">
+                    <i class="pi pi-times-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Absent</span>
+                </Button>
+
+                <Button class="attendance-btn excused-btn p-button-outlined" @click="setAttendanceStatus('Excused')">
+                    <i class="pi pi-info-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Excused</span>
+                </Button>
+            </div>
+        </Dialog>
+
+        <!-- Add Remarks Dialog -->
+        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '400px' }">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="remarks">Remarks</label>
+                    <Textarea id="remarks" v-model="attendanceRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showRemarksDialog = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveRemarks" />
+            </template>
+        </Dialog>
+
+        <!-- Add Remarks Panel -->
+        <div v-if="remarksPanel.length > 0" class="remarks-panel fixed right-4 top-4 w-80 bg-white rounded-lg shadow-lg border border-gray-200 p-4 overflow-y-auto max-h-[calc(100vh-2rem)]">
+            <h3 class="text-lg font-semibold mb-3">Attendance Remarks</h3>
+            <div class="space-y-3">
+                <div
+                    v-for="remark in remarksPanel"
+                    :key="remark.studentId"
+                    class="remark-card p-3 rounded-lg border"
+                    :class="{
+                        'border-red-500 bg-red-50': remark.status === 'Absent',
+                        'border-purple-500 bg-purple-50': remark.status === 'Excused'
+                    }"
+                >
+                    <div class="font-medium">{{ remark.studentName }}</div>
+                    <div
+                        class="text-sm"
+                        :class="{
+                            'text-red-600': remark.status === 'Absent',
+                            'text-purple-600': remark.status === 'Excused'
+                        }"
+                    >
+                        Status: {{ remark.status }}
+                    </div>
+                    <div class="text-sm text-gray-600 mt-1">{{ remark.remarks }}</div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -1605,5 +1740,91 @@ const sortedUnassignedStudents = computed(() => {
 .template-item:hover {
     background-color: #f8f9fa;
     border-color: #dee2e6;
+}
+
+.attendance-btn {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1.5rem !important;
+    border-radius: 8px !important;
+    transition: all 0.2s !important;
+    height: 120px !important;
+    border: 2px solid !important;
+    background-color: white !important;
+}
+
+.present-btn {
+    color: #22c55e !important;
+    border-color: #22c55e !important;
+}
+.present-btn:hover {
+    background-color: #22c55e !important;
+    color: white !important;
+}
+
+.late-btn {
+    color: #eab308 !important;
+    border-color: #eab308 !important;
+}
+.late-btn:hover {
+    background-color: #eab308 !important;
+    color: white !important;
+}
+
+.absent-btn {
+    color: #ef4444 !important;
+    border-color: #ef4444 !important;
+}
+.absent-btn:hover {
+    background-color: #ef4444 !important;
+    color: white !important;
+}
+
+.excused-btn {
+    color: #9333ea !important;
+    border-color: #9333ea !important;
+}
+.excused-btn:hover {
+    background-color: #9333ea !important;
+    color: white !important;
+}
+
+/* Force icon colors */
+.present-btn i {
+    color: #22c55e !important;
+}
+.late-btn i {
+    color: #eab308 !important;
+}
+.absent-btn i {
+    color: #ef4444 !important;
+}
+.excused-btn i {
+    color: #9333ea !important;
+}
+
+/* Change icon colors on hover */
+.attendance-btn:hover i {
+    color: white !important;
+}
+
+/* Add to your existing styles */
+.remarks-panel {
+    z-index: 1000;
+}
+
+@media (max-width: 768px) {
+    .remarks-panel {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        top: auto;
+        width: 100%;
+        max-height: 40vh;
+        border-radius: 1rem 1rem 0 0;
+    }
 }
 </style>
