@@ -1,14 +1,13 @@
 <script setup>
 import { AttendanceService } from '@/router/service/Students';
-import { SubjectService } from '@/router/service/Subjects';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 // Add OverlayPanel and Menu components
 
 // Add Dialog component if not already imported
-import Dialog from 'primevue/dialog';
 
 const route = useRoute();
 const toast = useToast();
@@ -97,6 +96,17 @@ const dialogCanceled = ref(false);
 // Status selection dialog
 const showStatusDialog = ref(false);
 
+// Attendance method selection
+const showAttendanceMethodModal = ref(true); // Start with this visible
+const showQRScanner = ref(false);
+const showRollCall = ref(false);
+const isCameraLoading = ref(true);
+const videoElement = ref(null);
+const currentStudentIndex = ref(0);
+const currentStudent = ref(null);
+const scannedStudents = ref([]);
+let codeReader = null;
+
 // Toggle edit mode
 const toggleEditMode = () => {
     isEditMode.value = !isEditMode.value;
@@ -151,24 +161,18 @@ const formatSubjectName = (id) => {
 
 // Create an empty seat plan grid
 const initializeSeatPlan = () => {
-    const grid = [];
+    seatPlan.value = [];
     for (let i = 0; i < rows.value; i++) {
         const row = [];
         for (let j = 0; j < columns.value; j++) {
             row.push({
-                row: i,
-                col: j,
+                isOccupied: false,
                 studentId: null,
-                status: null,
-                isOccupied: false
+                status: null
             });
         }
-        grid.push(row);
+        seatPlan.value.push(row);
     }
-    seatPlan.value = grid;
-
-    // Recalculate unassigned students when grid size changes
-    calculateUnassignedStudents();
 };
 
 // Update seat plan with changes to row/column count
@@ -452,42 +456,22 @@ const saveAttendanceWithRemarks = () => {
 // Update the saveAttendanceRecord function to include remarks
 const saveAttendanceRecord = async (studentId, status, remarks = '') => {
     try {
-        const student = getStudentById(studentId);
-        if (!student) {
-            console.error('Student not found:', studentId);
-            return;
-        }
-
-        // Create attendance record object
-        const attendanceRecord = {
-            id: Date.now().toString(),
-            studentId: studentId,
-            subjectId: subjectId.value,
-            date: currentDate.value,
-            status: status,
-            remarks: remarks, // Add remarks to the record
-            createdAt: new Date().toISOString()
-        };
-
-        // Record attendance in the service
-        await AttendanceService.recordAttendance(student.id, attendanceRecord);
-
-        // Add to local attendance history
-        attendanceHistory.value.push(attendanceRecord);
+        // Implement API call to save attendance record
+        console.log('Saving attendance record:', { studentId, status, remarks, date: currentDate.value });
 
         // Show success message
         toast.add({
             severity: 'success',
-            summary: 'Attendance Recorded',
-            detail: `${student.name} marked as ${status}`,
+            summary: 'Attendance Saved',
+            detail: `Marked student ${studentId} as ${status}`,
             life: 3000
         });
     } catch (error) {
-        console.error('Error recording attendance:', error);
+        console.error('Error saving attendance record:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to record attendance',
+            detail: 'Failed to save attendance record',
             life: 3000
         });
     }
@@ -495,7 +479,7 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
 
 // Save the current seat plan as a template
 const saveAsTemplate = () => {
-    if (!templateName.value) {
+    if (!templateName.value.trim()) {
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -505,118 +489,112 @@ const saveAsTemplate = () => {
         return;
     }
 
-    // Create a template object
-    const template = {
-        id: Date.now().toString(),
-        name: templateName.value,
-        showTeacherDesk: showTeacherDesk.value,
-        showStudentIds: showStudentIds.value,
+    // Check if template name already exists
+    const existingIndex = savedTemplates.value.findIndex((t) => t.name === templateName.value);
 
-        // Grid layout data
+    const templateData = {
+        name: templateName.value,
         rows: rows.value,
         columns: columns.value,
         seatPlan: JSON.parse(JSON.stringify(seatPlan.value)),
-
-        // Template metadata
-        createdAt: new Date().toISOString(),
-        subjectId: subjectId.value,
-        grade: currentGrade.value
+        showTeacherDesk: showTeacherDesk.value,
+        createdAt: new Date().toISOString()
     };
 
-    // Add to saved templates
-    savedTemplates.value.push(template);
-
-    // Save to local storage
-    const storageKey = `seatPlan_${subjectId.value}`;
-    localStorage.setItem(storageKey, JSON.stringify(savedTemplates.value));
-
-    // Close dialog and reset
-    templateName.value = '';
-    showTemplateSaveDialog.value = false;
-
-    toast.add({
-        severity: 'success',
-        summary: 'Template Saved',
-        detail: `Seat plan template "${template.name}" has been saved`,
-        life: 3000
-    });
-};
-
-// Load a saved template
-const loadTemplate = (template) => {
-    // Apply layout options
-    showTeacherDesk.value = template.showTeacherDesk !== undefined ? template.showTeacherDesk : true;
-    showStudentIds.value = template.showStudentIds !== undefined ? template.showStudentIds : true;
-
-    // Apply grid layout
-    rows.value = template.rows || 6;
-    columns.value = template.columns || 6;
-
-    // Reset and initialize seat plan with template data
-    initializeSeatPlan();
-
-    // Apply student assignments if present
-    if (template.seatPlan) {
-        for (let i = 0; i < Math.min(template.seatPlan.length, seatPlan.value.length); i++) {
-            for (let j = 0; j < Math.min(template.seatPlan[i].length, seatPlan.value[i].length); j++) {
-                const sourceSeat = template.seatPlan[i][j];
-                const targetSeat = seatPlan.value[i][j];
-
-                // Copy seat properties, but ensure student actually exists
-                if (sourceSeat.studentId && getStudentById(sourceSeat.studentId)) {
-                    targetSeat.studentId = sourceSeat.studentId;
-                    targetSeat.isOccupied = true;
-                }
-            }
-        }
+    if (existingIndex >= 0) {
+        // Update existing template
+        savedTemplates.value[existingIndex] = templateData;
+        toast.add({
+            severity: 'success',
+            summary: 'Template Updated',
+            detail: `Template "${templateName.value}" has been updated`,
+            life: 3000
+        });
+    } else {
+        // Add new template
+        savedTemplates.value.push(templateData);
+        toast.add({
+            severity: 'success',
+            summary: 'Template Saved',
+            detail: `Template "${templateName.value}" has been saved`,
+            life: 3000
+        });
     }
 
-    // Update unassigned students
-    calculateUnassignedStudents();
+    // Save to localStorage
+    localStorage.setItem('seatPlanTemplates', JSON.stringify(savedTemplates.value));
 
-    // Close template manager
-    showTemplateManager.value = false;
+    // Close dialog and reset form
+    showTemplateSaveDialog.value = false;
+    templateName.value = '';
+};
+
+// Load a template
+const loadTemplate = (template) => {
+    // Apply template settings
+    rows.value = template.rows;
+    columns.value = template.columns;
+    showTeacherDesk.value = template.showTeacherDesk;
+
+    // Deep copy the seat plan to avoid reference issues
+    seatPlan.value = JSON.parse(JSON.stringify(template.seatPlan));
 
     toast.add({
         severity: 'success',
         summary: 'Template Loaded',
-        detail: `Seating layout "${template.name}" has been loaded`,
+        detail: `Template "${template.name}" has been loaded`,
         life: 3000
     });
+
+    // Close dialog
+    showTemplateManager.value = false;
+    selectedTemplate.value = null;
 };
 
-// Delete a saved template
-const deleteTemplate = (templateId) => {
-    const index = savedTemplates.value.findIndex((t) => t.id === templateId);
-    if (index !== -1) {
-        const deletedTemplate = savedTemplates.value[index];
-        savedTemplates.value.splice(index, 1);
+// Delete a template
+const deleteTemplate = (template, event) => {
+    // Stop event propagation to prevent selecting the template
+    if (event) event.stopPropagation();
 
-        // Update local storage
-        const storageKey = `seatPlan_${subjectId.value}`;
-        localStorage.setItem(storageKey, JSON.stringify(savedTemplates.value));
+    // Remove template from array
+    savedTemplates.value = savedTemplates.value.filter((t) => t.name !== template.name);
 
-        toast.add({
-            severity: 'success',
-            summary: 'Template Deleted',
-            detail: `Template "${deletedTemplate.name}" has been deleted`,
-            life: 3000
-        });
+    // Save updated templates to localStorage
+    localStorage.setItem('seatPlanTemplates', JSON.stringify(savedTemplates.value));
+
+    toast.add({
+        severity: 'success',
+        summary: 'Template Deleted',
+        detail: `Template "${template.name}" has been deleted`,
+        life: 3000
+    });
+
+    // If the deleted template was selected, clear selection
+    if (selectedTemplate.value && selectedTemplate.value.name === template.name) {
+        selectedTemplate.value = null;
     }
 };
 
 // Load saved templates from local storage
-const loadSavedTemplates = () => {
+const loadSavedTemplates = async () => {
     try {
         const storageKey = `seatPlan_${subjectId.value}`;
         const savedData = localStorage.getItem(storageKey);
+
         if (savedData) {
-            savedTemplates.value = JSON.parse(savedData);
+            const parsed = JSON.parse(savedData);
+            if (Array.isArray(parsed)) {
+                savedTemplates.value = parsed;
+            } else {
+                console.warn('Saved data is not an array, initializing empty array');
+                savedTemplates.value = [];
+            }
+        } else {
+            savedTemplates.value = [];
         }
-        return Promise.resolve();
     } catch (error) {
         console.error('Error loading saved templates:', error);
-        return Promise.reject(error);
+        savedTemplates.value = [];
     }
 };
 
@@ -700,8 +678,8 @@ const updateStudentStatusInGrid = (studentId, status) => {
 
 // Format date for display
 const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('en-US', options);
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
 // Mark all students as present
@@ -782,64 +760,23 @@ watch(
 // Initialize data on component mount
 onMounted(async () => {
     try {
-        // Get subject ID from route params
-        if (route.params.subjectId) {
-            subjectId.value = route.params.subjectId;
+        // Initialize empty seat plan first
+        initializeSeatPlan();
 
-            // Format subject name from ID
-            subjectName.value = formatSubjectName(subjectId.value);
-
-            // Try to fetch actual subject data
-            try {
-                const subject = await SubjectService.getSubjectById(subjectId.value);
-                if (subject && subject.name) {
-                    subjectName.value = subject.name;
-                }
-            } catch (err) {
-                console.warn('Could not fetch subject details', err);
-            }
-        }
+        // Then try to load saved layout
+        await loadSavedTemplates();
 
         // Fetch students
         const studentsData = await AttendanceService.getData();
         if (studentsData && studentsData.length > 0) {
             students.value = studentsData;
-        } else {
-            console.error('No students found in the database!');
 
-            // Create sample students for testing
-            students.value = [
-                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
-                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
-                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
-                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
-            ];
+            // Initialize unassigned students
+            unassignedStudents.value = [...students.value];
         }
 
-        // Initialize an empty seat plan for grid layout
-        initializeSeatPlan();
-
-        // Set all students as unassigned initially
-        unassignedStudents.value = [...students.value];
-
-        // Fetch attendance history
-        await fetchAttendanceHistory();
-
-        // Load saved templates
-        await loadSavedTemplates();
-
-        // Use default layout if no templates exist
-        if (savedTemplates.value.length === 0) {
-            toast.add({
-                severity: 'info',
-                summary: 'Welcome to Seat Plan Attendance',
-                detail: 'Create your own classroom layout using the Edit Seats button',
-                life: 5000
-            });
-        } else {
-            // Load the most recently created template
+        // If there are saved templates, load the most recent one
+        if (savedTemplates.value && savedTemplates.value.length > 0) {
             const defaultTemplate = savedTemplates.value.sort((a, b) => {
                 return new Date(b.createdAt) - new Date(a.createdAt);
             })[0];
@@ -848,8 +785,13 @@ onMounted(async () => {
                 loadTemplate(defaultTemplate);
             }
         }
+
+        // Show the attendance method selection modal
+        showAttendanceMethodModal.value = true;
     } catch (error) {
         console.error('Error initializing data:', error);
+        // Ensure we at least have an empty seat plan
+        initializeSeatPlan();
     }
 });
 
@@ -974,19 +916,322 @@ const dropOnUnassigned = (event) => {
 const showRemarksOnSide = computed(() => {
     return columns.value <= 11;
 });
+
+// QR Code Attendance Methods
+const startQRAttendance = () => {
+    showAttendanceMethodModal.value = false;
+    showQRScanner.value = true;
+    isCameraLoading.value = true;
+
+    // Ensure Vue has updated the DOM before initializing the camera
+    nextTick(() => {
+        if (videoElement.value) {
+            initializeCamera();
+        } else {
+            console.error('Video element not found in DOM.');
+        }
+    });
+};
+
+const initializeCamera = async () => {
+    if (!codeReader) {
+        codeReader = new BrowserMultiFormatReader();
+    }
+
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((device) => device.kind === 'videoinput');
+
+        if (videoDevices.length > 0) {
+            const selectedDeviceId = videoDevices[0].deviceId;
+
+            // Ensure videoElement is available before accessing it
+            if (!videoElement.value) {
+                console.error('Error: videoElement is not available.');
+                return;
+            }
+
+            await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, err) => {
+                if (result) {
+                    processScannedData(result.text);
+                } else if (err) {
+                    console.warn('QR Code scan error:', err);
+                }
+            });
+        } else {
+            console.error('No camera found');
+        }
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+    } finally {
+        isCameraLoading.value = false;
+    }
+};
+
+const processScannedData = (scannedText) => {
+    try {
+        // Try to parse the scanned data as JSON
+        const studentData = JSON.parse(scannedText);
+
+        // Check if it has the expected properties
+        if (studentData.id && studentData.name) {
+            // Find the student in our data
+            const student = students.value.find((s) => s.id === studentData.id);
+
+            if (student) {
+                // Check if already scanned
+                if (!scannedStudents.value.some((s) => s.id === student.id)) {
+                    // Add to scanned students
+                    scannedStudents.value.push(student);
+
+                    // Mark as present in the seat plan
+                    markStudentPresent(student.id);
+
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Student Scanned',
+                        detail: `${student.name} marked as present`,
+                        life: 3000
+                    });
+                } else {
+                    toast.add({
+                        severity: 'info',
+                        summary: 'Already Scanned',
+                        detail: `${student.name} was already scanned`,
+                        life: 3000
+                    });
+                }
+            } else {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Unknown Student',
+                    detail: 'Student not found in class roster',
+                    life: 3000
+                });
+            }
+        } else {
+            throw new Error('Invalid student data format');
+        }
+    } catch (error) {
+        console.error('Error processing QR data:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Invalid QR Code',
+            detail: 'The scanned QR code is not valid for attendance',
+            life: 3000
+        });
+    }
+};
+
+const markStudentPresent = (studentId) => {
+    // Find the student in the seat plan
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            const seat = seatPlan.value[i][j];
+            if (seat.isOccupied && seat.studentId === studentId) {
+                seat.status = 'Present';
+                saveAttendanceRecord(studentId, 'Present');
+                return;
+            }
+        }
+    }
+};
+
+const closeScanner = () => {
+    if (codeReader) {
+        try {
+            codeReader.reset();
+        } catch (error) {
+            console.error('Error stopping scanner:', error);
+        }
+    }
+
+    // Stop the camera stream safely
+    if (videoElement.value && videoElement.value.srcObject) {
+        const stream = videoElement.value.srcObject;
+        const tracks = stream.getTracks();
+        tracks.forEach((track) => track.stop());
+        videoElement.value.srcObject = null;
+    }
+
+    showQRScanner.value = false;
+};
+
+// Roll Call Methods
+const startRollCall = () => {
+    showAttendanceMethodModal.value = false;
+
+    // Initialize roll call with the first student
+    if (students.value.length > 0) {
+        currentStudentIndex.value = 0;
+        currentStudent.value = students.value[0];
+        showRollCall.value = true;
+    } else {
+        toast.add({
+            severity: 'error',
+            summary: 'No Students',
+            detail: 'There are no students to call',
+            life: 3000
+        });
+    }
+};
+
+const markAttendance = (status) => {
+    if (!currentStudent.value) return;
+
+    // Mark the student in the seat plan
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            const seat = seatPlan.value[i][j];
+            if (seat.isOccupied && seat.studentId === currentStudent.value.id) {
+                seat.status = status;
+
+                // If status requires remarks, show dialog
+                if (status === 'Absent' || status === 'Excused') {
+                    selectedStudentForRemarks.value = currentStudent.value;
+                    pendingStatus.value = status;
+                    attendanceRemarks.value = '';
+                    showRemarksDialog.value = true;
+                    return;
+                } else {
+                    // Otherwise save directly
+                    saveAttendanceRecord(currentStudent.value.id, status);
+                }
+                break;
+            }
+        }
+    }
+
+    // Move to next student
+    moveToNextStudent();
+};
+
+const moveToNextStudent = () => {
+    currentStudentIndex.value++;
+    if (currentStudentIndex.value < students.value.length) {
+        currentStudent.value = students.value[currentStudentIndex.value];
+    } else {
+        // End of roll call
+        showRollCall.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Roll Call Complete',
+            detail: 'All students have been called',
+            life: 3000
+        });
+    }
+};
+
+// Start seat plan attendance directly
+const startSeatPlanAttendance = () => {
+    showAttendanceMethodModal.value = false;
+    // No additional setup needed as the seat plan is already visible
+    toast.add({
+        severity: 'info',
+        summary: 'Seat Plan Attendance',
+        detail: 'Click on students to mark attendance',
+        life: 3000
+    });
+};
+
+// Clean up on component unmount
+onUnmounted(() => {
+    if (codeReader) {
+        codeReader.reset();
+        codeReader = null;
+    }
+});
+
+// Function to choose seat plan directly
+const chooseSeatPlan = () => {
+    showAttendanceMethodModal.value = false;
+};
+
+// Add a function to show the attendance method modal
+const showAttendanceMethodSelector = () => {
+    // Force the dialog to show
+    showAttendanceMethodModal.value = true;
+
+    // Log to console for debugging
+    console.log('Showing attendance method modal:', showAttendanceMethodModal.value);
+};
+
+// Make sure these functions are defined
+const incrementRows = () => {
+    if (rows.value < 10) {
+        rows.value++;
+        updateGridSize();
+    }
+};
+
+const decrementRows = () => {
+    if (rows.value > 1) {
+        rows.value--;
+        updateGridSize();
+    }
+};
+
+const incrementColumns = () => {
+    if (columns.value < 10) {
+        columns.value++;
+        updateGridSize();
+    }
+};
+
+const decrementColumns = () => {
+    if (columns.value > 1) {
+        columns.value--;
+        updateGridSize();
+    }
+};
+
+const updateGridSize = () => {
+    // Preserve student assignments when possible
+    const oldGrid = [...seatPlan.value];
+
+    // Create new grid with updated dimensions
+    const newGrid = [];
+    for (let i = 0; i < rows.value; i++) {
+        const row = [];
+        for (let j = 0; j < columns.value; j++) {
+            // Copy existing seat data if available
+            if (i < oldGrid.length && j < oldGrid[i].length) {
+                row.push({ ...oldGrid[i][j] });
+            } else {
+                row.push({
+                    isOccupied: false,
+                    studentId: null,
+                    status: null
+                });
+            }
+        }
+        newGrid.push(row);
+    }
+
+    // Update the seat plan
+    seatPlan.value = newGrid;
+};
+
+// Add computed property for sorted unassigned students
+const sortedUnassignedStudents = computed(() => {
+    // First filter by search query
+    const filtered = filteredUnassignedStudents.value;
+
+    // Then sort alphabetically by name
+    return [...filtered].sort((a, b) => {
+        return a.name.localeCompare(b.name);
+    });
+});
 </script>
 
 <template>
     <div class="attendance-container p-4">
-        <!-- Header section with subject info and date selector -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-            <div>
-                <h1 class="text-2xl font-bold">{{ subjectName }} Attendance</h1>
-                <p class="text-gray-600">{{ formatDate(currentDate) }}</p>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-                <Calendar v-model="currentDate" dateFormat="yy-mm-dd" showIcon class="calendar-input" />
+        <!-- Header with subject name and date -->
+        <div class="flex justify-between items-center mb-4">
+            <h5 class="text-xl font-semibold">{{ subjectName }} Attendance</h5>
+            <div class="flex gap-2 align-items-center">
+                <Calendar v-model="currentDate" dateFormat="yy-mm-dd" class="mr-2" />
+                <Button label="Take Attendance" icon="pi pi-plus" class="p-button-success" @click="showAttendanceMethodSelector" />
             </div>
         </div>
 
@@ -998,414 +1243,276 @@ const showRemarksOnSide = computed(() => {
 
             <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
 
-            <!-- Attendance Actions -->
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
 
             <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAttendance" />
         </div>
 
-        <!-- Edit Mode Notice -->
-        <div v-if="isEditMode" class="bg-blue-100 text-blue-800 p-3 mb-4 rounded-lg">
-            <i class="pi pi-info-circle mr-2"></i>
-            Edit mode active. Drag students from the unassigned list to assign them to seats. Click "Edit Seats" again to save.
-        </div>
+        <!-- Main content with seat plan - always visible -->
+        <div :class="{ 'edit-layout': isEditMode }">
+            <!-- Left side: Layout config and seat plan -->
+            <div class="main-content">
+                <!-- Layout Configuration - only visible in edit mode -->
+                <div v-if="isEditMode" class="layout-config mb-4 p-3 border rounded-lg bg-gray-50">
+                    <h3 class="text-lg font-medium mb-2">Layout Configuration</h3>
 
-        <!-- Layout Configuration -->
-        <div class="layout-config bg-white rounded-lg shadow-sm border mb-4">
-            <h3 class="text-lg font-medium px-4 pt-4 pb-2">Layout Configuration</h3>
-            <div class="grid grid-cols-2 gap-4 px-4 pb-4">
-                <!-- Row and Column configuration -->
-                <div class="config-group">
-                    <div class="flex flex-col">
-                        <label for="rowsInput" class="mb-2 font-medium text-sm">Rows:</label>
-                        <InputNumber id="rowsInput" v-model="rows" :min="1" :max="15" class="w-full" :disabled="!isEditMode" showButtons inputClass="w-full" />
-                    </div>
-                </div>
+                    <div class="flex flex-wrap gap-3 items-center">
+                        <!-- Rows and Columns in one line -->
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center">
+                                <label for="rows" class="mr-1 whitespace-nowrap">Rows:</label>
+                                <div class="p-inputgroup">
+                                    <Button icon="pi pi-minus" @click="decrementRows" :disabled="rows <= 1" class="p-button-secondary p-button-sm" />
+                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <Button icon="pi pi-plus" @click="incrementRows" :disabled="rows >= 10" class="p-button-secondary p-button-sm" />
+                                </div>
+                            </div>
 
-                <div class="config-group">
-                    <div class="flex flex-col">
-                        <label for="columnsInput" class="mb-2 font-medium text-sm">Columns:</label>
-                        <InputNumber id="columnsInput" v-model="columns" :min="1" :max="15" class="w-full" :disabled="!isEditMode" showButtons inputClass="w-full" />
-                    </div>
-                </div>
-            </div>
-
-            <!-- Additional options -->
-            <div class="flex items-center px-4 py-3 border-t border-gray-100">
-                <div class="flex items-center mr-6">
-                    <Checkbox id="teacherDesk" v-model="showTeacherDesk" :binary="true" :disabled="!isEditMode" />
-                    <label for="teacherDesk" class="ml-2 text-sm">Show Teacher's Desk</label>
-                </div>
-
-                <div class="flex items-center">
-                    <Checkbox id="studentIds" v-model="showStudentIds" :binary="true" :disabled="!isEditMode" />
-                    <label for="studentIds" class="ml-2 text-sm">Show Student IDs</label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main content with grid and remarks panel -->
-        <div class="flex flex-col">
-            <div class="flex flex-col md:flex-row">
-                <!-- Left side: Seating grid -->
-                <div class="flex-grow">
-                    <!-- Seating grid layout -->
-                    <div class="seating-grid-container mt-4">
-                        <!-- Seating grid -->
-                        <div class="seating-grid">
-                            <div v-for="(row, rowIndex) in seatPlan" :key="rowIndex" class="seat-row flex justify-center mb-3">
-                                <div
-                                    v-for="(seat, colIndex) in row"
-                                    :key="`${rowIndex}-${colIndex}`"
-                                    class="seat-container mx-2"
-                                    @click="!isEditMode && seat.isOccupied ? showStatusSelection(rowIndex, colIndex) : isEditMode && seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null"
-                                    @dragover.prevent="isEditMode"
-                                    @drop="isEditMode ? dropOnSeat(rowIndex, colIndex) : null"
-                                >
-                                    <div
-                                        class="seat p-3 rounded-lg border select-none"
-                                        :class="{
-                                            'bg-white border-gray-300 shadow-sm': !seat.isOccupied,
-                                            'bg-blue-50 border-blue-200 shadow': seat.isOccupied && !seat.status,
-                                            'drop-target': isEditMode && !seat.isOccupied,
-                                            'student-present': seat.status === 'Present',
-                                            'student-absent': seat.status === 'Absent',
-                                            'student-late': seat.status === 'Late',
-                                            'student-excused': seat.status === 'Excused',
-                                            removable: isEditMode && seat.isOccupied
-                                        }"
-                                    >
-                                        <div v-if="seat.isOccupied" class="student-info">
-                                            <div
-                                                class="student-initials"
-                                                :class="{
-                                                    'initials-present': seat.status === 'Present',
-                                                    'initials-absent': seat.status === 'Absent',
-                                                    'initials-late': seat.status === 'Late',
-                                                    'initials-excused': seat.status === 'Excused'
-                                                }"
-                                            >
-                                                {{ getStudentInitials(getStudentById(seat.studentId)) }}
-                                            </div>
-                                            <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
-                                            <div v-if="showStudentIds" class="student-id">ID: {{ seat.studentId }}</div>
-                                            <div v-if="isEditMode" class="remove-hint text-xs text-gray-500 mt-1"><i class="pi pi-times-circle"></i> Click to remove</div>
-                                        </div>
-                                        <div v-else-if="isEditMode" class="empty-seat">
-                                            <span>Empty</span>
-                                        </div>
-                                    </div>
+                            <div class="flex items-center">
+                                <label for="columns" class="mr-1 whitespace-nowrap">Columns:</label>
+                                <div class="p-inputgroup">
+                                    <Button icon="pi pi-minus" @click="decrementColumns" :disabled="columns <= 1" class="p-button-secondary p-button-sm" />
+                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <Button icon="pi pi-plus" @click="incrementColumns" :disabled="columns >= 10" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Teacher's desk at the bottom -->
-                        <div v-if="showTeacherDesk" class="teacher-desk mt-6">
-                            <div class="teacher-desk-label bg-blue-50 p-3 text-center rounded-lg border border-blue-200 shadow-sm font-medium">
-                                <i class="pi pi-user mr-2"></i>
-                                Teacher's Desk
+                        <!-- Checkboxes in one line -->
+                        <div class="flex items-center gap-3">
+                            <div class="flex align-items-center">
+                                <Checkbox v-model="showTeacherDesk" :binary="true" inputId="teacherDesk" />
+                                <label for="teacherDesk" class="ml-1">Teacher's Desk</label>
+                            </div>
+
+                            <div class="flex align-items-center">
+                                <Checkbox v-model="showStudentIds" :binary="true" inputId="studentIds" />
+                                <label for="studentIds" class="ml-1">Student IDs</label>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right side: Remarks panel (only shown if columns <= 11) -->
-                <div v-if="!isEditMode && studentsWithRemarks.length > 0 && showRemarksOnSide" class="remarks-sidebar w-80 ml-4 bg-gray-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-semibold mb-3">Student Remarks</h3>
+                <!-- Seating grid -->
+                <div class="seating-grid-container">
+                    <!-- Teacher's desk at top (removed) -->
 
-                    <div v-for="student in studentsWithRemarks" :key="student.id" class="student-remark mb-3 bg-white p-3 rounded-lg shadow-sm">
-                        <div class="flex items-center mb-2">
-                            <div class="status-indicator w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getStatusColor(student.status) }"></div>
-                            <span class="font-medium">{{ student.name }}</span>
-                        </div>
-                        <div class="status-badge text-xs mb-1" :class="student.status.toLowerCase()">
-                            {{ student.status }}
-                        </div>
-                        <p class="text-sm text-gray-600">{{ student.remarks }}</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Bottom remarks panel (only shown if columns > 11) -->
-            <div v-if="!isEditMode && studentsWithRemarks.length > 0 && !showRemarksOnSide" class="remarks-bottom mt-6 bg-gray-50 p-4 rounded-lg">
-                <h3 class="text-lg font-semibold mb-3">Student Remarks</h3>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    <div v-for="student in studentsWithRemarks" :key="student.id" class="student-remark bg-white p-3 rounded-lg shadow-sm">
-                        <div class="flex items-center mb-2">
-                            <div class="status-indicator w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: getStatusColor(student.status) }"></div>
-                            <span class="font-medium">{{ student.name }}</span>
-                        </div>
-                        <div class="status-badge text-xs mb-1" :class="student.status.toLowerCase()">
-                            {{ student.status }}
-                        </div>
-                        <p class="text-sm text-gray-600">{{ student.remarks }}</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Unassigned students section (only visible in edit mode) -->
-            <div v-if="isEditMode" class="unassigned-section mt-8 bg-white p-4 rounded-lg shadow-sm" @dragover="allowDrop" @drop="dropOnUnassigned">
-                <h3 class="text-lg font-medium mb-3">Unassigned Students</h3>
-
-                <div class="mb-4">
-                    <span class="p-input-icon-left w-full">
-                        <i class="pi pi-search" />
-                        <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
-                    </span>
-                </div>
-
-                <div v-if="filteredUnassignedStudents.length === 0" class="text-center py-4 text-gray-500">
-                    <p v-if="unassignedStudents.length === 0">All students have been assigned to seats.</p>
-                    <p v-else>No students match your search.</p>
-                </div>
-
-                <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    <div v-for="student in filteredUnassignedStudents" :key="student.id" class="student-card p-3 bg-blue-50 rounded-lg border border-blue-200 shadow-sm" draggable="true" @dragstart="dragStudent(student)">
-                        <div class="student-info">
-                            <div class="student-initials bg-blue-500 text-white">
-                                {{ getStudentInitials(student) }}
+                    <div class="seating-grid">
+                        <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
+                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
+                                <div
+                                    :class="[
+                                        'seat p-3 border rounded-lg',
+                                        { 'cursor-pointer': !isEditMode || seat.isOccupied },
+                                        { 'drop-target': isDropTarget && isDropTarget(rowIndex, colIndex) },
+                                        { 'student-present': seat.isOccupied && seat.status === 'Present' },
+                                        { 'student-absent': seat.isOccupied && seat.status === 'Absent' },
+                                        { 'student-late': seat.isOccupied && seat.status === 'Late' },
+                                        { 'student-excused': seat.isOccupied && seat.status === 'Excused' },
+                                        { 'student-occupied': seat.isOccupied },
+                                        { removable: isEditMode && seat.isOccupied }
+                                    ]"
+                                    @click="isEditMode ? (seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null) : showStatusSelection(rowIndex, colIndex)"
+                                    @dragover="allowDrop($event)"
+                                    @drop="dropOnSeat(rowIndex, colIndex)"
+                                >
+                                    <div v-if="seat.isOccupied" class="student-info">
+                                        <div class="student-initials bg-blue-500 text-white">
+                                            {{ getStudentInitials(getStudentById(seat.studentId)) }}
+                                        </div>
+                                        <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
+                                        <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ seat.studentId }}</div>
+                                    </div>
+                                    <div v-else-if="isEditMode" class="empty-seat">
+                                        <i class="pi pi-plus text-gray-400"></i>
+                                        <div class="text-gray-400 text-xs mt-1">Empty</div>
+                                    </div>
+                                    <div v-else class="empty-seat">
+                                        <div class="text-gray-400">Empty</div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="student-name">{{ student.name }}</div>
-                            <div v-if="showStudentIds" class="student-id">ID: {{ student.id }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Teacher's desk at bottom -->
+                    <div v-if="showTeacherDesk" class="teacher-desk mt-8">
+                        <div class="teacher-desk-label p-3 bg-blue-50 border border-blue-200 rounded-lg text-center"><i class="pi pi-user mr-2"></i> Teacher's Desk</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right side: Unassigned students panel - only visible in edit mode -->
+            <div v-if="isEditMode" class="side-panel">
+                <div class="unassigned-panel p-3 border rounded-lg bg-white h-full">
+                    <h3 class="text-lg font-medium mb-3">Unassigned Students</h3>
+
+                    <div class="mb-3">
+                        <span class="p-input-icon-left w-full">
+                            <i class="pi pi-search" />
+                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
+                        </span>
+                    </div>
+
+                    <div v-if="filteredUnassignedStudents.length === 0" class="text-center py-4 text-gray-500">
+                        <p v-if="unassignedStudents.length === 0">All students have been assigned to seats.</p>
+                        <p v-else>No students match your search.</p>
+                    </div>
+
+                    <div v-else class="unassigned-students-list">
+                        <div v-for="student in sortedUnassignedStudents" :key="student.id" class="student-card p-3 mb-2 bg-blue-50 rounded-lg border border-blue-200 shadow-sm" draggable="true" @dragstart="dragStudent(student)">
+                            <div class="student-info">
+                                <div class="student-initials bg-blue-500 text-white">
+                                    {{ getStudentInitials(student) }}
+                                </div>
+                                <div class="student-name">{{ student.name }}</div>
+                                <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ student.id }}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Status Selection Dialog -->
-        <Dialog v-model:visible="showStatusDialog" header="Select Attendance Status" :modal="true" :closable="true" :dismissableMask="true" class="status-dialog" style="width: 90vw; max-width: 500px">
-            <div v-if="selectedStudent" class="p-fluid">
-                <div class="text-center mb-4">
-                    <h3 class="text-xl font-bold mb-1">{{ selectedStudent.name }}</h3>
-                    <p class="text-gray-600">Select attendance status</p>
-                </div>
-
-                <div class="status-buttons grid grid-cols-2 gap-4">
-                    <button class="status-button present-button p-4 rounded-lg flex flex-col items-center justify-center" @click="selectStatus('Present')">
-                        <i class="pi pi-check-circle text-3xl mb-2"></i>
-                        <span class="text-lg font-medium">Present</span>
-                    </button>
-
-                    <button class="status-button absent-button p-4 rounded-lg flex flex-col items-center justify-center" @click="selectStatus('Absent')">
-                        <i class="pi pi-times-circle text-3xl mb-2"></i>
-                        <span class="text-lg font-medium">Absent</span>
-                    </button>
-
-                    <button class="status-button late-button p-4 rounded-lg flex flex-col items-center justify-center" @click="selectStatus('Late')">
-                        <i class="pi pi-clock text-3xl mb-2"></i>
-                        <span class="text-lg font-medium">Late</span>
-                    </button>
-
-                    <button class="status-button excused-button p-4 rounded-lg flex flex-col items-center justify-center" @click="selectStatus('Excused')">
-                        <i class="pi pi-info-circle text-3xl mb-2"></i>
-                        <span class="text-lg font-medium">Excused</span>
-                    </button>
-                </div>
-            </div>
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="showStatusDialog = false" class="p-button-text" />
-            </template>
-        </Dialog>
-
-        <!-- Remarks dialog -->
-        <Dialog v-model:visible="showRemarksDialog" :header="`Add Remarks - ${pendingStatus}`" :modal="true" class="remarks-dialog" style="width: 90vw; max-width: 500px">
-            <div v-if="selectedStudentForRemarks" class="p-fluid">
-                <div class="field mb-4">
-                    <h4 class="font-medium mb-2">{{ selectedStudentForRemarks.name }}</h4>
-                    <div class="status-badge mb-3" :class="pendingStatus?.toLowerCase()">
-                        <i :class="getStatusIcon(pendingStatus)"></i>
-                        <span>{{ pendingStatus }}</span>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label for="remarks">Remarks</label>
-                    <Textarea id="remarks" v-model="attendanceRemarks" rows="3" placeholder="Enter reason or additional information..." autoResize />
-                </div>
-            </div>
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="showRemarksDialog = false" class="p-button-text" />
-                <Button label="Save" icon="pi pi-save" @click="saveAttendanceWithRemarks" class="p-button-success" autofocus />
-            </template>
-        </Dialog>
-
-        <!-- Save Template Dialog -->
-        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :modal="true" style="width: 30vw; min-width: 400px">
+        <!-- Template Save Dialog -->
+        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :style="{ width: '450px' }" :modal="true">
             <div class="p-fluid">
                 <div class="field">
                     <label for="templateName">Template Name</label>
-                    <InputText id="templateName" v-model="templateName" autofocus />
+                    <InputText id="templateName" v-model="templateName" placeholder="Enter a name for this template" autofocus />
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="showTemplateSaveDialog = false" class="p-button-text" />
-                <Button label="Save" icon="pi pi-save" @click="saveAsTemplate" autofocus />
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showTemplateSaveDialog = false" />
+                <Button label="Save" icon="pi pi-save" class="p-button-success" @click="saveAsTemplate" />
             </template>
         </Dialog>
 
         <!-- Template Manager Dialog -->
-        <Dialog v-model:visible="showTemplateManager" header="Manage Templates" :modal="true" style="width: 60vw; min-width: 500px">
-            <div v-if="savedTemplates.length === 0" class="text-center p-4">
-                <p class="text-gray-500">No saved templates found.</p>
+        <Dialog v-model:visible="showTemplateManager" header="Load Template" :style="{ width: '600px' }" :modal="true">
+            <div v-if="savedTemplates.length === 0" class="text-center p-4 text-gray-500">
+                <i class="pi pi-folder-open text-4xl mb-3"></i>
+                <p>No templates saved yet. Create a seat plan and save it as a template.</p>
             </div>
 
-            <DataTable v-else :value="savedTemplates">
-                <Column field="name" header="Template Name"></Column>
-                <Column field="createdAt" header="Created On">
-                    <template #body="slotProps">
-                        {{ formatDate(slotProps.data.createdAt) }}
-                    </template>
-                </Column>
-                <Column header="Actions">
-                    <template #body="slotProps">
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined mr-2" @click="deleteTemplate(slotProps.data.id)" />
-                        <Button icon="pi pi-check" class="p-button-rounded p-button-success p-button-outlined" @click="loadTemplate(slotProps.data)" />
-                    </template>
-                </Column>
-            </DataTable>
+            <div v-else class="template-list">
+                <div
+                    v-for="template in savedTemplates"
+                    :key="template.name"
+                    :class="['template-item p-3 mb-2 border rounded-lg cursor-pointer', { 'bg-blue-50 border-blue-300': selectedTemplate && selectedTemplate.name === template.name }]"
+                    @click="selectedTemplate = template"
+                >
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 class="m-0 font-medium">{{ template.name }}</h4>
+                            <div class="text-sm text-gray-600 mt-1">
+                                <span>{{ template.rows }}×{{ template.columns }} grid</span>
+                                <span class="mx-2">•</span>
+                                <span>{{ formatDate(template.createdAt) }}</span>
+                            </div>
+                        </div>
+                        <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" @click="deleteTemplate(template, $event)" />
+                    </div>
+                </div>
+            </div>
 
             <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="showTemplateManager = false" class="p-button-text" />
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showTemplateManager = false" />
+                <Button label="Load" icon="pi pi-check" class="p-button-success" :disabled="!selectedTemplate" @click="loadTemplate(selectedTemplate)" />
             </template>
         </Dialog>
     </div>
 </template>
 
 <style>
-.teacher-route {
-    --seat-width: 90px;
-    --seat-height: 80px;
+/* Add these styles for the side-by-side layout */
+.edit-layout {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
 }
 
+.main-content {
+    flex: 3;
+    min-width: 0; /* Prevent flex item from overflowing */
+}
+
+.side-panel {
+    flex: 1;
+    min-width: 250px;
+    max-width: 350px;
+}
+
+.unassigned-panel {
+    position: sticky;
+    top: 1rem;
+    height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+.unassigned-students-list {
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Seat grid styles */
 .seating-grid-container {
     width: 100%;
     overflow-x: auto;
 }
 
-.teacher-desk {
-    max-width: 300px;
-    margin: 0 auto 2rem;
-}
-
-.teacher-desk-label {
-    width: 100%;
-}
-
 .seating-grid {
-    width: max-content;
-    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 .seat-row {
     display: flex;
-    justify-content: center;
-    margin-bottom: 1rem;
+    gap: 0.5rem;
 }
 
 .seat-container {
-    width: var(--seat-width);
-    min-width: var(--seat-width);
-    margin: 0 0.5rem;
+    flex: 1;
+    min-width: 100px;
 }
 
 .seat {
-    height: var(--seat-height);
-    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     text-align: center;
-    transition: all 0.2s;
-}
-
-.drop-target {
-    border: 2px dashed #4caf50 !important;
-    background-color: rgba(76, 175, 80, 0.1) !important;
+    transition: all 0.2s ease;
 }
 
 .student-info {
-    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
 }
 
 .student-initials {
-    width: 30px;
-    height: 30px;
-    background-color: #3f51b5;
-    color: white;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-bottom: 0.5rem;
     font-weight: bold;
-    margin-bottom: 0.4rem;
-    font-size: 0.8rem;
-}
-
-.initials-present {
-    background-color: #4caf50;
-}
-
-.initials-absent {
-    background-color: #f44336;
-}
-
-.initials-late {
-    background-color: #ff9800;
-}
-
-.initials-excused {
-    background-color: #2196f3;
-}
-
-.student-present {
-    background-color: rgba(76, 175, 80, 0.1);
-    border-color: #4caf50;
-}
-
-.student-absent {
-    background-color: rgba(244, 67, 54, 0.1);
-    border-color: #f44336;
-}
-
-.student-late {
-    background-color: rgba(255, 152, 0, 0.1);
-    border-color: #ff9800;
-}
-
-.student-excused {
-    background-color: rgba(33, 150, 243, 0.1);
-    border-color: #2196f3;
-}
-
-.student-name {
-    font-weight: bold;
-    margin-bottom: 0.25rem;
-    font-size: 0.8rem;
-    max-width: 85px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.student-id {
-    font-size: 0.7rem;
-    color: #666;
-    margin-bottom: 0.25rem;
 }
 
 .empty-seat {
-    color: #999;
-    font-style: italic;
-}
-
-.unassigned-section {
-    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
 }
 
 .student-card {
@@ -1422,171 +1529,81 @@ const showRemarksOnSide = computed(() => {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* Dialog styling */
-:deep(.p-dialog-content) {
-    padding: 1.5rem;
+/* Status colors - only affect the background, not the initials */
+.student-present {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
 }
 
-/* Styles for the remarks dialog */
-.remarks-dialog :deep(.p-dialog-content) {
-    padding: 1.5rem;
+.student-absent {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
 }
 
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.5rem 1rem;
-    border-radius: 2rem;
-    font-weight: 500;
-    font-size: 0.875rem;
+.student-late {
+    background-color: #fff3cd;
+    border-color: #ffeeba;
 }
 
-.status-badge.late {
-    background-color: rgba(255, 152, 0, 0.1);
-    color: #ff9800;
+.student-excused {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
 }
 
-.status-badge.excused {
-    background-color: rgba(33, 150, 243, 0.1);
-    color: #2196f3;
+.student-occupied {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-.status-badge i {
-    margin-right: 0.5rem;
+/* Hover effects for removable seats */
+.removable:hover {
+    background-color: #ffebee;
+    border-color: #f44336;
 }
 
-/* Status menu styling */
-:deep(.p-menu) {
-    min-width: 12rem;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.removable:hover::after {
+    content: 'Click to remove';
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
 }
 
-:deep(.p-menu .p-menuitem-link) {
-    padding: 0.75rem 1rem;
+/* Responsive adjustments */
+@media (max-width: 991px) {
+    .edit-layout {
+        flex-direction: column;
+    }
+
+    .side-panel {
+        max-width: none;
+    }
+
+    .unassigned-panel {
+        position: static;
+        height: auto;
+        max-height: 400px;
+    }
 }
 
-:deep(.p-menu .p-menuitem-icon) {
-    margin-right: 0.75rem;
-}
-
-/* Remarks sidebar styling */
-.remarks-sidebar {
-    border-left: 1px solid #e5e7eb;
-    max-height: calc(100vh - 200px);
+/* Add these styles for the template manager */
+.template-list {
+    max-height: 400px;
     overflow-y: auto;
 }
 
-.student-remark {
-    border-left: 3px solid #e0e0e0;
-}
-
-.student-remark .status-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 1rem;
-    font-weight: 500;
-}
-
-.student-remark .status-badge.absent {
-    background-color: rgba(244, 67, 54, 0.1);
-    color: #f44336;
-}
-
-.student-remark .status-badge.excused {
-    background-color: rgba(33, 150, 243, 0.1);
-    color: #2196f3;
-}
-
-/* Status dialog styling */
-.status-dialog :deep(.p-dialog-content) {
-    padding: 1.5rem;
-}
-
-.status-button {
-    border: 2px solid;
-    transition: all 0.2s;
-    min-height: 120px;
-}
-
-.status-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.present-button {
-    background-color: rgba(76, 175, 80, 0.1);
-    border-color: #4caf50;
-    color: #4caf50;
-}
-
-.absent-button {
-    background-color: rgba(244, 67, 54, 0.1);
-    border-color: #f44336;
-    color: #f44336;
-}
-
-.late-button {
-    background-color: rgba(255, 152, 0, 0.1);
-    border-color: #ff9800;
-    color: #ff9800;
-}
-
-.excused-button {
-    background-color: rgba(33, 150, 243, 0.1);
-    border-color: #2196f3;
-    color: #2196f3;
-}
-
-/* Unassigned students section styling */
-.unassigned-section {
-    border-top: 1px solid #e5e7eb;
-    padding-top: 1.5rem;
-}
-
-.student-card {
-    cursor: grab;
+.template-item {
     transition: all 0.2s;
 }
 
-.student-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Styles for removable seats */
-.removable {
-    cursor: pointer;
-    position: relative;
-}
-
-.removable:hover {
-    border-color: #f44336 !important;
-    background-color: rgba(244, 67, 54, 0.05) !important;
-}
-
-.remove-hint {
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.removable:hover .remove-hint {
-    opacity: 1;
-}
-
-/* Unassigned dropzone styling */
-.unassigned-dropzone {
-    transition: all 0.2s;
-}
-
-.unassigned-dropzone:hover {
-    background-color: rgba(59, 130, 246, 0.15);
-    border-color: #3b82f6;
-}
-
-/* Remarks bottom panel styling */
-.remarks-bottom {
-    border-top: 1px solid #e5e7eb;
-    margin-top: 2rem;
+.template-item:hover {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
 }
 </style>

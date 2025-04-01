@@ -15,7 +15,7 @@
                         <i class="pi pi-envelope"></i>
                         <div>
                             <h3>Check Your Messages</h3>
-                            <p>We've sent a confirmation text to contact details you've provided.</p>
+                            <p>We've sent a confirmation text to the contact details you've provided.</p>
                         </div>
                     </li>
                     <li>
