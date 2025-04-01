@@ -712,7 +712,7 @@ function ensureStudentAttendanceService() {
         <!-- Loading State -->
         <div v-if="loading" class="flex justify-center items-center h-64">
             <ProgressSpinner strokeWidth="4" />
-            <span class="ml-2">Loading dashboard data...</span>
+            <span class="ml-2 font-medium">Loading dashboard data...</span>
         </div>
 
         <div v-else>
@@ -720,7 +720,7 @@ function ensureStudentAttendanceService() {
             <div class="grid grid-cols-12 gap-4 mb-6">
                 <div class="col-span-12 sm:col-span-7">
                     <h1 class="text-2xl font-bold mb-2">Welcome, {{ currentTeacher?.name }}</h1>
-                    <p class="text-gray-600">
+                    <p class="text-gray-600 font-normal">
                         {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
                     </p>
                 </div>
@@ -733,22 +733,22 @@ function ensureStudentAttendanceService() {
             <!-- Attendance Stats Summary Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-                    <div class="text-sm text-gray-500 mb-1">Total Students</div>
+                    <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
                     <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
                 </div>
 
                 <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-                    <div class="text-sm text-gray-500 mb-1">Average Attendance</div>
+                    <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
                     <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
                 </div>
 
                 <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
-                    <div class="text-sm text-gray-500 mb-1">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
+                    <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
                     <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
                 </div>
 
                 <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-                    <div class="text-sm text-gray-500 mb-1">Critical ({{ CRITICAL_THRESHOLD }}+ absences)</div>
+                    <div class="text-sm text-gray-500 mb-1 font-medium">Critical ({{ CRITICAL_THRESHOLD }}+ absences)</div>
                     <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
                 </div>
             </div>
@@ -759,30 +759,30 @@ function ensureStudentAttendanceService() {
                 <div class="col-span-12 lg:col-span-8">
                     <div class="bg-white rounded-lg shadow p-4">
                         <h2 class="text-lg font-semibold mb-4">Attendance Trends</h2>
-                        <div v-if="!selectedSubject" class="text-center py-8 text-gray-500">Please select a subject to view attendance trends</div>
-                        <div v-else-if="!attendanceChartData" class="text-center py-8 text-gray-500">Loading chart data...</div>
+                        <div v-if="!selectedSubject" class="text-center py-8 text-gray-500 font-normal">Please select a subject to view attendance trends</div>
+                        <div v-else-if="!attendanceChartData" class="text-center py-8 text-gray-500 font-normal">Loading chart data...</div>
                         <div v-else class="chart-container">
                             <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 250px" />
                         </div>
 
                         <!-- Add this as a fallback if the chart fails to render -->
                         <div v-if="attendanceChartData && !attendanceChartData.datasets[0]?.data.some((val) => val > 0)" class="text-center py-4 text-gray-500">
-                            <p>No attendance data available for the selected time period</p>
+                            <p class="font-normal">No attendance data available for the selected time period</p>
                             <div class="flex justify-center gap-6 mt-4">
                                 <div class="text-center">
                                     <div class="text-green-500 font-bold text-lg">8-10</div>
-                                    <div class="text-sm">Present</div>
+                                    <div class="text-sm font-medium">Present</div>
                                 </div>
                                 <div class="text-center">
                                     <div class="text-red-500 font-bold text-lg">0-2</div>
-                                    <div class="text-sm">Absent</div>
+                                    <div class="text-sm font-medium">Absent</div>
                                 </div>
                                 <div class="text-center">
                                     <div class="text-yellow-500 font-bold text-lg">0-1</div>
-                                    <div class="text-sm">Late</div>
+                                    <div class="text-sm font-medium">Late</div>
                                 </div>
                             </div>
-                            <p class="mt-4 text-sm">Sample data range shown above</p>
+                            <p class="mt-4 text-sm font-normal">Sample data range shown above</p>
                         </div>
                     </div>
                 </div>
@@ -797,32 +797,32 @@ function ensureStudentAttendanceService() {
                             </span>
                         </h2>
 
-                        <div v-if="!selectedSubject" class="text-center py-6 text-gray-500">Please select a subject to view insights</div>
+                        <div v-if="!selectedSubject" class="text-center py-6 text-gray-500 font-normal">Please select a subject to view insights</div>
 
                         <div v-else-if="attendanceSummary" class="space-y-3">
                             <div v-if="attendanceSummary.studentsWithWarning > 0" class="flex items-start">
                                 <span class="text-yellow-500 mr-2">⚠️</span>
-                                <p>{{ attendanceSummary.studentsWithWarning }} students have {{ WARNING_THRESHOLD }}+ absences this month</p>
+                                <p class="font-normal">{{ attendanceSummary.studentsWithWarning }} students have {{ WARNING_THRESHOLD }}+ absences this month</p>
                             </div>
 
                             <div v-if="attendanceSummary.studentsWithCritical > 0" class="flex items-start">
                                 <span class="text-red-500 mr-2">🔔</span>
-                                <p>{{ attendanceSummary.studentsWithCritical }} students have {{ CRITICAL_THRESHOLD }}+ absences this month</p>
+                                <p class="font-normal">{{ attendanceSummary.studentsWithCritical }} students have {{ CRITICAL_THRESHOLD }}+ absences this month</p>
                             </div>
 
                             <div v-if="attendanceSummary.averageAttendance < 85 && attendanceSummary.totalStudents > 0" class="flex items-start">
                                 <span class="text-blue-500 mr-2">📊</span>
-                                <p>Average attendance is below 85% for this subject</p>
+                                <p class="font-normal">Average attendance is below 85% for this subject</p>
                             </div>
 
                             <div v-if="attendanceSummary.studentsWithWarning === 0 && attendanceSummary.studentsWithCritical === 0 && attendanceSummary.totalStudents > 0" class="flex items-start">
                                 <span class="text-green-500 mr-2">✅</span>
-                                <p>No attendance issues detected for this subject</p>
+                                <p class="font-normal">No attendance issues detected for this subject</p>
                             </div>
 
                             <div v-if="attendanceSummary.totalStudents === 0" class="flex items-start">
                                 <span class="text-gray-500 mr-2">ℹ️</span>
-                                <p>No students found for this subject</p>
+                                <p class="font-normal">No students found for this subject</p>
                             </div>
                         </div>
                     </div>
@@ -847,14 +847,14 @@ function ensureStudentAttendanceService() {
 
                         <div class="flex items-center">
                             <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
-                            <label for="showIssues" class="ml-2 text-sm">Show only students with issues</label>
+                            <label for="showIssues" class="ml-2 text-sm font-medium">Show only students with issues</label>
                         </div>
                     </div>
                 </div>
 
-                <div v-if="!selectedSubject" class="text-center py-8 text-gray-500">Please select a subject to view student attendance</div>
+                <div v-if="!selectedSubject" class="text-center py-8 text-gray-500 font-normal">Please select a subject to view student attendance</div>
 
-                <div v-else-if="filteredStudents.length === 0" class="text-center py-8 text-gray-500">
+                <div v-else-if="filteredStudents.length === 0" class="text-center py-8 text-gray-500 font-normal">
                     <p v-if="searchQuery">No students match your search criteria</p>
                     <p v-else-if="showOnlyAbsenceIssues">No students with absence issues found</p>
                     <p v-else>No students found for this subject</p>
@@ -935,8 +935,8 @@ function ensureStudentAttendanceService() {
                     </div>
                     <div>
                         <h3 class="text-xl font-semibold">{{ selectedStudent.name }}</h3>
-                        <p class="text-gray-600">Grade {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
-                        <p v-if="selectedSubject" class="text-blue-600 text-sm">Subject: {{ selectedSubject.name }}</p>
+                        <p class="text-gray-600 font-normal">Grade {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
+                        <p v-if="selectedSubject" class="text-blue-600 text-sm font-medium">Subject: {{ selectedSubject.name }}</p>
                     </div>
                 </div>
 

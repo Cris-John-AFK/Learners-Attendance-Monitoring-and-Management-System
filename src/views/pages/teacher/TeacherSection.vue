@@ -252,7 +252,7 @@ onMounted(async () => {
     <div v-if="!selectedGrade" class="card-container">
         <Sakai-card v-for="(grade, index) in grades" :key="index" class="custom-card" :style="cardStyles[index]" @click="showSections(grade.grade)">
             <div class="card-header">
-                <h1 class="grade-name">{{ grade.grade }}</h1>
+                <h1 class="grade-name text-2xl font-bold">{{ grade.grade }}</h1>
             </div>
         </Sakai-card>
     </div>
@@ -260,7 +260,7 @@ onMounted(async () => {
     <!-- Show sections for the selected grade -->
     <div v-else-if="selectedGrade !== 'attendance'">
         <div class="card">
-            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded">Back</button>
+            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded font-medium">Back</button>
 
             <div class="font-semibold text-xl mb-4">Sections for {{ selectedGrade }}</div>
 
@@ -277,7 +277,7 @@ onMounted(async () => {
 
                 <template #expansion="slotProps">
                     <div class="p-4">
-                        <h5>Attendance for {{ slotProps.data.title }}</h5>
+                        <h5 class="text-md font-semibold mb-3">Attendance for {{ slotProps.data.title }}</h5>
 
                         <DataTable :value="filteredStudents(slotProps.data.students)">
                             <Column field="id" header="ID" sortable></Column>
@@ -305,7 +305,7 @@ onMounted(async () => {
     <!-- Show attendance view -->
     <div v-else>
         <div class="card">
-            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded">Back</button>
+            <button @click="goBack" class="mb-4 bg-gray-500 text-white px-4 py-2 rounded font-medium">Back</button>
             <Toolbar class="mb-6">
                 <template #end>
                     <IconField>
@@ -328,7 +328,7 @@ onMounted(async () => {
 
                 <template #expansion="slotProps">
                     <div class="p-4">
-                        <h5>Attendance for {{ slotProps.data.title }}</h5>
+                        <h5 class="text-md font-semibold mb-3">Attendance for {{ slotProps.data.title }}</h5>
 
                         <DataTable :value="filteredStudents(slotProps.data.students)">
                             <Column field="id" header="ID" sortable></Column>
@@ -398,29 +398,11 @@ onMounted(async () => {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-weight: bold;
-}
-
-.card-body {
     flex-grow: 1;
-    background: white;
 }
 
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px;
-    border-top: 1px solid #ddd;
-    background: white;
-}
-
-.card-footer i {
-    font-size: 20px;
-    cursor: pointer;
-    transition: color 0.3s ease;
-}
-
-.card-footer i.hover-icon:hover {
-    color: #ff5722;
+.grade-name {
+    margin: 0;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
 }
 </style>

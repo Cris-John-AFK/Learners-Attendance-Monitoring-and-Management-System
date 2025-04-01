@@ -96,7 +96,7 @@ onMounted(() => {
         <div class="card">
             <Toolbar class="mb-6">
                 <template #start>
-                    <h4 class="m-0">Section Schedules</h4>
+                    <h4 class="m-0 text-lg font-semibold">Section Schedules</h4>
                 </template>
             </Toolbar>
 
@@ -116,11 +116,11 @@ onMounted(() => {
         <Dialog v-model:visible="scheduleDialog" :style="{ width: '450px' }" header="Edit Schedule" :modal="true">
             <div class="flex flex-col gap-6">
                 <div>
-                    <label class="block font-bold mb-3">Start Time</label>
+                    <label class="block font-semibold mb-3 text-sm">Start Time</label>
                     <Calendar v-model="selectedSchedule.startTime" showIcon iconDisplay="input" timeOnly />
                 </div>
                 <div>
-                    <label class="block font-bold mb-3">End Time</label>
+                    <label class="block font-semibold mb-3 text-sm">End Time</label>
                     <Calendar v-model="selectedSchedule.endTime" showIcon iconDisplay="input" timeOnly />
                 </div>
             </div>
