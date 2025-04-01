@@ -153,9 +153,10 @@ class TeacherSectionSubject extends Model
         return $this->is_primary || $this->role === 'primary';
     }
 
-    /**
-     * Toggle the active status of the assignment.
-     */
+    public function schedules()
+    {
+        return $this->hasMany(SubjectSchedule::class);
+    }
     public function toggleActive()
     {
         $this->is_active = !$this->is_active;

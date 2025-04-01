@@ -2410,7 +2410,7 @@ const archiveTeacher = async (teacher) => {
             <div class="shape circle-2"></div>
             <div class="shape square-2"></div>
             <div class="shape triangle-2"></div>
-        </div>
+                </div>
 
         <div class="content-wrapper">
             <!-- Header Section -->
@@ -2420,7 +2420,7 @@ const archiveTeacher = async (teacher) => {
                     <p class="subtitle">Manage and organize your teaching staff</p>
                 </div>
                 <Button label="Register Teacher" icon="pi pi-plus" class="p-button-primary" @click="openNewTeacherDialog" />
-            </div>
+                </div>
 
             <!-- Search Section -->
             <div class="search-section">
@@ -2441,7 +2441,7 @@ const archiveTeacher = async (teacher) => {
                             <div class="teacher-info">
                                 <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
                             </div>
-                        </div>
+                </div>
 
                         <div class="teacher-card-body">
                             <!-- Homeroom Section -->
@@ -2451,8 +2451,8 @@ const archiveTeacher = async (teacher) => {
                                     <div class="section-info">
                                         <span class="section-name">{{ teacher.primary_assignment.section?.name || 'Not assigned' }}</span>
                                         <span class="grade-level">Grade {{ teacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
-                                    </div>
                                 </div>
+                                    </div>
                                 <div v-else class="not-assigned">
                                     No homeroom assigned
                                 </div>
@@ -2465,10 +2465,10 @@ const archiveTeacher = async (teacher) => {
                                     <div v-for="assignment in teacher.subject_assignments" :key="assignment.id" class="subject-item">
                                         <span class="subject-name">{{ assignment.subject?.name }}</span>
                                         <span class="section-name">{{ assignment.section?.name }}</span>
-                                    </div>
+                                </div>
                                 </div>
                                 <div v-else class="not-assigned">
-                                    No subjects assigned
+                                                No subjects assigned
                                 </div>
                             </div>
                         </div>
@@ -2479,32 +2479,32 @@ const archiveTeacher = async (teacher) => {
                                     @click="viewTeacher(teacher)"
                                     v-tooltip.top="'View Details'">
                                     <i class="pi pi-eye"></i>
-                                    <span>Details</span>
-                                </Button>
+                                <span>Details</span>
+                            </Button>
 
                                 <Button class="action-btn edit-btn"
                                     @click="editTeacher(teacher)"
                                     v-tooltip.top="'Edit Teacher'">
-                                    <i class="pi pi-pencil"></i>
-                                    <span>Edit</span>
-                                </Button>
+                                <i class="pi pi-pencil"></i>
+                                <span>Edit</span>
+                            </Button>
 
                                 <Button class="action-btn archive-btn"
                                     @click="confirmArchiveTeacher(teacher)"
                                     v-tooltip.top="'Archive Teacher'">
                                     <i class="pi pi-folder"></i>
                                     <span>Archive</span>
-                                </Button>
+                            </Button>
+                            </div>
                             </div>
                         </div>
-                    </div>
                 </div>
                 <div v-else class="no-data-message">
                     <i class="pi pi-info-circle"></i>
                     <p>No teachers found</p>
-                </div>
             </div>
-        </div>
+                </div>
+                </div>
 
         <!-- Teacher Registration/Edit Dialog -->
         <Dialog v-model:visible="teacherDialog" :header="dialogTitle" :style="{ width: '700px' }" :modal="true" class="registration-dialog">
@@ -2570,19 +2570,19 @@ const archiveTeacher = async (teacher) => {
                 <div class="teacher-details-header">
                     <div class="teacher-avatar">
                         <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
-                    </div>
+            </div>
                     <div class="teacher-details-name">
                         <div class="teacher-info-header">
                             <div class="name-status">
                                 <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
-                            </div>
+                </div>
                             <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
                                 <i class="pi pi-refresh"></i>
                                 Refresh Data
                             </button>
-                        </div>
-                    </div>
                 </div>
+                </div>
+            </div>
 
                 <div class="teacher-details-info">
                     <div class="info-section">
@@ -2593,15 +2593,15 @@ const archiveTeacher = async (teacher) => {
                         <div class="info-row">
                             <div class="info-label">Phone</div>
                             <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
-                        </div>
+                </div>
                         <div class="info-row">
                             <div class="info-label">Address</div>
                             <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
-                        </div>
+                </div>
                         <div class="info-row">
                             <div class="info-label">Gender</div>
                             <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
-                        </div>
+                    </div>
                     </div>
 
                     <!-- Homeroom Section -->
@@ -2611,12 +2611,12 @@ const archiveTeacher = async (teacher) => {
                             <div class="section-info">
                                 <span class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'Not assigned' }}</span>
                                 <span class="grade-level">Grade {{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
-                            </div>
-                        </div>
+                    </div>
+                    </div>
                         <div v-else class="no-assignment">
                             No homeroom assigned
-                        </div>
-                    </div>
+                </div>
+                </div>
 
                     <!-- Teaching Subjects Section -->
                     <div class="teaching-subjects-section">
@@ -2625,16 +2625,16 @@ const archiveTeacher = async (teacher) => {
                             <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
                                 <span class="subject-name">{{ assignment.subject?.name }}</span>
                                 <span class="section-name">{{ assignment.section?.name }}</span>
-                            </div>
-                        </div>
+                </div>
+                </div>
                         <div v-else class="no-assignment">
                             No subjects assigned
-                        </div>
+                </div>
                     </div>
                 </div>
             </div>
         </Dialog>
-    </div>
+                </div>
 </template>
 
 <style scoped>

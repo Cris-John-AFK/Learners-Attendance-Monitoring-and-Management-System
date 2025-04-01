@@ -3,8 +3,15 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Curriculum;
+use App\Models\CurriculumGrade;
+use App\Models\Grade;
 use App\Models\Section;
+use App\Models\Subject;
+use App\Models\Teacher;
+use App\Models\SubjectSchedule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -81,29 +88,44 @@ class SectionController extends Controller
     }
 
     /**
+     * Get sections by curriculum grade
+     */
+    public function byCurriculumGrade($curriculumGradeId)
+    {
+        try {
+            $sections = Section::where('curriculum_grade_id', $curriculumGradeId)
+                ->with(['curriculumGrade.grade', 'homeroomTeacher'])
+                ->get();
+
+            return response()->json($sections);
+        } catch (\Exception $e) {
+            Log::error("Error getting sections by curriculum grade: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get sections',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'grade_id' => 'required_without:grade|exists:grades,id',
-            'grade' => 'required_without:grade_id',
-            'description' => 'nullable|string'
+            'curriculum_grade_id' => 'required|exists:curriculum_grade,id',
+            'homeroom_teacher_id' => 'nullable|exists:teachers,id',
+            'description' => 'nullable|string',
+            'capacity' => 'integer|min:1|max:100'
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // If grade is provided as an object, extract the ID
-        $gradeId = $request->grade_id;
-        if (!$gradeId && isset($request->grade['id'])) {
-            $gradeId = $request->grade['id'];
-        }
-
-        // Check if section name is unique within the grade
-        if (!Section::isNameUniqueInGrade($request->name, $gradeId)) {
+        // Check if section name is unique within the curriculum grade
+        if (!Section::isNameUniqueInCurriculumGrade($request->name, $request->curriculum_grade_id)) {
             return response()->json([
                 'errors' => [
                     'name' => ['Section name already exists in this grade.']
@@ -111,13 +133,15 @@ class SectionController extends Controller
             ], 422);
         }
 
-        $section = new Section();
-        $section->name = $request->name;
-        $section->grade_id = $gradeId;
-        $section->description = $request->description;
-        $section->save();
-
-        return response()->json($section->load('grade'), 201);
+        try {
+            $section = Section::create($request->all());
+            return response()->json($section->load(['curriculumGrade.grade', 'homeroomTeacher']), 201);
+        } catch (\Exception $e) {
+            Log::error('Error creating section: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to create section: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -184,5 +208,286 @@ class SectionController extends Controller
         $section = Section::withTrashed()->findOrFail($id);
         $section->restore();
         return response()->json($section->load('grade'));
+    }
+
+    /**
+     * Get all subjects for a specific section
+     */
+    public function getSectionSubjects(Request $request, $curriculumId = null, $gradeId = null, $sectionId = null)
+    {
+        // If we're using the simplified route
+        if ($sectionId === null && $request->route('sectionId')) {
+            $sectionId = $request->route('sectionId');
+        }
+
+        try {
+            Log::info("Getting subjects for section: {$sectionId}");
+
+            $section = Section::findOrFail($sectionId);
+
+            // Get subjects through the pivot table
+            $subjects = $section->subjects()->get();
+
+            // If no subjects found, try to get all subjects as a fallback
+            if ($subjects->isEmpty()) {
+                Log::info("No subjects found for section {$sectionId}, returning all subjects instead");
+                $subjects = Subject::all();
+            }
+
+            return response()->json($subjects);
+        } catch (\Exception $e) {
+            Log::error("Error getting subjects for section: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get subjects for section',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Add a subject to a section
+     */
+    public function addSubjectToSection(Request $request, $curriculumId = null, $gradeId = null, $sectionId = null)
+    {
+        // If we're using the simplified route
+        if ($sectionId === null && $request->route('sectionId')) {
+            $sectionId = $request->route('sectionId');
+        }
+
+        try {
+            $validated = $request->validate([
+                'subject_id' => 'required|exists:subjects,id'
+            ]);
+
+            $section = Section::findOrFail($sectionId);
+            $subjectId = $validated['subject_id'];
+
+            // Check if subject is already added to section
+            if ($section->subjects()->where('subject_id', $subjectId)->exists()) {
+                return response()->json([
+                    'message' => 'Subject already exists in this section'
+                ], 422);
+            }
+
+            // Add subject to section
+            $section->subjects()->attach($subjectId, [
+                'is_primary' => true,
+                'is_active' => true
+            ]);
+
+            return response()->json([
+                'message' => 'Subject added to section successfully',
+                'subject_id' => $subjectId,
+                'section_id' => $sectionId
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error("Error adding subject to section: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to add subject to section',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a subject from a section
+     */
+    public function removeSubjectFromSection(Request $request, $curriculumId = null, $gradeId = null, $sectionId = null, $subjectId = null)
+    {
+        // If we're using the simplified route
+        if ($sectionId === null && $request->route('sectionId')) {
+            $sectionId = $request->route('sectionId');
+            $subjectId = $request->route('subjectId');
+        }
+
+        try {
+            $section = Section::findOrFail($sectionId);
+
+            // Remove subject from section
+            $section->subjects()->detach($subjectId);
+
+            return response()->json([
+                'message' => 'Subject removed from section successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Error removing subject from section: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to remove subject from section',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign a homeroom teacher to a section
+     */
+    public function assignHomeRoomTeacher(Request $request, $curriculumId, $gradeId, $sectionId)
+    {
+        try {
+            $validated = $request->validate([
+                'teacher_id' => 'required|exists:teachers,id'
+            ]);
+
+            $section = Section::findOrFail($sectionId);
+            $section->homeroom_teacher_id = $validated['teacher_id'];
+            $section->save();
+
+            return response()->json([
+                'message' => 'Homeroom teacher assigned successfully',
+                'teacher_id' => $validated['teacher_id'],
+                'section_id' => $sectionId
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Error assigning homeroom teacher: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to assign homeroom teacher',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign a teacher to a subject in a section
+     */
+    public function assignTeacherToSubject(Request $request, $curriculumId, $gradeId, $sectionId, $subjectId)
+    {
+        try {
+            $validated = $request->validate([
+                'teacher_id' => 'required|exists:teachers,id'
+            ]);
+
+            // Find the section
+            $section = Section::findOrFail($sectionId);
+
+            // Check if the subject exists
+            $subject = Subject::findOrFail($subjectId);
+
+            // Update or create the teacher-section-subject relationship
+            DB::table('teacher_section_subject')
+                ->updateOrInsert(
+                    [
+                        'teacher_id' => $validated['teacher_id'],
+                        'section_id' => $sectionId,
+                        'subject_id' => $subjectId
+                    ],
+                    [
+                        'is_primary' => true,
+                        'is_active' => true,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]
+                );
+
+            return response()->json([
+                'message' => 'Teacher assigned to subject successfully',
+                'teacher_id' => $validated['teacher_id'],
+                'subject_id' => $subjectId,
+                'section_id' => $sectionId
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Error assigning teacher to subject: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to assign teacher to subject',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get the teacher assigned to a subject in a section
+     */
+    public function getSubjectTeacher($sectionId, $subjectId)
+    {
+        try {
+            // Query the teacher-section-subject relationship
+            $assignment = DB::table('teacher_section_subject')
+                ->where('section_id', $sectionId)
+                ->where('subject_id', $subjectId)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$assignment) {
+                return response()->json([
+                    'message' => 'No teacher assigned to this subject'
+                ], 404);
+            }
+
+            // Get teacher details
+            $teacher = Teacher::find($assignment->teacher_id);
+
+            if (!$teacher) {
+                return response()->json([
+                    'message' => 'Teacher not found'
+                ], 404);
+            }
+
+            return response()->json($teacher);
+        } catch (\Exception $e) {
+            Log::error("Error getting subject teacher: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get subject teacher',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Set the schedule for a subject in a section
+     */
+    public function setSubjectSchedule(Request $request, $curriculumId, $gradeId, $sectionId, $subjectId)
+    {
+        try {
+            $validated = $request->validate([
+                'day' => 'required|string',
+                'start_time' => 'required|string',
+                'end_time' => 'required|string',
+                'teacher_id' => 'nullable|exists:teachers,id'
+            ]);
+
+            // Create or update the schedule
+            $schedule = SubjectSchedule::updateOrCreate(
+                [
+                    'section_id' => $sectionId,
+                    'subject_id' => $subjectId,
+                    'day' => $validated['day']
+                ],
+                [
+                    'start_time' => $validated['start_time'],
+                    'end_time' => $validated['end_time'],
+                    'teacher_id' => $validated['teacher_id'] ?? null
+                ]
+            );
+
+            return response()->json([
+                'message' => 'Schedule set successfully',
+                'schedule' => $schedule
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Error setting subject schedule: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to set subject schedule',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get the schedule for a subject in a section
+     */
+    public function getSubjectSchedule($sectionId, $subjectId)
+    {
+        try {
+            $schedules = SubjectSchedule::where('section_id', $sectionId)
+                ->where('subject_id', $subjectId)
+                ->get();
+
+            return response()->json($schedules);
+        } catch (\Exception $e) {
+            Log::error("Error getting subject schedule: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to get subject schedule',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

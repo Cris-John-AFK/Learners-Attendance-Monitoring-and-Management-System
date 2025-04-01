@@ -12,22 +12,28 @@ class Section extends Model
 
     protected $fillable = [
         'name',
-        'grade_id',
+        'curriculum_grade_id',
+        'homeroom_teacher_id',
         'description',
         'capacity',
         'is_active'
     ];
 
-    protected $with = ['grade'];
+    protected $with = ['curriculumGrade', 'homeroomTeacher'];
 
     protected $casts = [
         'is_active' => 'boolean',
         'capacity' => 'integer'
     ];
 
-    public function grade()
+    public function curriculumGrade()
     {
-        return $this->belongsTo(Grade::class);
+        return $this->belongsTo(CurriculumGrade::class);
+    }
+
+    public function homeroomTeacher()
+    {
+        return $this->belongsTo(Teacher::class, 'homeroom_teacher_id');
     }
 
     public function teachers()
@@ -44,6 +50,11 @@ class Section extends Model
             ->withTimestamps();
     }
 
+    public function schedules()
+    {
+        return $this->hasMany(SubjectSchedule::class);
+    }
+
     /**
      * Scope a query to only include active sections.
      */
@@ -53,17 +64,32 @@ class Section extends Model
     }
 
     /**
-     * Check if section name is unique within the grade
+     * Check if section name is unique within the curriculum grade
      */
-    public static function isNameUniqueInGrade($name, $gradeId, $excludeSectionId = null)
+    public static function isNameUniqueInCurriculumGrade($name, $curriculumGradeId, $excludeSectionId = null)
     {
         $query = static::where('name', $name)
-            ->where('grade_id', $gradeId);
+            ->where('curriculum_grade_id', $curriculumGradeId);
 
         if ($excludeSectionId) {
             $query->where('id', '!=', $excludeSectionId);
         }
 
         return !$query->exists();
+    }
+
+    /**
+     * Get the grade level through the curriculum_grade relationship
+     */
+    public function grade()
+    {
+        return $this->hasOneThrough(
+            Grade::class,
+            CurriculumGrade::class,
+            'id', // Foreign key on curriculum_grade table
+            'id', // Foreign key on grades table
+            'curriculum_grade_id', // Local key on sections table
+            'grade_id' // Local key on curriculum_grade table
+        );
     }
 }

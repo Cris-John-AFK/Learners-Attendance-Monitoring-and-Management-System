@@ -5,6 +5,8 @@ use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\SectionController;
 use App\Http\Controllers\API\TeacherController;
+use App\Http\Controllers\API\CurriculumController;
+use App\Http\Controllers\API\CurriculumGradeController;
 use Illuminate\Support\Facades\Route;
 
 // Health check route for testing connectivity
@@ -69,3 +71,47 @@ Route::get('/test-section', function() {
         'section_model_exists' => class_exists('App\Models\Section')
     ]);
 });
+
+// Curriculum Routes
+Route::get('/curriculums', [CurriculumController::class, 'index']);
+Route::post('/curriculums', [CurriculumController::class, 'store']);
+Route::get('/curriculums/{id}', [CurriculumController::class, 'show']);
+Route::put('/curriculums/{id}', [CurriculumController::class, 'update']);
+Route::delete('/curriculums/{id}', [CurriculumController::class, 'destroy']);
+Route::put('/curriculums/{id}/archive', [CurriculumController::class, 'archive']);
+Route::put('/curriculums/{id}/activate', [CurriculumController::class, 'activate']);
+
+// Curriculum-Grade Routes
+Route::get('/curriculums/{id}/grades', [CurriculumController::class, 'getGrades']);
+Route::post('/curriculums/{id}/grades', [CurriculumController::class, 'addGrade']);
+Route::delete('/curriculums/{id}/grades/{gradeId}', [CurriculumController::class, 'removeGrade']);
+
+// Curriculum-Grade-Section Routes
+Route::get('/curriculums/{curriculumId}/grades/{gradeId}/sections', [CurriculumController::class, 'getSections']);
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections', [CurriculumController::class, 'addSection']);
+Route::delete('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}', [CurriculumController::class, 'removeSection']);
+
+// Subject routes for sections
+Route::get('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects', [SectionController::class, 'getSectionSubjects']);
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects', [SectionController::class, 'addSubjectToSection']);
+Route::delete('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}', [SectionController::class, 'removeSubjectFromSection']);
+
+// Teacher assignment routes
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/teacher', [SectionController::class, 'assignHomeRoomTeacher']);
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionController::class, 'assignTeacherToSubject']);
+Route::get('/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionController::class, 'getSubjectTeacher']);
+
+// Schedule routes
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'setSubjectSchedule']);
+Route::get('/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'getSubjectSchedule']);
+
+// Alternative endpoints for section subjects
+Route::get('/sections/{sectionId}/subjects', [SectionController::class, 'getSectionSubjects']);
+Route::post('/sections/{sectionId}/subjects', [SectionController::class, 'addSubjectToSection']);
+Route::delete('/sections/{sectionId}/subjects/{subjectId}', [SectionController::class, 'removeSubjectFromSection']);
+
+// Curriculum Grade routes with alternative endpoints
+Route::get('/curriculum-grade/{curriculum}/{grade}', [CurriculumGradeController::class, 'show']);
+Route::get('/curriculum_grade', [CurriculumGradeController::class, 'getByParams']);
+Route::get('/curriculums/{curriculumId}/grades/{gradeId}/relationship', [CurriculumGradeController::class, 'relationship']);
+Route::get('/sections/curriculum-grade/{curriculumGrade}', [SectionController::class, 'byCurriculumGrade']);

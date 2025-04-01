@@ -9,7 +9,6 @@ import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import { useToast } from 'primevue/usetoast';
 import { onMounted, ref, watch } from 'vue';
-
 const toast = useToast();
 const grades = ref([]);
 const loading = ref(true);
@@ -208,7 +207,7 @@ onMounted(() => {
             <div class="top-nav-bar">
                 <div class="nav-left">
                     <h2 class="text-2xl font-semibold">Grade Level Management</h2>
-                </div>
+                    </div>
                 <div class="search-container">
                     <div class="search-input-wrapper">
                         <i class="pi pi-search search-icon"></i>
@@ -221,13 +220,13 @@ onMounted(() => {
                 <div class="nav-right">
                     <Button label="Add New Grade" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
-            </div>
+                </div>
 
             <!-- Loading State -->
             <div v-if="loading" class="loading-container">
                 <ProgressSpinner />
                 <p>Loading grades...</p>
-            </div>
+                </div>
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
@@ -244,10 +243,10 @@ onMounted(() => {
                         <div class="card-actions">
                             <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editGrade(grade)" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDeleteGrade(grade)" />
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
+                        </div>
+                            </div>
 
             <!-- Empty State -->
             <div v-if="grades.length === 0 && !loading" class="empty-state">

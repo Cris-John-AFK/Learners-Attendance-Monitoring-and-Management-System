@@ -38,5 +38,8 @@ class Grade extends Model
         return $query->orderBy('display_order', 'asc');
     }
 
-    // Relationship methods will be implemented when related models are created
+    public function curriculums()
+    {
+        return $this->belongsToMany(Curriculum::class);
+    }
 }
