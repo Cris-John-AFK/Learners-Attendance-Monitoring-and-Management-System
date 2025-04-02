@@ -225,13 +225,19 @@ class SectionController extends Controller
 
             $section = Section::findOrFail($sectionId);
 
-            // Get subjects through the pivot table
-            $subjects = $section->subjects()->get();
+            // Get subjects through the direct section_subject pivot table
+            $subjects = $section->directSubjects()->get();
 
-            // If no subjects found, try to get all subjects as a fallback
+            // If no subjects found in direct relationship, try the three-way pivot
             if ($subjects->isEmpty()) {
-                Log::info("No subjects found for section {$sectionId}, returning all subjects instead");
-                $subjects = Subject::all();
+                Log::info("No subjects found in direct relationship for section {$sectionId}, trying three-way pivot");
+                $subjects = $section->subjects()->get();
+
+                // If still no subjects, as a last resort return all subjects
+                if ($subjects->isEmpty()) {
+                    Log::info("No subjects found for section {$sectionId}, returning all subjects instead");
+                    $subjects = Subject::all();
+                }
             }
 
             return response()->json($subjects);
@@ -262,23 +268,27 @@ class SectionController extends Controller
             $section = Section::findOrFail($sectionId);
             $subjectId = $validated['subject_id'];
 
-            // Check if subject is already added to section
-            if ($section->subjects()->where('subject_id', $subjectId)->exists()) {
+            // First, check if we already have this subject in the section_subject table
+            if ($section->directSubjects()->where('subject_id', $subjectId)->exists()) {
                 return response()->json([
                     'message' => 'Subject already exists in this section'
                 ], 422);
             }
 
-            // Add subject to section
-            $section->subjects()->attach($subjectId, [
-                'is_primary' => true,
-                'is_active' => true
-            ]);
+            // Add subject to section using the direct relationship
+            $section->directSubjects()->attach($subjectId);
+
+            // Return the subject with its relationship data
+            $subject = Subject::find($subjectId);
 
             return response()->json([
                 'message' => 'Subject added to section successfully',
                 'subject_id' => $subjectId,
-                'section_id' => $sectionId
+                'section_id' => $sectionId,
+                'pivot' => [
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
             ], 201);
         } catch (\Exception $e) {
             Log::error("Error adding subject to section: " . $e->getMessage());
@@ -303,8 +313,8 @@ class SectionController extends Controller
         try {
             $section = Section::findOrFail($sectionId);
 
-            // Remove subject from section
-            $section->subjects()->detach($subjectId);
+            // Remove subject from section using direct relationship
+            $section->directSubjects()->detach($subjectId);
 
             return response()->json([
                 'message' => 'Subject removed from section successfully'
@@ -444,6 +454,28 @@ class SectionController extends Controller
                 'teacher_id' => 'nullable|exists:teachers,id'
             ]);
 
+            // Check for schedule conflicts if a teacher is assigned
+            if (!empty($validated['teacher_id'])) {
+                // Convert times to standard format for comparison
+                $startTime = date('H:i:s', strtotime($validated['start_time']));
+                $endTime = date('H:i:s', strtotime($validated['end_time']));
+
+                // Check if this would create a scheduling conflict for the teacher
+                $conflict = SubjectSchedule::hasConflict(
+                    $validated['teacher_id'],
+                    $validated['day'],
+                    $startTime,
+                    $endTime
+                );
+
+                if ($conflict) {
+                    return response()->json([
+                        'message' => 'Teacher already has a schedule at this time',
+                        'error' => 'Schedule conflict detected'
+                    ], 422);
+                }
+            }
+
             // Create or update the schedule
             $schedule = SubjectSchedule::updateOrCreate(
                 [
@@ -452,8 +484,8 @@ class SectionController extends Controller
                     'day' => $validated['day']
                 ],
                 [
-                    'start_time' => $validated['start_time'],
-                    'end_time' => $validated['end_time'],
+                    'start_time' => $startTime ?? $validated['start_time'],
+                    'end_time' => $endTime ?? $validated['end_time'],
                     'teacher_id' => $validated['teacher_id'] ?? null
                 ]
             );

@@ -583,6 +583,42 @@ export const CurriculumService = {
         }
     },
 
+    // Get subject schedules
+    async getSubjectSchedules(curriculumId, gradeId, sectionId, subjectId) {
+        try {
+            console.log('Fetching schedules for subject:', { curriculumId, gradeId, sectionId, subjectId });
+
+            // Try direct endpoint first (this is the correct one from the API routes)
+            try {
+                const response = await axios.get(`${API_URL}/sections/${sectionId}/subjects/${subjectId}/schedule`);
+                if (response.data) {
+                    console.log('Found schedules using direct endpoint');
+                    return Array.isArray(response.data) ? response.data : [response.data];
+                }
+            } catch (directError) {
+                console.log('Direct schedule endpoint failed:', directError.message);
+            }
+
+            // If direct endpoint fails, try nested endpoint as fallback
+            try {
+                const response = await axios.get(`${API_URL}/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/subjects/${subjectId}/schedule`);
+                if (response.data) {
+                    console.log('Found schedules using nested endpoint');
+                    return Array.isArray(response.data) ? response.data : [response.data];
+                }
+            } catch (nestedError) {
+                console.log('Nested schedule endpoint failed:', nestedError.message);
+            }
+
+            // If both attempts fail, return empty array
+            console.log('No schedules found, returning empty array');
+            return [];
+        } catch (error) {
+            console.error('Error fetching subject schedules:', error);
+            return [];
+        }
+    },
+
     // Clear cache
     clearCache() {
         console.log('Clearing curriculum cache');

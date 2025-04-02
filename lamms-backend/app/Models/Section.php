@@ -92,4 +92,13 @@ class Section extends Model
             'grade_id' // Local key on curriculum_grade table
         );
     }
+
+    /**
+     * Direct relationship with subjects through the section_subject pivot table
+     */
+    public function directSubjects()
+    {
+        return $this->belongsToMany(Subject::class, 'section_subject')
+            ->withTimestamps();
+    }
 }

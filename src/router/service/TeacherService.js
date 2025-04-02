@@ -75,16 +75,27 @@ export const TeacherService = {
             }
 
             console.log('Fetching teachers from API...');
-            const response = await axios.get(`${API_URL}/teachers`);
+            try {
+                const response = await axios.get(`${API_URL}/teachers`);
 
-            // Update cache
-            teacherCache = response.data;
-            cacheTimestamp = now;
-
-            return response.data;
+                // Check if response has data and is an array
+                if (response.data && Array.isArray(response.data)) {
+                    // Update cache
+                    teacherCache = response.data;
+                    cacheTimestamp = now;
+                    return response.data;
+                } else {
+                    console.warn('API returned invalid data format, falling back to mock data');
+                    return state.teachers;
+                }
+            } catch (apiError) {
+                console.warn('API request failed, falling back to mock data:', apiError);
+                return state.teachers;
+            }
         } catch (error) {
-            console.error('Error fetching teachers:', error);
-            throw error;
+            console.error('Error in getTeachers:', error);
+            // Return mock data as a fallback
+            return state.teachers;
         }
     },
 
@@ -92,8 +103,20 @@ export const TeacherService = {
     async getTeacherById(id) {
         try {
             console.log('Fetching teacher by ID:', id);
-            const response = await axios.get(`${API_URL}/teachers/${id}`);
-            return response.data;
+
+            try {
+                const response = await axios.get(`${API_URL}/teachers/${id}`);
+                return response.data;
+            } catch (apiError) {
+                console.warn('API request failed, falling back to mock data:', apiError);
+                // Find teacher in the mock data
+                const mockTeacher = state.teachers.find((t) => t.id == id);
+                if (mockTeacher) {
+                    return mockTeacher;
+                } else {
+                    throw new Error('Teacher not found in mock data');
+                }
+            }
         } catch (error) {
             console.error('Error fetching teacher by ID:', error);
             throw error;

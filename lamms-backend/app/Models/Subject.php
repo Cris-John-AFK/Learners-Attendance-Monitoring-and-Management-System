@@ -30,6 +30,15 @@ class Subject extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Direct relationship with sections through the section_subject pivot table
+     */
+    public function directSections()
+    {
+        return $this->belongsToMany(Section::class, 'section_subject')
+            ->withTimestamps();
+    }
+
     public function sections()
     {
         return $this->belongsToMany(Section::class, 'teacher_section_subject')
