@@ -1,5 +1,6 @@
 <script setup>
 import { AttendanceService } from '@/router/service/Students';
+import { SubjectService } from '@/router/service/Subjects';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -25,8 +26,8 @@ const isEditMode = ref(false);
 const showRemarks = ref(false);
 
 // Seating plan configuration
-const rows = ref(6);
-const columns = ref(6);
+const rows = ref(9);
+const columns = ref(9);
 const templateName = ref('');
 const savedTemplates = ref([]);
 const selectedTemplate = ref(null);
@@ -45,6 +46,8 @@ const searchQuery = ref('');
 const unassignedStudents = ref([]);
 const seatPlan = ref([]);
 const attendanceHistory = ref([]);
+const attendanceRecords = ref({});
+const remarksPanel = ref([]);
 
 // Drag and drop state
 const isDragging = ref(false);
@@ -53,7 +56,6 @@ const draggedPosition = ref(null);
 
 // Status menu and panel refs
 const statusMenu = ref(null);
-const remarksPanel = ref([]);
 const selectedSeat = ref(null);
 const studentsWithRemarks = ref([]);
 
@@ -179,7 +181,7 @@ const initializeSeatPlan = () => {
 };
 
 // Update seat plan with changes to row/column count
-watch([rows, columns], () => {
+watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
     if (isEditMode.value) {
         // Save current student assignments
         const currentAssignments = [];
@@ -199,21 +201,72 @@ watch([rows, columns], () => {
             }
         }
 
-        // Initialize new seat plan with updated dimensions
-        initializeSeatPlan();
+        // Create a new seat plan with the updated dimensions
+        const newSeatPlan = [];
 
-        // Restore assignments where possible in the new grid
-        for (const assignment of currentAssignments) {
-            // Only restore if the row and column exist in the new grid
-            if (assignment.row < rows.value && assignment.col < columns.value) {
-                const seat = seatPlan.value[assignment.row][assignment.col];
-                seat.studentId = assignment.studentId;
-                seat.status = assignment.status;
-                seat.isOccupied = true;
+        // If we're adding rows, add them at the top
+        // If we're removing rows, remove them from the top
+        const rowDifference = newRows - oldRows;
+
+        if (rowDifference > 0) {
+            // Add new rows at the top (further from teacher's desk)
+            for (let i = 0; i < rowDifference; i++) {
+                const newRow = [];
+                for (let j = 0; j < newColumns; j++) {
+                    newRow.push({
+                        row: i,
+                        col: j,
+                        studentId: null,
+                        status: null,
+                        isOccupied: false
+                    });
+                }
+                newSeatPlan.push(newRow);
             }
         }
 
-        // Recalculate unassigned students with the updated seat plan
+        // Keep existing rows, starting from the bottom ones (closest to teacher)
+        // if reducing rows, we'll skip the top ones
+        const startIndex = Math.max(0, -rowDifference);
+        const endIndex = oldRows;
+
+        for (let i = startIndex; i < endIndex; i++) {
+            if (i >= seatPlan.value.length) continue;
+
+            const newRow = [];
+            const oldRow = seatPlan.value[i];
+
+            // Handle column changes
+            const colDifference = newColumns - oldColumns;
+
+            // Keep existing columns, add new ones if needed
+            for (let j = 0; j < Math.min(oldColumns, newColumns); j++) {
+                if (j < oldRow.length) {
+                    // Copy existing seat
+                    newRow.push({ ...oldRow[j] });
+                }
+            }
+
+            // Add new columns if needed
+            if (colDifference > 0) {
+                for (let j = oldColumns; j < newColumns; j++) {
+                    newRow.push({
+                        row: newSeatPlan.length,
+                        col: j,
+                        studentId: null,
+                        status: null,
+                        isOccupied: false
+                    });
+                }
+            }
+
+            newSeatPlan.push(newRow);
+        }
+
+        // Update the seat plan
+        seatPlan.value = newSeatPlan;
+
+        // Recalculate unassigned students
         calculateUnassignedStudents();
     }
 });
@@ -428,23 +481,49 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
     // Update seat status
     seat.status = status;
 
+    // Get the student
+    const student = getStudentById(seat.studentId);
+
     // Save to attendance records
     const recordKey = `${seat.studentId}-${currentDate.value}`;
+
+    if (status === 'Present' || status === 'Late') {
+        // Remove from remarks panel if exists
+        remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== seat.studentId);
+        // Remove remarks from records
+        if (attendanceRecords.value[recordKey]) {
+            attendanceRecords.value[recordKey].remarks = '';
+        }
+    } else if (remarks) {
+        // Update or add to remarks panel for Absent/Excused
+        const remarkItem = {
+            studentId: seat.studentId,
+            studentName: student?.name || 'Unknown Student',
+            status,
+            remarks,
+            timestamp: new Date().toISOString()
+        };
+
+        const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === seat.studentId);
+        if (existingIndex >= 0) {
+            remarksPanel.value[existingIndex] = remarkItem;
+        } else {
+            remarksPanel.value.push(remarkItem);
+        }
+    }
+
+    // Update attendance records
     attendanceRecords.value[recordKey] = {
         studentId: seat.studentId,
         date: currentDate.value,
         status,
-        remarks,
+        remarks: remarks || '',
         timestamp: new Date().toISOString()
     };
 
-    // Update remarks panel if there are remarks
-    if (remarks) {
-        updateRemarksPanel(seat.studentId, status, remarks);
-    }
-
     // Save to localStorage
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+    localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
     // Show success message
     toast.add({
@@ -459,6 +538,7 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
     showRemarksDialog.value = false;
     selectedSeat.value = null;
     attendanceRemarks.value = '';
+    pendingStatus.value = '';
 };
 
 // Update the saveAttendanceRecord function to include remarks
@@ -710,21 +790,32 @@ const markAllPresent = () => {
     });
 };
 
-// Reset all attendance statuses
-const resetAttendance = () => {
-    // Confirm before resetting
+// Update resetAllAttendance function
+const resetAllAttendance = () => {
     if (confirm('Are you sure you want to reset all attendance statuses?')) {
         // Reset all seat statuses
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                if (seatPlan.value[i][j].isOccupied) {
-                    seatPlan.value[i][j].status = null;
+        seatPlan.value.forEach((row) => {
+            row.forEach((seat) => {
+                if (seat.isOccupied) {
+                    seat.status = null;
                 }
-            }
-        }
+            });
+        });
 
-        // Clear all remarks
-        studentsWithRemarks.value = [];
+        // Clear attendance records for current date
+        const today = currentDate.value;
+        Object.keys(attendanceRecords.value).forEach((key) => {
+            if (key.includes(today)) {
+                delete attendanceRecords.value[key];
+            }
+        });
+
+        // Clear remarks panel
+        remarksPanel.value = [];
+
+        // Update localStorage
+        localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+        localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
         toast.add({
             severity: 'success',
@@ -732,6 +823,30 @@ const resetAttendance = () => {
             detail: 'All attendance statuses and remarks have been cleared',
             life: 3000
         });
+    }
+};
+
+// Update decrementRows function
+const decrementRows = () => {
+    if (rows.value > 1) {
+        rows.value--;
+
+        // Find the first empty row from the top
+        let foundEmptyRow = false;
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            const rowIsEmpty = seatPlan.value[i].every((seat) => !seat.isOccupied);
+            if (rowIsEmpty) {
+                // Remove this empty row
+                seatPlan.value.splice(i, 1);
+                foundEmptyRow = true;
+                break;
+            }
+        }
+
+        // If no empty row was found, remove from bottom
+        if (!foundEmptyRow) {
+            seatPlan.value.pop();
+        }
     }
 };
 
@@ -768,23 +883,79 @@ watch(
 // Initialize data on component mount
 onMounted(async () => {
     try {
-        // Initialize empty seat plan first
-        initializeSeatPlan();
+        // Get subject ID from route params
+        if (route.params.subjectId) {
+            subjectId.value = route.params.subjectId;
 
-        // Then try to load saved layout
-        await loadSavedTemplates();
+            // Format subject name from ID
+            subjectName.value = formatSubjectName(subjectId.value);
+
+            // Try to fetch actual subject data
+            try {
+                const subject = await SubjectService.getSubjectById(subjectId.value);
+                if (subject && subject.name) {
+                    subjectName.value = subject.name;
+                }
+            } catch (err) {
+                console.warn('Could not fetch subject details', err);
+            }
+        }
 
         // Fetch students
         const studentsData = await AttendanceService.getData();
         if (studentsData && studentsData.length > 0) {
             students.value = studentsData;
+        } else {
+            console.error('No students found in the database!');
 
-            // Initialize unassigned students
-            unassignedStudents.value = [...students.value];
+            // Create sample students for testing
+            students.value = [
+                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
+                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
+                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
+                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
+            ];
         }
 
-        // If there are saved templates, load the most recent one
-        if (savedTemplates.value && savedTemplates.value.length > 0) {
+        // Initialize an empty seat plan for grid layout
+        initializeSeatPlan();
+
+        // Set all students as unassigned initially
+        unassignedStudents.value = [...students.value];
+
+        // Load attendance records from localStorage
+        try {
+            const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
+            if (savedAttendanceRecords) {
+                attendanceRecords.value = JSON.parse(savedAttendanceRecords);
+            }
+
+            const savedRemarksPanel = localStorage.getItem('remarksPanel');
+            if (savedRemarksPanel) {
+                remarksPanel.value = JSON.parse(savedRemarksPanel);
+            }
+        } catch (err) {
+            console.warn('Error loading attendance records from localStorage:', err);
+        }
+
+        // Fetch attendance history
+        await fetchAttendanceHistory();
+
+        // Load saved templates
+        await loadSavedTemplates();
+
+        // Use default layout if no templates exist
+        if (savedTemplates.value.length === 0) {
+            toast.add({
+                severity: 'info',
+                summary: 'Welcome to Seat Plan Attendance',
+                detail: 'Create your own classroom layout using the Edit Seats button',
+                life: 5000
+            });
+        } else {
+            // Load the most recently created template
             const defaultTemplate = savedTemplates.value.sort((a, b) => {
                 return new Date(b.createdAt) - new Date(a.createdAt);
             })[0];
@@ -793,13 +964,8 @@ onMounted(async () => {
                 loadTemplate(defaultTemplate);
             }
         }
-
-        // Show the attendance method selection modal
-        showAttendanceMethodModal.value = true;
     } catch (error) {
         console.error('Error initializing data:', error);
-        // Ensure we at least have an empty seat plan
-        initializeSeatPlan();
     }
 });
 
@@ -1164,61 +1330,25 @@ const showAttendanceMethodSelector = () => {
     console.log('Showing attendance method modal:', showAttendanceMethodModal.value);
 };
 
-// Make sure these functions are defined
+// Update incrementRows function
 const incrementRows = () => {
-    if (rows.value < 10) {
+    if (rows.value < 12) {
         rows.value++;
-        updateGridSize();
+
+        // Add new row at the top
+        const newRow = Array(columns.value)
+            .fill()
+            .map(() => ({
+                isOccupied: false,
+                studentId: null,
+                status: null
+            }));
+
+        seatPlan.value.unshift(newRow);
     }
 };
 
-const decrementRows = () => {
-    if (rows.value > 1) {
-        rows.value--;
-        updateGridSize();
-    }
-};
-
-const incrementColumns = () => {
-    if (columns.value < 10) {
-        columns.value++;
-        updateGridSize();
-    }
-};
-
-const decrementColumns = () => {
-    if (columns.value > 1) {
-        columns.value--;
-        updateGridSize();
-    }
-};
-
-const updateGridSize = () => {
-    // Preserve student assignments when possible
-    const oldGrid = [...seatPlan.value];
-
-    // Create new grid with updated dimensions
-    const newGrid = [];
-    for (let i = 0; i < rows.value; i++) {
-        const row = [];
-        for (let j = 0; j < columns.value; j++) {
-            // Copy existing seat data if available
-            if (i < oldGrid.length && j < oldGrid[i].length) {
-                row.push({ ...oldGrid[i][j] });
-            } else {
-                row.push({
-                    isOccupied: false,
-                    studentId: null,
-                    status: null
-                });
-            }
-        }
-        newGrid.push(row);
-    }
-
-    // Update the seat plan
-    seatPlan.value = newGrid;
-};
+// Remove or comment out updateGridSize calls in both functions as we're handling the grid directly
 
 // Add computed property for sorted unassigned students
 const sortedUnassignedStudents = computed(() => {
@@ -1313,7 +1443,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
 
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
 
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAttendance" />
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" />
         </div>
 
         <!-- Main content with seat plan - always visible -->
@@ -1443,7 +1573,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         </div>
 
         <!-- Template Save Dialog -->
-        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :style="{ width: '450px' }" :modal="true">
+        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :modal="true" :style="{ width: '450px' }" :closeOnEscape="true" :dismissableMask="true">
             <div class="p-fluid">
                 <div class="field">
                     <label for="templateName">Template Name</label>
@@ -1457,7 +1587,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         </Dialog>
 
         <!-- Template Manager Dialog -->
-        <Dialog v-model:visible="showTemplateManager" header="Load Template" :style="{ width: '600px' }" :modal="true">
+        <Dialog v-model:visible="showTemplateManager" header="Load Template" :modal="true" :style="{ width: '600px' }" :closeOnEscape="true" :dismissableMask="true">
             <div v-if="savedTemplates.length === 0" class="text-center p-4 text-gray-500">
                 <i class="pi pi-folder-open text-4xl mb-3"></i>
                 <p>No templates saved yet. Create a seat plan and save it as a template.</p>
@@ -1491,7 +1621,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         </Dialog>
 
         <!-- Add the Attendance Dialog -->
-        <Dialog v-model:visible="showAttendanceDialog" header="Mark Attendance" :modal="true" :style="{ width: '400px' }">
+        <Dialog v-model:visible="showAttendanceDialog" header="Mark Attendance" :modal="true" :style="{ width: '400px' }" :closeOnEscape="true" :dismissableMask="true">
             <div class="grid grid-cols-2 gap-4 p-4">
                 <Button class="attendance-btn present-btn p-button-outlined" @click="setAttendanceStatus('Present')">
                     <i class="pi pi-check-circle text-3xl mb-2"></i>
@@ -1516,7 +1646,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         </Dialog>
 
         <!-- Add Remarks Dialog -->
-        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '400px' }">
+        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '400px' }" :closeOnEscape="true" :dismissableMask="true">
             <div class="p-fluid">
                 <div class="field">
                     <label for="remarks">Remarks</label>
@@ -1530,29 +1660,31 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         </Dialog>
 
         <!-- Add Remarks Panel -->
-        <div v-if="remarksPanel.length > 0" class="remarks-panel fixed right-4 top-4 w-80 bg-white rounded-lg shadow-lg border border-gray-200 p-4 overflow-y-auto max-h-[calc(100vh-2rem)]">
-            <h3 class="text-lg font-semibold mb-3">Attendance Remarks</h3>
-            <div class="space-y-3">
-                <div
-                    v-for="remark in remarksPanel"
-                    :key="remark.studentId"
-                    class="remark-card p-3 rounded-lg border"
-                    :class="{
-                        'border-red-500 bg-red-50': remark.status === 'Absent',
-                        'border-purple-500 bg-purple-50': remark.status === 'Excused'
-                    }"
-                >
-                    <div class="font-medium">{{ remark.studentName }}</div>
+        <div v-if="remarksPanel.length > 0" class="remarks-section">
+            <div class="remarks-container">
+                <h3 class="text-lg font-semibold mb-3">Attendance Remarks</h3>
+                <div class="remarks-list">
                     <div
-                        class="text-sm"
+                        v-for="remark in remarksPanel"
+                        :key="remark.studentId"
+                        class="remark-card p-3 rounded-lg border mb-2"
                         :class="{
-                            'text-red-600': remark.status === 'Absent',
-                            'text-purple-600': remark.status === 'Excused'
+                            'border-red-500 bg-red-50': remark.status === 'Absent',
+                            'border-purple-500 bg-purple-50': remark.status === 'Excused'
                         }"
                     >
-                        Status: {{ remark.status }}
+                        <div class="font-medium">{{ remark.studentName }}</div>
+                        <div
+                            class="text-sm"
+                            :class="{
+                                'text-red-600': remark.status === 'Absent',
+                                'text-purple-600': remark.status === 'Excused'
+                            }"
+                        >
+                            Status: {{ remark.status }}
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">{{ remark.remarks }}</div>
                     </div>
-                    <div class="text-sm text-gray-600 mt-1">{{ remark.remarks }}</div>
                 </div>
             </div>
         </div>
@@ -1811,20 +1943,33 @@ const updateRemarksPanel = (studentId, status, remarks) => {
 }
 
 /* Add to your existing styles */
-.remarks-panel {
-    z-index: 1000;
+.remarks-section {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
 }
 
-@media (max-width: 768px) {
-    .remarks-panel {
-        position: fixed;
-        bottom: 0;
-        right: 0;
-        left: 0;
-        top: auto;
-        width: 100%;
-        max-height: 40vh;
-        border-radius: 1rem 1rem 0 0;
-    }
+.remarks-container {
+    width: 100%;
+    max-width: 600px;
+    background-color: white;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.remarks-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.remark-card {
+    transition: all 0.2s ease;
+}
+
+.remark-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 </style>
