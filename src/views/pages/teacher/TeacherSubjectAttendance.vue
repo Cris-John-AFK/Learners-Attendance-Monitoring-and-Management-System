@@ -87,7 +87,7 @@ const toggleEditMode = () => {
 };
 
 // Save current layout
-const saveCurrentLayout = () => {
+const saveCurrentLayout = (showToast = true) => {
     // Implementation depends on your storage mechanism
     console.log('Saving current layout');
 
@@ -102,12 +102,14 @@ const saveCurrentLayout = () => {
 
     localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
 
-    toast.add({
-        severity: 'success',
-        summary: 'Layout Saved',
-        detail: 'Seating arrangement has been saved',
-        life: 3000
-    });
+    if (showToast) {
+        toast.add({
+            severity: 'success',
+            summary: 'Layout Saved',
+            detail: 'Seating arrangement has been saved',
+            life: 3000
+        });
+    }
 };
 
 // Format subject name for display
@@ -280,6 +282,9 @@ const dropOnSeat = (rowIndex, colIndex) => {
     // Reset dragged student
     draggedStudent.value = null;
 
+    // Save the current layout to localStorage
+    saveCurrentLayout(false); // false means don't show toast notification
+
     // Show success message
     toast.add({
         severity: 'success',
@@ -442,6 +447,12 @@ const loadTemplate = (template) => {
 
     // Deep copy the seat plan to avoid reference issues
     seatPlan.value = JSON.parse(JSON.stringify(template.seatPlan));
+
+    // Recalculate unassigned students
+    calculateUnassignedStudents();
+
+    // Save the current layout to localStorage
+    saveCurrentLayout(false);
 
     toast.add({
         severity: 'success',
@@ -642,6 +653,27 @@ const resetAllAttendance = () => {
     }
 };
 
+// Update incrementRows function
+const incrementRows = () => {
+    if (rows.value < 12) {
+        rows.value++;
+
+        // Add new row at the top
+        const newRow = Array(columns.value)
+            .fill()
+            .map(() => ({
+                isOccupied: false,
+                studentId: null,
+                status: null
+            }));
+
+        seatPlan.value.unshift(newRow);
+
+        // Save the layout after changing rows
+        saveCurrentLayout(false);
+    }
+};
+
 // Update decrementRows function
 const decrementRows = () => {
     if (rows.value > 1) {
@@ -663,6 +695,66 @@ const decrementRows = () => {
         if (!foundEmptyRow) {
             seatPlan.value.pop();
         }
+
+        // Save the layout after changing rows
+        saveCurrentLayout(false);
+    }
+};
+
+// Add incrementColumns and decrementColumns functions with similar save logic
+const incrementColumns = () => {
+    if (columns.value < 12) {
+        columns.value++;
+
+        // Add a new column to each row
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            seatPlan.value[i].push({
+                isOccupied: false,
+                studentId: null,
+                status: null
+            });
+        }
+
+        // Save the layout after changing columns
+        saveCurrentLayout(false);
+    }
+};
+
+const decrementColumns = () => {
+    if (columns.value > 1) {
+        columns.value--;
+
+        // Remove last column from each row if empty
+        let allEmpty = true;
+
+        // Check if all seats in the last column are empty
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            const lastColIndex = seatPlan.value[i].length - 1;
+            if (lastColIndex >= 0 && seatPlan.value[i][lastColIndex].isOccupied) {
+                allEmpty = false;
+                break;
+            }
+        }
+
+        // Only remove if all are empty
+        if (allEmpty) {
+            for (let i = 0; i < seatPlan.value.length; i++) {
+                seatPlan.value[i].pop();
+            }
+        } else {
+            // If not all empty, revert the column change
+            columns.value++;
+            toast.add({
+                severity: 'warn',
+                summary: 'Cannot Remove Column',
+                detail: 'Cannot remove a column with assigned students',
+                life: 3000
+            });
+            return;
+        }
+
+        // Save the layout after changing columns
+        saveCurrentLayout(false);
     }
 };
 
@@ -747,26 +839,38 @@ onMounted(async () => {
         // Fetch attendance history
         await fetchAttendanceHistory();
 
-        // Load saved templates
-        await loadSavedTemplates();
+        // First try to load the saved layout
+        const layoutLoaded = loadSavedLayout();
 
-        // Use default layout if no templates exist
-        if (savedTemplates.value.length === 0) {
+        if (!layoutLoaded) {
+            // If no saved layout, try to load templates
+            await loadSavedTemplates();
+
+            // Use default layout if no templates exist
+            if (savedTemplates.value.length === 0) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'Welcome to Seat Plan Attendance',
+                    detail: 'Create your own classroom layout using the Edit Seats button',
+                    life: 5000
+                });
+            } else {
+                // Load the most recently created template
+                const defaultTemplate = savedTemplates.value.sort((a, b) => {
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                })[0];
+
+                if (defaultTemplate) {
+                    loadTemplate(defaultTemplate);
+                }
+            }
+        } else {
             toast.add({
                 severity: 'info',
-                summary: 'Welcome to Seat Plan Attendance',
-                detail: 'Create your own classroom layout using the Edit Seats button',
-                life: 5000
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
             });
-        } else {
-            // Load the most recently created template
-            const defaultTemplate = savedTemplates.value.sort((a, b) => {
-                return new Date(b.createdAt) - new Date(a.createdAt);
-            })[0];
-
-            if (defaultTemplate) {
-                loadTemplate(defaultTemplate);
-            }
         }
     } catch (error) {
         console.error('Error initializing data:', error);
@@ -812,6 +916,9 @@ const removeStudentFromSeat = (rowIndex, colIndex) => {
             unassignedStudents.value.push(student);
         }
     }
+
+    // Save the current layout to localStorage
+    saveCurrentLayout(false); // false means don't show toast notification
 
     toast.add({
         severity: 'info',
@@ -904,26 +1011,6 @@ onUnmounted(() => {
         codeReader = null;
     }
 });
-
-// Update incrementRows function
-const incrementRows = () => {
-    if (rows.value < 12) {
-        rows.value++;
-
-        // Add new row at the top
-        const newRow = Array(columns.value)
-            .fill()
-            .map(() => ({
-                isOccupied: false,
-                studentId: null,
-                status: null
-            }));
-
-        seatPlan.value.unshift(newRow);
-    }
-};
-
-// Remove or comment out updateGridSize calls in both functions as we're handling the grid directly
 
 // Add computed property for sorted unassigned students
 const sortedUnassignedStudents = computed(() => {
@@ -1281,6 +1368,56 @@ const updateRemarksPanel = (studentId, status, remarks) => {
     // Save to localStorage
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 };
+
+// Add a function to load the saved layout
+const loadSavedLayout = () => {
+    try {
+        const storageKey = `seatPlan_${subjectId.value}`;
+        const savedData = localStorage.getItem(storageKey);
+
+        if (savedData) {
+            const parsedData = JSON.parse(savedData);
+
+            // Check if it's a template array or a layout object
+            if (Array.isArray(parsedData)) {
+                console.log('Found array of templates instead of layout object');
+                return false;
+            }
+
+            // Set layout configuration
+            rows.value = parsedData.rows || rows.value;
+            columns.value = parsedData.columns || columns.value;
+            showTeacherDesk.value = parsedData.showTeacherDesk !== undefined ? parsedData.showTeacherDesk : showTeacherDesk.value;
+            showStudentIds.value = parsedData.showStudentIds !== undefined ? parsedData.showStudentIds : showStudentIds.value;
+
+            // Set the seat plan with deep copy to avoid reference issues
+            if (parsedData.seatPlan) {
+                seatPlan.value = JSON.parse(JSON.stringify(parsedData.seatPlan));
+
+                // Recalculate unassigned students
+                calculateUnassignedStudents();
+
+                console.log('Loaded saved layout with student assignments');
+                return true;
+            }
+        }
+        return false;
+    } catch (error) {
+        console.error('Error loading saved layout:', error);
+        return false;
+    }
+};
+
+// Add watchers for the checkbox options
+watch(showTeacherDesk, (newValue) => {
+    // Save layout when teacher desk visibility is changed
+    saveCurrentLayout(false);
+});
+
+watch(showStudentIds, (newValue) => {
+    // Save layout when student IDs visibility is changed
+    saveCurrentLayout(false);
+});
 </script>
 
 <template>
@@ -1499,10 +1636,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
                     <span class="font-semibold">Absent</span>
                 </Button>
 
-                <Button class="attendance-btn excused-btn p-button-outlined" @click="setAttendanceStatus('Excused')">
-                    <i class="pi pi-info-circle text-3xl mb-2"></i>
-                    <span class="font-semibold">Excused</span>
-                </Button>
+                <Button icon="pi pi-info-circle" label="Excused" style="background: #9333ea; border-color: #9333ea" @click="markRollCallAttendance('Excused')" />
             </div>
         </Dialog>
 
@@ -1581,8 +1715,8 @@ const updateRemarksPanel = (studentId, status, remarks) => {
                 <div class="flex gap-2 justify-center mt-4">
                     <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallAttendance('Present')" />
                     <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallAttendance('Absent')" />
-                    <Button icon="pi pi-clock" label="Late" class="p-button-warning" @click="markRollCallAttendance('Late')" />
-                    <Button icon="pi pi-info-circle" label="Excused" class="p-button-info" @click="markRollCallAttendance('Excused')" />
+                    <Button icon="pi pi-clock" label="Late" style="background: #eab308; border-color: #eab308" @click="markRollCallAttendance('Late')" />
+                    <Button icon="pi pi-info-circle" label="Excused" style="background: #9333ea; border-color: #9333ea" @click="markRollCallAttendance('Excused')" />
                 </div>
 
                 <div class="flex justify-between mt-6">
@@ -1764,8 +1898,8 @@ const updateRemarksPanel = (studentId, status, remarks) => {
 }
 
 .student-excused {
-    background-color: #d1ecf1;
-    border-color: #bee5eb;
+    background-color: #e3ccf8;
+    border-color: #c5a9fa;
 }
 
 .student-occupied {
