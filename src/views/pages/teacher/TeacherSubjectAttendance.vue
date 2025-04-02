@@ -43,49 +43,13 @@ const attendanceRecords = ref({});
 const remarksPanel = ref([]);
 
 // Drag and drop state
-const isDragging = ref(false);
 const draggedStudent = ref(null);
-const draggedPosition = ref(null);
-
-// Status menu and panel refs
-const statusMenu = ref(null);
 const selectedSeat = ref(null);
-
-// Attendance statuses with icons and colors
-const attendanceStatuses = [
-    { name: 'Present', icon: 'pi pi-check-circle', color: '#4caf50' },
-    { name: 'Absent', icon: 'pi pi-times-circle', color: '#f44336', requiresRemarks: true },
-    { name: 'Late', icon: 'pi pi-clock', color: '#ff9800' },
-    { name: 'Excused', icon: 'pi pi-info-circle', color: '#2196f3', requiresRemarks: true }
-];
-
-// Status menu items
-const statusMenuItems = computed(() => {
-    return attendanceStatuses.map((status) => ({
-        label: status.name,
-        icon: status.icon,
-        command: () => {
-            if (selectedSeat.value) {
-                const { rowIndex, colIndex } = selectedSeat.value;
-                updateStudentStatus(rowIndex, colIndex, status.name);
-            }
-        },
-        style: { color: status.color }
-    }));
-});
-
-// Add these variables to the script setup
-const autoScrollSpeed = ref(0);
-const autoScrollInterval = ref(null);
-const scrollThreshold = 100; // px from the edge of the viewport to start scrolling
 
 // Add these new refs for the remarks functionality
 const showRemarksDialog = ref(false);
-const selectedStudentForRemarks = ref(null);
-const attendanceRemarks = ref('');
 
-// Add this new ref to track if dialog was canceled
-const dialogCanceled = ref(false);
+const attendanceRemarks = ref('');
 
 // Status selection dialog
 const showStatusDialog = ref(false);
@@ -274,109 +238,10 @@ const getStudentInitials = (student) => {
         .slice(0, 2);
 };
 
-// Check if a seat is occupied
-const isSeatOccupied = (row, col) => {
-    if (!seatPlan.value[row] || !seatPlan.value[row][col]) return false;
-    return seatPlan.value[row][col].isOccupied;
-};
-
 // Get student data by ID
 const getStudentById = (id) => {
     if (!id) return null;
     return students.value.find((student) => student.id === id) || null;
-};
-
-// Get student assigned to a seat
-const getStudentAtSeat = (row, col) => {
-    if (!seatPlan.value[row] || !seatPlan.value[row][col]) return null;
-    const studentId = seatPlan.value[row][col].studentId;
-    return getStudentById(studentId);
-};
-
-// Get student's current status
-const getStudentStatus = (student) => {
-    if (!student) return null;
-
-    // Find the seat with this student
-    for (const row of seatPlan.value) {
-        for (const seat of row) {
-            if (seat.studentId === student.id) {
-                return seat.status;
-            }
-        }
-    }
-
-    return null;
-};
-
-// Start auto-scroll based on mouse position
-const handleDragOver = (event) => {
-    if (!isDragging.value) return;
-
-    const { clientY } = event;
-    const { innerHeight } = window;
-
-    // Calculate distance from top and bottom of viewport
-    const distanceFromTop = clientY;
-    const distanceFromBottom = innerHeight - clientY;
-
-    // Clear any existing interval
-    clearAutoScroll();
-
-    // Auto-scroll up if near the top
-    if (distanceFromTop < scrollThreshold) {
-        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromTop) / 5));
-        startAutoScroll(-scrollSpeed);
-    }
-    // Auto-scroll down if near the bottom
-    else if (distanceFromBottom < scrollThreshold) {
-        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromBottom) / 5));
-        startAutoScroll(scrollSpeed);
-    }
-};
-
-// Start auto-scrolling with the given speed
-const startAutoScroll = (speed) => {
-    autoScrollSpeed.value = speed;
-
-    if (!autoScrollInterval.value) {
-        autoScrollInterval.value = setInterval(() => {
-            window.scrollBy(0, autoScrollSpeed.value);
-        }, 16); // ~60fps
-    }
-};
-
-// Clear auto-scroll interval
-const clearAutoScroll = () => {
-    if (autoScrollInterval.value) {
-        clearInterval(autoScrollInterval.value);
-        autoScrollInterval.value = null;
-    }
-};
-
-// Modify the startDrag function to initialize drag state
-const startDrag = (student, position) => {
-    isDragging.value = true;
-    draggedStudent.value = student;
-    draggedPosition.value = position;
-
-    // Add global event listeners
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('dragend', clearAutoScroll);
-    document.addEventListener('drop', clearAutoScroll);
-};
-
-// Modify the existing cancelDrag and dropOnSeat functions to clean up
-const cancelDrag = () => {
-    isDragging.value = false;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    clearAutoScroll();
-
-    // Remove global event listeners
-    document.removeEventListener('dragover', handleDragOver);
-    document.removeEventListener('dragend', clearAutoScroll);
-    document.removeEventListener('drop', clearAutoScroll);
 };
 
 // Update the other drop functions to also clean up
@@ -417,52 +282,6 @@ const dropOnSeat = (rowIndex, colIndex) => {
         detail: 'Student has been assigned to seat',
         life: 3000
     });
-};
-
-const dropToUnassigned = () => {
-    if (!draggedStudent.value) return;
-
-    // Clear the seat the student was in
-    if (draggedPosition.value) {
-        // Standard grid seat
-        const { row, col } = draggedPosition.value;
-        seatPlan.value[row][col].studentId = null;
-        seatPlan.value[row][col].isOccupied = false;
-    }
-
-    // Reset drag state
-    cancelDrag();
-
-    // Update unassigned students
-    calculateUnassignedStudents();
-};
-
-// Show status menu for a student
-const showStatusMenu = (event, rowIndex, colIndex) => {
-    const seat = seatPlan.value[rowIndex][colIndex];
-    if (!seat.isOccupied || isEditMode.value) return;
-
-    selectedSeat.value = { rowIndex, colIndex };
-    statusMenu.value.toggle(event);
-};
-
-// Update student status
-const updateStudentStatus = (rowIndex, colIndex, status) => {
-    const seat = seatPlan.value[rowIndex][colIndex];
-    if (!seat.isOccupied) return;
-
-    // If status requires remarks, show dialog
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    if (statusObj && statusObj.requiresRemarks) {
-        selectedStudentForRemarks.value = getStudentById(seat.studentId);
-        pendingStatus.value = status;
-        attendanceRemarks.value = ''; // Clear previous remarks
-        showRemarksDialog.value = true;
-    } else {
-        // Otherwise, update status directly
-        seat.status = status;
-        saveAttendanceRecord(seat.studentId, status);
-    }
 };
 
 // Save attendance with remarks
@@ -842,18 +661,6 @@ const decrementRows = () => {
     }
 };
 
-// Get color for status
-const getStatusColor = (status) => {
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    return statusObj ? statusObj.color : 'transparent';
-};
-
-// Get icon for status
-const getStatusIcon = (status) => {
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    return statusObj ? statusObj.icon : '';
-};
-
 // Watch for route changes to update subject
 watch(
     () => route.params,
@@ -971,29 +778,6 @@ const showStatusSelection = (rowIndex, colIndex) => {
     showStatusDialog.value = true;
 };
 
-// Update student status from dialog
-const selectStatus = (status) => {
-    if (!selectedSeat.value) return;
-
-    const { rowIndex, colIndex } = selectedSeat.value;
-    const seat = seatPlan.value[rowIndex][colIndex];
-
-    // If status requires remarks, show remarks dialog
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    if (statusObj && statusObj.requiresRemarks) {
-        selectedStudentForRemarks.value = selectedStudent.value;
-        pendingStatus.value = status;
-        attendanceRemarks.value = ''; // Clear previous remarks
-        showStatusDialog.value = false;
-        showRemarksDialog.value = true;
-    } else {
-        // Otherwise, update status directly
-        seat.status = status;
-        saveAttendanceRecord(seat.studentId, status);
-        showStatusDialog.value = false;
-    }
-};
-
 // Function to handle drag start
 const dragStudent = (student) => {
     draggedStudent.value = student;
@@ -1036,156 +820,6 @@ const removeStudentFromSeat = (rowIndex, colIndex) => {
 const allowDrop = (event) => {
     if (isEditMode.value) {
         event.preventDefault();
-    }
-};
-
-// Add function to handle drop on unassigned section
-const dropOnUnassigned = (event) => {
-    if (!isEditMode.value || !draggedStudent.value) return;
-
-    // Find the student's current seat
-    let foundSeat = false;
-
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === draggedStudent.value.id) {
-                // Clear the seat
-                seat.studentId = null;
-                seat.isOccupied = false;
-                seat.status = null;
-                foundSeat = true;
-                break;
-            }
-        }
-        if (foundSeat) break;
-    }
-
-    // Make sure student is in unassigned list
-    const exists = unassignedStudents.value.some((s) => s.id === draggedStudent.value.id);
-    if (!exists) {
-        unassignedStudents.value.push(draggedStudent.value);
-    }
-
-    // Reset dragged student
-    draggedStudent.value = null;
-
-    toast.add({
-        severity: 'info',
-        summary: 'Student Unassigned',
-        detail: 'Student has been moved to unassigned list',
-        life: 3000
-    });
-};
-
-// Compute whether to show remarks on side or bottom
-const showRemarksOnSide = computed(() => {
-    return columns.value <= 11;
-});
-
-// QR Code Attendance Methods
-const startQRAttendance = () => {
-    showAttendanceMethodModal.value = false;
-    showQRScanner.value = true;
-    isCameraLoading.value = true;
-
-    // Ensure Vue has updated the DOM before initializing the camera
-    nextTick(() => {
-        if (videoElement.value) {
-            initializeCamera();
-        } else {
-            console.error('Video element not found in DOM.');
-        }
-    });
-};
-
-const initializeCamera = async () => {
-    if (!codeReader) {
-        codeReader = new BrowserMultiFormatReader();
-    }
-
-    try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter((device) => device.kind === 'videoinput');
-
-        if (videoDevices.length > 0) {
-            const selectedDeviceId = videoDevices[0].deviceId;
-
-            // Ensure videoElement is available before accessing it
-            if (!videoElement.value) {
-                console.error('Error: videoElement is not available.');
-                return;
-            }
-
-            await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, err) => {
-                if (result) {
-                    processScannedData(result.text);
-                } else if (err) {
-                    console.warn('QR Code scan error:', err);
-                }
-            });
-        } else {
-            console.error('No camera found');
-        }
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-    } finally {
-        isCameraLoading.value = false;
-    }
-};
-
-const processScannedData = (scannedText) => {
-    try {
-        // Try to parse the scanned data as JSON
-        const studentData = JSON.parse(scannedText);
-
-        // Check if it has the expected properties
-        if (studentData.id && studentData.name) {
-            // Find the student in our data
-            const student = students.value.find((s) => s.id === studentData.id);
-
-            if (student) {
-                // Check if already scanned
-                if (!scannedStudents.value.some((s) => s.id === student.id)) {
-                    // Add to scanned students
-                    scannedStudents.value.push(student);
-
-                    // Mark as present in the seat plan
-                    markStudentPresent(student);
-
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Student Scanned',
-                        detail: `${student.name} marked as present`,
-                        life: 3000
-                    });
-                } else {
-                    toast.add({
-                        severity: 'info',
-                        summary: 'Already Scanned',
-                        detail: `${student.name} was already scanned`,
-                        life: 3000
-                    });
-                }
-            } else {
-                toast.add({
-                    severity: 'warn',
-                    summary: 'Unknown Student',
-                    detail: 'Student not found in class roster',
-                    life: 3000
-                });
-            }
-        } else {
-            throw new Error('Invalid student data format');
-        }
-    } catch (error) {
-        console.error('Error processing QR data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Invalid QR Code',
-            detail: 'The scanned QR code is not valid for attendance',
-            life: 3000
-        });
     }
 };
 
@@ -1238,26 +872,6 @@ const markStudentPresent = (student) => {
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
 };
 
-const closeScanner = () => {
-    if (codeReader) {
-        try {
-            codeReader.reset();
-        } catch (error) {
-            console.error('Error stopping scanner:', error);
-        }
-    }
-
-    // Stop the camera stream safely
-    if (videoElement.value && videoElement.value.srcObject) {
-        const stream = videoElement.value.srcObject;
-        const tracks = stream.getTracks();
-        tracks.forEach((track) => track.stop());
-        videoElement.value.srcObject = null;
-    }
-
-    showQRScanner.value = false;
-};
-
 // Roll Call Methods
 const startRollCall = () => {
     showRollCall.value = true;
@@ -1278,64 +892,6 @@ const startRollCall = () => {
     });
 };
 
-const markAttendance = (status) => {
-    if (!currentStudent.value) return;
-
-    // Mark the student in the seat plan
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === currentStudent.value.id) {
-                seat.status = status;
-
-                // If status requires remarks, show dialog
-                if (status === 'Absent' || status === 'Excused') {
-                    selectedStudentForRemarks.value = currentStudent.value;
-                    pendingStatus.value = status;
-                    attendanceRemarks.value = '';
-                    showRemarksDialog.value = true;
-                    return;
-                } else {
-                    // Otherwise save directly
-                    saveAttendanceRecord(currentStudent.value.id, status);
-                }
-                break;
-            }
-        }
-    }
-
-    // Move to next student
-    moveToNextStudent();
-};
-
-const moveToNextStudent = () => {
-    currentStudentIndex.value++;
-    if (currentStudentIndex.value < students.value.length) {
-        currentStudent.value = students.value[currentStudentIndex.value];
-    } else {
-        // End of roll call
-        showRollCall.value = false;
-        toast.add({
-            severity: 'success',
-            summary: 'Roll Call Complete',
-            detail: 'All students have been called',
-            life: 3000
-        });
-    }
-};
-
-// Start seat plan attendance directly
-const startSeatPlanAttendance = () => {
-    showAttendanceMethodModal.value = false;
-    // No additional setup needed as the seat plan is already visible
-    toast.add({
-        severity: 'info',
-        summary: 'Seat Plan Attendance',
-        detail: 'Click on students to mark attendance',
-        life: 3000
-    });
-};
-
 // Clean up on component unmount
 onUnmounted(() => {
     if (codeReader) {
@@ -1343,20 +899,6 @@ onUnmounted(() => {
         codeReader = null;
     }
 });
-
-// Function to choose seat plan directly
-const chooseSeatPlan = () => {
-    showAttendanceMethodModal.value = false;
-};
-
-// Add a function to show the attendance method modal
-const showAttendanceMethodSelector = () => {
-    // Force the dialog to show
-    showAttendanceMethodModal.value = true;
-
-    // Log to console for debugging
-    console.log('Showing attendance method modal:', showAttendanceMethodModal.value);
-};
 
 // Update incrementRows function
 const incrementRows = () => {
@@ -1425,28 +967,6 @@ const saveRemarks = () => {
     }
 
     saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
-};
-
-// Add function to update remarks panel
-const updateRemarksPanel = (studentId, status, remarks) => {
-    const student = getStudentById(studentId);
-    if (!student) return;
-
-    // Add or update remarks
-    const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === studentId);
-    const remarkItem = {
-        studentId,
-        studentName: student.name,
-        status,
-        remarks,
-        timestamp: new Date().toISOString()
-    };
-
-    if (existingIndex >= 0) {
-        remarksPanel.value[existingIndex] = remarkItem;
-    } else {
-        remarksPanel.value.push(remarkItem);
-    }
 };
 
 // Add this function to show the attendance method dialog
