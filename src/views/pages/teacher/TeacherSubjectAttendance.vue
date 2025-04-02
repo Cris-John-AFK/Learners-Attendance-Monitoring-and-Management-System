@@ -17,13 +17,9 @@ const subjectId = ref('');
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 
 // Modals and UI states
-const showSeatEditor = ref(false);
-const showStudentDetails = ref(false);
-const showAttendanceHistory = ref(false);
 const showTemplateManager = ref(false);
 const showTemplateSaveDialog = ref(false);
 const isEditMode = ref(false);
-const showRemarks = ref(false);
 
 // Seating plan configuration
 const rows = ref(9);
@@ -35,17 +31,14 @@ const selectedTemplate = ref(null);
 // Layout configuration options
 const showTeacherDesk = ref(true);
 const showStudentIds = ref(true);
-const currentGrade = ref('3');
 
 // Student and attendance data
 const students = ref([]);
 const selectedStudent = ref(null);
-const remarks = ref('');
 const pendingStatus = ref('');
 const searchQuery = ref('');
 const unassignedStudents = ref([]);
 const seatPlan = ref([]);
-const attendanceHistory = ref([]);
 const attendanceRecords = ref({});
 const remarksPanel = ref([]);
 
@@ -57,7 +50,6 @@ const draggedPosition = ref(null);
 // Status menu and panel refs
 const statusMenu = ref(null);
 const selectedSeat = ref(null);
-const studentsWithRemarks = ref([]);
 
 // Attendance statuses with icons and colors
 const attendanceStatuses = [
@@ -99,10 +91,10 @@ const dialogCanceled = ref(false);
 const showStatusDialog = ref(false);
 
 // Attendance method selection
-const showAttendanceMethodModal = ref(true); // Start with this visible
+const showAttendanceMethodModal = ref(false);
 const showQRScanner = ref(false);
 const showRollCall = ref(false);
-const isCameraLoading = ref(true);
+const isCameraLoading = ref(false);
 const videoElement = ref(null);
 const currentStudentIndex = ref(0);
 const currentStudent = ref(null);
@@ -1159,7 +1151,7 @@ const processScannedData = (scannedText) => {
                     scannedStudents.value.push(student);
 
                     // Mark as present in the seat plan
-                    markStudentPresent(student.id);
+                    markStudentPresent(student);
 
                     toast.add({
                         severity: 'success',
@@ -1197,18 +1189,53 @@ const processScannedData = (scannedText) => {
     }
 };
 
-const markStudentPresent = (studentId) => {
-    // Find the student in the seat plan
+// Function to mark a student as present
+const markStudentPresent = (student) => {
+    // Find if student is already assigned to a seat
+    let found = false;
+    let rowIndex = -1;
+    let colIndex = -1;
+
+    // Search in seat plan
     for (let i = 0; i < seatPlan.value.length; i++) {
         for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === studentId) {
-                seat.status = 'Present';
-                saveAttendanceRecord(studentId, 'Present');
-                return;
+            if (seatPlan.value[i][j].studentId === student.id) {
+                rowIndex = i;
+                colIndex = j;
+                found = true;
+                break;
             }
         }
+        if (found) break;
     }
+
+    if (found) {
+        // Update existing seat
+        seatPlan.value[rowIndex][colIndex].status = 'Present';
+
+        // Save attendance record
+        const recordKey = `${student.id}_${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: student.id,
+            date: currentDate.value,
+            status: 'Present',
+            time: new Date().toLocaleTimeString(),
+            remarks: ''
+        };
+    } else {
+        // Student isn't assigned to a seat, just record attendance
+        const recordKey = `${student.id}_${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: student.id,
+            date: currentDate.value,
+            status: 'Present',
+            time: new Date().toLocaleTimeString(),
+            remarks: ''
+        };
+    }
+
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
 };
 
 const closeScanner = () => {
@@ -1233,21 +1260,22 @@ const closeScanner = () => {
 
 // Roll Call Methods
 const startRollCall = () => {
+    showRollCall.value = true;
+    showQRScanner.value = false;
     showAttendanceMethodModal.value = false;
 
-    // Initialize roll call with the first student
+    // Initialize roll call process
+    currentStudentIndex.value = 0;
     if (students.value.length > 0) {
-        currentStudentIndex.value = 0;
         currentStudent.value = students.value[0];
-        showRollCall.value = true;
-    } else {
-        toast.add({
-            severity: 'error',
-            summary: 'No Students',
-            detail: 'There are no students to call',
-            life: 3000
-        });
     }
+
+    toast.add({
+        severity: 'info',
+        summary: 'Roll Call Mode',
+        detail: 'Roll call mode started. Mark each student as they respond.',
+        life: 3000
+    });
 };
 
 const markAttendance = (status) => {
@@ -1420,6 +1448,195 @@ const updateRemarksPanel = (studentId, status, remarks) => {
         remarksPanel.value.push(remarkItem);
     }
 };
+
+// Add this function to show the attendance method dialog
+const openAttendanceMethodDialog = () => {
+    showAttendanceMethodModal.value = true;
+
+    // Reset any previous selection
+    showQRScanner.value = false;
+    showRollCall.value = false;
+
+    console.log('Opening attendance method dialog');
+};
+
+// Add these functions for handling attendance methods
+const startQRScanner = async () => {
+    showQRScanner.value = true;
+    showRollCall.value = false;
+    showAttendanceMethodModal.value = false;
+    isCameraLoading.value = true;
+
+    try {
+        // Initialize QR code scanner
+        codeReader = new BrowserMultiFormatReader();
+
+        // Get available video devices
+        const videoDevices = await codeReader.listVideoInputDevices();
+
+        if (videoDevices.length === 0) {
+            throw new Error('No camera devices found');
+        }
+
+        // Use first video device
+        const selectedDeviceId = videoDevices[0].deviceId;
+
+        // Wait for video element to be available in the DOM
+        await nextTick();
+
+        if (!videoElement.value) {
+            throw new Error('Video element not found');
+        }
+
+        // Start decoding from video stream
+        codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, error) => {
+            if (result) {
+                handleQRCodeResult(result.getText());
+            }
+            if (error && error.name !== 'NotFoundException') {
+                console.error('QR Scanner error:', error);
+            }
+        });
+
+        isCameraLoading.value = false;
+
+        toast.add({
+            severity: 'info',
+            summary: 'QR Scanner',
+            detail: 'QR Scanner is active. Scan student ID QR codes.',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error starting QR scanner:', error);
+        isCameraLoading.value = false;
+        showQRScanner.value = false;
+
+        toast.add({
+            severity: 'error',
+            summary: 'Scanner Error',
+            detail: 'Could not start QR scanner: ' + error.message,
+            life: 5000
+        });
+    }
+};
+
+// Handle QR code result
+const handleQRCodeResult = (qrData) => {
+    try {
+        // Extract student ID from QR code data
+        const studentId = parseInt(qrData.trim());
+
+        if (isNaN(studentId)) {
+            throw new Error('Invalid QR code format');
+        }
+
+        // Find the student
+        const student = getStudentById(studentId);
+
+        if (!student) {
+            throw new Error('Student not found');
+        }
+
+        // Check if already scanned
+        if (scannedStudents.value.includes(studentId)) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Already Scanned',
+                detail: `${student.name} has already been marked present`,
+                life: 3000
+            });
+            return;
+        }
+
+        // Mark student as present
+        markStudentPresent(student);
+
+        // Add to scanned list
+        scannedStudents.value.push(studentId);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Student Present',
+            detail: `${student.name} marked as present`,
+            life: 2000
+        });
+    } catch (error) {
+        console.error('Error processing QR code:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'QR Error',
+            detail: error.message,
+            life: 3000
+        });
+    }
+};
+
+// Clean up camera resources on unmount
+onUnmounted(() => {
+    if (codeReader) {
+        codeReader.reset();
+        codeReader = null;
+    }
+});
+
+// Add this function for the Roll Call feature
+const markRollCallStatus = (status) => {
+    if (!currentStudent.value) return;
+
+    // Mark student with the selected status
+    const student = currentStudent.value;
+    const studentId = student.id;
+
+    // Find if student is in a seat
+    let found = false;
+
+    // Search all seats
+    for (let i = 0; i < seatPlan.value.length && !found; i++) {
+        for (let j = 0; j < seatPlan.value[i].length && !found; j++) {
+            if (seatPlan.value[i][j].studentId === studentId) {
+                // Update seat status
+                seatPlan.value[i][j].status = status;
+                found = true;
+            }
+        }
+    }
+
+    // Save attendance record
+    const recordKey = `${studentId}_${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: studentId,
+        date: currentDate.value,
+        status: status,
+        time: new Date().toLocaleTimeString(),
+        remarks: ''
+    };
+
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+
+    // Show confirmation
+    toast.add({
+        severity: status === 'Present' ? 'success' : status === 'Absent' ? 'error' : 'warn',
+        summary: `Marked ${status}`,
+        detail: `${student.name} has been marked as ${status}`,
+        life: 2000
+    });
+
+    // Move to next student
+    if (currentStudentIndex.value < students.value.length - 1) {
+        currentStudentIndex.value++;
+        currentStudent.value = students.value[currentStudentIndex.value];
+    } else {
+        // End of roll call
+        toast.add({
+            severity: 'info',
+            summary: 'Roll Call Complete',
+            detail: 'All students have been processed',
+            life: 3000
+        });
+        showRollCall.value = false;
+    }
+};
 </script>
 
 <template>
@@ -1429,7 +1646,7 @@ const updateRemarksPanel = (studentId, status, remarks) => {
             <h5 class="text-xl font-semibold">{{ subjectName }} Attendance</h5>
             <div class="flex gap-2 align-items-center">
                 <Calendar v-model="currentDate" dateFormat="yy-mm-dd" class="mr-2" />
-                <Button label="Take Attendance" icon="pi pi-plus" class="p-button-success" @click="showAttendanceMethodSelector" />
+                <Button icon="pi pi-list-check" label="Take Attendance" class="p-button-primary" @click="openAttendanceMethodDialog" />
             </div>
         </div>
 
@@ -1688,6 +1905,82 @@ const updateRemarksPanel = (studentId, status, remarks) => {
                 </div>
             </div>
         </div>
+
+        <!-- Attendance Method Dialog -->
+        <Dialog v-model:visible="showAttendanceMethodModal" header="Select Attendance Method" :modal="true" :closable="true" style="width: 400px">
+            <div class="p-4">
+                <h3 class="text-lg font-medium mb-4">How would you like to take attendance?</h3>
+
+                <div class="flex flex-col gap-4">
+                    <Button icon="pi pi-users" label="Seat Plan" class="p-button-outlined" @click="showAttendanceMethodModal = false" />
+
+                    <Button icon="pi pi-list" label="Roll Call" class="p-button-outlined" @click="startRollCall" />
+
+                    <Button icon="pi pi-camera" label="QR Scanner" class="p-button-outlined" @click="startQRScanner" />
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- Roll Call Dialog -->
+        <Dialog v-model:visible="showRollCall" header="Roll Call" :modal="true" :closable="true" style="width: 500px">
+            <div v-if="currentStudent" class="p-4">
+                <div class="flex items-center mb-4">
+                    <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-800 font-bold mr-3">
+                        {{ getStudentInitials(currentStudent) }}
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-medium">{{ currentStudent.name }}</h3>
+                        <p class="text-gray-500 text-sm">ID: {{ currentStudent.id }}</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 justify-center mt-4">
+                    <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallStatus('Present')" />
+                    <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallStatus('Absent')" />
+                    <Button icon="pi pi-clock" label="Late" class="p-button-warning" @click="markRollCallStatus('Late')" />
+                    <Button icon="pi pi-info-circle" label="Excused" class="p-button-info" @click="markRollCallStatus('Excused')" />
+                </div>
+
+                <div class="flex justify-between mt-6">
+                    <p class="text-gray-500">{{ currentStudentIndex + 1 }} of {{ students.length }}</p>
+                    <div>
+                        <Button icon="pi pi-times" class="p-button-text" @click="showRollCall = false" label="Finish" />
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- QR Scanner Dialog -->
+        <Dialog v-model:visible="showQRScanner" header="QR Scanner" :modal="true" :closable="true" style="width: 500px">
+            <div class="p-4">
+                <div v-if="isCameraLoading" class="flex items-center justify-center p-6">
+                    <i class="pi pi-spin pi-spinner text-3xl text-blue-500 mr-3"></i>
+                    <span>Loading camera...</span>
+                </div>
+
+                <div v-else class="qr-scanner-container">
+                    <video ref="videoElement" class="w-full h-64 bg-black rounded"></video>
+
+                    <div class="mt-4">
+                        <p class="text-sm text-gray-600 mb-2">Point the camera at a student ID QR code</p>
+
+                        <div v-if="scannedStudents.length > 0" class="mt-4">
+                            <h4 class="text-sm font-medium mb-2">Scanned Students: {{ scannedStudents.length }}</h4>
+                            <ul class="text-sm max-h-32 overflow-y-auto">
+                                <li v-for="id in scannedStudents" :key="id" class="py-1 px-2 bg-green-50 rounded mb-1 flex items-center">
+                                    <i class="pi pi-check-circle text-green-500 mr-2"></i>
+                                    {{ getStudentById(id)?.name || `Student ID: ${id}` }}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end mt-4">
+                        <Button icon="pi pi-times" label="Close" @click="showQRScanner = false" />
+                    </div>
+                </div>
+            </div>
+        </Dialog>
     </div>
 </template>
 
