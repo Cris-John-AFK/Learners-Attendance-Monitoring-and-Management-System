@@ -9,10 +9,22 @@ import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSection from '@/views/pages/teacher/TeacherSection.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
+import LayoutPageGlobal from '../layout/landingpagegloballayout/LayoutPageGlobal.vue'
+import PageGlobal from '../views/landingpageglobal/PageGlobal.vue'
 import { createRouter, createWebHistory } from 'vue-router';
 const router = createRouter({
     history: createWebHistory(),
     routes: [
+        {
+            path: '/global',
+            component: LayoutPageGlobal,
+            children: [
+                {
+                    path: '',
+                    component: PageGlobal
+                }
+            ]
+        },
         {
             path: '/',
             component: LoginLayout,
@@ -193,6 +205,14 @@ const router = createRouter({
             component: () => import('@/views/Enrollment/RegistrationConfirmation.vue'),
             meta: {
                 layout: 'enrollment'
+            }
+        },
+        {
+            path: '/homepage',
+            name: 'homepage',
+            component: () => import('@/views/homepagelanding/HomePageLand.vue'),
+            meta: {
+                layout: () => import('@/layout/homepagelayout/LayoutHomePage.vue')
             }
         },
         {

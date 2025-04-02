@@ -1,5 +1,6 @@
 <script setup>
 import { AttendanceService } from '@/router/service/Students';
+import { SubjectService } from '@/router/service/Subjects';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -16,17 +17,13 @@ const subjectId = ref('');
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 
 // Modals and UI states
-const showSeatEditor = ref(false);
-const showStudentDetails = ref(false);
-const showAttendanceHistory = ref(false);
 const showTemplateManager = ref(false);
 const showTemplateSaveDialog = ref(false);
 const isEditMode = ref(false);
-const showRemarks = ref(false);
 
 // Seating plan configuration
-const rows = ref(6);
-const columns = ref(6);
+const rows = ref(9);
+const columns = ref(9);
 const templateName = ref('');
 const savedTemplates = ref([]);
 const selectedTemplate = ref(null);
@@ -34,78 +31,47 @@ const selectedTemplate = ref(null);
 // Layout configuration options
 const showTeacherDesk = ref(true);
 const showStudentIds = ref(true);
-const currentGrade = ref('3');
 
 // Student and attendance data
 const students = ref([]);
 const selectedStudent = ref(null);
-const remarks = ref('');
 const pendingStatus = ref('');
 const searchQuery = ref('');
 const unassignedStudents = ref([]);
 const seatPlan = ref([]);
-const attendanceHistory = ref([]);
+const attendanceRecords = ref({});
+const remarksPanel = ref([]);
 
 // Drag and drop state
-const isDragging = ref(false);
 const draggedStudent = ref(null);
-const draggedPosition = ref(null);
-
-// Status menu and panel refs
-const statusMenu = ref(null);
-const remarksPanel = ref(null);
 const selectedSeat = ref(null);
-const studentsWithRemarks = ref([]);
-
-// Attendance statuses with icons and colors
-const attendanceStatuses = [
-    { name: 'Present', icon: 'pi pi-check-circle', color: '#4caf50' },
-    { name: 'Absent', icon: 'pi pi-times-circle', color: '#f44336', requiresRemarks: true },
-    { name: 'Late', icon: 'pi pi-clock', color: '#ff9800' },
-    { name: 'Excused', icon: 'pi pi-info-circle', color: '#2196f3', requiresRemarks: true }
-];
-
-// Status menu items
-const statusMenuItems = computed(() => {
-    return attendanceStatuses.map((status) => ({
-        label: status.name,
-        icon: status.icon,
-        command: () => {
-            if (selectedSeat.value) {
-                const { rowIndex, colIndex } = selectedSeat.value;
-                updateStudentStatus(rowIndex, colIndex, status.name);
-            }
-        },
-        style: { color: status.color }
-    }));
-});
-
-// Add these variables to the script setup
-const autoScrollSpeed = ref(0);
-const autoScrollInterval = ref(null);
-const scrollThreshold = 100; // px from the edge of the viewport to start scrolling
 
 // Add these new refs for the remarks functionality
 const showRemarksDialog = ref(false);
-const selectedStudentForRemarks = ref(null);
-const attendanceRemarks = ref('');
 
-// Add this new ref to track if dialog was canceled
-const dialogCanceled = ref(false);
+const attendanceRemarks = ref('');
 
 // Status selection dialog
 const showStatusDialog = ref(false);
 
 // Attendance method selection
-const showAttendanceMethodModal = ref(true); // Start with this visible
+const showAttendanceMethodModal = ref(false);
 const showQRScanner = ref(false);
 const showRollCall = ref(false);
-const isCameraLoading = ref(true);
+const isCameraLoading = ref(false);
 const videoElement = ref(null);
 const currentStudentIndex = ref(0);
 const currentStudent = ref(null);
 const scannedStudents = ref([]);
 let codeReader = null;
+
+// Rename to avoid conflict
+const showAttendanceDialog = ref(false);
+
+// Add these refs if not already present
+const showRollCallRemarksDialog = ref(false);
+const rollCallRemarks = ref('');
+const pendingRollCallStatus = ref('');
 
 // Toggle edit mode
 const toggleEditMode = () => {
@@ -116,12 +82,12 @@ const toggleEditMode = () => {
         calculateUnassignedStudents();
     } else {
         // Exiting edit mode - save the current layout
-        saveCurrentLayout();
+        saveCurrentLayout(false);
     }
 };
 
 // Save current layout
-const saveCurrentLayout = () => {
+const saveCurrentLayout = (showToast = true) => {
     // Implementation depends on your storage mechanism
     console.log('Saving current layout');
 
@@ -136,12 +102,14 @@ const saveCurrentLayout = () => {
 
     localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
 
-    toast.add({
-        severity: 'success',
-        summary: 'Layout Saved',
-        detail: 'Seating arrangement has been saved',
-        life: 3000
-    });
+    if (showToast) {
+        toast.add({
+            severity: 'success',
+            summary: 'Layout Saved',
+            detail: 'Seating arrangement has been saved',
+            life: 3000
+        });
+    }
 };
 
 // Format subject name for display
@@ -176,7 +144,7 @@ const initializeSeatPlan = () => {
 };
 
 // Update seat plan with changes to row/column count
-watch([rows, columns], () => {
+watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
     if (isEditMode.value) {
         // Save current student assignments
         const currentAssignments = [];
@@ -196,21 +164,72 @@ watch([rows, columns], () => {
             }
         }
 
-        // Initialize new seat plan with updated dimensions
-        initializeSeatPlan();
+        // Create a new seat plan with the updated dimensions
+        const newSeatPlan = [];
 
-        // Restore assignments where possible in the new grid
-        for (const assignment of currentAssignments) {
-            // Only restore if the row and column exist in the new grid
-            if (assignment.row < rows.value && assignment.col < columns.value) {
-                const seat = seatPlan.value[assignment.row][assignment.col];
-                seat.studentId = assignment.studentId;
-                seat.status = assignment.status;
-                seat.isOccupied = true;
+        // If we're adding rows, add them at the top
+        // If we're removing rows, remove them from the top
+        const rowDifference = newRows - oldRows;
+
+        if (rowDifference > 0) {
+            // Add new rows at the top (further from teacher's desk)
+            for (let i = 0; i < rowDifference; i++) {
+                const newRow = [];
+                for (let j = 0; j < newColumns; j++) {
+                    newRow.push({
+                        row: i,
+                        col: j,
+                        studentId: null,
+                        status: null,
+                        isOccupied: false
+                    });
+                }
+                newSeatPlan.push(newRow);
             }
         }
 
-        // Recalculate unassigned students with the updated seat plan
+        // Keep existing rows, starting from the bottom ones (closest to teacher)
+        // if reducing rows, we'll skip the top ones
+        const startIndex = Math.max(0, -rowDifference);
+        const endIndex = oldRows;
+
+        for (let i = startIndex; i < endIndex; i++) {
+            if (i >= seatPlan.value.length) continue;
+
+            const newRow = [];
+            const oldRow = seatPlan.value[i];
+
+            // Handle column changes
+            const colDifference = newColumns - oldColumns;
+
+            // Keep existing columns, add new ones if needed
+            for (let j = 0; j < Math.min(oldColumns, newColumns); j++) {
+                if (j < oldRow.length) {
+                    // Copy existing seat
+                    newRow.push({ ...oldRow[j] });
+                }
+            }
+
+            // Add new columns if needed
+            if (colDifference > 0) {
+                for (let j = oldColumns; j < newColumns; j++) {
+                    newRow.push({
+                        row: newSeatPlan.length,
+                        col: j,
+                        studentId: null,
+                        status: null,
+                        isOccupied: false
+                    });
+                }
+            }
+
+            newSeatPlan.push(newRow);
+        }
+
+        // Update the seat plan
+        seatPlan.value = newSeatPlan;
+
+        // Recalculate unassigned students
         calculateUnassignedStudents();
     }
 });
@@ -226,109 +245,10 @@ const getStudentInitials = (student) => {
         .slice(0, 2);
 };
 
-// Check if a seat is occupied
-const isSeatOccupied = (row, col) => {
-    if (!seatPlan.value[row] || !seatPlan.value[row][col]) return false;
-    return seatPlan.value[row][col].isOccupied;
-};
-
 // Get student data by ID
 const getStudentById = (id) => {
     if (!id) return null;
     return students.value.find((student) => student.id === id) || null;
-};
-
-// Get student assigned to a seat
-const getStudentAtSeat = (row, col) => {
-    if (!seatPlan.value[row] || !seatPlan.value[row][col]) return null;
-    const studentId = seatPlan.value[row][col].studentId;
-    return getStudentById(studentId);
-};
-
-// Get student's current status
-const getStudentStatus = (student) => {
-    if (!student) return null;
-
-    // Find the seat with this student
-    for (const row of seatPlan.value) {
-        for (const seat of row) {
-            if (seat.studentId === student.id) {
-                return seat.status;
-            }
-        }
-    }
-
-    return null;
-};
-
-// Start auto-scroll based on mouse position
-const handleDragOver = (event) => {
-    if (!isDragging.value) return;
-
-    const { clientY } = event;
-    const { innerHeight } = window;
-
-    // Calculate distance from top and bottom of viewport
-    const distanceFromTop = clientY;
-    const distanceFromBottom = innerHeight - clientY;
-
-    // Clear any existing interval
-    clearAutoScroll();
-
-    // Auto-scroll up if near the top
-    if (distanceFromTop < scrollThreshold) {
-        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromTop) / 5));
-        startAutoScroll(-scrollSpeed);
-    }
-    // Auto-scroll down if near the bottom
-    else if (distanceFromBottom < scrollThreshold) {
-        const scrollSpeed = Math.max(5, Math.floor((scrollThreshold - distanceFromBottom) / 5));
-        startAutoScroll(scrollSpeed);
-    }
-};
-
-// Start auto-scrolling with the given speed
-const startAutoScroll = (speed) => {
-    autoScrollSpeed.value = speed;
-
-    if (!autoScrollInterval.value) {
-        autoScrollInterval.value = setInterval(() => {
-            window.scrollBy(0, autoScrollSpeed.value);
-        }, 16); // ~60fps
-    }
-};
-
-// Clear auto-scroll interval
-const clearAutoScroll = () => {
-    if (autoScrollInterval.value) {
-        clearInterval(autoScrollInterval.value);
-        autoScrollInterval.value = null;
-    }
-};
-
-// Modify the startDrag function to initialize drag state
-const startDrag = (student, position) => {
-    isDragging.value = true;
-    draggedStudent.value = student;
-    draggedPosition.value = position;
-
-    // Add global event listeners
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('dragend', clearAutoScroll);
-    document.addEventListener('drop', clearAutoScroll);
-};
-
-// Modify the existing cancelDrag and dropOnSeat functions to clean up
-const cancelDrag = () => {
-    isDragging.value = false;
-    draggedStudent.value = null;
-    draggedPosition.value = null;
-    clearAutoScroll();
-
-    // Remove global event listeners
-    document.removeEventListener('dragover', handleDragOver);
-    document.removeEventListener('dragend', clearAutoScroll);
-    document.removeEventListener('drop', clearAutoScroll);
 };
 
 // Update the other drop functions to also clean up
@@ -362,6 +282,9 @@ const dropOnSeat = (rowIndex, colIndex) => {
     // Reset dragged student
     draggedStudent.value = null;
 
+    // Save the current layout to localStorage
+    saveCurrentLayout(false); // false means don't show toast notification
+
     // Show success message
     toast.add({
         severity: 'success',
@@ -371,86 +294,72 @@ const dropOnSeat = (rowIndex, colIndex) => {
     });
 };
 
-const dropToUnassigned = () => {
-    if (!draggedStudent.value) return;
-
-    // Clear the seat the student was in
-    if (draggedPosition.value) {
-        // Standard grid seat
-        const { row, col } = draggedPosition.value;
-        seatPlan.value[row][col].studentId = null;
-        seatPlan.value[row][col].isOccupied = false;
-    }
-
-    // Reset drag state
-    cancelDrag();
-
-    // Update unassigned students
-    calculateUnassignedStudents();
-};
-
-// Show status menu for a student
-const showStatusMenu = (event, rowIndex, colIndex) => {
-    const seat = seatPlan.value[rowIndex][colIndex];
-    if (!seat.isOccupied || isEditMode.value) return;
-
-    selectedSeat.value = { rowIndex, colIndex };
-    statusMenu.value.toggle(event);
-};
-
-// Update student status
-const updateStudentStatus = (rowIndex, colIndex, status) => {
-    const seat = seatPlan.value[rowIndex][colIndex];
-    if (!seat.isOccupied) return;
-
-    // If status requires remarks, show dialog
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    if (statusObj && statusObj.requiresRemarks) {
-        selectedStudentForRemarks.value = getStudentById(seat.studentId);
-        pendingStatus.value = status;
-        attendanceRemarks.value = ''; // Clear previous remarks
-        showRemarksDialog.value = true;
-    } else {
-        // Otherwise, update status directly
-        seat.status = status;
-        saveAttendanceRecord(seat.studentId, status);
-    }
-};
-
 // Save attendance with remarks
-const saveAttendanceWithRemarks = () => {
-    if (!selectedStudentForRemarks.value || !selectedSeat.value) return;
-
+const saveAttendanceWithRemarks = (status, remarks = '') => {
     const { rowIndex, colIndex } = selectedSeat.value;
     const seat = seatPlan.value[rowIndex][colIndex];
 
-    // Update the status
-    seat.status = pendingStatus.value;
+    // Update seat status
+    seat.status = status;
 
-    // Save the attendance record with remarks
-    saveAttendanceRecord(selectedStudentForRemarks.value.id, pendingStatus.value, attendanceRemarks.value);
+    // Get the student
+    const student = getStudentById(seat.studentId);
 
-    // Add to students with remarks
-    const existingIndex = studentsWithRemarks.value.findIndex((s) => s.id === selectedStudentForRemarks.value.id);
+    // Save to attendance records
+    const recordKey = `${seat.studentId}-${currentDate.value}`;
 
-    const remarkData = {
-        id: selectedStudentForRemarks.value.id,
-        name: selectedStudentForRemarks.value.name,
-        status: pendingStatus.value,
-        remarks: attendanceRemarks.value,
+    if (status === 'Present' || status === 'Late') {
+        // Remove from remarks panel if exists
+        remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== seat.studentId);
+        // Remove remarks from records
+        if (attendanceRecords.value[recordKey]) {
+            attendanceRecords.value[recordKey].remarks = '';
+        }
+    } else if (remarks) {
+        // Update or add to remarks panel for Absent/Excused
+        const remarkItem = {
+            studentId: seat.studentId,
+            studentName: student?.name || 'Unknown Student',
+            status,
+            remarks,
+            timestamp: new Date().toISOString()
+        };
+
+        const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === seat.studentId);
+        if (existingIndex >= 0) {
+            remarksPanel.value[existingIndex] = remarkItem;
+        } else {
+            remarksPanel.value.push(remarkItem);
+        }
+    }
+
+    // Update attendance records
+    attendanceRecords.value[recordKey] = {
+        studentId: seat.studentId,
+        date: currentDate.value,
+        status,
+        remarks: remarks || '',
         timestamp: new Date().toISOString()
     };
 
-    if (existingIndex >= 0) {
-        studentsWithRemarks.value[existingIndex] = remarkData;
-    } else {
-        studentsWithRemarks.value.push(remarkData);
-    }
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+    localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
-    // Close the dialog
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Attendance Marked',
+        detail: `Student marked as ${status}`,
+        life: 3000
+    });
+
+    // Close dialogs and reset values
+    showAttendanceDialog.value = false;
     showRemarksDialog.value = false;
-    selectedStudentForRemarks.value = null;
-    pendingStatus.value = null;
+    selectedSeat.value = null;
+    attendanceRemarks.value = '';
+    pendingStatus.value = '';
 };
 
 // Update the saveAttendanceRecord function to include remarks
@@ -539,6 +448,12 @@ const loadTemplate = (template) => {
     // Deep copy the seat plan to avoid reference issues
     seatPlan.value = JSON.parse(JSON.stringify(template.seatPlan));
 
+    // Recalculate unassigned students
+    calculateUnassignedStudents();
+
+    // Save the current layout to localStorage
+    saveCurrentLayout(false);
+
     toast.add({
         severity: 'success',
         summary: 'Template Loaded',
@@ -604,9 +519,9 @@ const calculateUnassignedStudents = () => {
     const assignedIds = new Set();
 
     for (const row of seatPlan.value) {
-        for (const seat of row) {
-            if (seat.isOccupied && seat.studentId) {
-                assignedIds.add(seat.studentId);
+        for (let j = 0; j < row.length; j++) {
+            if (row[j].isOccupied && row[j].studentId) {
+                assignedIds.add(row[j].studentId);
             }
         }
     }
@@ -702,21 +617,32 @@ const markAllPresent = () => {
     });
 };
 
-// Reset all attendance statuses
-const resetAttendance = () => {
-    // Confirm before resetting
+// Update resetAllAttendance function
+const resetAllAttendance = () => {
     if (confirm('Are you sure you want to reset all attendance statuses?')) {
         // Reset all seat statuses
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                if (seatPlan.value[i][j].isOccupied) {
-                    seatPlan.value[i][j].status = null;
+        seatPlan.value.forEach((row) => {
+            row.forEach((seat) => {
+                if (seat.isOccupied) {
+                    seat.status = null;
                 }
-            }
-        }
+            });
+        });
 
-        // Clear all remarks
-        studentsWithRemarks.value = [];
+        // Clear attendance records for current date
+        const today = currentDate.value;
+        Object.keys(attendanceRecords.value).forEach((key) => {
+            if (key.includes(today)) {
+                delete attendanceRecords.value[key];
+            }
+        });
+
+        // Clear remarks panel
+        remarksPanel.value = [];
+
+        // Update localStorage
+        localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+        localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
         toast.add({
             severity: 'success',
@@ -727,16 +653,109 @@ const resetAttendance = () => {
     }
 };
 
-// Get color for status
-const getStatusColor = (status) => {
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    return statusObj ? statusObj.color : 'transparent';
+// Update incrementRows function
+const incrementRows = () => {
+    if (rows.value < 12) {
+        rows.value++;
+
+        // Add new row at the top
+        const newRow = Array(columns.value)
+            .fill()
+            .map(() => ({
+                isOccupied: false,
+                studentId: null,
+                status: null
+            }));
+
+        seatPlan.value.unshift(newRow);
+
+        // Save the layout after changing rows
+        saveCurrentLayout(false);
+    }
 };
 
-// Get icon for status
-const getStatusIcon = (status) => {
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    return statusObj ? statusObj.icon : '';
+// Update decrementRows function
+const decrementRows = () => {
+    if (rows.value > 1) {
+        rows.value--;
+
+        // Find the first empty row from the top
+        let foundEmptyRow = false;
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            const rowIsEmpty = seatPlan.value[i].every((seat) => !seat.isOccupied);
+            if (rowIsEmpty) {
+                // Remove this empty row
+                seatPlan.value.splice(i, 1);
+                foundEmptyRow = true;
+                break;
+            }
+        }
+
+        // If no empty row was found, remove from bottom
+        if (!foundEmptyRow) {
+            seatPlan.value.pop();
+        }
+
+        // Save the layout after changing rows
+        saveCurrentLayout(false);
+    }
+};
+
+// Add incrementColumns and decrementColumns functions with similar save logic
+const incrementColumns = () => {
+    if (columns.value < 12) {
+        columns.value++;
+
+        // Add a new column to each row
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            seatPlan.value[i].push({
+                isOccupied: false,
+                studentId: null,
+                status: null
+            });
+        }
+
+        // Save the layout after changing columns
+        saveCurrentLayout(false);
+    }
+};
+
+const decrementColumns = () => {
+    if (columns.value > 1) {
+        columns.value--;
+
+        // Remove last column from each row if empty
+        let allEmpty = true;
+
+        // Check if all seats in the last column are empty
+        for (let i = 0; i < seatPlan.value.length; i++) {
+            const lastColIndex = seatPlan.value[i].length - 1;
+            if (lastColIndex >= 0 && seatPlan.value[i][lastColIndex].isOccupied) {
+                allEmpty = false;
+                break;
+            }
+        }
+
+        // Only remove if all are empty
+        if (allEmpty) {
+            for (let i = 0; i < seatPlan.value.length; i++) {
+                seatPlan.value[i].pop();
+            }
+        } else {
+            // If not all empty, revert the column change
+            columns.value++;
+            toast.add({
+                severity: 'warn',
+                summary: 'Cannot Remove Column',
+                detail: 'Cannot remove a column with assigned students',
+                life: 3000
+            });
+            return;
+        }
+
+        // Save the layout after changing columns
+        saveCurrentLayout(false);
+    }
 };
 
 // Watch for route changes to update subject
@@ -760,38 +779,104 @@ watch(
 // Initialize data on component mount
 onMounted(async () => {
     try {
-        // Initialize empty seat plan first
-        initializeSeatPlan();
+        // Get subject ID from route params
+        if (route.params.subjectId) {
+            subjectId.value = route.params.subjectId;
 
-        // Then try to load saved layout
-        await loadSavedTemplates();
+            // Format subject name from ID
+            subjectName.value = formatSubjectName(subjectId.value);
+
+            // Try to fetch actual subject data
+            try {
+                const subject = await SubjectService.getSubjectById(subjectId.value);
+                if (subject && subject.name) {
+                    subjectName.value = subject.name;
+                }
+            } catch (err) {
+                console.warn('Could not fetch subject details', err);
+            }
+        }
 
         // Fetch students
         const studentsData = await AttendanceService.getData();
         if (studentsData && studentsData.length > 0) {
             students.value = studentsData;
+        } else {
+            console.error('No students found in the database!');
 
-            // Initialize unassigned students
-            unassignedStudents.value = [...students.value];
+            // Create sample students for testing
+            students.value = [
+                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
+                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
+                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
+                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
+            ];
         }
 
-        // If there are saved templates, load the most recent one
-        if (savedTemplates.value && savedTemplates.value.length > 0) {
-            const defaultTemplate = savedTemplates.value.sort((a, b) => {
-                return new Date(b.createdAt) - new Date(a.createdAt);
-            })[0];
+        // Initialize an empty seat plan for grid layout
+        initializeSeatPlan();
 
-            if (defaultTemplate) {
-                loadTemplate(defaultTemplate);
+        // Set all students as unassigned initially
+        unassignedStudents.value = [...students.value];
+
+        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
+        try {
+            const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
+            if (savedAttendanceRecords) {
+                attendanceRecords.value = JSON.parse(savedAttendanceRecords);
             }
+
+            const savedRemarksPanel = localStorage.getItem('remarksPanel');
+            if (savedRemarksPanel) {
+                remarksPanel.value = JSON.parse(savedRemarksPanel);
+            }
+        } catch (err) {
+            console.warn('Error loading attendance records from localStorage:', err);
         }
 
-        // Show the attendance method selection modal
-        showAttendanceMethodModal.value = true;
+        // Fetch attendance history
+        await fetchAttendanceHistory();
+
+        // First try to load the saved layout
+        const layoutLoaded = loadSavedLayout();
+
+        if (!layoutLoaded) {
+            // If no saved layout, try to load templates
+            await loadSavedTemplates();
+
+            // Use default layout if no templates exist
+            if (savedTemplates.value.length === 0) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'Welcome to Seat Plan Attendance',
+                    detail: 'Create your own classroom layout using the Edit Seats button',
+                    life: 5000
+                });
+            } else {
+                // Load the most recently created template
+                const defaultTemplate = savedTemplates.value.sort((a, b) => {
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                })[0];
+
+                if (defaultTemplate) {
+                    loadTemplate(defaultTemplate);
+
+                    // Apply attendance statuses after loading template
+                    applyAttendanceStatusesToSeatPlan();
+                }
+            }
+        } else {
+            toast.add({
+                severity: 'info',
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
+            });
+        }
     } catch (error) {
         console.error('Error initializing data:', error);
-        // Ensure we at least have an empty seat plan
-        initializeSeatPlan();
     }
 });
 
@@ -803,29 +888,6 @@ const showStatusSelection = (rowIndex, colIndex) => {
     selectedSeat.value = { rowIndex, colIndex };
     selectedStudent.value = getStudentById(seat.studentId);
     showStatusDialog.value = true;
-};
-
-// Update student status from dialog
-const selectStatus = (status) => {
-    if (!selectedSeat.value) return;
-
-    const { rowIndex, colIndex } = selectedSeat.value;
-    const seat = seatPlan.value[rowIndex][colIndex];
-
-    // If status requires remarks, show remarks dialog
-    const statusObj = attendanceStatuses.find((s) => s.name === status);
-    if (statusObj && statusObj.requiresRemarks) {
-        selectedStudentForRemarks.value = selectedStudent.value;
-        pendingStatus.value = status;
-        attendanceRemarks.value = ''; // Clear previous remarks
-        showStatusDialog.value = false;
-        showRemarksDialog.value = true;
-    } else {
-        // Otherwise, update status directly
-        seat.status = status;
-        saveAttendanceRecord(seat.studentId, status);
-        showStatusDialog.value = false;
-    }
 };
 
 // Function to handle drag start
@@ -858,6 +920,9 @@ const removeStudentFromSeat = (rowIndex, colIndex) => {
         }
     }
 
+    // Save the current layout to localStorage
+    saveCurrentLayout(false); // false means don't show toast notification
+
     toast.add({
         severity: 'info',
         summary: 'Student Unassigned',
@@ -873,263 +938,71 @@ const allowDrop = (event) => {
     }
 };
 
-// Add function to handle drop on unassigned section
-const dropOnUnassigned = (event) => {
-    if (!isEditMode.value || !draggedStudent.value) return;
+// Function to mark a student as present
+const markStudentPresent = (student) => {
+    // Find if student is already assigned to a seat
+    let found = false;
+    let rowIndex = -1;
+    let colIndex = -1;
 
-    // Find the student's current seat
-    let foundSeat = false;
-
+    // Search in seat plan
     for (let i = 0; i < seatPlan.value.length; i++) {
         for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === draggedStudent.value.id) {
-                // Clear the seat
-                seat.studentId = null;
-                seat.isOccupied = false;
-                seat.status = null;
-                foundSeat = true;
+            if (seatPlan.value[i][j].studentId === student.id) {
+                rowIndex = i;
+                colIndex = j;
+                found = true;
                 break;
             }
         }
-        if (foundSeat) break;
+        if (found) break;
     }
 
-    // Make sure student is in unassigned list
-    const exists = unassignedStudents.value.some((s) => s.id === draggedStudent.value.id);
-    if (!exists) {
-        unassignedStudents.value.push(draggedStudent.value);
+    if (found) {
+        // Update existing seat
+        seatPlan.value[rowIndex][colIndex].status = 'Present';
+
+        // Save attendance record
+        const recordKey = `${student.id}_${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: student.id,
+            date: currentDate.value,
+            status: 'Present',
+            time: new Date().toLocaleTimeString(),
+            remarks: ''
+        };
+    } else {
+        // Student isn't assigned to a seat, just record attendance
+        const recordKey = `${student.id}_${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: student.id,
+            date: currentDate.value,
+            status: 'Present',
+            time: new Date().toLocaleTimeString(),
+            remarks: ''
+        };
     }
 
-    // Reset dragged student
-    draggedStudent.value = null;
-
-    toast.add({
-        severity: 'info',
-        summary: 'Student Unassigned',
-        detail: 'Student has been moved to unassigned list',
-        life: 3000
-    });
-};
-
-// Compute whether to show remarks on side or bottom
-const showRemarksOnSide = computed(() => {
-    return columns.value <= 11;
-});
-
-// QR Code Attendance Methods
-const startQRAttendance = () => {
-    showAttendanceMethodModal.value = false;
-    showQRScanner.value = true;
-    isCameraLoading.value = true;
-
-    // Ensure Vue has updated the DOM before initializing the camera
-    nextTick(() => {
-        if (videoElement.value) {
-            initializeCamera();
-        } else {
-            console.error('Video element not found in DOM.');
-        }
-    });
-};
-
-const initializeCamera = async () => {
-    if (!codeReader) {
-        codeReader = new BrowserMultiFormatReader();
-    }
-
-    try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter((device) => device.kind === 'videoinput');
-
-        if (videoDevices.length > 0) {
-            const selectedDeviceId = videoDevices[0].deviceId;
-
-            // Ensure videoElement is available before accessing it
-            if (!videoElement.value) {
-                console.error('Error: videoElement is not available.');
-                return;
-            }
-
-            await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, err) => {
-                if (result) {
-                    processScannedData(result.text);
-                } else if (err) {
-                    console.warn('QR Code scan error:', err);
-                }
-            });
-        } else {
-            console.error('No camera found');
-        }
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-    } finally {
-        isCameraLoading.value = false;
-    }
-};
-
-const processScannedData = (scannedText) => {
-    try {
-        // Try to parse the scanned data as JSON
-        const studentData = JSON.parse(scannedText);
-
-        // Check if it has the expected properties
-        if (studentData.id && studentData.name) {
-            // Find the student in our data
-            const student = students.value.find((s) => s.id === studentData.id);
-
-            if (student) {
-                // Check if already scanned
-                if (!scannedStudents.value.some((s) => s.id === student.id)) {
-                    // Add to scanned students
-                    scannedStudents.value.push(student);
-
-                    // Mark as present in the seat plan
-                    markStudentPresent(student.id);
-
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Student Scanned',
-                        detail: `${student.name} marked as present`,
-                        life: 3000
-                    });
-                } else {
-                    toast.add({
-                        severity: 'info',
-                        summary: 'Already Scanned',
-                        detail: `${student.name} was already scanned`,
-                        life: 3000
-                    });
-                }
-            } else {
-                toast.add({
-                    severity: 'warn',
-                    summary: 'Unknown Student',
-                    detail: 'Student not found in class roster',
-                    life: 3000
-                });
-            }
-        } else {
-            throw new Error('Invalid student data format');
-        }
-    } catch (error) {
-        console.error('Error processing QR data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Invalid QR Code',
-            detail: 'The scanned QR code is not valid for attendance',
-            life: 3000
-        });
-    }
-};
-
-const markStudentPresent = (studentId) => {
-    // Find the student in the seat plan
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === studentId) {
-                seat.status = 'Present';
-                saveAttendanceRecord(studentId, 'Present');
-                return;
-            }
-        }
-    }
-};
-
-const closeScanner = () => {
-    if (codeReader) {
-        try {
-            codeReader.reset();
-        } catch (error) {
-            console.error('Error stopping scanner:', error);
-        }
-    }
-
-    // Stop the camera stream safely
-    if (videoElement.value && videoElement.value.srcObject) {
-        const stream = videoElement.value.srcObject;
-        const tracks = stream.getTracks();
-        tracks.forEach((track) => track.stop());
-        videoElement.value.srcObject = null;
-    }
-
-    showQRScanner.value = false;
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
 };
 
 // Roll Call Methods
 const startRollCall = () => {
+    showRollCall.value = true;
+    showQRScanner.value = false;
     showAttendanceMethodModal.value = false;
 
-    // Initialize roll call with the first student
+    // Initialize roll call process
+    currentStudentIndex.value = 0;
     if (students.value.length > 0) {
-        currentStudentIndex.value = 0;
         currentStudent.value = students.value[0];
-        showRollCall.value = true;
-    } else {
-        toast.add({
-            severity: 'error',
-            summary: 'No Students',
-            detail: 'There are no students to call',
-            life: 3000
-        });
-    }
-};
-
-const markAttendance = (status) => {
-    if (!currentStudent.value) return;
-
-    // Mark the student in the seat plan
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
-            const seat = seatPlan.value[i][j];
-            if (seat.isOccupied && seat.studentId === currentStudent.value.id) {
-                seat.status = status;
-
-                // If status requires remarks, show dialog
-                if (status === 'Absent' || status === 'Excused') {
-                    selectedStudentForRemarks.value = currentStudent.value;
-                    pendingStatus.value = status;
-                    attendanceRemarks.value = '';
-                    showRemarksDialog.value = true;
-                    return;
-                } else {
-                    // Otherwise save directly
-                    saveAttendanceRecord(currentStudent.value.id, status);
-                }
-                break;
-            }
-        }
     }
 
-    // Move to next student
-    moveToNextStudent();
-};
-
-const moveToNextStudent = () => {
-    currentStudentIndex.value++;
-    if (currentStudentIndex.value < students.value.length) {
-        currentStudent.value = students.value[currentStudentIndex.value];
-    } else {
-        // End of roll call
-        showRollCall.value = false;
-        toast.add({
-            severity: 'success',
-            summary: 'Roll Call Complete',
-            detail: 'All students have been called',
-            life: 3000
-        });
-    }
-};
-
-// Start seat plan attendance directly
-const startSeatPlanAttendance = () => {
-    showAttendanceMethodModal.value = false;
-    // No additional setup needed as the seat plan is already visible
     toast.add({
         severity: 'info',
-        summary: 'Seat Plan Attendance',
-        detail: 'Click on students to mark attendance',
+        summary: 'Roll Call Mode',
+        detail: 'Roll call mode started. Mark each student as they respond.',
         life: 3000
     });
 };
@@ -1142,76 +1015,6 @@ onUnmounted(() => {
     }
 });
 
-// Function to choose seat plan directly
-const chooseSeatPlan = () => {
-    showAttendanceMethodModal.value = false;
-};
-
-// Add a function to show the attendance method modal
-const showAttendanceMethodSelector = () => {
-    // Force the dialog to show
-    showAttendanceMethodModal.value = true;
-
-    // Log to console for debugging
-    console.log('Showing attendance method modal:', showAttendanceMethodModal.value);
-};
-
-// Make sure these functions are defined
-const incrementRows = () => {
-    if (rows.value < 10) {
-        rows.value++;
-        updateGridSize();
-    }
-};
-
-const decrementRows = () => {
-    if (rows.value > 1) {
-        rows.value--;
-        updateGridSize();
-    }
-};
-
-const incrementColumns = () => {
-    if (columns.value < 10) {
-        columns.value++;
-        updateGridSize();
-    }
-};
-
-const decrementColumns = () => {
-    if (columns.value > 1) {
-        columns.value--;
-        updateGridSize();
-    }
-};
-
-const updateGridSize = () => {
-    // Preserve student assignments when possible
-    const oldGrid = [...seatPlan.value];
-
-    // Create new grid with updated dimensions
-    const newGrid = [];
-    for (let i = 0; i < rows.value; i++) {
-        const row = [];
-        for (let j = 0; j < columns.value; j++) {
-            // Copy existing seat data if available
-            if (i < oldGrid.length && j < oldGrid[i].length) {
-                row.push({ ...oldGrid[i][j] });
-            } else {
-                row.push({
-                    isOccupied: false,
-                    studentId: null,
-                    status: null
-                });
-            }
-        }
-        newGrid.push(row);
-    }
-
-    // Update the seat plan
-    seatPlan.value = newGrid;
-};
-
 // Add computed property for sorted unassigned students
 const sortedUnassignedStudents = computed(() => {
     // First filter by search query
@@ -1222,6 +1025,544 @@ const sortedUnassignedStudents = computed(() => {
         return a.name.localeCompare(b.name);
     });
 });
+
+// Function to show attendance dialog when clicking a seat
+const handleSeatClick = (rowIndex, colIndex) => {
+    if (!isEditMode.value && seatPlan.value[rowIndex][colIndex].isOccupied) {
+        selectedSeat.value = { rowIndex, colIndex };
+        showAttendanceDialog.value = true;
+    }
+};
+
+// Function to set attendance status
+const setAttendanceStatus = (status) => {
+    if (!selectedSeat.value) return;
+
+    // If status is Absent or Excused, show remarks dialog
+    if (status === 'Absent' || status === 'Excused') {
+        pendingStatus.value = status;
+        showAttendanceDialog.value = false;
+        showRemarksDialog.value = true;
+        return;
+    }
+
+    saveAttendanceWithRemarks(status);
+};
+
+// Add new function to save attendance with remarks
+const saveRemarks = () => {
+    if (!attendanceRemarks.value.trim()) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please enter remarks',
+            life: 3000
+        });
+        return;
+    }
+
+    saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
+};
+
+// Add this function to show the attendance method dialog
+const openAttendanceMethodDialog = () => {
+    showAttendanceMethodModal.value = true;
+
+    // Reset any previous selection
+    showQRScanner.value = false;
+    showRollCall.value = false;
+
+    console.log('Opening attendance method dialog');
+};
+
+// Add these functions for handling attendance methods
+const startQRScanner = async () => {
+    showQRScanner.value = true;
+    showRollCall.value = false;
+    showAttendanceMethodModal.value = false;
+    isCameraLoading.value = true;
+
+    try {
+        // Initialize QR code scanner
+        codeReader = new BrowserMultiFormatReader();
+
+        // Get available video devices
+        const videoDevices = await codeReader.listVideoInputDevices();
+
+        if (videoDevices.length === 0) {
+            throw new Error('No camera devices found');
+        }
+
+        // Use first video device
+        const selectedDeviceId = videoDevices[0].deviceId;
+
+        // Wait for video element to be available in the DOM
+        await nextTick();
+
+        if (!videoElement.value) {
+            throw new Error('Video element not found');
+        }
+
+        // Start decoding from video stream
+        codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, error) => {
+            if (result) {
+                handleQRCodeResult(result.getText());
+            }
+            if (error && error.name !== 'NotFoundException') {
+                console.error('QR Scanner error:', error);
+            }
+        });
+
+        isCameraLoading.value = false;
+
+        toast.add({
+            severity: 'info',
+            summary: 'QR Scanner',
+            detail: 'QR Scanner is active. Scan student ID QR codes.',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error starting QR scanner:', error);
+        isCameraLoading.value = false;
+        showQRScanner.value = false;
+
+        toast.add({
+            severity: 'error',
+            summary: 'Scanner Error',
+            detail: 'Could not start QR scanner: ' + error.message,
+            life: 5000
+        });
+    }
+};
+
+// Handle QR code result
+const handleQRCodeResult = (qrData) => {
+    try {
+        // Extract student ID from QR code data
+        const studentId = parseInt(qrData.trim());
+
+        if (isNaN(studentId)) {
+            throw new Error('Invalid QR code format');
+        }
+
+        // Find the student
+        const student = getStudentById(studentId);
+
+        if (!student) {
+            throw new Error('Student not found');
+        }
+
+        // Check if already scanned
+        if (scannedStudents.value.includes(studentId)) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Already Scanned',
+                detail: `${student.name} has already been marked present`,
+                life: 3000
+            });
+            return;
+        }
+
+        // Mark student as present
+        markStudentPresent(student);
+
+        // Add to scanned list
+        scannedStudents.value.push(studentId);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Student Present',
+            detail: `${student.name} marked as present`,
+            life: 2000
+        });
+    } catch (error) {
+        console.error('Error processing QR code:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'QR Error',
+            detail: error.message,
+            life: 3000
+        });
+    }
+};
+
+// Clean up camera resources on unmount
+onUnmounted(() => {
+    if (codeReader) {
+        codeReader.reset();
+        codeReader = null;
+    }
+});
+
+// Add this function for the Roll Call feature
+const markRollCallStatus = (status) => {
+    if (!currentStudent.value) return;
+
+    // Mark student with the selected status
+    const student = currentStudent.value;
+    const studentId = student.id;
+
+    // Find if student is in a seat
+    let found = false;
+
+    // Search all seats
+    for (let i = 0; i < seatPlan.value.length && !found; i++) {
+        for (let j = 0; j < seatPlan.value[i].length && !found; j++) {
+            if (seatPlan.value[i][j].studentId === studentId) {
+                // Update seat status
+                seatPlan.value[i][j].status = status;
+                found = true;
+            }
+        }
+    }
+
+    // Save attendance record
+    const recordKey = `${studentId}_${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: studentId,
+        date: currentDate.value,
+        status: status,
+        time: new Date().toLocaleTimeString(),
+        remarks: ''
+    };
+
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+
+    // Show confirmation
+    toast.add({
+        severity: status === 'Present' ? 'success' : status === 'Absent' ? 'error' : 'warn',
+        summary: `Marked ${status}`,
+        detail: `${student.name} has been marked as ${status}`,
+        life: 2000
+    });
+
+    // Move to next student
+    if (currentStudentIndex.value < students.value.length - 1) {
+        currentStudentIndex.value++;
+        currentStudent.value = students.value[currentStudentIndex.value];
+    } else {
+        // End of roll call
+        toast.add({
+            severity: 'info',
+            summary: 'Roll Call Complete',
+            detail: 'All students have been processed',
+            life: 3000
+        });
+        showRollCall.value = false;
+    }
+};
+
+// Update the roll call attendance marking function
+const markRollCallAttendance = (status) => {
+    if (!currentStudent.value) return;
+
+    // For Absent or Excused, show remarks dialog
+    if (status === 'Absent' || status === 'Excused') {
+        pendingRollCallStatus.value = status;
+        showRollCallRemarksDialog.value = true;
+        return;
+    }
+
+    // For Present or Late, mark directly
+    saveRollCallAttendanceWithRemarks(status);
+};
+
+// Add function to save roll call attendance with remarks
+const saveRollCallAttendanceWithRemarks = (status, remarks = '') => {
+    if (!currentStudent.value) return;
+
+    // Find student's seat in the grid
+    let foundSeat = null;
+    let rowIndex = -1;
+    let colIndex = -1;
+
+    seatPlan.value.forEach((row, rIndex) => {
+        row.forEach((seat, cIndex) => {
+            if (seat.studentId === currentStudent.value.id) {
+                foundSeat = seat;
+                rowIndex = rIndex;
+                colIndex = cIndex;
+            }
+        });
+    });
+
+    if (foundSeat) {
+        // Update seat status
+        foundSeat.status = status;
+
+        // Save attendance with remarks
+        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: currentStudent.value.id,
+            date: currentDate.value,
+            status,
+            remarks,
+            timestamp: new Date().toISOString()
+        };
+
+        // Update remarks panel if needed
+        if (status === 'Absent' || status === 'Excused') {
+            updateRemarksPanel(currentStudent.value.id, status, remarks);
+        } else {
+            // Remove from remarks panel if exists
+            remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== currentStudent.value.id);
+        }
+    }
+
+    // Move to next student
+    currentStudentIndex.value++;
+    if (currentStudentIndex.value < students.value.length) {
+        currentStudent.value = students.value[currentStudentIndex.value];
+    } else {
+        // End roll call
+        showRollCall.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Roll Call Complete',
+            detail: 'Roll call has been completed',
+            life: 3000
+        });
+    }
+
+    // Reset remarks dialog
+    showRollCallRemarksDialog.value = false;
+    rollCallRemarks.value = '';
+    pendingRollCallStatus.value = '';
+};
+
+// Add function to save roll call remarks
+const saveRollCallRemarks = () => {
+    if (!rollCallRemarks.value.trim()) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please enter remarks',
+            life: 3000
+        });
+        return;
+    }
+
+    saveRollCallAttendanceWithRemarks(pendingRollCallStatus.value, rollCallRemarks.value);
+};
+
+// Add this function for the updateRemarksPanel
+const updateRemarksPanel = (studentId, status, remarks) => {
+    // Get the student
+    const student = getStudentById(studentId);
+
+    // Create a remark item
+    const remarkItem = {
+        studentId: studentId,
+        studentName: student?.name || 'Unknown Student',
+        status,
+        remarks,
+        timestamp: new Date().toISOString()
+    };
+
+    // Update or add to remarks panel
+    const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === studentId);
+    if (existingIndex >= 0) {
+        remarksPanel.value[existingIndex] = remarkItem;
+    } else {
+        remarksPanel.value.push(remarkItem);
+    }
+
+    // Save to localStorage
+    localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
+};
+
+// Add a function to apply attendance statuses to the seat plan after loading
+const applyAttendanceStatusesToSeatPlan = () => {
+    // Skip if no attendance records
+    if (!attendanceRecords.value || Object.keys(attendanceRecords.value).length === 0) return;
+
+    // Get today's date
+    const today = currentDate.value;
+
+    // Apply attendance statuses to the seat plan
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
+            if (seat.isOccupied && seat.studentId) {
+                // Look for a record matching this student on current date
+                // Check both formats: studentId-date and studentId_date
+                const recordKey1 = `${seat.studentId}-${today}`;
+                const recordKey2 = `${seat.studentId}_${today}`;
+
+                const record = attendanceRecords.value[recordKey1] || attendanceRecords.value[recordKey2];
+
+                if (record) {
+                    // Apply the status from the record
+                    seat.status = record.status;
+                    console.log(`Applied status ${record.status} to student ${seat.studentId}`);
+                }
+            }
+        });
+    });
+};
+
+// Update the loadSavedLayout function to apply attendance statuses after loading the layout
+const loadSavedLayout = () => {
+    try {
+        const storageKey = `seatPlan_${subjectId.value}`;
+        const savedData = localStorage.getItem(storageKey);
+
+        if (savedData) {
+            const parsedData = JSON.parse(savedData);
+
+            // Check if it's a template array or a layout object
+            if (Array.isArray(parsedData)) {
+                console.log('Found array of templates instead of layout object');
+                return false;
+            }
+
+            // Set layout configuration
+            rows.value = parsedData.rows || rows.value;
+            columns.value = parsedData.columns || columns.value;
+            showTeacherDesk.value = parsedData.showTeacherDesk !== undefined ? parsedData.showTeacherDesk : showTeacherDesk.value;
+            showStudentIds.value = parsedData.showStudentIds !== undefined ? parsedData.showStudentIds : showStudentIds.value;
+
+            // Set the seat plan with deep copy to avoid reference issues
+            if (parsedData.seatPlan) {
+                seatPlan.value = JSON.parse(JSON.stringify(parsedData.seatPlan));
+
+                // Recalculate unassigned students
+                calculateUnassignedStudents();
+
+                // Apply attendance statuses to the seat plan
+                applyAttendanceStatusesToSeatPlan();
+
+                console.log('Loaded saved layout with student assignments');
+                return true;
+            }
+        }
+        return false;
+    } catch (error) {
+        console.error('Error loading saved layout:', error);
+        return false;
+    }
+};
+
+// Update onMounted to load attendance records first, before loading the layout
+onMounted(async () => {
+    try {
+        // Get subject ID from route params
+        if (route.params.subjectId) {
+            subjectId.value = route.params.subjectId;
+
+            // Format subject name from ID
+            subjectName.value = formatSubjectName(subjectId.value);
+
+            // Try to fetch actual subject data
+            try {
+                const subject = await SubjectService.getSubjectById(subjectId.value);
+                if (subject && subject.name) {
+                    subjectName.value = subject.name;
+                }
+            } catch (err) {
+                console.warn('Could not fetch subject details', err);
+            }
+        }
+
+        // Fetch students
+        const studentsData = await AttendanceService.getData();
+        if (studentsData && studentsData.length > 0) {
+            students.value = studentsData;
+        } else {
+            console.error('No students found in the database!');
+
+            // Create sample students for testing
+            students.value = [
+                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
+                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
+                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
+                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
+            ];
+        }
+
+        // Initialize an empty seat plan for grid layout
+        initializeSeatPlan();
+
+        // Set all students as unassigned initially
+        unassignedStudents.value = [...students.value];
+
+        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
+        try {
+            const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
+            if (savedAttendanceRecords) {
+                attendanceRecords.value = JSON.parse(savedAttendanceRecords);
+            }
+
+            const savedRemarksPanel = localStorage.getItem('remarksPanel');
+            if (savedRemarksPanel) {
+                remarksPanel.value = JSON.parse(savedRemarksPanel);
+            }
+        } catch (err) {
+            console.warn('Error loading attendance records from localStorage:', err);
+        }
+
+        // Fetch attendance history
+        await fetchAttendanceHistory();
+
+        // First try to load the saved layout
+        const layoutLoaded = loadSavedLayout();
+
+        if (!layoutLoaded) {
+            // If no saved layout, try to load templates
+            await loadSavedTemplates();
+
+            // Use default layout if no templates exist
+            if (savedTemplates.value.length === 0) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'Welcome to Seat Plan Attendance',
+                    detail: 'Create your own classroom layout using the Edit Seats button',
+                    life: 5000
+                });
+            } else {
+                // Load the most recently created template
+                const defaultTemplate = savedTemplates.value.sort((a, b) => {
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                })[0];
+
+                if (defaultTemplate) {
+                    loadTemplate(defaultTemplate);
+
+                    // Apply attendance statuses after loading template
+                    applyAttendanceStatusesToSeatPlan();
+                }
+            }
+        } else {
+            toast.add({
+                severity: 'info',
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error initializing data:', error);
+    }
+});
+
+// Update watch for currentDate to reapply statuses when date changes
+watch(currentDate, (newDate) => {
+    // Reapply attendance statuses when the date changes
+    applyAttendanceStatusesToSeatPlan();
+});
+
+// Add watchers for the checkbox options
+watch(showTeacherDesk, (newValue) => {
+    // Save layout when teacher desk visibility is changed
+    saveCurrentLayout(false);
+});
+
+watch(showStudentIds, (newValue) => {
+    // Save layout when student IDs visibility is changed
+    saveCurrentLayout(false);
+});
 </script>
 
 <template>
@@ -1231,7 +1572,7 @@ const sortedUnassignedStudents = computed(() => {
             <h5 class="text-xl font-semibold">{{ subjectName }} Attendance</h5>
             <div class="flex gap-2 align-items-center">
                 <Calendar v-model="currentDate" dateFormat="yy-mm-dd" class="mr-2" />
-                <Button label="Take Attendance" icon="pi pi-plus" class="p-button-success" @click="showAttendanceMethodSelector" />
+                <Button icon="pi pi-list-check" label="Take Attendance" class="p-button-primary" @click="openAttendanceMethodDialog" />
             </div>
         </div>
 
@@ -1245,7 +1586,7 @@ const sortedUnassignedStudents = computed(() => {
 
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
 
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAttendance" />
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" />
         </div>
 
         <!-- Main content with seat plan - always visible -->
@@ -1299,7 +1640,7 @@ const sortedUnassignedStudents = computed(() => {
 
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
-                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
+                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1" @click="!isEditMode ? handleSeatClick(rowIndex, colIndex) : null">
                                 <div
                                     :class="[
                                         'seat p-3 border rounded-lg',
@@ -1375,7 +1716,7 @@ const sortedUnassignedStudents = computed(() => {
         </div>
 
         <!-- Template Save Dialog -->
-        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :style="{ width: '450px' }" :modal="true">
+        <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :modal="true" :style="{ width: '450px' }" :closeOnEscape="true" :dismissableMask="true">
             <div class="p-fluid">
                 <div class="field">
                     <label for="templateName">Template Name</label>
@@ -1389,7 +1730,7 @@ const sortedUnassignedStudents = computed(() => {
         </Dialog>
 
         <!-- Template Manager Dialog -->
-        <Dialog v-model:visible="showTemplateManager" header="Load Template" :style="{ width: '600px' }" :modal="true">
+        <Dialog v-model:visible="showTemplateManager" header="Load Template" :modal="true" :style="{ width: '600px' }" :closeOnEscape="true" :dismissableMask="true">
             <div v-if="savedTemplates.length === 0" class="text-center p-4 text-gray-500">
                 <i class="pi pi-folder-open text-4xl mb-3"></i>
                 <p>No templates saved yet. Create a seat plan and save it as a template.</p>
@@ -1420,6 +1761,165 @@ const sortedUnassignedStudents = computed(() => {
                 <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showTemplateManager = false" />
                 <Button label="Load" icon="pi pi-check" class="p-button-success" :disabled="!selectedTemplate" @click="loadTemplate(selectedTemplate)" />
             </template>
+        </Dialog>
+
+        <!-- Add the Attendance Dialog -->
+        <Dialog v-model:visible="showAttendanceDialog" header="Mark Attendance" :modal="true" :style="{ width: '400px' }" :closeOnEscape="true" :dismissableMask="true">
+            <div class="grid grid-cols-2 gap-4 p-4">
+                <Button class="attendance-btn present-btn p-button-outlined" @click="setAttendanceStatus('Present')">
+                    <i class="pi pi-check-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Present</span>
+                </Button>
+
+                <Button class="attendance-btn late-btn p-button-outlined" @click="setAttendanceStatus('Late')">
+                    <i class="pi pi-clock text-3xl mb-2"></i>
+                    <span class="font-semibold">Late</span>
+                </Button>
+
+                <Button class="attendance-btn absent-btn p-button-outlined" @click="setAttendanceStatus('Absent')">
+                    <i class="pi pi-times-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Absent</span>
+                </Button>
+
+                <Button class="attendance-btn excused-btn p-button-outlined" @click="setAttendanceStatus('Excused')">
+                    <i class="pi pi-info-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Excused</span>
+                </Button>
+            </div>
+        </Dialog>
+
+        <!-- Add Remarks Dialog -->
+        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '30vw', minWidth: '400px' }" :closeOnEscape="true" :dismissableMask="true">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="attendanceRemarks">Remarks</label>
+                    <Textarea id="attendanceRemarks" v-model="attendanceRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showRemarksDialog = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveRemarks" />
+            </template>
+        </Dialog>
+
+        <!-- Add Remarks Panel -->
+        <div v-if="remarksPanel.length > 0" class="remarks-section">
+            <div class="remarks-container">
+                <h3 class="text-lg font-medium mb-3">Attendance Remarks</h3>
+                <div class="remarks-list">
+                    <div
+                        v-for="remark in remarksPanel"
+                        :key="remark.studentId"
+                        class="remark-card p-3 rounded-lg border mb-2"
+                        :class="{
+                            'border-red-500 bg-red-50': remark.status === 'Absent',
+                            'border-purple-500 bg-purple-50': remark.status === 'Excused'
+                        }"
+                    >
+                        <div class="font-medium">{{ remark.studentName }}</div>
+                        <div
+                            class="text-sm"
+                            :class="{
+                                'text-red-600': remark.status === 'Absent',
+                                'text-purple-600': remark.status === 'Excused'
+                            }"
+                        >
+                            Status: {{ remark.status }}
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">{{ remark.remarks }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Method Dialog -->
+        <Dialog v-model:visible="showAttendanceMethodModal" header="Select Attendance Method" :modal="true" :closable="true" style="width: 400px">
+            <div class="p-4">
+                <h3 class="text-lg font-medium mb-4">How would you like to take attendance?</h3>
+
+                <div class="flex flex-col gap-4">
+                    <Button icon="pi pi-users" label="Seat Plan" class="p-button-outlined" @click="showAttendanceMethodModal = false" />
+
+                    <Button icon="pi pi-list" label="Roll Call" class="p-button-outlined" @click="startRollCall" />
+
+                    <Button icon="pi pi-camera" label="QR Scanner" class="p-button-outlined" @click="startQRScanner" />
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- Roll Call Dialog -->
+        <Dialog v-model:visible="showRollCall" header="Roll Call" :modal="true" :closable="true" style="width: 500px">
+            <div v-if="currentStudent" class="p-4">
+                <div class="flex items-center mb-4">
+                    <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-800 font-bold mr-3">
+                        {{ getStudentInitials(currentStudent) }}
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-medium">{{ currentStudent.name }}</h3>
+                        <p class="text-gray-500 text-sm">ID: {{ currentStudent.id }}</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 justify-center mt-4">
+                    <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallAttendance('Present')" />
+                    <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallAttendance('Absent')" />
+                    <Button icon="pi pi-clock" label="Late" style="background: #eab308; border-color: #eab308" @click="markRollCallAttendance('Late')" />
+                    <Button icon="pi pi-info-circle" label="Excused" style="background: #9333ea; border-color: #9333ea" @click="markRollCallAttendance('Excused')" />
+                </div>
+
+                <div class="flex justify-between mt-6">
+                    <p class="text-gray-500">{{ currentStudentIndex + 1 }} of {{ students.length }}</p>
+                    <div>
+                        <Button icon="pi pi-times" class="p-button-text" @click="showRollCall = false" label="Finish" />
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- Roll Call Remarks Dialog -->
+        <Dialog v-model:visible="showRollCallRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '30vw', minWidth: '400px' }" :closeOnEscape="true" :dismissableMask="true">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="rollCallRemarks">Remarks</label>
+                    <Textarea id="rollCallRemarks" v-model="rollCallRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showRollCallRemarksDialog = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveRollCallRemarks" />
+            </template>
+        </Dialog>
+
+        <!-- QR Scanner Dialog -->
+        <Dialog v-model:visible="showQRScanner" header="QR Scanner" :modal="true" :closable="true" style="width: 500px">
+            <div class="p-4">
+                <div v-if="isCameraLoading" class="flex items-center justify-center p-6">
+                    <i class="pi pi-spin pi-spinner text-3xl text-blue-500 mr-3"></i>
+                    <span>Loading camera...</span>
+                </div>
+
+                <div v-else class="qr-scanner-container">
+                    <video ref="videoElement" class="w-full h-64 bg-black rounded"></video>
+
+                    <div class="mt-4">
+                        <p class="text-sm text-gray-600 mb-2">Point the camera at a student ID QR code</p>
+
+                        <div v-if="scannedStudents.length > 0" class="mt-4">
+                            <h4 class="text-sm font-medium mb-2">Scanned Students: {{ scannedStudents.length }}</h4>
+                            <ul class="text-sm max-h-32 overflow-y-auto">
+                                <li v-for="id in scannedStudents" :key="id" class="py-1 px-2 bg-green-50 rounded mb-1 flex items-center">
+                                    <i class="pi pi-check-circle text-green-500 mr-2"></i>
+                                    {{ getStudentById(id)?.name || `Student ID: ${id}` }}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end mt-4">
+                        <Button icon="pi pi-times" label="Close" @click="showQRScanner = false" />
+                    </div>
+                </div>
+            </div>
         </Dialog>
     </div>
 </template>
@@ -1546,8 +2046,8 @@ const sortedUnassignedStudents = computed(() => {
 }
 
 .student-excused {
-    background-color: #d1ecf1;
-    border-color: #bee5eb;
+    background-color: #e3ccf8;
+    border-color: #c5a9fa;
 }
 
 .student-occupied {
@@ -1605,5 +2105,104 @@ const sortedUnassignedStudents = computed(() => {
 .template-item:hover {
     background-color: #f8f9fa;
     border-color: #dee2e6;
+}
+
+.attendance-btn {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1.5rem !important;
+    border-radius: 8px !important;
+    transition: all 0.2s !important;
+    height: 120px !important;
+    border: 2px solid !important;
+    background-color: white !important;
+}
+
+.present-btn {
+    color: #22c55e !important;
+    border-color: #22c55e !important;
+}
+.present-btn:hover {
+    background-color: #22c55e !important;
+    color: white !important;
+}
+
+.late-btn {
+    color: #eab308 !important;
+    border-color: #eab308 !important;
+}
+.late-btn:hover {
+    background-color: #eab308 !important;
+    color: white !important;
+}
+
+.absent-btn {
+    color: #ef4444 !important;
+    border-color: #ef4444 !important;
+}
+.absent-btn:hover {
+    background-color: #ef4444 !important;
+    color: white !important;
+}
+
+.excused-btn {
+    color: #9333ea !important;
+    border-color: #9333ea !important;
+}
+.excused-btn:hover {
+    background-color: #9333ea !important;
+    color: white !important;
+}
+
+/* Force icon colors */
+.present-btn i {
+    color: #22c55e !important;
+}
+.late-btn i {
+    color: #eab308 !important;
+}
+.absent-btn i {
+    color: #ef4444 !important;
+}
+.excused-btn i {
+    color: #9333ea !important;
+}
+
+/* Change icon colors on hover */
+.attendance-btn:hover i {
+    color: white !important;
+}
+
+/* Add to your existing styles */
+.remarks-section {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
+}
+
+.remarks-container {
+    width: 100%;
+    max-width: 600px;
+    background-color: white;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.remarks-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.remark-card {
+    transition: all 0.2s ease;
+}
+
+.remark-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 </style>
