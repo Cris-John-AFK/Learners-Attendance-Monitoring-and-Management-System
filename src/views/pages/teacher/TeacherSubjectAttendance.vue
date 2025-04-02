@@ -68,6 +68,11 @@ let codeReader = null;
 // Rename to avoid conflict
 const showAttendanceDialog = ref(false);
 
+// Add these refs if not already present
+const showRollCallRemarksDialog = ref(false);
+const rollCallRemarks = ref('');
+const pendingRollCallStatus = ref('');
+
 // Toggle edit mode
 const toggleEditMode = () => {
     isEditMode.value = !isEditMode.value;
@@ -503,9 +508,9 @@ const calculateUnassignedStudents = () => {
     const assignedIds = new Set();
 
     for (const row of seatPlan.value) {
-        for (const seat of row) {
-            if (seat.isOccupied && seat.studentId) {
-                assignedIds.add(seat.studentId);
+        for (let j = 0; j < row.length; j++) {
+            if (row[j].isOccupied && row[j].studentId) {
+                assignedIds.add(row[j].studentId);
             }
         }
     }
@@ -1157,6 +1162,125 @@ const markRollCallStatus = (status) => {
         showRollCall.value = false;
     }
 };
+
+// Update the roll call attendance marking function
+const markRollCallAttendance = (status) => {
+    if (!currentStudent.value) return;
+
+    // For Absent or Excused, show remarks dialog
+    if (status === 'Absent' || status === 'Excused') {
+        pendingRollCallStatus.value = status;
+        showRollCallRemarksDialog.value = true;
+        return;
+    }
+
+    // For Present or Late, mark directly
+    saveRollCallAttendanceWithRemarks(status);
+};
+
+// Add function to save roll call attendance with remarks
+const saveRollCallAttendanceWithRemarks = (status, remarks = '') => {
+    if (!currentStudent.value) return;
+
+    // Find student's seat in the grid
+    let foundSeat = null;
+    let rowIndex = -1;
+    let colIndex = -1;
+
+    seatPlan.value.forEach((row, rIndex) => {
+        row.forEach((seat, cIndex) => {
+            if (seat.studentId === currentStudent.value.id) {
+                foundSeat = seat;
+                rowIndex = rIndex;
+                colIndex = cIndex;
+            }
+        });
+    });
+
+    if (foundSeat) {
+        // Update seat status
+        foundSeat.status = status;
+
+        // Save attendance with remarks
+        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: currentStudent.value.id,
+            date: currentDate.value,
+            status,
+            remarks,
+            timestamp: new Date().toISOString()
+        };
+
+        // Update remarks panel if needed
+        if (status === 'Absent' || status === 'Excused') {
+            updateRemarksPanel(currentStudent.value.id, status, remarks);
+        } else {
+            // Remove from remarks panel if exists
+            remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== currentStudent.value.id);
+        }
+    }
+
+    // Move to next student
+    currentStudentIndex.value++;
+    if (currentStudentIndex.value < students.value.length) {
+        currentStudent.value = students.value[currentStudentIndex.value];
+    } else {
+        // End roll call
+        showRollCall.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Roll Call Complete',
+            detail: 'Roll call has been completed',
+            life: 3000
+        });
+    }
+
+    // Reset remarks dialog
+    showRollCallRemarksDialog.value = false;
+    rollCallRemarks.value = '';
+    pendingRollCallStatus.value = '';
+};
+
+// Add function to save roll call remarks
+const saveRollCallRemarks = () => {
+    if (!rollCallRemarks.value.trim()) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please enter remarks',
+            life: 3000
+        });
+        return;
+    }
+
+    saveRollCallAttendanceWithRemarks(pendingRollCallStatus.value, rollCallRemarks.value);
+};
+
+// Add this function for the updateRemarksPanel
+const updateRemarksPanel = (studentId, status, remarks) => {
+    // Get the student
+    const student = getStudentById(studentId);
+
+    // Create a remark item
+    const remarkItem = {
+        studentId: studentId,
+        studentName: student?.name || 'Unknown Student',
+        status,
+        remarks,
+        timestamp: new Date().toISOString()
+    };
+
+    // Update or add to remarks panel
+    const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === studentId);
+    if (existingIndex >= 0) {
+        remarksPanel.value[existingIndex] = remarkItem;
+    } else {
+        remarksPanel.value.push(remarkItem);
+    }
+
+    // Save to localStorage
+    localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
+};
 </script>
 
 <template>
@@ -1383,11 +1507,11 @@ const markRollCallStatus = (status) => {
         </Dialog>
 
         <!-- Add Remarks Dialog -->
-        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '400px' }" :closeOnEscape="true" :dismissableMask="true">
+        <Dialog v-model:visible="showRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '30vw', minWidth: '400px' }" :closeOnEscape="true" :dismissableMask="true">
             <div class="p-fluid">
                 <div class="field">
-                    <label for="remarks">Remarks</label>
-                    <Textarea id="remarks" v-model="attendanceRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
+                    <label for="attendanceRemarks">Remarks</label>
+                    <Textarea id="attendanceRemarks" v-model="attendanceRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
                 </div>
             </div>
             <template #footer>
@@ -1399,7 +1523,7 @@ const markRollCallStatus = (status) => {
         <!-- Add Remarks Panel -->
         <div v-if="remarksPanel.length > 0" class="remarks-section">
             <div class="remarks-container">
-                <h3 class="text-lg font-semibold mb-3">Attendance Remarks</h3>
+                <h3 class="text-lg font-medium mb-3">Attendance Remarks</h3>
                 <div class="remarks-list">
                     <div
                         v-for="remark in remarksPanel"
@@ -1455,10 +1579,10 @@ const markRollCallStatus = (status) => {
                 </div>
 
                 <div class="flex gap-2 justify-center mt-4">
-                    <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallStatus('Present')" />
-                    <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallStatus('Absent')" />
-                    <Button icon="pi pi-clock" label="Late" class="p-button-warning" @click="markRollCallStatus('Late')" />
-                    <Button icon="pi pi-info-circle" label="Excused" class="p-button-info" @click="markRollCallStatus('Excused')" />
+                    <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallAttendance('Present')" />
+                    <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallAttendance('Absent')" />
+                    <Button icon="pi pi-clock" label="Late" class="p-button-warning" @click="markRollCallAttendance('Late')" />
+                    <Button icon="pi pi-info-circle" label="Excused" class="p-button-info" @click="markRollCallAttendance('Excused')" />
                 </div>
 
                 <div class="flex justify-between mt-6">
@@ -1468,6 +1592,20 @@ const markRollCallStatus = (status) => {
                     </div>
                 </div>
             </div>
+        </Dialog>
+
+        <!-- Roll Call Remarks Dialog -->
+        <Dialog v-model:visible="showRollCallRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '30vw', minWidth: '400px' }" :closeOnEscape="true" :dismissableMask="true">
+            <div class="p-fluid">
+                <div class="field">
+                    <label for="rollCallRemarks">Remarks</label>
+                    <Textarea id="rollCallRemarks" v-model="rollCallRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showRollCallRemarksDialog = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveRollCallRemarks" />
+            </template>
         </Dialog>
 
         <!-- QR Scanner Dialog -->
