@@ -10,7 +10,7 @@
             <router-link to="/pricing">PRICING</router-link>
             <router-link to="/features">FEATURES</router-link>
             <router-link to="/contact">CONTACT</router-link>
-            <button class="sign-in-btn">MY ACCOUNT</button>
+            <router-link to="/homepage" class="sign-in-btn">MY ACCOUNT</router-link>
         </div>
     </header>
 </template>
@@ -69,7 +69,7 @@
 }
 
 .sign-in-btn {
-    background-color: #ff6b6b;
+    background-color: #007bff;
     color: white;
     border: none;
     padding: 0.5rem 1.5rem;
@@ -80,6 +80,6 @@
 }
 
 .sign-in-btn:hover {
-    background-color: #ff5252;
+    background-color: #0056b3;
 }
 </style>

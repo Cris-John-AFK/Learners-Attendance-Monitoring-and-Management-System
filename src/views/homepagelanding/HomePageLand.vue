@@ -3,6 +3,9 @@
         <!-- Left side with background -->
         <div class="left-side">
             <div class="left-content">
+                <div class="back-button mb-6">
+                    <router-link to="/" class="back-link"> <i class="pi pi-arrow-left"></i> Back </router-link>
+                </div>
                 <div class="logo-text">NCS</div>
                 <h1 class="brand-title">LAMMS</h1>
                 <p class="brand-subtitle">Learners Attendance Monitoring and Management System</p>
@@ -14,6 +17,9 @@
         <!-- Right side with login form -->
         <div class="right-side">
             <div class="login-container">
+                <div class="back-button mb-6">
+                    <router-link to="/global" class="back-link"> <i class="pi pi-arrow-left"></i> Back </router-link>
+                </div>
                 <h2 class="welcome-text">Welcome</h2>
                 <p class="login-subtitle">Login with Email - I am a</p>
 
@@ -393,5 +399,22 @@ const handleTabClick = (panel) => {
 
 .warning-icon {
     color: #dc3545;
+}
+
+.back-button {
+    margin-bottom: 1rem;
+}
+
+.back-link {
+    color: #666;
+    text-decoration: none;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-link:hover {
+    text-decoration: underline;
 }
 </style>
