@@ -82,7 +82,7 @@ const toggleEditMode = () => {
         calculateUnassignedStudents();
     } else {
         // Exiting edit mode - save the current layout
-        saveCurrentLayout();
+        saveCurrentLayout(false);
     }
 };
 
@@ -821,7 +821,7 @@ onMounted(async () => {
         // Set all students as unassigned initially
         unassignedStudents.value = [...students.value];
 
-        // Load attendance records from localStorage
+        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
         try {
             const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
             if (savedAttendanceRecords) {
@@ -862,6 +862,9 @@ onMounted(async () => {
 
                 if (defaultTemplate) {
                     loadTemplate(defaultTemplate);
+
+                    // Apply attendance statuses after loading template
+                    applyAttendanceStatusesToSeatPlan();
                 }
             }
         } else {
@@ -1369,7 +1372,36 @@ const updateRemarksPanel = (studentId, status, remarks) => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 };
 
-// Add a function to load the saved layout
+// Add a function to apply attendance statuses to the seat plan after loading
+const applyAttendanceStatusesToSeatPlan = () => {
+    // Skip if no attendance records
+    if (!attendanceRecords.value || Object.keys(attendanceRecords.value).length === 0) return;
+
+    // Get today's date
+    const today = currentDate.value;
+
+    // Apply attendance statuses to the seat plan
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
+            if (seat.isOccupied && seat.studentId) {
+                // Look for a record matching this student on current date
+                // Check both formats: studentId-date and studentId_date
+                const recordKey1 = `${seat.studentId}-${today}`;
+                const recordKey2 = `${seat.studentId}_${today}`;
+
+                const record = attendanceRecords.value[recordKey1] || attendanceRecords.value[recordKey2];
+
+                if (record) {
+                    // Apply the status from the record
+                    seat.status = record.status;
+                    console.log(`Applied status ${record.status} to student ${seat.studentId}`);
+                }
+            }
+        });
+    });
+};
+
+// Update the loadSavedLayout function to apply attendance statuses after loading the layout
 const loadSavedLayout = () => {
     try {
         const storageKey = `seatPlan_${subjectId.value}`;
@@ -1397,6 +1429,9 @@ const loadSavedLayout = () => {
                 // Recalculate unassigned students
                 calculateUnassignedStudents();
 
+                // Apply attendance statuses to the seat plan
+                applyAttendanceStatusesToSeatPlan();
+
                 console.log('Loaded saved layout with student assignments');
                 return true;
             }
@@ -1407,6 +1442,116 @@ const loadSavedLayout = () => {
         return false;
     }
 };
+
+// Update onMounted to load attendance records first, before loading the layout
+onMounted(async () => {
+    try {
+        // Get subject ID from route params
+        if (route.params.subjectId) {
+            subjectId.value = route.params.subjectId;
+
+            // Format subject name from ID
+            subjectName.value = formatSubjectName(subjectId.value);
+
+            // Try to fetch actual subject data
+            try {
+                const subject = await SubjectService.getSubjectById(subjectId.value);
+                if (subject && subject.name) {
+                    subjectName.value = subject.name;
+                }
+            } catch (err) {
+                console.warn('Could not fetch subject details', err);
+            }
+        }
+
+        // Fetch students
+        const studentsData = await AttendanceService.getData();
+        if (studentsData && studentsData.length > 0) {
+            students.value = studentsData;
+        } else {
+            console.error('No students found in the database!');
+
+            // Create sample students for testing
+            students.value = [
+                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
+                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
+                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
+                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
+                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
+            ];
+        }
+
+        // Initialize an empty seat plan for grid layout
+        initializeSeatPlan();
+
+        // Set all students as unassigned initially
+        unassignedStudents.value = [...students.value];
+
+        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
+        try {
+            const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
+            if (savedAttendanceRecords) {
+                attendanceRecords.value = JSON.parse(savedAttendanceRecords);
+            }
+
+            const savedRemarksPanel = localStorage.getItem('remarksPanel');
+            if (savedRemarksPanel) {
+                remarksPanel.value = JSON.parse(savedRemarksPanel);
+            }
+        } catch (err) {
+            console.warn('Error loading attendance records from localStorage:', err);
+        }
+
+        // Fetch attendance history
+        await fetchAttendanceHistory();
+
+        // First try to load the saved layout
+        const layoutLoaded = loadSavedLayout();
+
+        if (!layoutLoaded) {
+            // If no saved layout, try to load templates
+            await loadSavedTemplates();
+
+            // Use default layout if no templates exist
+            if (savedTemplates.value.length === 0) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'Welcome to Seat Plan Attendance',
+                    detail: 'Create your own classroom layout using the Edit Seats button',
+                    life: 5000
+                });
+            } else {
+                // Load the most recently created template
+                const defaultTemplate = savedTemplates.value.sort((a, b) => {
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                })[0];
+
+                if (defaultTemplate) {
+                    loadTemplate(defaultTemplate);
+
+                    // Apply attendance statuses after loading template
+                    applyAttendanceStatusesToSeatPlan();
+                }
+            }
+        } else {
+            toast.add({
+                severity: 'info',
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error initializing data:', error);
+    }
+});
+
+// Update watch for currentDate to reapply statuses when date changes
+watch(currentDate, (newDate) => {
+    // Reapply attendance statuses when the date changes
+    applyAttendanceStatusesToSeatPlan();
+});
 
 // Add watchers for the checkbox options
 watch(showTeacherDesk, (newValue) => {
@@ -1636,7 +1781,10 @@ watch(showStudentIds, (newValue) => {
                     <span class="font-semibold">Absent</span>
                 </Button>
 
-                <Button icon="pi pi-info-circle" label="Excused" style="background: #9333ea; border-color: #9333ea" @click="markRollCallAttendance('Excused')" />
+                <Button class="attendance-btn excused-btn p-button-outlined" @click="setAttendanceStatus('Excused')">
+                    <i class="pi pi-info-circle text-3xl mb-2"></i>
+                    <span class="font-semibold">Excused</span>
+                </Button>
             </div>
         </Dialog>
 
