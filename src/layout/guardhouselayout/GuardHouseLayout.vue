@@ -16,7 +16,7 @@ const selectedStudent = ref(null);
 const allStudents = ref([
     {
         id: '12345',
-        name: 'Jane Smith',
+        name: 'Jess Smith',
         gradeLevel: '10',
         section: 'A',
         contact: '(555) 123-4567',
@@ -131,13 +131,13 @@ const restartCamera = () => {
     scanning.value = true;
 };
 
-const processStudentScan = (studentId) => {
-    console.log('Processing student scan for ID:', studentId);
+const processStudentScan = (scannedId) => {
+    console.log('Processing student scan for ID:', scannedId);
     console.log('All students:', allStudents.value);
 
     // Find the student in our allStudents array
     // Handle both string and number IDs
-    const student = allStudents.value.find((s) => s.id.toString() === studentId.toString());
+    const student = allStudents.value.find((s) => s.id.toString() === scannedId.toString());
 
     console.log('Found student:', student);
 
@@ -203,7 +203,7 @@ const processStudentScan = (studentId) => {
         console.log('Student record created:', record);
     } else {
         // Invalid QR code
-        console.log('Invalid student ID:', studentId);
+        console.log('Invalid student ID:', scannedId);
         showScanFeedback('unauthorized', null, 'Invalid student ID');
         playStatusSound('unauthorized');
     }
