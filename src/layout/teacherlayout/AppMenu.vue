@@ -49,17 +49,6 @@ const model = ref([
     },
     {
         separator: true
-    },
-    {
-        label: 'Manage',
-        icon: 'pi pi-fw pi-briefcase',
-        items: [
-            {
-                label: 'Section',
-                icon: 'pi pi-fw pi-users',
-                to: '/pages/section'
-            }
-        ]
     }
 ]);
 </script>

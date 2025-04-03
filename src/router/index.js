@@ -6,12 +6,11 @@ import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
 import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
-import TeacherSection from '@/views/pages/teacher/TeacherSection.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
-import LayoutPageGlobal from '../layout/landingpagegloballayout/LayoutPageGlobal.vue'
-import PageGlobal from '../views/landingpageglobal/PageGlobal.vue'
 import { createRouter, createWebHistory } from 'vue-router';
+import LayoutPageGlobal from '../layout/landingpagegloballayout/LayoutPageGlobal.vue';
+import PageGlobal from '../views/landingpageglobal/PageGlobal.vue';
 const router = createRouter({
     history: createWebHistory(),
     routes: [
@@ -54,11 +53,6 @@ const router = createRouter({
                     path: '/pages/report',
                     name: 'report',
                     component: () => import('@/views/pages/Report.vue')
-                },
-                {
-                    path: '/pages/section',
-                    name: 'section',
-                    component: TeacherSection
                 },
                 {
                     path: '/pages/settings',

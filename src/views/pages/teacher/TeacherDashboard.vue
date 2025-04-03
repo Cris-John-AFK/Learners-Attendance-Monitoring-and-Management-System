@@ -3,15 +3,18 @@ import { GradeService } from '@/router/service/Grades';
 import { StudentAttendanceService } from '@/router/service/StudentAttendanceService';
 import { AttendanceService } from '@/router/service/Students';
 import { SubjectService } from '@/router/service/Subjects';
+import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Chart from 'primevue/chart';
 import Checkbox from 'primevue/checkbox';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import ProgressBar from 'primevue/progressbar';
 import ProgressSpinner from 'primevue/progressspinner';
-import Select from 'primevue/select';
+import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
 import { computed, onMounted, ref } from 'vue';
 
@@ -27,6 +30,11 @@ const chartOptions = ref({});
 const attendanceChartData = ref(null);
 const selectedSubject = ref(null);
 const availableSubjects = ref([]);
+const chartView = ref('weekly'); // 'weekly' or 'monthly'
+const chartViewOptions = ref([
+    { label: 'Weekly', value: 'weekly' },
+    { label: 'Monthly', value: 'monthly' }
+]);
 
 // Store for the current date and navigation
 const currentDate = ref(new Date());
@@ -71,6 +79,15 @@ for (let i = 0; i < 3; i++) {
     const year = new Date().getFullYear() - i;
     years.value.push({ label: year.toString(), value: year });
 }
+
+// Icons for status indicators
+const statusIcons = {
+    present: 'pi pi-check-circle',
+    absent: 'pi pi-times-circle',
+    late: 'pi pi-clock',
+    warning: 'pi pi-exclamation-triangle',
+    critical: 'pi pi-exclamation-circle'
+};
 
 // Add this to your variable declarations
 const isDebugMode = ref(false); // Set to true manually when debugging
@@ -140,7 +157,7 @@ onMounted(async () => {
         // Use mock data instead of real API calls
         currentTeacher.value = MOCK_TEACHER;
         teacherSubjects.value = MOCK_SUBJECTS;
-        availableSubjects.value = MOCK_SUBJECTS.map(subject => ({
+        availableSubjects.value = MOCK_SUBJECTS.map((subject) => ({
             id: subject.id,
             name: `${subject.name} (${subject.grade})`,
             grade: subject.grade,
@@ -155,36 +172,9 @@ onMounted(async () => {
         // Set mock attendance data
         attendanceSummary.value = MOCK_ATTENDANCE_SUMMARY;
         studentsWithAbsenceIssues.value = MOCK_STUDENTS;
-        attendanceChartData.value = MOCK_ATTENDANCE_CHART_DATA;
 
-        // Prepare chart options
-        chartOptions.value = {
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        font: { size: 12 },
-                        padding: 20
-                    }
-                },
-                title: {
-                    display: true,
-                    text: `Attendance Trends: ${selectedSubject.value?.name}`,
-                    font: { size: 16, weight: 'bold' },
-                    padding: { top: 10, bottom: 20 }
-                }
-            },
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { stacked: true },
-                y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    max: 10
-                }
-            }
-        };
+        // Prepare chart data with enhanced styling
+        await prepareChartData();
     } catch (error) {
         console.error('Error loading teacher dashboard:', error);
     } finally {
@@ -453,7 +443,7 @@ function calculateAverageAttendance(totalStudents, attendanceRecords) {
     return Math.round((presentCount / totalPossibleAttendances) * 100);
 }
 
-// Prepare chart data for attendance visualization
+// Prepare chart data for attendance visualization with enhanced styling
 async function prepareChartData() {
     if (!selectedSubject.value) return;
 
@@ -485,98 +475,116 @@ async function prepareChartData() {
 
         console.log('Using guaranteed chart data:', guaranteedData);
 
-        // Prepare datasets for each status with guaranteed data
+        // Prepare datasets for each status with guaranteed data and enhanced styling
         attendanceChartData.value = {
             labels: labels,
             datasets: [
                 {
                     label: 'Present',
-                    backgroundColor: '#4CAF50',
-                    data: guaranteedData.present
+                    backgroundColor: 'rgba(76, 175, 80, 0.8)',
+                    borderColor: '#4CAF50',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    data: guaranteedData.present,
+                    hoverBackgroundColor: 'rgba(76, 175, 80, 1)'
                 },
                 {
                     label: 'Absent',
-                    backgroundColor: '#F44336',
-                    data: guaranteedData.absent
+                    backgroundColor: 'rgba(244, 67, 54, 0.8)',
+                    borderColor: '#F44336',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    data: guaranteedData.absent,
+                    hoverBackgroundColor: 'rgba(244, 67, 54, 1)'
                 },
                 {
                     label: 'Late',
-                    backgroundColor: '#FFC107',
-                    data: guaranteedData.late
+                    backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                    borderColor: '#FFC107',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    data: guaranteedData.late,
+                    hoverBackgroundColor: 'rgba(255, 193, 7, 1)'
                 }
             ]
         };
 
         console.log('Chart data prepared:', attendanceChartData.value);
 
-        // Chart options with forced scaling to show data
+        // Chart options with enhanced styling for modern look
         chartOptions.value = {
             plugins: {
                 legend: {
                     position: 'top',
+                    align: 'center',
                     labels: {
                         font: {
-                            size: 12
+                            family: 'Inter, sans-serif',
+                            size: 12,
+                            weight: 500
                         },
+                        usePointStyle: true,
+                        pointStyle: 'circle',
                         padding: 20
                     }
                 },
-                title: {
-                    display: true,
-                    text: `Attendance Trends: ${selectedSubject.value.name}`,
-                    font: {
-                        size: 16,
-                        weight: 'bold'
-                    },
-                    padding: {
-                        top: 10,
-                        bottom: 20
-                    }
-                },
                 tooltip: {
-                    callbacks: {
-                        label: function (context) {
-                            return `${context.dataset.label}: ${context.raw} students`;
-                        }
-                    }
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    titleColor: '#333',
+                    titleFont: {
+                        family: 'Inter, sans-serif',
+                        size: 13,
+                        weight: 600
+                    },
+                    bodyColor: '#555',
+                    bodyFont: {
+                        family: 'Inter, sans-serif',
+                        size: 12
+                    },
+                    borderColor: '#e1e1e1',
+                    borderWidth: 1,
+                    cornerRadius: 8,
+                    padding: 12,
+                    boxPadding: 4
                 }
             },
             responsive: true,
             maintainAspectRatio: false,
+            barPercentage: 0.8,
+            categoryPercentage: 0.9,
             animation: {
-                duration: 0 // Disable animations to ensure immediate rendering
+                duration: 1000,
+                easing: 'easeOutQuart'
             },
             scales: {
                 x: {
-                    stacked: true,
                     grid: {
-                        display: false
+                        display: false,
+                        drawBorder: false
                     },
                     ticks: {
                         font: {
-                            size: 12
-                        }
+                            family: 'Inter, sans-serif',
+                            size: 11
+                        },
+                        color: '#666'
                     }
                 },
                 y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    min: 0,
-                    suggestedMax: 15, // Use suggestedMax instead of max
-                    ticks: {
-                        stepSize: 2, // Use step size of 2 for better visibility
-                        precision: 0,
-                        font: {
-                            size: 12
-                        }
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)',
+                        drawBorder: false
                     },
-                    title: {
-                        display: true,
-                        text: 'Number of Students',
+                    ticks: {
                         font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
+                            family: 'Inter, sans-serif',
+                            size: 11
+                        },
+                        color: '#666',
+                        padding: 8
+                    },
+                    border: {
+                        dash: [4, 4]
                     }
                 }
             }
@@ -708,48 +716,91 @@ function ensureStudentAttendanceService() {
 </script>
 
 <template>
-    <div class="teacher-dashboard p-4">
+    <div class="teacher-dashboard p-4 bg-gray-50">
         <!-- Loading State -->
-        <div v-if="loading" class="flex justify-center items-center h-64">
-            <ProgressSpinner strokeWidth="4" />
-            <span class="ml-2 font-medium">Loading dashboard data...</span>
+        <div v-if="loading" class="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
+            <ProgressSpinner strokeWidth="4" class="text-blue-500" />
+            <span class="ml-3 font-medium text-gray-700">Loading dashboard data...</span>
         </div>
 
         <div v-else>
-            <!-- Teacher Welcome & Subject Selection -->
-            <div class="grid grid-cols-12 gap-4 mb-6">
-                <div class="col-span-12 sm:col-span-7">
-                    <h1 class="text-2xl font-bold mb-2">Welcome, {{ currentTeacher?.name }}</h1>
-                    <p class="text-gray-600 font-normal">
-                        {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
-                    </p>
-                </div>
+            <!-- Modern Header with Teacher Welcome & Subject Selection -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-md p-6 mb-6 text-white">
+                <div class="grid grid-cols-12 gap-4 items-center">
+                    <div class="col-span-12 sm:col-span-7">
+                        <h1
+                            class="text-2xl font-bold mb-1"
+                            style="
+                                color: #1a1a1a;
+                                text-shadow:
+                                    0 0 1px #fff,
+                                    0 0 2px #fff;
+                            "
+                        >
+                            Welcome, {{ currentTeacher?.name }}
+                        </h1>
+                        <p class="text-blue-100 font-normal">
+                            {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+                        </p>
+                    </div>
 
-                <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
-                    <Select v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full" @change="onSubjectChange" />
+                    <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
+                        <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg" @change="onSubjectChange" />
+                    </div>
                 </div>
             </div>
 
             <!-- Attendance Stats Summary Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-                    <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
-                    <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-blue-100 p-3 rounded-lg">
+                        <i class="pi pi-users text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
+                        <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
+                    </div>
                 </div>
 
-                <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-                    <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
-                    <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-green-100 p-3 rounded-lg">
+                        <i class="pi pi-check-circle text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                        <div class="flex items-end">
+                            <span class="text-2xl font-bold mr-1">{{ attendanceSummary?.averageAttendance || 0 }}%</span>
+                            <ProgressBar
+                                :value="attendanceSummary?.averageAttendance || 0"
+                                class="h-1.5 w-16 mb-1.5"
+                                :class="{
+                                    'attendance-good': (attendanceSummary?.averageAttendance || 0) >= 85,
+                                    'attendance-warning': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
+                                    'attendance-poor': (attendanceSummary?.averageAttendance || 0) < 70
+                                }"
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
-                    <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
-                    <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-yellow-100 p-3 rounded-lg">
+                        <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
+                        <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
+                    </div>
                 </div>
 
-                <div class="col-span-1 bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-                    <div class="text-sm text-gray-500 mb-1 font-medium">Critical ({{ CRITICAL_THRESHOLD }}+ absences)</div>
-                    <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-red-100 p-3 rounded-lg">
+                        <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Critical ({{ CRITICAL_THRESHOLD }}+ absences)</div>
+                        <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
+                    </div>
                 </div>
             </div>
 
@@ -757,15 +808,27 @@ function ensureStudentAttendanceService() {
             <div class="grid grid-cols-12 gap-6 mb-6">
                 <!-- Attendance Trends Chart -->
                 <div class="col-span-12 lg:col-span-8">
-                    <div class="bg-white rounded-lg shadow p-4">
-                        <h2 class="text-lg font-semibold mb-4">Attendance Trends</h2>
-                        <div v-if="!selectedSubject" class="text-center py-8 text-gray-500 font-normal">Please select a subject to view attendance trends</div>
-                        <div v-else-if="!attendanceChartData" class="text-center py-8 text-gray-500 font-normal">Loading chart data...</div>
-                        <div v-else class="chart-container">
-                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 250px" />
+                    <div class="bg-white rounded-xl shadow-sm p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold">Attendance Trends</h2>
+                            <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" />
                         </div>
 
-                        <!-- Add this as a fallback if the chart fails to render -->
+                        <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                            <i class="pi pi-chart-bar text-4xl mb-3 text-gray-300"></i>
+                            <p class="font-normal">Please select a subject to view attendance trends</p>
+                        </div>
+
+                        <div v-else-if="!attendanceChartData" class="flex flex-col items-center justify-center py-12">
+                            <ProgressSpinner strokeWidth="4" style="width: 50px; height: 50px" class="text-blue-500" />
+                            <p class="mt-3 text-gray-500 font-normal">Loading chart data...</p>
+                        </div>
+
+                        <div v-else class="chart-container">
+                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 300px" />
+                        </div>
+
+                        <!-- Fallback for chart rendering issues -->
                         <div v-if="attendanceChartData && !attendanceChartData.datasets[0]?.data.some((val) => val > 0)" class="text-center py-4 text-gray-500">
                             <p class="font-normal">No attendance data available for the selected time period</p>
                             <div class="flex justify-center gap-6 mt-4">
@@ -787,41 +850,45 @@ function ensureStudentAttendanceService() {
                     </div>
                 </div>
 
-                <!-- Attendance Alerts -->
+                <!-- Attendance Insights Card -->
                 <div class="col-span-12 lg:col-span-4">
-                    <div class="bg-white rounded-lg shadow p-4">
-                        <h2 class="text-lg font-semibold mb-4">
+                    <div class="bg-white rounded-xl shadow-sm p-5 h-full">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="pi pi-lightbulb text-amber-500 mr-2"></i>
                             Attendance Insights
-                            <span v-if="selectedSubject" class="text-sm font-normal text-gray-500 block">
+                            <span v-if="selectedSubject" class="text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
                                 {{ selectedSubject.name }}
                             </span>
                         </h2>
 
-                        <div v-if="!selectedSubject" class="text-center py-6 text-gray-500 font-normal">Please select a subject to view insights</div>
+                        <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-8 text-gray-500">
+                            <i class="pi pi-info-circle text-4xl mb-3 text-gray-300"></i>
+                            <p class="font-normal">Please select a subject to view insights</p>
+                        </div>
 
-                        <div v-else-if="attendanceSummary" class="space-y-3">
-                            <div v-if="attendanceSummary.studentsWithWarning > 0" class="flex items-start">
-                                <span class="text-yellow-500 mr-2">⚠️</span>
+                        <div v-else-if="attendanceSummary" class="space-y-4">
+                            <div v-if="attendanceSummary.studentsWithWarning > 0" class="flex items-start p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                                <i class="pi pi-exclamation-triangle text-yellow-500 mr-3 mt-0.5"></i>
                                 <p class="font-normal">{{ attendanceSummary.studentsWithWarning }} students have {{ WARNING_THRESHOLD }}+ absences this month</p>
                             </div>
 
-                            <div v-if="attendanceSummary.studentsWithCritical > 0" class="flex items-start">
-                                <span class="text-red-500 mr-2">🔔</span>
+                            <div v-if="attendanceSummary.studentsWithCritical > 0" class="flex items-start p-3 bg-red-50 rounded-lg border border-red-200">
+                                <i class="pi pi-exclamation-circle text-red-500 mr-3 mt-0.5"></i>
                                 <p class="font-normal">{{ attendanceSummary.studentsWithCritical }} students have {{ CRITICAL_THRESHOLD }}+ absences this month</p>
                             </div>
 
-                            <div v-if="attendanceSummary.averageAttendance < 85 && attendanceSummary.totalStudents > 0" class="flex items-start">
-                                <span class="text-blue-500 mr-2">📊</span>
+                            <div v-if="attendanceSummary.averageAttendance < 85 && attendanceSummary.totalStudents > 0" class="flex items-start p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <i class="pi pi-chart-line text-blue-500 mr-3 mt-0.5"></i>
                                 <p class="font-normal">Average attendance is below 85% for this subject</p>
                             </div>
 
-                            <div v-if="attendanceSummary.studentsWithWarning === 0 && attendanceSummary.studentsWithCritical === 0 && attendanceSummary.totalStudents > 0" class="flex items-start">
-                                <span class="text-green-500 mr-2">✅</span>
+                            <div v-if="attendanceSummary.studentsWithWarning === 0 && attendanceSummary.studentsWithCritical === 0 && attendanceSummary.totalStudents > 0" class="flex items-start p-3 bg-green-50 rounded-lg border border-green-200">
+                                <i class="pi pi-check-circle text-green-500 mr-3 mt-0.5"></i>
                                 <p class="font-normal">No attendance issues detected for this subject</p>
                             </div>
 
-                            <div v-if="attendanceSummary.totalStudents === 0" class="flex items-start">
-                                <span class="text-gray-500 mr-2">ℹ️</span>
+                            <div v-if="attendanceSummary.totalStudents === 0" class="flex items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <i class="pi pi-info-circle text-gray-500 mr-3 mt-0.5"></i>
                                 <p class="font-normal">No students found for this subject</p>
                             </div>
                         </div>
@@ -830,94 +897,112 @@ function ensureStudentAttendanceService() {
             </div>
 
             <!-- Student List with Attendance Issues -->
-            <div class="bg-white rounded-lg shadow p-4">
+            <div class="bg-white rounded-xl shadow-sm p-5">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                    <h2 class="text-lg font-semibold">
+                    <h2 class="text-lg font-semibold flex items-center">
+                        <i class="pi pi-list text-blue-600 mr-2"></i>
                         Student Attendance
                         <span v-if="selectedSubject" class="text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
                             {{ selectedSubject.name }}
                         </span>
                     </h2>
 
-                    <div class="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
+                    <div class="flex flex-col sm:flex-row gap-3 mt-2 sm:mt-0">
                         <span class="p-input-icon-left w-full sm:w-64">
                             <i class="pi pi-search" />
-                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
+                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full rounded-lg" />
                         </span>
 
-                        <div class="flex items-center">
+                        <div class="flex items-center bg-gray-50 p-2 rounded-lg">
                             <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
                             <label for="showIssues" class="ml-2 text-sm font-medium">Show only students with issues</label>
                         </div>
                     </div>
                 </div>
 
-                <div v-if="!selectedSubject" class="text-center py-8 text-gray-500 font-normal">Please select a subject to view student attendance</div>
+                <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                    <i class="pi pi-users text-4xl mb-3 text-gray-300"></i>
+                    <p class="font-normal">Please select a subject to view student attendance</p>
+                </div>
 
-                <div v-else-if="filteredStudents.length === 0" class="text-center py-8 text-gray-500 font-normal">
+                <div v-else-if="filteredStudents.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                    <i class="pi pi-search text-4xl mb-3 text-gray-300"></i>
                     <p v-if="searchQuery">No students match your search criteria</p>
                     <p v-else-if="showOnlyAbsenceIssues">No students with absence issues found</p>
                     <p v-else>No students found for this subject</p>
                 </div>
 
-                <DataTable v-else :value="filteredStudents" :paginator="true" :rows="10" stripedRows responsiveLayout="scroll" class="p-datatable-sm">
-                    <Column>
+                <DataTable v-else :value="filteredStudents" :paginator="true" :rows="10" stripedRows responsiveLayout="scroll" class="p-datatable-sm modern-table" :rowHover="true">
+                    <Column style="width: 40px">
                         <template #body="slotProps">
-                            <span
+                            <i
                                 v-if="slotProps.data.severity !== 'normal'"
                                 :class="{
-                                    'text-yellow-500': slotProps.data.severity === 'warning',
-                                    'text-red-500': slotProps.data.severity === 'critical'
+                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'warning',
+                                    'pi pi-exclamation-circle text-red-500': slotProps.data.severity === 'critical'
                                 }"
-                            >
-                                {{ getSeverityIcon(slotProps.data.severity) }}
-                            </span>
+                                class="text-lg"
+                            ></i>
                         </template>
                     </Column>
 
                     <Column field="name" header="Student Name" sortable>
                         <template #body="slotProps">
-                            <div class="student-name cursor-pointer hover:text-blue-600" @click="openStudentProfile(slotProps.data)">
-                                {{ slotProps.data.name }}
+                            <div class="flex items-center cursor-pointer" @click="openStudentProfile(slotProps.data)">
+                                <Avatar
+                                    :label="slotProps.data.name.charAt(0)"
+                                    shape="circle"
+                                    class="mr-2"
+                                    :class="{
+                                        'bg-green-100 text-green-600': slotProps.data.severity === 'normal',
+                                        'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'warning',
+                                        'bg-red-100 text-red-600': slotProps.data.severity === 'critical'
+                                    }"
+                                    style="width: 2rem; height: 2rem"
+                                ></Avatar>
+                                <span class="student-name hover:text-blue-600">{{ slotProps.data.name }}</span>
                             </div>
                         </template>
                     </Column>
 
-                    <Column field="gradeLevel" header="Grade">
+                    <Column field="gradeLevel" header="Grade" style="width: 100px">
                         <template #body="slotProps">
-                            {{ slotProps.data.gradeLevel }}
+                            <span class="text-sm">Grade {{ slotProps.data.gradeLevel }}</span>
                         </template>
                     </Column>
 
-                    <Column field="section" header="Section">
+                    <Column field="section" header="Section" style="width: 140px">
                         <template #body="slotProps">
-                            {{ slotProps.data.section }}
+                            <span class="text-sm">{{ slotProps.data.section }}</span>
                         </template>
                     </Column>
 
-                    <Column field="absences" header="Absences" sortable>
+                    <Column field="absences" header="Absences" sortable style="width: 120px">
                         <template #body="slotProps">
-                            <span
+                            <div
+                                class="flex items-center justify-center w-10 h-10 rounded-full"
                                 :class="{
-                                    'text-yellow-600 font-medium': slotProps.data.severity === 'warning',
-                                    'text-red-600 font-medium': slotProps.data.severity === 'critical'
+                                    'bg-green-100 text-green-800': slotProps.data.severity === 'normal',
+                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'warning',
+                                    'bg-red-100 text-red-800': slotProps.data.severity === 'critical'
                                 }"
                             >
                                 {{ slotProps.data.absences }}
-                            </span>
+                            </div>
                         </template>
                     </Column>
 
-                    <Column header="Status">
+                    <Column header="Status" style="width: 140px">
                         <template #body="slotProps">
                             <Tag
                                 :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'warning' ? 'warning' : 'success'"
                                 :value="slotProps.data.severity === 'critical' ? 'Critical' : slotProps.data.severity === 'warning' ? 'Warning' : 'Normal'"
+                                class="px-3 py-1.5 text-sm font-medium rounded-full"
                             />
                         </template>
                     </Column>
 
-                    <Column header="Actions">
+                    <Column header="Actions" style="width: 100px">
                         <template #body="slotProps">
                             <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" tooltip="View Attendance History" />
                         </template>
@@ -926,45 +1011,86 @@ function ensureStudentAttendanceService() {
             </div>
         </div>
 
-        <!-- Student Profile Dialog -->
-        <Dialog v-model:visible="studentProfileVisible" :style="{ width: '650px' }" header="Student Attendance Profile" :modal="true" class="student-profile-dialog">
+        <!-- Student Profile Dialog - Modern Version -->
+        <Dialog v-model:visible="studentProfileVisible" :style="{ width: '700px' }" header="Student Attendance Profile" :modal="true" :dismissableMask="true" class="student-profile-dialog">
             <div v-if="selectedStudent" class="student-profile p-3">
-                <div class="flex items-center mb-4">
-                    <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center text-xl font-bold mr-4">
+                <div class="flex flex-col sm:flex-row items-center sm:items-start mb-6">
+                    <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-2xl font-bold mr-6 text-blue-600 mb-4 sm:mb-0">
                         {{ selectedStudent.name.charAt(0) }}
                     </div>
                     <div>
                         <h3 class="text-xl font-semibold">{{ selectedStudent.name }}</h3>
-                        <p class="text-gray-600 font-normal">Grade {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
-                        <p v-if="selectedSubject" class="text-blue-600 text-sm font-medium">Subject: {{ selectedSubject.name }}</p>
+                        <p class="text-gray-600 font-normal mb-2">Grade {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
+                        <p v-if="selectedSubject" class="inline-flex items-center bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+                            <i class="pi pi-book mr-1"></i>
+                            {{ selectedSubject.name }}
+                        </p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div class="bg-gray-50 p-3 rounded">
-                        <p class="text-gray-500 text-sm">Total Absences</p>
-                        <p
-                            class="text-2xl font-bold"
-                            :class="{
-                                'text-yellow-600': selectedStudent.severity === 'warning',
-                                'text-red-600': selectedStudent.severity === 'critical',
-                                'text-green-600': selectedStudent.severity === 'normal'
-                            }"
-                        >
-                            {{ selectedStudent.absences }}
-                        </p>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-gray-50 p-4 rounded-xl shadow-sm">
+                        <p class="text-gray-500 text-sm mb-1">Total Absences</p>
+                        <div class="flex items-center">
+                            <div
+                                class="flex items-center justify-center w-12 h-12 rounded-full mr-3"
+                                :class="{
+                                    'bg-green-100 text-green-800': selectedStudent.severity === 'normal',
+                                    'bg-yellow-100 text-yellow-800': selectedStudent.severity === 'warning',
+                                    'bg-red-100 text-red-800': selectedStudent.severity === 'critical'
+                                }"
+                            >
+                                {{ selectedStudent.absences }}
+                            </div>
+                            <div>
+                                <p
+                                    class="font-medium"
+                                    :class="{
+                                        'text-green-600': selectedStudent.severity === 'normal',
+                                        'text-yellow-600': selectedStudent.severity === 'warning',
+                                        'text-red-600': selectedStudent.severity === 'critical'
+                                    }"
+                                >
+                                    {{ selectedStudent.severity === 'normal' ? 'Good' : selectedStudent.severity === 'warning' ? 'Warning' : 'Critical' }}
+                                </p>
+                                <p class="text-xs text-gray-500">Absence level</p>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="bg-gray-50 p-3 rounded">
-                        <p class="text-gray-500 text-sm">Attendance Rate</p>
-                        <p class="text-2xl font-bold">{{ Math.round(((20 - selectedStudent.absences) / 20) * 100) }}%</p>
+                    <div class="bg-gray-50 p-4 rounded-xl shadow-sm">
+                        <p class="text-gray-500 text-sm mb-1">Attendance Rate</p>
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 relative mr-3">
+                                <div
+                                    class="absolute inset-0 flex items-center justify-center text-lg font-bold"
+                                    :class="{
+                                        'text-green-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 85,
+                                        'text-yellow-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 85 && Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 70,
+                                        'text-red-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 70
+                                    }"
+                                >
+                                    {{ Math.round(((20 - selectedStudent.absences) / 20) * 100) }}%
+                                </div>
+                                <!-- Would add a circular progress bar component here in a real implementation -->
+                            </div>
+                            <ProgressBar
+                                :value="Math.round(((20 - selectedStudent.absences) / 20) * 100)"
+                                class="h-2 flex-1"
+                                :class="{
+                                    'attendance-good': Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 85,
+                                    'attendance-warning': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 85 && Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 70,
+                                    'attendance-poor': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 70
+                                }"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 <h4 class="font-medium mb-3">Attendance Calendar: {{ selectedSubject?.name }}</h4>
-                <div class="calendar-view mb-4">
+                <div class="calendar-view mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
                     <div class="calendar-header grid grid-cols-7 gap-1 mb-2">
-                        <div v-for="day in ['S', 'M', 'T', 'W', 'T', 'F', 'S']" :key="day" class="text-center font-medium text-gray-600">
+                        <div v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-center font-medium text-gray-600 text-xs">
                             {{ day }}
                         </div>
                     </div>
@@ -977,10 +1103,11 @@ function ensureStudentAttendanceService() {
                         <div
                             v-for="calDay in calendarData"
                             :key="calDay.day"
-                            class="calendar-day h-10 w-10 flex items-center justify-center rounded-full"
+                            class="calendar-day h-10 w-10 flex items-center justify-center rounded-full transition-all"
                             :class="{
-                                'bg-red-100 text-red-800': calDay.isAbsent,
-                                'hover:bg-gray-100': !calDay.isAbsent
+                                'bg-red-100 text-red-800 border border-red-200': calDay.isAbsent,
+                                'hover:bg-gray-100': !calDay.isAbsent,
+                                'bg-gray-200 text-gray-400': new Date(currentYear, currentMonth, calDay.day).getDay() === 0 || new Date(currentYear, currentMonth, calDay.day).getDay() === 6
                             }"
                         >
                             {{ calDay.day }}
@@ -990,21 +1117,29 @@ function ensureStudentAttendanceService() {
 
                 <h4 class="font-medium mb-3">Absence History</h4>
                 <div class="absence-history">
-                    <div v-if="absentDays.length > 0" class="space-y-2">
-                        <div v-for="(day, index) in absentDays" :key="index" class="p-2 border-l-4 border-red-500 bg-red-50 rounded">
-                            <div class="flex justify-between">
-                                <div>{{ formatDate(day) }}</div>
-                                <div class="text-gray-500 text-sm">Unexcused</div>
+                    <div v-if="absentDays.length > 0" class="space-y-3">
+                        <div v-for="(day, index) in absentDays" :key="index" class="p-3 border-l-4 border-red-500 bg-red-50 rounded-r-lg flex justify-between items-center">
+                            <div class="flex items-center">
+                                <i class="pi pi-calendar-times text-red-500 mr-2"></i>
+                                <span class="font-medium">{{ formatDate(day) }}</span>
                             </div>
+                            <span class="text-gray-500 text-sm px-2 py-1 bg-white rounded-full">Unexcused</span>
                         </div>
                     </div>
-                    <div v-else class="text-gray-500 italic p-2">No absence records found for this student in this subject.</div>
+                    <div v-else class="flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-500 italic">
+                        <i class="pi pi-check-circle text-green-500 mr-2"></i>
+                        No absence records found for this student in this subject.
+                    </div>
                 </div>
             </div>
 
             <template #footer>
-                <Button label="Close" icon="pi pi-times" @click="studentProfileVisible = false" class="p-button-text" />
-                <Button label="Contact Parent" icon="pi pi-envelope" class="p-button-primary" />
+                <div class="flex justify-between">
+                    <Button label="Close" icon="pi pi-times" @click="studentProfileVisible = false" class="p-button-text" />
+                    <div>
+                        <Button label="Contact Parent" icon="pi pi-envelope" class="p-button-primary" />
+                    </div>
+                </div>
             </template>
         </Dialog>
 
@@ -1049,7 +1184,7 @@ function ensureStudentAttendanceService() {
 
 .chart-container {
     position: relative;
-    height: 250px !important;
+    height: 300px !important;
     width: 100%;
     margin-bottom: 1rem;
 }
@@ -1060,9 +1195,100 @@ function ensureStudentAttendanceService() {
     width: 100% !important;
 }
 
+/* Modern styles for attendance stats progress bars */
+.attendance-good {
+    background: linear-gradient(to right, #22c55e, #4ade80) !important;
+}
+
+.attendance-warning {
+    background: linear-gradient(to right, #eab308, #fbbf24) !important;
+}
+
+.attendance-poor {
+    background: linear-gradient(to right, #ef4444, #f87171) !important;
+}
+
+/* Enhanced Data Table Styling */
+.modern-table {
+    box-shadow: none;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.modern-table :deep(.p-datatable-header) {
+    background-color: #f8fafc;
+    border: none;
+    padding: 1rem;
+}
+
+.modern-table :deep(.p-datatable-thead > tr > th) {
+    background-color: #f8fafc;
+    color: #334155;
+    font-weight: 600;
+    padding: 1rem;
+    border-color: #f1f5f9;
+}
+
+.modern-table :deep(.p-datatable-tbody > tr) {
+    transition:
+        background-color 0.2s,
+        box-shadow 0.2s;
+}
+
+.modern-table :deep(.p-datatable-tbody > tr:hover) {
+    background-color: #f8fafc;
+}
+
+.modern-table :deep(.p-datatable-tbody > tr > td) {
+    padding: 0.8rem 1rem;
+    border-color: #f1f5f9;
+}
+
+.modern-table :deep(.p-paginator) {
+    background-color: #fff;
+    border: none;
+    padding: 1rem;
+}
+
+.modern-table :deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
+    background-color: #3b82f6;
+    color: white;
+}
+
+/* Enhanced Dialog Styling */
+.student-profile-dialog :deep(.p-dialog-header) {
+    background: linear-gradient(to right, #3b82f6, #60a5fa);
+    color: white;
+    border-radius: 12px 12px 0 0;
+    padding: 1.25rem;
+}
+
+.student-profile-dialog :deep(.p-dialog-title) {
+    font-weight: 600;
+}
+
+.student-profile-dialog :deep(.p-dialog-header-icon) {
+    color: white;
+}
+
+.student-profile-dialog :deep(.p-dialog-header-icon:hover) {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.student-profile-dialog :deep(.p-dialog-content) {
+    border-radius: 0 0 12px 12px;
+    padding: 1.5rem;
+}
+
+.student-profile-dialog :deep(.p-dialog-footer) {
+    border-top: 1px solid #f1f5f9;
+    padding: 1.25rem;
+}
+
 @media (max-width: 768px) {
     .chart-container {
-        height: 250px;
+        height: 250px !important;
     }
 }
 </style>
