@@ -57,7 +57,6 @@ const cameraError = ref(null);
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
 const regularCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'regular' && record.recordType === 'check-in').length);
-const visitCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'visit' && record.recordType === 'check-in').length);
 const eventCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'event' && record.recordType === 'check-in').length);
 
 // Timer reference for cleanup
@@ -321,7 +320,7 @@ const filteredRecords = computed(() => {
     if (statusFilter.value !== 'all') {
         records = records.filter((record) => {
             // Filter by purpose for check-ins
-            if (statusFilter.value === 'regular' || statusFilter.value === 'visit' || statusFilter.value === 'event') {
+            if (statusFilter.value === 'regular' || statusFilter.value === 'event') {
                 return record.purpose === statusFilter.value && record.recordType === 'check-in';
             }
             return true;
@@ -385,14 +384,10 @@ const filteredRecords = computed(() => {
                     <!-- Purpose Selection Controls -->
                     <div class="purpose-controls">
                         <span class="purpose-label">Check-in Purpose:</span>
-                        <div class="purpose-buttons">
+                        <div class="purpose-buttons purpose-buttons-two">
                             <button @click="checkInPurpose = 'regular'" :class="['purpose-button', checkInPurpose === 'regular' ? 'active' : '']">
                                 <i class="pi pi-calendar"></i>
                                 Regular
-                            </button>
-                            <button @click="checkInPurpose = 'visit'" :class="['purpose-button', checkInPurpose === 'visit' ? 'active' : '']">
-                                <i class="pi pi-user-plus"></i>
-                                Visit
                             </button>
                             <button @click="checkInPurpose = 'event'" :class="['purpose-button', checkInPurpose === 'event' ? 'active' : '']">
                                 <i class="pi pi-star"></i>
@@ -496,7 +491,6 @@ const filteredRecords = computed(() => {
                             <div class="filter-buttons">
                                 <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
                                 <button @click="statusFilter = 'regular'" :class="['filter-button', statusFilter === 'regular' ? 'active' : '']"><i class="pi pi-calendar"></i> Regular</button>
-                                <button @click="statusFilter = 'visit'" :class="['filter-button', statusFilter === 'visit' ? 'active' : '']"><i class="pi pi-user-plus"></i> Visit</button>
                                 <button @click="statusFilter = 'event'" :class="['filter-button', statusFilter === 'event' ? 'active' : '']"><i class="pi pi-star"></i> Event</button>
                             </div>
                         </div>
@@ -524,8 +518,8 @@ const filteredRecords = computed(() => {
                         <Column field="purpose" header="Purpose" :sortable="true">
                             <template #body="slotProps">
                                 <span v-if="slotProps.data.purpose && slotProps.data.recordType === 'check-in'" :class="['purpose-pill', 'purpose-' + slotProps.data.purpose]">
-                                    <i :class="slotProps.data.purpose === 'regular' ? 'pi pi-calendar' : slotProps.data.purpose === 'visit' ? 'pi pi-user-plus' : 'pi pi-star'"></i>
-                                    {{ slotProps.data.purpose === 'regular' ? 'Regular' : slotProps.data.purpose === 'visit' ? 'Visit' : 'Event' }}
+                                    <i :class="slotProps.data.purpose === 'regular' ? 'pi pi-calendar' : 'pi pi-star'"></i>
+                                    {{ slotProps.data.purpose === 'regular' ? 'Regular' : 'Event' }}
                                 </span>
                                 <span v-else>-</span>
                             </template>
@@ -552,10 +546,6 @@ const filteredRecords = computed(() => {
                 <div class="stat-item">
                     <div class="stat-label">Regular</div>
                     <div class="stat-value purpose-regular">{{ regularCheckins }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Visits</div>
-                    <div class="stat-value purpose-visit">{{ visitCheckins }}</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-label">Events</div>
@@ -1292,10 +1282,6 @@ const filteredRecords = computed(() => {
             color: #0d9488;
         }
 
-        &.purpose-visit {
-            color: #7c3aed;
-        }
-
         &.purpose-event {
             color: #d97706;
         }
@@ -1472,18 +1458,27 @@ const filteredRecords = computed(() => {
     color: #0d9488;
 }
 
-.purpose-pill.purpose-visit {
-    background: rgba(124, 58, 237, 0.15);
-    color: #7c3aed;
-}
-
 .purpose-pill.purpose-event {
     background: rgba(245, 158, 11, 0.15);
     color: #d97706;
 }
 
-.timestamp {
-    font-size: 0.875rem;
-    color: #64748b;
+.purpose-pill.purpose-visit {
+    background: rgba(124, 58, 237, 0.15);
+    color: #7c3aed;
+}
+
+.purpose-buttons-two {
+    justify-content: center;
+    max-width: 500px;
+    margin: 0 auto;
+    gap: 1rem;
+}
+
+.purpose-buttons-two .purpose-button {
+    flex-grow: 1;
+    max-width: 200px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
 }
 </style>
