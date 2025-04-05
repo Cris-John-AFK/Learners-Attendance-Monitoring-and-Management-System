@@ -1542,24 +1542,118 @@ const getLocalSubjects = (sectionId) => {
 const closeSubjectListDialog = () => {
     console.log('Closing subject list dialog');
 
-    // Hide the dialog
+    // Only hide the dialog initially
     showSubjectListDialog.value = false;
 
-    // Wait briefly before resetting variables to ensure dialog closes smoothly
-    setTimeout(() => {
-        // Reset all related variables
-        selectedSection.value = null;
-        selectedSubjects.value = [];
-        selectedSubjectForTeacher.value = null;
-        selectedSubjectForSchedule.value = null;
-        selectedTeacher.value = null;
+    // Check if schedule dialog is visible
+    if (!showScheduleDialog.value) {
+        console.log('No other dialogs open, cleaning up resources');
 
-        // Don't reset selectedSubject.value here as it's used by the Add Subject dialog
-        // Don't touch subjectDialog.value here to avoid affecting Add Subject dialog
-    }, 100);
+        // If schedule dialog is not open, then also reset variables
+        // Wait briefly before resetting variables to ensure dialog closes smoothly
+        setTimeout(() => {
+            // Reset all related variables
+            selectedSection.value = null;
+            selectedSubjects.value = [];
+            selectedSubjectForTeacher.value = null;
+            selectedSubjectForSchedule.value = null;
+            selectedTeacher.value = null;
+
+            // Also ensure schedule dialog is closed
+            showScheduleDialog.value = false;
+        }, 100);
+    } else {
+        console.log('Schedule dialog is open, preserving section/subject context');
+    }
 };
 
-// Add the saveSchedule function after removeSubject
+// Track if we're already handling a schedule dialog close
+const isScheduleClosing = ref(false);
+
+// Add this function to handle schedule dialog closing
+const handleScheduleDialogClose = () => {
+    // Prevent handling this event multiple times
+    if (isScheduleClosing.value) {
+        console.log('Already handling schedule dialog close, ignoring duplicate event');
+        return;
+    }
+
+    isScheduleClosing.value = true;
+    console.log('Schedule dialog closed');
+
+    // Check if a schedule was saved
+    const scheduleWasSaved = localStorage.getItem('schedule_was_saved') === 'true';
+
+    // Check if we should restore the subject dialog
+    const subjectDialogWasOpen = localStorage.getItem('temp_subject_dialog_was_open') === 'true';
+
+    if (subjectDialogWasOpen) {
+        try {
+            // Get the stored section data
+            const storedSectionJson = localStorage.getItem('temp_selected_section');
+            if (storedSectionJson) {
+                const storedSection = JSON.parse(storedSectionJson);
+
+                // Restore the section selection
+                selectedSection.value = storedSection;
+
+                console.log('Restoring subject dialog with section:', storedSection.name);
+
+                // Load subjects for this section
+                CurriculumService.getSubjectsBySection(
+                    selectedCurriculum.value.id,
+                    selectedGrade.value.id,
+                    storedSection.id
+                ).then(subjects => {
+                    if (Array.isArray(subjects)) {
+                        selectedSubjects.value = subjects;
+                    }
+                    // Then show the dialog after data is loaded
+                    setTimeout(() => {
+                        showSubjectListDialog.value = true;
+
+                        // If a schedule was saved, refresh the subjects list
+                        if (scheduleWasSaved) {
+                            setTimeout(() => {
+                                refreshSectionSubjects();
+                            }, 500);
+                        }
+
+                        // Reset the flag after restoring dialogs
+                        setTimeout(() => {
+                            isScheduleClosing.value = false;
+                        }, 300);
+                    }, 200);
+                }).catch(error => {
+                    console.error('Error reloading subjects:', error);
+                    // Still show the dialog even if reload fails
+                    setTimeout(() => {
+                        showSubjectListDialog.value = true;
+                        // Reset the flag after restoring dialogs
+                        setTimeout(() => {
+                            isScheduleClosing.value = false;
+                        }, 300);
+                    }, 200);
+                });
+            } else {
+                console.warn('No stored section data found');
+                isScheduleClosing.value = false;
+            }
+        } catch (error) {
+            console.error('Error restoring subject dialog:', error);
+            isScheduleClosing.value = false;
+        } finally {
+            // Clean up temp storage
+            localStorage.removeItem('temp_subject_dialog_was_open');
+            localStorage.removeItem('temp_selected_section');
+        }
+    } else {
+        // Reset the flag if we're not restoring anything
+        isScheduleClosing.value = false;
+    }
+};
+
+// Update the saveSchedule function to not reopen the subject list dialog
 const saveSchedule = async () => {
     try {
         if (!selectedSubjectForSchedule.value) {
@@ -1582,6 +1676,18 @@ const saveSchedule = async () => {
             return;
         }
 
+        // Check if we have a valid section_id directly in the schedule object
+        if (!schedule.value.section_id) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No section selected. Please try again.',
+                life: 3000
+            });
+            loading.value = false;
+            return;
+        }
+
         loading.value = true;
 
         // Validate time format
@@ -1592,22 +1698,36 @@ const saveSchedule = async () => {
                 detail: 'Start time must be before end time',
                 life: 3000
             });
+            loading.value = false;
             return;
         }
 
         try {
-            // Format the schedule data
+            // Format the schedule data using the stored section_id
             const scheduleData = {
                 day: schedule.value.day,
                 start_time: schedule.value.start_time,
                 end_time: schedule.value.end_time,
                 teacher_id: schedule.value.teacher_id,
                 subject_id: selectedSubjectForSchedule.value.id,
-                section_id: selectedSection.value.id
+                section_id: schedule.value.section_id
             };
 
+            console.log('Saving schedule with data:', scheduleData);
+
+            // Get curriculum and grade IDs from selected values
+            const curriculumId = selectedCurriculum.value.id;
+            const gradeId = selectedGrade.value.id;
+            const sectionId = schedule.value.section_id;
+
             // Call the API using the correct method name
-            await CurriculumService.setSubjectSchedule(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, selectedSubjectForSchedule.value.id, scheduleData);
+            await CurriculumService.setSubjectSchedule(
+                curriculumId,
+                gradeId,
+                sectionId,
+                selectedSubjectForSchedule.value.id,
+                scheduleData
+            );
 
             // Initialize the schedules array if it doesn't exist
             if (!selectedSubjectForSchedule.value.schedules) {
@@ -1624,8 +1744,11 @@ const saveSchedule = async () => {
                 life: 3000
             });
 
-            // Close the dialog
+            // Close the schedule dialog
             showScheduleDialog.value = false;
+
+            // Refresh the subjects list to show the updated schedules
+            refreshSectionSubjects();
         } catch (error) {
             console.error('Error adding schedule:', error);
             toast.add({
@@ -1824,7 +1947,10 @@ const openAssignHomeRoomTeacherDialog = async (sectionData) => {
 // Add the openScheduleDialog function after closeSubjectListDialog
 const openScheduleDialog = async (subject) => {
     try {
+        // Store the subject reference (without hiding the subject dialog)
         selectedSubjectForSchedule.value = subject;
+
+        console.log('Opening schedule dialog for subject:', subject.name);
 
         // Initialize schedule with default values
         schedule.value = {
@@ -1832,7 +1958,8 @@ const openScheduleDialog = async (subject) => {
             start_time: '08:00',
             end_time: '09:00',
             subject_id: subject.id,
-            teacher_id: subject.teacher?.id || null
+            teacher_id: subject.teacher?.id || null,
+            section_id: selectedSection.value.id
         };
 
         // Load teachers if needed
@@ -1856,6 +1983,7 @@ const openScheduleDialog = async (subject) => {
             }
         }
 
+        // Show the custom schedule dialog
         showScheduleDialog.value = true;
     } catch (error) {
         console.error('Error in openScheduleDialog:', error);
@@ -2476,41 +2604,50 @@ const addSubjectToSection = async (subjectId) => {
             </template>
         </Dialog>
 
-        <!-- Schedule Dialog -->
-        <Dialog v-model:visible="showScheduleDialog" :header="'Set Schedule for ' + (selectedSubjectForSchedule?.name || 'Subject')" modal class="p-fluid" :style="{ width: '450px' }">
-            <div class="schedule-form">
-                <div class="field">
-                    <label for="day">Day</label>
-                    <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" />
+        <!-- Schedule Dialog - completely custom implementation -->
+        <div v-if="showScheduleDialog" class="custom-schedule-overlay">
+            <div class="custom-schedule-dialog">
+                <div class="custom-dialog-header">
+                    <span>Set Schedule for {{ selectedSubjectForSchedule?.name || 'Subject' }}</span>
+                    <button class="custom-close-button" @click="showScheduleDialog = false">&times;</button>
                 </div>
+                <div class="custom-dialog-content">
+                    <div class="field">
+                        <label for="day">Day</label>
+                        <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" />
+                    </div>
 
-                <div class="field">
-                    <label for="startTime">Start Time</label>
-                    <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
+                    <div class="field">
+                        <label for="startTime">Start Time</label>
+                        <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
+                    </div>
+
+                    <div class="field">
+                        <label for="endTime">End Time</label>
+                        <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
+                    </div>
+
+                    <div class="field">
+                        <label for="teacher">Teacher</label>
+                        <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" />
+                    </div>
                 </div>
-
-                <div class="field">
-                    <label for="endTime">End Time</label>
-                    <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
-                </div>
-
-                <div class="field">
-                    <label for="teacher">Teacher</label>
-                    <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" />
+                <div class="custom-dialog-footer">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
                 </div>
             </div>
+        </div>
 
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
-                <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
-            </template>
-        </Dialog>
-
-        <!-- ALL OTHER DIALOGS FIRST -->
-
-        <!-- Move this dialog to be the last one in the DOM structure -->
         <!-- Subject List Dialog -->
-        <Dialog v-model:visible="showSubjectListDialog" :header="'Subjects for Section ' + (selectedSection?.name || '')" modal class="p-fluid" :style="{ width: '800px' }">
+        <Dialog v-model:visible="showSubjectListDialog"
+            :header="'Subjects for Section ' + (selectedSection?.name || '')"
+            modal
+            class="p-fluid"
+            :style="{ width: '800px' }"
+            :closable="true"
+            @hide="closeSubjectListDialog"
+        >
             <div class="flex justify-content-between align-items-center mb-3">
                 <h3 class="m-0">Subjects</h3>
                 <div class="flex gap-2">
@@ -3164,5 +3301,125 @@ const addSubjectToSection = async (subjectId) => {
 .no-teacher-text {
     color: #666;
     font-style: italic;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+:deep(.p-dialog.schedule-dialog) {
+    z-index: 99999 !important;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+:deep(.p-dialog-mask) {
+    z-index: auto !important;
+}
+
+/* Ensure the teleported dialog is always on top */
+body > .p-dialog-mask {
+    z-index: 9999 !important;
+}
+
+/* Fix dialog stacking */
+:deep(.p-dialog.schedule-dialog) {
+    z-index: 99999 !important;
+}
+
+:deep(.p-dialog-mask.p-component-overlay) {
+    background-color: rgba(0,0,0,0.4) !important;
+}
+
+/* Make sure the schedule dialog mask is on top */
+body > .p-dialog-mask {
+    z-index: 99998 !important;
+}
+
+/* Special styling for the schedule dialog */
+.schedule-dialog {
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+}
+
+/* Custom Schedule Dialog styles */
+.custom-schedule-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999; /* Extremely high z-index */
+}
+
+.custom-schedule-dialog {
+  background-color: white;
+  border-radius: 8px;
+  width: 450px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  animation: dialogFadeIn 0.2s ease-out;
+}
+
+.custom-dialog-header {
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.custom-dialog-header span {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.custom-close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.custom-close-button:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.custom-dialog-content {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.custom-dialog-footer {
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid #e9ecef;
+}
+
+@keyframes dialogFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
