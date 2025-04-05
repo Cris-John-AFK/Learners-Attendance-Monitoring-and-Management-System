@@ -153,9 +153,9 @@ const dayOptions = [
     { label: 'Saturday', value: 'Saturday' }
 ];
 
-// Calculate if a grade requires subject teachers (Grade 4-6)
+// Calculate if a grade requires subject teachers (Grade 3-6)
 const requiresSubjectTeachers = (gradeCode) => {
-    return ['G4', 'G5', 'G6'].includes(gradeCode);
+    return ['G3', 'G4', 'G5', 'G6'].includes(gradeCode);
 };
 
 // Ensure curriculum has a valid yearRange property and status
@@ -545,7 +545,7 @@ const loadGradeLevels = async () => {
     try {
         // Only get curriculum-specific grades - no fallbacks
         const data = await CurriculumService.getGradesByCurriculum(selectedCurriculum.value.id);
-        console.log('Grade levels loaded from API:', data);
+            console.log('Grade levels loaded from API:', data);
 
         // Ensure we have a valid array
         grades.value = Array.isArray(data) ? data : [];
@@ -1271,7 +1271,7 @@ const saveSection = async () => {
             // Only try direct endpoint if the nested endpoint didn't work
             try {
                 // Fall back to direct endpoint if nested fails
-                await CurriculumService.addSection(sectionData);
+        await CurriculumService.addSection(sectionData);
                 console.log('Successfully added section using direct endpoint');
                 sectionCreated = true;
             } catch (directError) {
@@ -1326,12 +1326,12 @@ const saveSection = async () => {
         sectionDialog.value = false;
 
         if (sectionCreated) {
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
-                detail: 'Section added successfully',
-                life: 3000
-            });
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section added successfully',
+            life: 3000
+        });
         } else {
             toast.add({
                 severity: 'info',
@@ -1454,15 +1454,15 @@ const openSubjectList = async (section) => {
                 console.log('Successfully retrieved user-added subjects:', response.data.length);
                 console.log('Subject names:', response.data.map(s => s.name).join(', '));
 
-                // Load schedules for each subject
-                const subjectsWithSchedules = await Promise.all(
+            // Load schedules for each subject
+            const subjectsWithSchedules = await Promise.all(
                     response.data.map(async (subject) => {
                         try {
-                            const schedules = await loadSubjectSchedules(section.id, subject.id);
-                            return {
-                                ...subject,
-                                schedules: schedules
-                            };
+                    const schedules = await loadSubjectSchedules(section.id, subject.id);
+                    return {
+                        ...subject,
+                        schedules: schedules
+                    };
                         } catch (scheduleErr) {
                             console.warn(`Could not load schedules for subject ${subject.id}:`, scheduleErr);
                             return {
@@ -1473,7 +1473,7 @@ const openSubjectList = async (section) => {
                     })
                 );
 
-                selectedSubjects.value = subjectsWithSchedules;
+            selectedSubjects.value = subjectsWithSchedules;
                 console.log('Loaded subjects with schedules:', selectedSubjects.value.length);
             } else {
                 console.log('No subjects found or invalid response format');
@@ -1552,12 +1552,12 @@ const closeSubjectListDialog = () => {
         // If schedule dialog is not open, then also reset variables
         // Wait briefly before resetting variables to ensure dialog closes smoothly
         setTimeout(() => {
-            // Reset all related variables
-            selectedSection.value = null;
-            selectedSubjects.value = [];
-            selectedSubjectForTeacher.value = null;
-            selectedSubjectForSchedule.value = null;
-            selectedTeacher.value = null;
+    // Reset all related variables
+    selectedSection.value = null;
+    selectedSubjects.value = [];
+    selectedSubjectForTeacher.value = null;
+    selectedSubjectForSchedule.value = null;
+    selectedTeacher.value = null;
 
             // Also ensure schedule dialog is closed
             showScheduleDialog.value = false;
@@ -1575,8 +1575,8 @@ const handleScheduleDialogClose = () => {
     // Prevent handling this event multiple times
     if (isScheduleClosing.value) {
         console.log('Already handling schedule dialog close, ignoring duplicate event');
-        return;
-    }
+            return;
+        }
 
     isScheduleClosing.value = true;
     console.log('Schedule dialog closed');
@@ -1638,11 +1638,11 @@ const handleScheduleDialogClose = () => {
             } else {
                 console.warn('No stored section data found');
                 isScheduleClosing.value = false;
-            }
-        } catch (error) {
+        }
+    } catch (error) {
             console.error('Error restoring subject dialog:', error);
             isScheduleClosing.value = false;
-        } finally {
+    } finally {
             // Clean up temp storage
             localStorage.removeItem('temp_subject_dialog_was_open');
             localStorage.removeItem('temp_selected_section');
@@ -1708,7 +1708,7 @@ const saveSchedule = async () => {
                 day: schedule.value.day,
                 start_time: schedule.value.start_time,
                 end_time: schedule.value.end_time,
-                teacher_id: schedule.value.teacher_id,
+                teacher_id: currentGradeHasSubjectTeachers ? schedule.value.teacher_id : null,
                 subject_id: selectedSubjectForSchedule.value.id,
                 section_id: schedule.value.section_id
             };
@@ -1774,6 +1774,8 @@ const saveSchedule = async () => {
 // Add the assignTeacher function
 const assignTeacher = async () => {
     try {
+        teacherSubmitted.value = true;
+
         if (!selectedSubjectForTeacher.value) {
             toast.add({
                 severity: 'error',
@@ -1797,12 +1799,28 @@ const assignTeacher = async () => {
         loading.value = true;
 
         try {
-            // Call the API
-            await CurriculumService.assignTeacherToSubject(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, selectedSubjectForTeacher.value.id, { teacher_id: selectedTeacher.value.id });
+            console.log('Assigning teacher:', selectedTeacher.value);
+            console.log('To subject:', selectedSubjectForTeacher.value);
 
-            // Update the subject with the teacher
+            // Call the API
+            await CurriculumService.assignTeacherToSubject(
+                selectedCurriculum.value.id,
+                selectedGrade.value.id,
+                selectedSection.value.id,
+                selectedSubjectForTeacher.value.id,
+                { teacher_id: selectedTeacher.value.id }
+            );
+
+            // Update the subject with the teacher in the local data
             selectedSubjectForTeacher.value.teacher = selectedTeacher.value;
             selectedSubjectForTeacher.value.teacher_id = selectedTeacher.value.id;
+
+            // Update the subject in the selectedSubjects array
+            const subjectIndex = selectedSubjects.value.findIndex(s => s.id === selectedSubjectForTeacher.value.id);
+            if (subjectIndex !== -1) {
+                selectedSubjects.value[subjectIndex].teacher = selectedTeacher.value;
+                selectedSubjects.value[subjectIndex].teacher_id = selectedTeacher.value.id;
+            }
 
             toast.add({
                 severity: 'success',
@@ -1813,6 +1831,7 @@ const assignTeacher = async () => {
 
             // Close the dialog
             showTeacherAssignmentDialog.value = false;
+            teacherSubmitted.value = false;
         } catch (error) {
             console.error('Error assigning teacher:', error);
             toast.add({
@@ -1958,7 +1977,7 @@ const openScheduleDialog = async (subject) => {
             start_time: '08:00',
             end_time: '09:00',
             subject_id: subject.id,
-            teacher_id: subject.teacher?.id || null,
+            teacher_id: currentGradeHasSubjectTeachers ? (subject.teacher?.id || null) : null,
             section_id: selectedSection.value.id
         };
 
@@ -2004,27 +2023,40 @@ const openTeacherDialog = async (subject) => {
 
     // Load teachers if needed
     if (!teachers.value || teachers.value.length === 0) {
+        loading.value = true;
         try {
             const teachersData = await TeacherService.getTeachers();
             teachers.value = Array.isArray(teachersData) ? teachersData : [];
+            console.log(`Loaded ${teachers.value.length} teachers`);
 
             if (teachers.value.length === 0) {
                 toast.add({
                     severity: 'warn',
                     summary: 'Notice',
-                    detail: 'Using default teacher list. Some data may not be up to date.',
+                    detail: 'No teachers found in the system.',
                     life: 3000
                 });
             }
         } catch (error) {
-            console.warn('Error loading teachers:', error);
+            console.error('Error loading teachers:', error);
             teachers.value = []; // Reset to empty array on error
             toast.add({
-                severity: 'warn',
-                summary: 'Warning',
-                detail: 'Could not load teachers list. Using cached or default data.',
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load teachers: ' + (error.message || 'Unknown error'),
                 life: 3000
             });
+        } finally {
+            loading.value = false;
+        }
+    }
+
+    // If the subject already has a teacher assigned, pre-select it
+    if (subject.teacher_id) {
+        const existingTeacher = teachers.value.find(t => t.id === subject.teacher_id);
+        if (existingTeacher) {
+            selectedTeacher.value = existingTeacher;
+            console.log('Pre-selected existing teacher:', existingTeacher);
         }
     }
 };
@@ -2305,6 +2337,28 @@ const addSubjectToSection = async (subjectId) => {
         loading.value = false;
     }
 };
+
+// Computed property to determine if the current grade should have subject teachers
+const currentGradeHasSubjectTeachers = computed(() => {
+    if (!selectedGrade.value || !selectedGrade.value.code) {
+        return false;
+    }
+    return requiresSubjectTeachers(selectedGrade.value.code);
+});
+
+// Teacher Assignment Dialog
+const openTeacherAssignmentDialog = () => {
+    showTeacherAssignmentDialog.value = true;
+};
+
+const closeTeacherAssignmentDialog = () => {
+    showTeacherAssignmentDialog.value = false;
+};
+
+const assignSubjectTeacher = (subject) => {
+    selectedSubjectForTeacher.value = subject;
+    openTeacherAssignmentDialog();
+};
 </script>
 <template>
     <div class="curriculum-wrapper">
@@ -2562,17 +2616,17 @@ const addSubjectToSection = async (subjectId) => {
                     <Button v-tooltip.top="'Repair Section-Grade Relationships'" icon="pi pi-wrench" class="p-button-outlined p-button-secondary" @click="repairSectionGradeRelationships" :loading="loading" />
                     <Button label="Add Section" icon="pi pi-plus" class="p-button-success" @click="openAddSectionDialog" />
                 </div>
-            </div>
+                    </div>
 
             <div v-if="loading" class="flex justify-content-center">
-                <ProgressSpinner />
-            </div>
+                        <ProgressSpinner />
+                    </div>
 
             <div v-else-if="sections.length === 0" class="text-center p-4">
                 <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
-                <p>No sections assigned to this grade level.</p>
+                        <p>No sections assigned to this grade level.</p>
                 <p>Click "Add Section" to create a section.</p>
-            </div>
+                    </div>
 
             <div v-else class="section-grid">
                 <div v-for="section in sections" :key="section.id" class="section-card p-3 border-round shadow-2">
@@ -2581,17 +2635,17 @@ const addSubjectToSection = async (subjectId) => {
                             <h4 class="m-0 mb-1 text-xl">Section {{ section.name }}</h4>
                             <p v-if="section.capacity" class="mt-0 mb-1">Capacity: {{ section.capacity }} students</p>
                             <p v-if="section.description" class="m-0 text-sm text-500">{{ section.description }}</p>
-                        </div>
+                                </div>
                         <div class="flex gap-2">
                             <Button icon="pi pi-book" class="p-button-rounded p-button-primary p-button-outlined" @click="openSubjectList(section)" v-tooltip.top="'Manage Subjects'" />
                             <Button v-if="!section.homeroom_teacher_id" icon="pi pi-user" class="p-button-rounded p-button-success p-button-outlined" @click="openHomeRoomTeacherDialog(section)" v-tooltip.top="'Assign Teacher'" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="confirmRemoveSection(section)" v-tooltip.top="'Remove Section'" />
-                        </div>
-                    </div>
+                                </div>
+                            </div>
                     <div v-if="section.homeroom_teacher_id" class="teacher-info flex align-items-center gap-2 mt-2">
                         <i class="pi pi-user text-primary"></i>
                         <span>Teacher: {{ getTeacherName(section.homeroom_teacher_id) }}</span>
-                    </div>
+                        </div>
                     <div v-else class="teacher-info flex align-items-center gap-2 mt-2 text-500">
                         <i class="pi pi-user text-gray-400"></i>
                         <span>No homeroom teacher assigned</span>
@@ -2612,22 +2666,22 @@ const addSubjectToSection = async (subjectId) => {
                     <button class="custom-close-button" @click="showScheduleDialog = false">&times;</button>
                 </div>
                 <div class="custom-dialog-content">
-                    <div class="field">
+            <div class="field">
                         <label for="day">Day</label>
                         <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" />
-                    </div>
+            </div>
 
-                    <div class="field">
+            <div class="field">
                         <label for="startTime">Start Time</label>
                         <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
-                    </div>
+            </div>
 
-                    <div class="field">
+            <div class="field">
                         <label for="endTime">End Time</label>
                         <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
-                    </div>
+            </div>
 
-                    <div class="field">
+                    <div v-if="currentGradeHasSubjectTeachers" class="field">
                         <label for="teacher">Teacher</label>
                         <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" />
                     </div>
@@ -2650,11 +2704,11 @@ const addSubjectToSection = async (subjectId) => {
         >
             <div class="flex justify-content-between align-items-center mb-3">
                 <h3 class="m-0">Subjects</h3>
-                <div class="flex gap-2">
+                    <div class="flex gap-2">
                     <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
                     <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
+                    </div>
                 </div>
-            </div>
 
             <div v-if="loading" class="flex justify-content-center">
                 <ProgressSpinner />
@@ -2664,45 +2718,55 @@ const addSubjectToSection = async (subjectId) => {
                 <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
                 <p>No subjects assigned to this section.</p>
                 <p>Click "Add Subject" to add subjects to this section.</p>
-            </div>
+                </div>
 
-            <div v-else class="subject-grid">
-                <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
-                    <div class="flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+                <div v-else class="subject-grid">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                            <div class="flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
                             <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                            <div v-if="subject.teacher" class="teacher-display mt-2">
-                                <i class="pi pi-user mr-2"></i>
-                                <span class="teacher-name">{{ subject.teacher.name }}</span>
+                            <div v-if="currentGradeHasSubjectTeachers">
+                                <div v-if="subject.teacher" class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
+                                </div>
+                                <div v-else class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="no-teacher-text">No teacher assigned</span>
+                                </div>
                             </div>
-                            <div v-else class="teacher-display mt-2">
-                                <i class="pi pi-user mr-2"></i>
-                                <span class="no-teacher-text">No teacher assigned</span>
+                            <div v-else class="teacher-display mt-2 text-muted">
+                                <i class="pi pi-info-circle mr-2"></i>
+                                <span class="text-sm text-gray-500">No teacher required for this grade level</span>
                             </div>
-                        </div>
+                            </div>
                         <div class="flex gap-2">
-                            <Button icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
+                            <Button v-if="currentGradeHasSubjectTeachers"
+                                   icon="pi pi-user"
+                                   class="p-button-rounded p-button-primary p-button-outlined"
+                                   @click="openTeacherDialog(subject)"
+                                   v-tooltip.top="'Assign Teacher'" />
                             <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
                         </div>
-                    </div>
+                                </div>
 
                     <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
                         <h5 class="mt-0 mb-2">Schedule</h5>
                         <ul class="schedule-list">
                             <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
-                                <div class="flex align-items-center gap-2">
+                                            <div class="flex align-items-center gap-2">
                                     <span class="schedule-day-badge">{{ schedule.day }}</span>
                                     <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                </div>
-                                <div v-if="schedule.teacher_id" class="teacher-info">
+                                                </div>
+                                <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
                                     <i class="pi pi-user mr-1"></i>
                                     <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                </div>
+                                                </div>
                             </li>
                         </ul>
-                    </div>
+                                            </div>
                     <div v-else class="no-schedules text-center mt-3">
                         <i class="pi pi-calendar-times text-3xl"></i>
                         <p class="m-0">No schedules set</p>
@@ -2722,17 +2786,17 @@ const addSubjectToSection = async (subjectId) => {
                 :closable="true"
                 appendTo="body"
             >
-                <div class="field">
-                    <label for="subject">Select Subject</label>
-                    <Select id="subject" v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" :class="{ 'p-invalid': submitted && !selectedSubject }" />
-                    <small class="p-error" v-if="submitted && !selectedSubject">Please select a subject.</small>
-                </div>
+            <div class="field">
+                <label for="subject">Select Subject</label>
+                <Select id="subject" v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" :class="{ 'p-invalid': submitted && !selectedSubject }" />
+                <small class="p-error" v-if="submitted && !selectedSubject">Please select a subject.</small>
+            </div>
 
-                <template #footer>
+            <template #footer>
                     <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="closeAddSubjectDialog" />
-                    <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" />
-                </template>
-            </Dialog>
+                <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" />
+            </template>
+        </Dialog>
         </Teleport>
 
         <!-- Homeroom Teacher Dialog -->
@@ -2785,6 +2849,41 @@ const addSubjectToSection = async (subjectId) => {
                 <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSection" />
             </template>
         </Dialog>
+
+        <!-- Teacher Assignment Dialog -->
+        <Teleport to="body">
+            <Dialog
+                v-model:visible="showTeacherAssignmentDialog"
+                header="Assign Subject Teacher"
+                modal
+                class="p-fluid"
+                :style="{ width: '450px', zIndex: 9999 }"
+                :closable="true"
+                appendTo="body"
+                @hide="selectedTeacher = null"
+            >
+                <div class="field">
+                    <label for="subject-name">Subject</label>
+                    <div class="p-field-value">{{ selectedSubjectForTeacher?.name }}</div>
+                </div>
+
+                <div class="field">
+                    <label for="teacher">Select Teacher</label>
+                    <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
+                        <option value="">Select a teacher</option>
+                        <option v-for="teacher in teachers" :key="teacher.id" :value="teacher">
+                            {{ teacher.first_name }} {{ teacher.last_name }}
+                        </option>
+                    </select>
+                    <small class="p-error" v-if="teacherSubmitted && !selectedTeacher">Please select a teacher.</small>
+                </div>
+
+                <template #footer>
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showTeacherAssignmentDialog = false" :disabled="loading" />
+                    <Button label="Assign" icon="pi pi-check" class="p-button-primary" @click="assignTeacher" :loading="loading" />
+                </template>
+            </Dialog>
+        </Teleport>
     </div>
 </template>
 <style scoped>
