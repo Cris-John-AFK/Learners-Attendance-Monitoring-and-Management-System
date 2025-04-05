@@ -2,6 +2,8 @@
 import { useLayout } from '@/layout/composables/layout';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 
@@ -11,6 +13,7 @@ const scanning = ref(true); // Auto-start scanning
 const attendanceRecords = ref([]);
 const searchQuery = ref('');
 const selectedStudent = ref(null);
+const toast = useToast();
 
 // Mock student data instead of using AttendanceService.getData()
 const allStudents = ref([
@@ -56,14 +59,9 @@ const cameraError = ref(null);
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
-const regularCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'regular' && record.recordType === 'check-in').length);
-const eventCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'event' && record.recordType === 'check-in').length);
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
-
-// Add a new ref for the check-in purpose selector
-const checkInPurpose = ref('regular'); // Default purpose is 'regular'
 
 // Update time every second
 onMounted(() => {
@@ -217,20 +215,19 @@ const processStudentScan = async (scannedId) => {
 
             console.log('Determined record type:', recordType);
 
-            // Create record with unique ID and current purpose
+            // Create record with unique ID
             const record = {
                 ...student,
                 timestamp: new Date().toLocaleTimeString(),
                 date: new Date().toLocaleDateString(),
-                purpose: checkInPurpose.value, // Use the current purpose setting
                 recordType: recordType,
                 recordId: `${student.id}-${Date.now()}` // Unique ID for each record
             };
 
             // Show feedback
-            showScanFeedback(recordType, checkInPurpose.value);
+            showScanFeedback(recordType);
 
-            // Play sound based on record type (not status)
+            // Play sound based on record type
             await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
 
             // Add to records and show details
@@ -253,13 +250,13 @@ const processStudentScan = async (scannedId) => {
     }
 };
 
-const showScanFeedback = (recordType, purpose, message = '') => {
+const showScanFeedback = (recordType, message = '') => {
     // Default messages based on record type
     let defaultMessage = '';
     let feedbackType = 'success';
 
     if (recordType === 'check-in') {
-        defaultMessage = `Check-in successful (${purpose})`;
+        defaultMessage = `Check-in successful`;
     } else if (recordType === 'check-out') {
         defaultMessage = 'Check-out successful';
     } else if (recordType === 'error') {
@@ -308,22 +305,100 @@ const manualCheckIn = () => {
     }
 };
 
-const exportReport = () => {
-    alert('Exporting attendance report...');
-    // In a real app, would generate CSV/PDF
+const exportReport = async () => {
+    try {
+        // First, show a loading message
+        toast.add({
+            severity: 'info',
+            summary: 'Generating Report',
+            detail: 'Preparing attendance report PDF...',
+            life: 3000
+        });
+
+        // Filter records for today only
+        const today = new Date().toLocaleDateString();
+        const todayRecords = attendanceRecords.value.filter((record) => record.date === today);
+
+        if (todayRecords.length === 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Records',
+                detail: 'No attendance records found for today',
+                life: 3000
+            });
+            return;
+        }
+
+        // Format date for filename (YYYY-MM-DD)
+        const dateForFilename = today.split('/').reverse().join('-');
+        const filename = `GH_${dateForFilename}.pdf`;
+
+        // Use jsPDF to generate the PDF
+        const { jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+
+        // Create new PDF document
+        const doc = new jsPDF();
+
+        // Add title
+        doc.setFontSize(18);
+        doc.text('Attendance Report', 14, 22);
+
+        // Add date
+        doc.setFontSize(12);
+        doc.text(`Date: ${today}`, 14, 30);
+
+        // Add time generated
+        const timeGenerated = new Date().toLocaleTimeString();
+        doc.text(`Time Generated: ${timeGenerated}`, 14, 36);
+
+        // Add summary counts
+        const checkins = todayRecords.filter((r) => r.recordType === 'check-in').length;
+        const checkouts = todayRecords.filter((r) => r.recordType === 'check-out').length;
+
+        doc.text(`Total Check-ins: ${checkins}`, 14, 44);
+        doc.text(`Total Check-outs: ${checkouts}`, 14, 50);
+
+        // Prepare data for the table
+        const tableData = todayRecords.map((record) => [record.id, record.name, record.recordType === 'check-in' ? 'Check In' : 'Check Out', record.gradeLevel, record.section, record.timestamp]);
+
+        // Generate the table
+        autoTable(doc, {
+            startY: 58,
+            head: [['ID', 'Name', 'Type', 'Grade', 'Section', 'Time']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+            alternateRowStyles: { fillColor: [240, 245, 255] }
+        });
+
+        // Save the PDF
+        doc.save(filename);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Report Generated',
+            detail: `Report saved as ${filename}`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Export Failed',
+            detail: 'Failed to generate PDF report',
+            life: 3000
+        });
+    }
 };
 
 const filteredRecords = computed(() => {
     let records = attendanceRecords.value;
 
-    // Apply purpose filter
+    // Apply record type filter
     if (statusFilter.value !== 'all') {
         records = records.filter((record) => {
-            // Filter by purpose for check-ins
-            if (statusFilter.value === 'regular' || statusFilter.value === 'event') {
-                return record.purpose === statusFilter.value && record.recordType === 'check-in';
-            }
-            return true;
+            return record.recordType === statusFilter.value; // Filter by check-in or check-out
         });
     }
 
@@ -339,6 +414,7 @@ const filteredRecords = computed(() => {
 
 <template>
     <div class="layout-wrapper">
+        <Toast />
         <!-- Fixed Header -->
         <header class="dashboard-header">
             <div class="header-left">
@@ -377,21 +453,6 @@ const filteredRecords = computed(() => {
                             <button @click="manualCheckIn" class="action-button">
                                 <i class="pi pi-pencil"></i>
                                 Manual
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Purpose Selection Controls -->
-                    <div class="purpose-controls">
-                        <span class="purpose-label">Check-in Purpose:</span>
-                        <div class="purpose-buttons purpose-buttons-two">
-                            <button @click="checkInPurpose = 'regular'" :class="['purpose-button', checkInPurpose === 'regular' ? 'active' : '']">
-                                <i class="pi pi-calendar"></i>
-                                Regular
-                            </button>
-                            <button @click="checkInPurpose = 'event'" :class="['purpose-button', checkInPurpose === 'event' ? 'active' : '']">
-                                <i class="pi pi-star"></i>
-                                Event
                             </button>
                         </div>
                     </div>
@@ -436,7 +497,6 @@ const filteredRecords = computed(() => {
                             <div class="record-badge" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
                                 <i :class="selectedStudent.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
                                 {{ selectedStudent.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
-                                <span v-if="selectedStudent.purpose && selectedStudent.recordType === 'check-in'" class="purpose-tag"> ({{ selectedStudent.purpose }}) </span>
                             </div>
                             <div class="timestamp">{{ selectedStudent.timestamp }}</div>
                         </div>
@@ -490,8 +550,8 @@ const filteredRecords = computed(() => {
 
                             <div class="filter-buttons">
                                 <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
-                                <button @click="statusFilter = 'regular'" :class="['filter-button', statusFilter === 'regular' ? 'active' : '']"><i class="pi pi-calendar"></i> Regular</button>
-                                <button @click="statusFilter = 'event'" :class="['filter-button', statusFilter === 'event' ? 'active' : '']"><i class="pi pi-star"></i> Event</button>
+                                <button @click="statusFilter = 'check-in'" :class="['filter-button', statusFilter === 'check-in' ? 'active' : '']"><i class="pi pi-sign-in"></i> Check-ins</button>
+                                <button @click="statusFilter = 'check-out'" :class="['filter-button', statusFilter === 'check-out' ? 'active' : '']"><i class="pi pi-sign-out"></i> Check-outs</button>
                             </div>
                         </div>
                     </div>
@@ -515,15 +575,6 @@ const filteredRecords = computed(() => {
                                 </span>
                             </template>
                         </Column>
-                        <Column field="purpose" header="Purpose" :sortable="true">
-                            <template #body="slotProps">
-                                <span v-if="slotProps.data.purpose && slotProps.data.recordType === 'check-in'" :class="['purpose-pill', 'purpose-' + slotProps.data.purpose]">
-                                    <i :class="slotProps.data.purpose === 'regular' ? 'pi pi-calendar' : 'pi pi-star'"></i>
-                                    {{ slotProps.data.purpose === 'regular' ? 'Regular' : 'Event' }}
-                                </span>
-                                <span v-else>-</span>
-                            </template>
-                        </Column>
                         <Column field="gradeLevel" header="Grade" :sortable="true"></Column>
                         <Column field="section" header="Section"></Column>
                         <Column field="timestamp" header="Time" :sortable="true"></Column>
@@ -542,14 +593,6 @@ const filteredRecords = computed(() => {
                 <div class="stat-item">
                     <div class="stat-label">Check-outs</div>
                     <div class="stat-value">{{ totalCheckouts }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Regular</div>
-                    <div class="stat-value purpose-regular">{{ regularCheckins }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Events</div>
-                    <div class="stat-value purpose-event">{{ eventCheckins }}</div>
                 </div>
             </div>
 
@@ -987,6 +1030,14 @@ const filteredRecords = computed(() => {
     align-items: center;
 }
 
+.preview-header.record-checkin {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.preview-header.record-checkout {
+    background: rgba(59, 130, 246, 0.1);
+}
+
 .preview-header.status-on-time {
     background: rgba(16, 185, 129, 0.1);
 }
@@ -1269,22 +1320,6 @@ const filteredRecords = computed(() => {
         font-size: 1.5rem;
         font-weight: 700;
         color: #1e293b;
-
-        &.status-late {
-            color: #f59e0b;
-        }
-
-        &.status-unauthorized {
-            color: #ef4444;
-        }
-
-        &.purpose-regular {
-            color: #0d9488;
-        }
-
-        &.purpose-event {
-            color: #d97706;
-        }
     }
 }
 
@@ -1359,61 +1394,6 @@ const filteredRecords = computed(() => {
     }
 }
 
-/* Purpose Controls */
-.purpose-controls {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.purpose-label {
-    display: block;
-    font-weight: 600;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-}
-
-.purpose-buttons {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.purpose-button {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    padding: 0.5rem;
-    border-radius: 0.375rem;
-    border: 1px solid #e2e8f0;
-    background: white;
-    color: #64748b;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.purpose-button:hover {
-    background: #f8fafc;
-}
-
-.purpose-button.active {
-    background: #eff6ff;
-    color: #3b82f6;
-    border-color: #bfdbfe;
-}
-
-.purpose-tag {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: #64748b;
-}
-
 /* Record Type Styling */
 .preview-header.record-checkin {
     background: rgba(16, 185, 129, 0.1);
@@ -1440,45 +1420,5 @@ const filteredRecords = computed(() => {
 .record-badge.record-checkout {
     background: rgba(59, 130, 246, 0.2);
     color: #3b82f6;
-}
-
-/* Purpose Pills for Table */
-.purpose-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.purpose-pill.purpose-regular {
-    background: rgba(16, 185, 129, 0.15);
-    color: #0d9488;
-}
-
-.purpose-pill.purpose-event {
-    background: rgba(245, 158, 11, 0.15);
-    color: #d97706;
-}
-
-.purpose-pill.purpose-visit {
-    background: rgba(124, 58, 237, 0.15);
-    color: #7c3aed;
-}
-
-.purpose-buttons-two {
-    justify-content: center;
-    max-width: 500px;
-    margin: 0 auto;
-    gap: 1rem;
-}
-
-.purpose-buttons-two .purpose-button {
-    flex-grow: 1;
-    max-width: 200px;
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
 }
 </style>
