@@ -56,11 +56,15 @@ const cameraError = ref(null);
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
-const lateArrivals = computed(() => attendanceRecords.value.filter((record) => record.status === 'late' && record.recordType === 'check-in').length);
-const unauthorizedAttempts = computed(() => attendanceRecords.value.filter((record) => record.status === 'unauthorized').length);
+const regularCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'regular' && record.recordType === 'check-in').length);
+const visitCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'visit' && record.recordType === 'check-in').length);
+const eventCheckins = computed(() => attendanceRecords.value.filter((record) => record.purpose === 'event' && record.recordType === 'check-in').length);
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
+
+// Add a new ref for the check-in purpose selector
+const checkInPurpose = ref('regular'); // Default purpose is 'regular'
 
 // Update time every second
 onMounted(() => {
@@ -140,7 +144,7 @@ const onDetect = async (detectedCodes) => {
         }
     } catch (error) {
         console.error('Error in QR code detection:', error);
-        showScanFeedback('unauthorized', null, 'Error processing QR code');
+        showScanFeedback('error', null, 'Error processing QR code');
 
         // Restart scanner after error
         setTimeout(() => {
@@ -214,30 +218,21 @@ const processStudentScan = async (scannedId) => {
 
             console.log('Determined record type:', recordType);
 
-            // Determine status (simplified logic - in real app would check against schedule)
-            let status = 'on-time';
-            const currentHour = new Date().getHours();
-
-            // Only check for late status on check-ins
-            if (recordType === 'check-in' && currentHour >= 8) {
-                status = 'late';
-            }
-
-            // Create record with unique ID
+            // Create record with unique ID and current purpose
             const record = {
                 ...student,
                 timestamp: new Date().toLocaleTimeString(),
                 date: new Date().toLocaleDateString(),
-                status: status,
+                purpose: checkInPurpose.value, // Use the current purpose setting
                 recordType: recordType,
                 recordId: `${student.id}-${Date.now()}` // Unique ID for each record
             };
 
             // Show feedback
-            showScanFeedback(status, recordType);
+            showScanFeedback(recordType, checkInPurpose.value);
 
-            // Play sound based on status
-            await playStatusSound(status);
+            // Play sound based on record type (not status)
+            await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
 
             // Add to records and show details
             attendanceRecords.value.unshift(record); // Add to beginning
@@ -248,31 +243,34 @@ const processStudentScan = async (scannedId) => {
         } else {
             // Invalid QR code
             console.log('Invalid student ID:', scannedId);
-            showScanFeedback('unauthorized', null, 'Invalid student ID');
-            await playStatusSound('unauthorized');
+            showScanFeedback('error', null, 'Invalid student ID');
+            await playStatusSound('error');
             return false;
         }
     } catch (error) {
         console.error('Error processing student scan:', error);
-        showScanFeedback('unauthorized', null, 'An error occurred while processing the scan');
+        showScanFeedback('error', null, 'An error occurred while processing the scan');
         return false;
     }
 };
 
-const showScanFeedback = (status, recordType, message = '') => {
-    // Default messages based on record type and status
+const showScanFeedback = (recordType, purpose, message = '') => {
+    // Default messages based on record type
     let defaultMessage = '';
+    let feedbackType = 'success';
+
     if (recordType === 'check-in') {
-        defaultMessage = status === 'on-time' ? 'Check-in successful' : status === 'late' ? 'Late check-in recorded' : 'Unauthorized check-in attempt';
+        defaultMessage = `Check-in successful (${purpose})`;
     } else if (recordType === 'check-out') {
         defaultMessage = 'Check-out successful';
-    } else {
+    } else if (recordType === 'error') {
         defaultMessage = 'Unauthorized scan';
+        feedbackType = 'error';
     }
 
     scanFeedback.value = {
         show: true,
-        type: status,
+        type: feedbackType,
         message: message || defaultMessage
     };
 
@@ -282,14 +280,14 @@ const showScanFeedback = (status, recordType, message = '') => {
     }, 3000);
 };
 
-const playStatusSound = async (status) => {
-    // In a real app, would play different sounds based on status
+const playStatusSound = async (type) => {
+    // In a real app, would play different sounds based on record type
     let sound;
 
-    if (status === 'on-time') {
+    if (type === 'success') {
         sound = new Audio('/demo/sounds/success.wav');
-    } else if (status === 'late') {
-        sound = new Audio('/demo/sounds/warning.mp3');
+    } else if (type === 'checkout') {
+        sound = new Audio('/demo/sounds/beep.mp3');
     } else {
         sound = new Audio('/demo/sounds/error.mp3');
     }
@@ -301,7 +299,7 @@ const playStatusSound = async (status) => {
         console.log('Sound play error:', e);
     }
 
-    console.log(`Playing ${status} sound`);
+    console.log(`Playing ${type} sound`);
 };
 
 const manualCheckIn = () => {
@@ -319,15 +317,21 @@ const exportReport = () => {
 const filteredRecords = computed(() => {
     let records = attendanceRecords.value;
 
-    // Apply status filter
+    // Apply purpose filter
     if (statusFilter.value !== 'all') {
-        records = records.filter((record) => record.status === statusFilter.value);
+        records = records.filter((record) => {
+            // Filter by purpose for check-ins
+            if (statusFilter.value === 'regular' || statusFilter.value === 'visit' || statusFilter.value === 'event') {
+                return record.purpose === statusFilter.value && record.recordType === 'check-in';
+            }
+            return true;
+        });
     }
 
     // Apply search filter
     if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        records = records.filter((record) => record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || record.gradeLevel.toString().toLowerCase().includes(query) || record.section.toLowerCase().includes(query));
+        records = records.filter((record) => record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || record.gradeLevel?.toString().toLowerCase().includes(query) || record.section?.toLowerCase().includes(query));
     }
 
     return records;
@@ -378,6 +382,25 @@ const filteredRecords = computed(() => {
                         </div>
                     </div>
 
+                    <!-- Purpose Selection Controls -->
+                    <div class="purpose-controls">
+                        <span class="purpose-label">Check-in Purpose:</span>
+                        <div class="purpose-buttons">
+                            <button @click="checkInPurpose = 'regular'" :class="['purpose-button', checkInPurpose === 'regular' ? 'active' : '']">
+                                <i class="pi pi-calendar"></i>
+                                Regular
+                            </button>
+                            <button @click="checkInPurpose = 'visit'" :class="['purpose-button', checkInPurpose === 'visit' ? 'active' : '']">
+                                <i class="pi pi-user-plus"></i>
+                                Visit
+                            </button>
+                            <button @click="checkInPurpose = 'event'" :class="['purpose-button', checkInPurpose === 'event' ? 'active' : '']">
+                                <i class="pi pi-star"></i>
+                                Event
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="scanner-container" :class="{ 'scanning-active': scanning }">
                         <!-- Show camera feed when scanning -->
                         <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'" :track="true"></qrcode-stream>
@@ -407,18 +430,18 @@ const filteredRecords = computed(() => {
 
                         <!-- Scan feedback notification -->
                         <div v-if="scanFeedback.show" :class="['scan-feedback', 'feedback-' + scanFeedback.type]">
-                            <i :class="scanFeedback.type === 'on-time' ? 'pi pi-check-circle' : scanFeedback.type === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
+                            <i :class="scanFeedback.type === 'success' ? 'pi pi-check-circle' : scanFeedback.type === 'checkout' ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
                             {{ scanFeedback.message }}
                         </div>
                     </div>
 
                     <!-- Student Preview Section -->
                     <div class="student-preview" v-if="selectedStudent">
-                        <div class="preview-header" :class="`status-${selectedStudent.status}`">
-                            <div class="status-badge" :class="`status-${selectedStudent.status}`">
-                                <i :class="selectedStudent.status === 'on-time' ? 'pi pi-check-circle' : selectedStudent.status === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
+                        <div class="preview-header" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                            <div class="record-badge" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                                <i :class="selectedStudent.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
                                 {{ selectedStudent.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
-                                ({{ selectedStudent.status === 'on-time' ? 'On Time' : selectedStudent.status === 'late' ? 'Late' : 'Unauthorized' }})
+                                <span v-if="selectedStudent.purpose && selectedStudent.recordType === 'check-in'" class="purpose-tag"> ({{ selectedStudent.purpose }}) </span>
                             </div>
                             <div class="timestamp">{{ selectedStudent.timestamp }}</div>
                         </div>
@@ -472,9 +495,9 @@ const filteredRecords = computed(() => {
 
                             <div class="filter-buttons">
                                 <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
-                                <button @click="statusFilter = 'on-time'" :class="['filter-button', statusFilter === 'on-time' ? 'active' : '']"><i class="pi pi-check-circle"></i> On Time</button>
-                                <button @click="statusFilter = 'late'" :class="['filter-button', statusFilter === 'late' ? 'active' : '']"><i class="pi pi-clock"></i> Late</button>
-                                <button @click="statusFilter = 'unauthorized'" :class="['filter-button', statusFilter === 'unauthorized' ? 'active' : '']"><i class="pi pi-exclamation-circle"></i> Unauthorized</button>
+                                <button @click="statusFilter = 'regular'" :class="['filter-button', statusFilter === 'regular' ? 'active' : '']"><i class="pi pi-calendar"></i> Regular</button>
+                                <button @click="statusFilter = 'visit'" :class="['filter-button', statusFilter === 'visit' ? 'active' : '']"><i class="pi pi-user-plus"></i> Visit</button>
+                                <button @click="statusFilter = 'event'" :class="['filter-button', statusFilter === 'event' ? 'active' : '']"><i class="pi pi-star"></i> Event</button>
                             </div>
                         </div>
                     </div>
@@ -498,17 +521,18 @@ const filteredRecords = computed(() => {
                                 </span>
                             </template>
                         </Column>
+                        <Column field="purpose" header="Purpose" :sortable="true">
+                            <template #body="slotProps">
+                                <span v-if="slotProps.data.purpose && slotProps.data.recordType === 'check-in'" :class="['purpose-pill', 'purpose-' + slotProps.data.purpose]">
+                                    <i :class="slotProps.data.purpose === 'regular' ? 'pi pi-calendar' : slotProps.data.purpose === 'visit' ? 'pi pi-user-plus' : 'pi pi-star'"></i>
+                                    {{ slotProps.data.purpose === 'regular' ? 'Regular' : slotProps.data.purpose === 'visit' ? 'Visit' : 'Event' }}
+                                </span>
+                                <span v-else>-</span>
+                            </template>
+                        </Column>
                         <Column field="gradeLevel" header="Grade" :sortable="true"></Column>
                         <Column field="section" header="Section"></Column>
                         <Column field="timestamp" header="Time" :sortable="true"></Column>
-                        <Column field="status" header="Status" :sortable="true">
-                            <template #body="slotProps">
-                                <span class="status-badge" :class="`status-${slotProps.data.status}`">
-                                    <i :class="slotProps.data.status === 'on-time' ? 'pi pi-check-circle' : slotProps.data.status === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
-                                    {{ slotProps.data.status === 'on-time' ? 'On Time' : slotProps.data.status === 'late' ? 'Late' : 'Unauthorized' }}
-                                </span>
-                            </template>
-                        </Column>
                     </DataTable>
                 </div>
             </div>
@@ -526,12 +550,16 @@ const filteredRecords = computed(() => {
                     <div class="stat-value">{{ totalCheckouts }}</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label">Late Arrivals</div>
-                    <div class="stat-value status-late">{{ lateArrivals }}</div>
+                    <div class="stat-label">Regular</div>
+                    <div class="stat-value purpose-regular">{{ regularCheckins }}</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label">Unauthorized</div>
-                    <div class="stat-value status-unauthorized">{{ unauthorizedAttempts }}</div>
+                    <div class="stat-label">Visits</div>
+                    <div class="stat-value purpose-visit">{{ visitCheckins }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Events</div>
+                    <div class="stat-value purpose-event">{{ eventCheckins }}</div>
                 </div>
             </div>
 
@@ -921,17 +949,17 @@ const filteredRecords = computed(() => {
     animation: fadeInOut 3s ease-in-out;
 }
 
-.feedback-on-time {
+.feedback-success {
     background: rgba(16, 185, 129, 0.9);
     color: white;
 }
 
-.feedback-late {
+.feedback-checkout {
     background: rgba(245, 158, 11, 0.9);
     color: white;
 }
 
-.feedback-unauthorized {
+.feedback-error {
     background: rgba(239, 68, 68, 0.9);
     color: white;
 }
@@ -1259,6 +1287,18 @@ const filteredRecords = computed(() => {
         &.status-unauthorized {
             color: #ef4444;
         }
+
+        &.purpose-regular {
+            color: #0d9488;
+        }
+
+        &.purpose-visit {
+            color: #7c3aed;
+        }
+
+        &.purpose-event {
+            color: #d97706;
+        }
     }
 }
 
@@ -1331,5 +1371,119 @@ const filteredRecords = computed(() => {
         width: 100%;
         justify-content: space-between;
     }
+}
+
+/* Purpose Controls */
+.purpose-controls {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.purpose-label {
+    display: block;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.purpose-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.purpose-button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.purpose-button:hover {
+    background: #f8fafc;
+}
+
+.purpose-button.active {
+    background: #eff6ff;
+    color: #3b82f6;
+    border-color: #bfdbfe;
+}
+
+.purpose-tag {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #64748b;
+}
+
+/* Record Type Styling */
+.preview-header.record-checkin {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.preview-header.record-checkout {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.record-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+}
+
+.record-badge.record-checkin {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.record-badge.record-checkout {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+/* Purpose Pills for Table */
+.purpose-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.purpose-pill.purpose-regular {
+    background: rgba(16, 185, 129, 0.15);
+    color: #0d9488;
+}
+
+.purpose-pill.purpose-visit {
+    background: rgba(124, 58, 237, 0.15);
+    color: #7c3aed;
+}
+
+.purpose-pill.purpose-event {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+
+.timestamp {
+    font-size: 0.875rem;
+    color: #64748b;
 }
 </style>
