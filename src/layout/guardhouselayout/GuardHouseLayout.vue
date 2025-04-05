@@ -69,13 +69,19 @@ onMounted(() => {
     }, 1000);
 
     console.log('Component mounted, students data:', allStudents.value);
+    console.log('Students data type:', typeof allStudents.value);
 });
 
 // Clean up interval on component unmount
 onBeforeUnmount(() => {
     if (timeInterval.value) {
         clearInterval(timeInterval.value);
+        timeInterval.value = null;
     }
+
+    // Make sure scanning is stopped to release camera
+    scanning.value = false;
+    console.log('Component unmounting, camera resources released');
 });
 
 watch(isSidebarActive, (newVal) => {
@@ -111,12 +117,35 @@ function isOutsideClicked(event) {
     return !(topbarEl && (topbarEl.isSameNode(event.target) || topbarEl.contains(event.target)));
 }
 
-const onDetect = (detectedCodes) => {
-    console.log('QR Code Detected:', detectedCodes);
-    if (detectedCodes.length > 0) {
-        const studentId = detectedCodes[0].rawValue;
-        console.log('Detected Student ID:', studentId);
-        processStudentScan(studentId);
+const onDetect = async (detectedCodes) => {
+    try {
+        console.log('QR Code Detected:', detectedCodes);
+        if (detectedCodes.length > 0) {
+            // Pause scanning while processing to avoid multiple scans of the same code
+            scanning.value = false;
+
+            const studentId = detectedCodes[0].rawValue;
+            console.log('Detected Student ID:', studentId);
+
+            // Process student scan in a microtask to avoid blocking the message channel
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            await processStudentScan(studentId);
+
+            // Wait a moment before restarting the scanner to avoid rapid scanning
+            setTimeout(() => {
+                scanning.value = true;
+            }, 1000);
+        } else {
+            console.log('No valid QR code detected');
+        }
+    } catch (error) {
+        console.error('Error in QR code detection:', error);
+        showScanFeedback('unauthorized', null, 'Error processing QR code');
+
+        // Restart scanner after error
+        setTimeout(() => {
+            scanning.value = true;
+        }, 2000);
     }
 };
 
@@ -124,88 +153,109 @@ const onCameraError = (error) => {
     console.error('Camera Error:', error);
     cameraError.value = error.message || 'Failed to access camera';
     scanning.value = false;
+
+    // Automatically attempt to restart camera after a delay
+    setTimeout(() => {
+        if (!scanning.value && !cameraError.value) {
+            restartCamera();
+        }
+    }, 5000);
 };
 
 const restartCamera = () => {
     cameraError.value = null;
-    scanning.value = true;
+    scanning.value = false;
+
+    // Use a short timeout to ensure component unmounts and remounts properly
+    setTimeout(() => {
+        scanning.value = true;
+        console.log('Camera restarted');
+    }, 500);
 };
 
-const processStudentScan = (scannedId) => {
-    console.log('Processing student scan for ID:', scannedId);
-    console.log('All students:', allStudents.value);
+const processStudentScan = async (scannedId) => {
+    try {
+        console.log('Processing student scan for ID:', scannedId);
+        console.log('All students:', allStudents.value);
 
-    // Find the student in our allStudents array
-    // Handle both string and number IDs
-    const student = allStudents.value.find((s) => s.id.toString() === scannedId.toString());
+        // Find the student in our allStudents array
+        // Handle both string and number IDs
+        const student = allStudents.value.find((s) => s.id.toString() === scannedId.toString());
 
-    console.log('Found student:', student);
+        console.log('Found student:', student);
 
-    if (student) {
-        // Get today's records for this student
-        const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === student.id.toString() && record.date === new Date().toLocaleDateString());
+        if (student) {
+            // Get today's records for this student
+            const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === student.id.toString() && record.date === new Date().toLocaleDateString());
 
-        console.log("Today's records for this student:", todaysRecords);
+            console.log("Today's records for this student:", todaysRecords);
 
-        // Determine record type based on the pattern of previous records
-        let recordType;
+            // Determine record type based on the pattern of previous records
+            let recordType;
 
-        if (todaysRecords.length === 0) {
-            // First scan of the day - always a check-in
-            recordType = 'check-in';
+            if (todaysRecords.length === 0) {
+                // First scan of the day - always a check-in
+                recordType = 'check-in';
+            } else {
+                // Get the most recent record for this student
+                const latestRecord = [...todaysRecords].sort((a, b) => {
+                    // Convert timestamps to Date objects for proper comparison
+                    const timeA = new Date(`1/1/2023 ${a.timestamp}`);
+                    const timeB = new Date(`1/1/2023 ${b.timestamp}`);
+                    return timeB - timeA; // Sort in descending order (newest first)
+                })[0];
+
+                console.log('Latest record:', latestRecord);
+
+                // If the latest record is a check-in, this should be a check-out
+                // If the latest record is a check-out, this should be a check-in
+                recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
+            }
+
+            console.log('Determined record type:', recordType);
+
+            // Determine status (simplified logic - in real app would check against schedule)
+            let status = 'on-time';
+            const currentHour = new Date().getHours();
+
+            // Only check for late status on check-ins
+            if (recordType === 'check-in' && currentHour >= 8) {
+                status = 'late';
+            }
+
+            // Create record with unique ID
+            const record = {
+                ...student,
+                timestamp: new Date().toLocaleTimeString(),
+                date: new Date().toLocaleDateString(),
+                status: status,
+                recordType: recordType,
+                recordId: `${student.id}-${Date.now()}` // Unique ID for each record
+            };
+
+            // Show feedback
+            showScanFeedback(status, recordType);
+
+            // Play sound based on status
+            await playStatusSound(status);
+
+            // Add to records and show details
+            attendanceRecords.value.unshift(record); // Add to beginning
+            selectedStudent.value = record;
+
+            console.log('Student record created:', record);
+            return true;
         } else {
-            // Get the most recent record for this student
-            const latestRecord = [...todaysRecords].sort((a, b) => {
-                // Convert timestamps to Date objects for proper comparison
-                const timeA = new Date(`1/1/2023 ${a.timestamp}`);
-                const timeB = new Date(`1/1/2023 ${b.timestamp}`);
-                return timeB - timeA; // Sort in descending order (newest first)
-            })[0];
-
-            console.log('Latest record:', latestRecord);
-
-            // If the latest record is a check-in, this should be a check-out
-            // If the latest record is a check-out, this should be a check-in
-            recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
+            // Invalid QR code
+            console.log('Invalid student ID:', scannedId);
+            showScanFeedback('unauthorized', null, 'Invalid student ID');
+            await playStatusSound('unauthorized');
+            return false;
         }
-
-        console.log('Determined record type:', recordType);
-
-        // Determine status (simplified logic - in real app would check against schedule)
-        let status = 'on-time';
-        const currentHour = new Date().getHours();
-
-        // Only check for late status on check-ins
-        if (recordType === 'check-in' && currentHour >= 8) {
-            status = 'late';
-        }
-
-        // Create record with unique ID
-        const record = {
-            ...student,
-            timestamp: new Date().toLocaleTimeString(),
-            date: new Date().toLocaleDateString(),
-            status: status,
-            recordType: recordType,
-            recordId: `${student.id}-${Date.now()}` // Unique ID for each record
-        };
-
-        // Show feedback
-        showScanFeedback(status, recordType);
-
-        // Play sound based on status
-        playStatusSound(status);
-
-        // Add to records and show details
-        attendanceRecords.value.unshift(record); // Add to beginning
-        selectedStudent.value = record;
-
-        console.log('Student record created:', record);
-    } else {
-        // Invalid QR code
-        console.log('Invalid student ID:', scannedId);
-        showScanFeedback('unauthorized', null, 'Invalid student ID');
-        playStatusSound('unauthorized');
+    } catch (error) {
+        console.error('Error processing student scan:', error);
+        showScanFeedback('unauthorized', null, 'An error occurred while processing the scan');
+        return false;
     }
 };
 
@@ -232,12 +282,12 @@ const showScanFeedback = (status, recordType, message = '') => {
     }, 3000);
 };
 
-const playStatusSound = (status) => {
+const playStatusSound = async (status) => {
     // In a real app, would play different sounds based on status
     let sound;
 
     if (status === 'on-time') {
-        sound = new Audio('/demo/sounds/success.mp3');
+        sound = new Audio('/demo/sounds/success.wav');
     } else if (status === 'late') {
         sound = new Audio('/demo/sounds/warning.mp3');
     } else {
@@ -246,7 +296,7 @@ const playStatusSound = (status) => {
 
     // Attempt to play the sound (may fail if sounds don't exist)
     try {
-        sound.play().catch((e) => console.log('Sound play failed:', e));
+        await sound.play().catch((e) => console.log('Sound play failed:', e));
     } catch (e) {
         console.log('Sound play error:', e);
     }
@@ -330,7 +380,7 @@ const filteredRecords = computed(() => {
 
                     <div class="scanner-container" :class="{ 'scanning-active': scanning }">
                         <!-- Show camera feed when scanning -->
-                        <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner"></qrcode-stream>
+                        <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'" :track="true"></qrcode-stream>
 
                         <!-- Show paused message when not scanning -->
                         <div v-else-if="!scanning && !cameraError" class="scanner-paused">
