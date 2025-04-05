@@ -8,6 +8,8 @@ use App\Http\Controllers\API\TeacherController;
 use App\Http\Controllers\API\CurriculumController;
 use App\Http\Controllers\API\CurriculumGradeController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 
 // Health check route for testing connectivity
 Route::get('/health-check', function() {
@@ -39,6 +41,8 @@ Route::get('sections/grade/{gradeId}', [SectionController::class, 'byGrade']);
 Route::get('sections/active', [SectionController::class, 'getActiveSections']);
 Route::patch('sections/{section}/toggle-status', [SectionController::class, 'toggleStatus']);
 Route::post('sections/{id}/restore', [SectionController::class, 'restore']);
+Route::get('/sections/{section}/subjects', [SectionController::class, 'getSubjects']);
+Route::get('/sections/{section}/direct-subjects', [SectionController::class, 'getDirectSubjects']);
 
 // Teacher routes
 Route::prefix('teachers')->group(function () {
@@ -109,9 +113,43 @@ Route::get('/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionContro
 Route::get('/sections/{sectionId}/subjects', [SectionController::class, 'getSectionSubjects']);
 Route::post('/sections/{sectionId}/subjects', [SectionController::class, 'addSubjectToSection']);
 Route::delete('/sections/{sectionId}/subjects/{subjectId}', [SectionController::class, 'removeSubjectFromSection']);
+Route::post('/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionController::class, 'assignTeacherToSubject']);
+Route::post('/sections/{sectionId}/repair-subjects', [SectionController::class, 'repairSectionSubjectsEndpoint']);
 
 // Curriculum Grade routes with alternative endpoints
 Route::get('/curriculum-grade/{curriculum}/{grade}', [CurriculumGradeController::class, 'show']);
 Route::get('/curriculum_grade', [CurriculumGradeController::class, 'getByParams']);
 Route::get('/curriculums/{curriculumId}/grades/{gradeId}/relationship', [CurriculumGradeController::class, 'relationship']);
 Route::get('/sections/curriculum-grade/{curriculumGrade}', [SectionController::class, 'byCurriculumGrade']);
+
+// System-level operations
+Route::prefix('system')->group(function () {
+    Route::post('repair-sections', function () {
+        try {
+            Artisan::call('app:repair-section-grade-relationships');
+            $output = Artisan::output();
+
+            Log::info('Section repair command executed via API');
+            Log::info($output);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Section-grade relationships repaired successfully',
+                'details' => str_replace("\n", "<br>", $output)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error executing section repair command: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to repair section-grade relationships',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    });
+});
+
+// Add these routes if missing
+Route::get('/teachers', [TeacherController::class, 'index']);
+Route::post('/teachers', [TeacherController::class, 'store']);
+Route::get('/subjects', [SubjectController::class, 'index']);
+Route::get('/grades', [GradeController::class, 'index']);

@@ -1,30 +1,11 @@
 import { reactive } from 'vue';
 import { AttendanceService } from './Students';
-import { SubjectService } from './Subjects';
-
-// Validate that required methods exist in the imported services
-console.log('AttendanceService methods:', Object.keys(AttendanceService));
-console.log('SubjectService methods:', Object.keys(SubjectService));
-
-// Check if getData exists and what type it returns
-if (typeof AttendanceService.getData !== 'function') {
-    console.error('AttendanceService.getData is not a function');
-} else {
-    console.log('AttendanceService.getData type:', typeof AttendanceService.getData());
-    // If it returns a promise, log the resolved value
-    if (AttendanceService.getData() instanceof Promise) {
-        AttendanceService.getData()
-            .then((data) => console.log('AttendanceService.getData result type:', typeof data, Array.isArray(data)))
-            .catch((err) => console.error('Error getting attendance data:', err));
-    }
-}
 
 // Create a reactive state for attendance data
 const state = reactive({
-    // Track all attendance records for students by subject
     attendanceRecords: [],
-    // Cache for quick lookups
-    recordsByMonth: {}
+    recordsByMonth: {},
+    initialized: false
 });
 
 export const StudentAttendanceService = {
@@ -92,89 +73,13 @@ export const StudentAttendanceService = {
 
     // Get students by subject
     async getStudentsBySubject(gradeId, subjectId) {
-        // Fetch students in the grade
-        const students = await AttendanceService.getStudentsInGrade(gradeId);
-
-        // In a real system, you'd check enrollment records for the subject
-        // For simplicity, we'll assume all students in a grade take all subjects
-        return students;
-    },
-
-    // Generate mock attendance data
-    async generateMockData() {
-        if (state.attendanceRecords.length > 0) {
-            return; // Don't regenerate if we already have data
-        }
-
         try {
-            // Make sure to await the data retrieval
-            const students = await AttendanceService.getData();
-
-            // Validate that students is an array before proceeding
-            if (!Array.isArray(students)) {
-                console.error('Expected students to be an array but got:', typeof students);
-                return;
-            }
-
-            const subjects = await SubjectService.getSubjects();
-            if (!Array.isArray(subjects)) {
-                console.error('Expected subjects to be an array but got:', typeof subjects);
-                return;
-            }
-
-            const records = [];
-
-            // Current month
-            const now = new Date();
-            const currentMonth = now.getMonth();
-            const currentYear = now.getFullYear();
-
-            // Generate records for each student for each subject
-            students.forEach((student) => {
-                subjects
-                    .filter((subject) => subject.grade === `Grade ${student.gradeLevel}`)
-                    .forEach((subject) => {
-                        // Generate about 20 days worth of records for the current month
-                        for (let day = 1; day <= 20; day++) {
-                            // Skip weekends (Saturday=6, Sunday=0)
-                            const date = new Date(currentYear, currentMonth, day);
-                            const dayOfWeek = date.getDay();
-                            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-
-                            // Random attendance status
-                            // 85% present, 10% absent, 5% late
-                            const rand = Math.random() * 100;
-                            let status = 'PRESENT';
-
-                            // Students with IDs divisible by 5 have worse attendance
-                            const poorAttendance = student.id % 5 === 0;
-
-                            if (poorAttendance) {
-                                // 60% present, 30% absent, 10% late
-                                if (rand > 60) status = 'ABSENT';
-                                else if (rand > 30) status = 'LATE';
-                            } else {
-                                if (rand > 90) status = 'ABSENT';
-                                else if (rand > 85) status = 'LATE';
-                            }
-
-                            records.push({
-                                id: records.length + 1,
-                                studentId: student.id,
-                                subjectId: subject.id,
-                                date: new Date(currentYear, currentMonth, day).toISOString().split('T')[0],
-                                status: status,
-                                remarks: status === 'ABSENT' ? 'Unexcused absence' : '',
-                                timestamp: new Date().toISOString()
-                            });
-                        }
-                    });
-            });
-
-            state.attendanceRecords = records;
-            console.log(`Generated ${records.length} mock attendance records`);
+            // Fetch students in the grade
+            const students = await AttendanceService.getStudentsInGrade(gradeId);
+            return students;
         } catch (error) {
-            console.error('Error generating mock attendance data:', error);
+            console.error('Error fetching students by subject:', error);
+            throw error;
         }
     },
 
@@ -221,12 +126,3 @@ export const StudentAttendanceService = {
         };
     }
 };
-
-// Initialize with some mock data - but do it properly with async/await
-(async () => {
-    try {
-        await StudentAttendanceService.generateMockData();
-    } catch (error) {
-        console.error('Failed to generate mock attendance data:', error);
-    }
-})();

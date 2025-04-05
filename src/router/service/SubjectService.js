@@ -1,8 +1,5 @@
 // Subject Service - Handles all operations related to subjects
-import axios from 'axios';
-
-// Base URL for the API
-const API_URL = 'http://localhost:8000/api';
+import api from '@/config/axios';
 
 // Cache settings
 let subjectCache = null;
@@ -21,7 +18,7 @@ export const SubjectService = {
             }
 
             console.log('Fetching subjects from API...');
-            const response = await axios.get(`${API_URL}/subjects`);
+            const response = await api.get('/api/subjects');
 
             // Update cache
             subjectCache = response.data;
@@ -38,7 +35,7 @@ export const SubjectService = {
     // Get subject by ID
     async getSubjectById(id) {
         try {
-            const response = await axios.get(`${API_URL}/subjects/${id}`);
+            const response = await api.get(`/api/subjects/${id}`);
             return response.data;
         } catch (error) {
             console.error('Error fetching subject by ID:', error);
@@ -50,7 +47,7 @@ export const SubjectService = {
     async createSubject(subject) {
         try {
             console.log('Creating new subject:', subject);
-            const response = await axios.post(`${API_URL}/subjects`, subject);
+            const response = await api.post('/api/subjects', subject);
 
             // Invalidate cache
             this.clearCache();
@@ -66,7 +63,7 @@ export const SubjectService = {
     async updateSubject(id, subject) {
         try {
             console.log('Updating subject:', id, subject);
-            const response = await axios.put(`${API_URL}/subjects/${id}`, subject);
+            const response = await api.put(`/api/subjects/${id}`, subject);
 
             // Invalidate cache
             this.clearCache();
@@ -82,7 +79,7 @@ export const SubjectService = {
     async archiveSubject(id) {
         try {
             console.log('Archiving subject:', id);
-            const response = await axios.put(`${API_URL}/subjects/${id}/archive`);
+            const response = await api.put(`/api/subjects/${id}/archive`);
 
             // Invalidate cache
             this.clearCache();
@@ -98,7 +95,7 @@ export const SubjectService = {
     async restoreSubject(id) {
         try {
             console.log('Restoring subject:', id);
-            const response = await axios.put(`${API_URL}/subjects/${id}/restore`);
+            const response = await api.put(`/api/subjects/${id}/restore`);
 
             // Invalidate cache
             this.clearCache();
@@ -114,7 +111,7 @@ export const SubjectService = {
     async getSubjectsByGrade(gradeId) {
         try {
             console.log('Fetching subjects for grade:', gradeId);
-            const response = await axios.get(`${API_URL}/grades/${gradeId}/subjects`);
+            const response = await api.get(`/api/grades/${gradeId}/subjects`);
             return response.data;
         } catch (error) {
             console.error('Error fetching subjects by grade:', error);
@@ -126,7 +123,7 @@ export const SubjectService = {
     async assignTeacher(subjectId, teacherId) {
         try {
             console.log('Assigning teacher to subject:', subjectId, teacherId);
-            const response = await axios.post(`${API_URL}/subjects/${subjectId}/teachers`, { teacher_id: teacherId });
+            const response = await api.post(`/api/subjects/${subjectId}/teachers`, { teacher_id: teacherId });
             return response.data;
         } catch (error) {
             console.error('Error assigning teacher to subject:', error);
@@ -138,7 +135,7 @@ export const SubjectService = {
     async removeTeacher(subjectId, teacherId) {
         try {
             console.log('Removing teacher from subject:', subjectId, teacherId);
-            const response = await axios.delete(`${API_URL}/subjects/${subjectId}/teachers/${teacherId}`);
+            const response = await api.delete(`/api/subjects/${subjectId}/teachers/${teacherId}`);
             return response.data;
         } catch (error) {
             console.error('Error removing teacher from subject:', error);
@@ -150,7 +147,7 @@ export const SubjectService = {
     async setSchedule(subjectId, schedule) {
         try {
             console.log('Setting schedule for subject:', subjectId, schedule);
-            const response = await axios.post(`${API_URL}/subjects/${subjectId}/schedule`, schedule);
+            const response = await api.post(`/api/subjects/${subjectId}/schedule`, schedule);
             return response.data;
         } catch (error) {
             console.error('Error setting subject schedule:', error);
@@ -162,7 +159,7 @@ export const SubjectService = {
     async checkScheduleConflicts(gradeId, sectionId, schedule) {
         try {
             console.log('Checking schedule conflicts for:', gradeId, sectionId, schedule);
-            const response = await axios.post(`${API_URL}/schedule/check-conflicts`, {
+            const response = await api.post('/api/schedule/check-conflicts', {
                 grade_id: gradeId,
                 section_id: sectionId,
                 schedule: schedule

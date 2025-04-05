@@ -1,66 +1,54 @@
 ﻿<script setup>
-import axios from 'axios';
+import api, { API_BASE_URL } from '@/config/axios';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
-// TODO: Dropdown is deprecated since PrimeVue v4. Consider migrating to Select component
 import { default as Dropdown } from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import ProgressSpinner from 'primevue/progressspinner';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
-// Add import for the new TeacherSectionAssigner component
-import ProgressSpinner from 'primevue/progressspinner';
-
-// API configuration with multiple endpoints to try
-const API_ENDPOINTS = [
-    'http://localhost:8000/api',
-    'http://127.0.0.1:8000/api'
-];
-
-let API_BASE_URL = API_ENDPOINTS[0];  // Default API endpoint
 
 // Helper function to try multiple API endpoints until one works
 const tryApiEndpoints = async (path, options = {}) => {
-    const defaultOptions = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
-    };
+    try {
+        console.log(`Making API request to: ${path}`);
 
-    const requestOptions = { ...defaultOptions, ...options };
-    let lastError = null;
-
-    // Log attempt to console
-    console.log(`Attempting to fetch data from ${path} using multiple endpoints...`);
-
-    // Try each endpoint in sequence
-    for (let baseUrl of API_ENDPOINTS) {
+        // First try the requested path directly
         try {
-            const url = `${baseUrl}${path}`;
-            console.log(`Trying endpoint: ${url}`);
+        const response = await api(path, options);
+            console.log('API response successful:', response);
+        return response.data;
+    } catch (error) {
+            console.warn(`Failed to access ${path}, trying alternative endpoints...`, error);
 
-            // Use axios for the request
-            const response = await axios(url, requestOptions);
+            // If this is a teacher request without API prefix, try with API prefix
+            if (path.includes('/teachers') && !path.includes('/api/')) {
+                console.log('Trying teacher endpoint with API prefix');
+                const apiResponse = await api(`/api${path}`, options);
+                if (apiResponse.data) {
+                    console.log('API teacher endpoint successful');
+                    return apiResponse.data;
+                }
+            }
 
-            // Update the working base URL for future requests
-            API_BASE_URL = baseUrl;
-            console.log(`Endpoint ${baseUrl} is working! Data retrieved successfully.`);
+            // If this is a subject request without API prefix, try with API prefix
+            if (path.includes('/subjects') && !path.includes('/api/')) {
+                console.log('Trying subject endpoint with API prefix');
+                const apiResponse = await api(`/api${path}`, options);
+                if (apiResponse.data) {
+                    console.log('API subject endpoint successful');
+                    return apiResponse.data;
+                }
+            }
 
-            // Return the data (either response.data or response.data.data depending on API structure)
-            return response.data?.data || response.data;
-        } catch (error) {
-            console.warn(`Endpoint ${baseUrl} failed:`, error.message);
-            lastError = error;
-            // Continue to the next endpoint
+            // If no alternative worked, throw the original error
+            throw error;
         }
+    } catch (error) {
+        console.error('All API request attempts failed:', error);
+        throw error;
     }
-
-    // If we get here, all endpoints failed
-    console.error('All API endpoints failed:', lastError);
-    // Return empty array instead of throwing error, so the component won't crash
-    return [];
 };
 
 const toast = useToast();
@@ -134,11 +122,6 @@ const genderOptions = [
 // Computed properties
 const dialogTitle = computed(() => {
     return teacher.value.id ? 'Edit Teacher' : 'Register Teacher';
-});
-
-// Add computed property for the API base URL
-const apiBaseUrl = computed(() => {
-    return API_BASE_URL;
 });
 
 const filteredTeachers = computed(() => {
@@ -245,104 +228,23 @@ const loadTeachers = async () => {
             life: 2000
         });
 
-        // Use the tryApiEndpoints helper to handle multiple endpoints
-        const data = await tryApiEndpoints('/teachers');
+        // Use the API_BASE_URL constant instead of direct URL
+        const teachersData = await tryApiEndpoints(`${API_BASE_URL}/teachers`);
 
-        if (!data || data.length === 0) {
+        if (!teachersData || teachersData.length === 0) {
             console.warn('No teachers returned from API');
             toast.add({
                 severity: 'warn',
                 summary: 'No Teachers',
-                detail: 'No teachers found in the database. Please add teachers using the Register button.',
+                detail: 'No teachers found in the database.',
                 life: 5000
             });
             teachers.value = [];
-            loading.value = false;
             return;
         }
 
-        // Load supporting data first
-        await Promise.all([
-            sections.value.length === 0 ? loadSections() : Promise.resolve(),
-            subjects.value.length === 0 ? loadSubjects() : Promise.resolve(),
-            gradeOptions.value.length === 0 ? loadGrades() : Promise.resolve()
-        ]);
-
-        // Process teachers data with proper assignment handling
-        teachers.value = data.map(teacher => {
-            console.log('Processing teacher data:', teacher);
-            console.log('Assignments from API:', teacher.assignments);
-
-            // Initialize arrays for different types of assignments
-            let primaryAssignment = null;
-            let subjectAssignments = [];
-
-            // Process assignments if present
-            if (teacher.assignments && Array.isArray(teacher.assignments)) {
-                // Filter valid assignments
-                const validAssignments = teacher.assignments.filter(a =>
-                    a && a.section_id && a.subject_id);
-
-                console.log('Valid assignments:', validAssignments);
-
-                // Process each assignment
-                validAssignments.forEach(assignment => {
-                    // Find section and subject objects
-                    const sectionObj = sections.value.find(s =>
-                        Number(s.id) === Number(assignment.section_id)) || {
-                        id: Number(assignment.section_id),
-                        name: `Section ${assignment.section_id}`,
-                        grade_id: null,
-                        grade: null
-                    };
-
-                    const subjectObj = subjects.value.find(s =>
-                        Number(s.id) === Number(assignment.subject_id)) || {
-                        id: Number(assignment.subject_id),
-                        name: `Subject ${assignment.subject_id}`
-                    };
-
-                    console.log(`Assignment ${assignment.id} - Subject:`, subjectObj);
-                    console.log(`Assignment ${assignment.id} - is_primary:`, assignment.is_primary);
-                    console.log(`Assignment ${assignment.id} - role:`, assignment.role);
-
-                    const processedAssignment = {
-                        id: assignment.id,
-                        section_id: Number(assignment.section_id),
-                        subject_id: Number(assignment.subject_id),
-                        is_primary: assignment.is_primary === true,
-                        role: assignment.role || 'subject',
-                        is_active: assignment.is_active !== undefined ? assignment.is_active : true,
-                        section: sectionObj,
-                        subject: subjectObj
-                    };
-
-                    // Sort assignments into primary vs subject
-                    if (processedAssignment.is_primary || processedAssignment.role === 'primary') {
-                        // Update to ensure consistency
-                        processedAssignment.is_primary = true;
-                        processedAssignment.role = 'primary';
-                        primaryAssignment = processedAssignment;
-                        console.log('Found primary assignment:', primaryAssignment);
-                    } else {
-                        subjectAssignments.push(processedAssignment);
-                    }
-                });
-            }
-
-            console.log('Primary assignment for teacher:', primaryAssignment);
-            console.log('Subject assignments for teacher:', subjectAssignments);
-
-            // Return teacher with organized assignments
-            return {
-                ...teacher,
-                primary_assignment: primaryAssignment,
-                subject_assignments: subjectAssignments,
-                active_assignments: [...(primaryAssignment ? [primaryAssignment] : []), ...subjectAssignments]
-            };
-        });
-
-        console.log('Successfully processed teachers with organized assignment data:', teachers.value);
+        teachers.value = teachersData;
+        console.log(`Loaded ${teachers.value.length} teachers successfully`);
 
         toast.add({
             severity: 'success',
@@ -355,10 +257,9 @@ const loadTeachers = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: `Failed to load teachers: ${error.message}`,
-            life: 5000
+            detail: 'Failed to load teachers.',
+            life: 3000
         });
-
         teachers.value = [];
     } finally {
         loading.value = false;
@@ -375,7 +276,7 @@ const loadSections = async () => {
         });
 
         // Make a direct API call instead of using tryApiEndpoints to ensure we're using the latest API_BASE_URL
-        const response = await axios.get(`${API_BASE_URL}/sections`);
+        const response = await api.get(`${API_BASE_URL}/sections`);
         const data = response.data || [];
         console.log('Raw section data from API:', data);
 
@@ -439,7 +340,7 @@ const loadSubjects = async () => {
         });
 
         // Make a direct API call instead of using tryApiEndpoints
-        const response = await axios.get(`${API_BASE_URL}/subjects`);
+        const response = await api.get(`${API_BASE_URL}/subjects`);
         const data = response.data || [];
         console.log('Raw subject data from API:', data);
 
@@ -508,7 +409,7 @@ const loadGrades = async () => {
         });
 
         // Make a direct API call instead of using tryApiEndpoints
-        const response = await axios.get(`${API_BASE_URL}/grades`);
+        const response = await api.get(`${API_BASE_URL}/grades`);
         const data = response.data || [];
         console.log('Raw grade data from API:', data);
 
@@ -589,7 +490,7 @@ const loadGradeSubjects = (gradeId) => {
     }
 
     // If no subjects are loaded yet, load them from the API
-    axios.get(`${API_BASE_URL}/subjects`)
+    api.get(`${API_BASE_URL}/subjects`)
         .then(response => {
             // Ensure we have a proper response with data
             if (response.data) {
@@ -812,10 +713,11 @@ const saveAssignment = async () => {
         console.log(`Saving assignment with payload:`, JSON.stringify(payload, null, 2));
 
         // Send request to API
-        const response = await axios.put(
-            `${API_BASE_URL}/teachers/${teacherId}/assignments`,
-            payload
-        ).catch(error => {
+        const response = await api({
+            method: 'PUT',
+            url: `${API_BASE_URL}/teachers/${teacherId}/assignments`,
+            data: payload
+        }).catch(error => {
             // Detailed error handling
             if (error.response) {
                 // Server responded with an error status
@@ -895,7 +797,7 @@ const saveAssignmentToBackend = async (teacherId, assignments) => {
             };
         }
 
-        const response = await axios.put(
+        const response = await api.put(
             `${API_BASE_URL}/teachers/${teacherId}/assignments`,
             { assignments: assignments.map(a => ({
                 section_id: a.section_id,
@@ -992,13 +894,7 @@ const checkServerAssignmentConflicts = async (assignments) => {
             if (!assignment.section_id || !assignment.subject_id) continue;
 
             // Check if any teacher is already assigned to this section-subject combination
-            const checkResponse = await axios.get(
-                `${API_BASE_URL}/check-assignment?section_id=${assignment.section_id}&subject_id=${assignment.subject_id}`
-            ).catch(error => {
-                // If endpoint not available, don't block the operation
-                console.warn('Assignment conflict check endpoint not available:', error);
-                return { data: { exists: false } };
-            });
+            const checkResponse = await api.get(`${API_BASE_URL}/check-assignment?section_id=${assignment.section_id}&subject_id=${assignment.subject_id}`);
 
             if (checkResponse?.data?.exists &&
                 checkResponse?.data?.teacher_id &&
@@ -1736,9 +1632,9 @@ const saveTeacher = async () => {
         const method = isUpdate ? 'PUT' : 'POST';
 
         // Use axios directly to better handle errors
-        const response = await axios({
+        const response = await api({
             method: method,
-            url: `${API_BASE_URL}${endpoint}`,
+            url: endpoint,
             data: teacher.value
         });
 

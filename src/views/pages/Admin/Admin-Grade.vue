@@ -137,17 +137,48 @@ const saveGrade = async () => {
         hideDialog();
     } catch (error) {
         let errorMessage = 'Failed to save grade';
+        let shouldRefreshGrades = false;
 
-        if (error.response && error.response.data) {
-            if (error.response.data.errors) {
-                const validationErrors = Object.values(error.response.data.errors).flat().join(', ');
-                errorMessage = `Validation error: ${validationErrors}`;
-            } else if (error.response.data.message) {
+        if (error.response) {
+            console.log('Error response:', error.response);
+
+            // Special handling for 422 errors
+            if (error.response.status === 422) {
+                if (error.response.data.errors) {
+                    const validationErrors = Object.values(error.response.data.errors).flat().join(', ');
+                    errorMessage = `Validation error: ${validationErrors}`;
+                } else if (error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                }
+
+                // Despite the validation error, the grade might have been created
+                // We'll refresh the grades list to check
+                shouldRefreshGrades = true;
+            } else if (error.response.data && error.response.data.message) {
                 errorMessage = error.response.data.message;
             }
         }
 
         toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 3000 });
+
+        // If there was a 422 error, we should refresh the grades list to see if the grade was still created
+        if (shouldRefreshGrades) {
+            await getGrades();
+
+            // Check if the grade was created despite the error
+            const newlyCreatedGrade = grades.value.find(g =>
+                g.code === grade.value.code && g.name === grade.value.name);
+
+            if (newlyCreatedGrade) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'Note',
+                    detail: 'The grade appears to have been created despite validation errors.',
+                    life: 5000
+                });
+                hideDialog();
+            }
+        }
     }
 };
 

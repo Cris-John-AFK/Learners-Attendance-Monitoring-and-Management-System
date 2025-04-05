@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Grade;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class GradeController extends Controller
@@ -23,6 +24,9 @@ class GradeController extends Controller
      */
     public function store(Request $request)
     {
+        // Log the incoming request data for debugging
+        Log::info('Grade creation request data:', $request->all());
+
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:10|unique:grades',
             'name' => 'required|string|max:100',
@@ -32,11 +36,18 @@ class GradeController extends Controller
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Grade validation failed:', ['errors' => $validator->errors()->toArray()]);
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $grade = Grade::create($request->all());
-        return response()->json($grade, 201);
+        try {
+            $grade = Grade::create($request->all());
+            Log::info('Grade created successfully:', ['id' => $grade->id, 'code' => $grade->code]);
+            return response()->json($grade, 201);
+        } catch (\Exception $e) {
+            Log::error('Error creating grade:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['message' => 'An error occurred while creating the grade'], 500);
+        }
     }
 
     /**

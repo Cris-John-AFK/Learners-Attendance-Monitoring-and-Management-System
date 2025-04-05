@@ -1,8 +1,5 @@
-import axios from 'axios';
+import api from '@/config/axios';
 import { reactive } from 'vue';
-
-// Define the API base URL
-const API_URL = 'http://localhost:8000/api';
 
 // Create a reactive state
 const state = reactive({
@@ -16,38 +13,24 @@ export const AttendanceService = {
         try {
             // If we already have the data and it's loaded, return it
             if (state.loaded && state.students.length > 0) {
-                return [...state.students];
+                return state.students;
             }
 
-            // If we're in development, return mock data until API is ready
-            // Remove this when your API is working
-            if (process.env.NODE_ENV !== 'production') {
-                console.log('Using mock student data');
-                const mockData = generateMockStudents();
-                state.students = mockData;
-                state.loaded = true;
-                return [...mockData];
-            }
-
-            // API call when backend is ready
-            const response = await axios.get(`${API_URL}/students`);
+            // Get data from API
+            const response = await api.get('/api/students');
             state.students = response.data;
             state.loaded = true;
-            return [...state.students];
+            return state.students;
         } catch (error) {
             console.error('Error loading students:', error);
-            // Fallback to mock data on error
-            const mockData = generateMockStudents();
-            state.students = mockData;
-            state.loaded = true;
-            return [...mockData];
+            throw error; // Re-throw to let caller handle the error
         }
     },
 
     // Get students by grade level
     async getStudentsByGrade(gradeLevel) {
         try {
-            const response = await axios.get(`${API_URL}/students/grade/${gradeLevel}`);
+            const response = await api.get(`/api/students/grade/${gradeLevel}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for grade ${gradeLevel}:`, error);
@@ -58,7 +41,7 @@ export const AttendanceService = {
     // Get students by grade and section
     async getStudentsBySection(gradeLevel, section) {
         try {
-            const response = await axios.get(`${API_URL}/students/grade/${gradeLevel}/section/${section}`);
+            const response = await api.get(`/api/students/grade/${gradeLevel}/section/${section}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for section ${section}:`, error);
@@ -69,7 +52,7 @@ export const AttendanceService = {
     // Add a new student
     async addStudent(student) {
         try {
-            const response = await axios.post(`${API_URL}/students`, student);
+            const response = await api.post('/api/students', student);
             state.students.push(response.data);
             return response.data;
         } catch (error) {
@@ -81,7 +64,7 @@ export const AttendanceService = {
     // Update a student
     async updateStudent(id, data) {
         try {
-            const response = await axios.put(`${API_URL}/students/${id}`, data);
+            const response = await api.put(`/api/students/${id}`, data);
 
             // Update the local state
             const index = state.students.findIndex((s) => s.id === id);
@@ -99,7 +82,7 @@ export const AttendanceService = {
     // Delete a student
     async deleteStudent(id) {
         try {
-            await axios.delete(`${API_URL}/students/${id}`);
+            await api.delete(`/api/students/${id}`);
 
             // Remove from local state
             const index = state.students.findIndex((s) => s.id === id);
@@ -178,36 +161,15 @@ export const AttendanceService = {
     async clearStore() {
         state.students = [];
         state.loaded = false;
+    },
+
+    async getStudentsInGrade(gradeId) {
+        try {
+            const students = await this.getData();
+            return students.filter((student) => student.grade_level === gradeId);
+        } catch (error) {
+            console.error('Error getting students in grade:', error);
+            throw error;
+        }
     }
 };
-
-// Mock data generator function
-function generateMockStudents() {
-    const sections = ['Mabini', 'Rizal', 'Masipag', 'Makabayan', 'Magalang', 'Matulungin'];
-    const students = [];
-
-    // Generate 200 mock students
-    for (let i = 1; i <= 200; i++) {
-        const gradeLevel = Math.floor(Math.random() * 7); // 0-6 (Kinder to Grade 6)
-        const section = sections[Math.floor(Math.random() * sections.length)];
-
-        students.push({
-            id: i,
-            name: `Student ${i}`,
-            gradeLevel: gradeLevel,
-            section: section,
-            studentId: `S${i.toString().padStart(4, '0')}`,
-            gender: Math.random() > 0.5 ? 'Male' : 'Female',
-            contactInfo: `09${Math.floor(Math.random() * 1000000000)
-                .toString()
-                .padStart(9, '0')}`,
-            parentName: `Parent of Student ${i}`,
-            parentContact: `09${Math.floor(Math.random() * 1000000000)
-                .toString()
-                .padStart(9, '0')}`,
-            profilePhoto: null
-        });
-    }
-
-    return students;
-}

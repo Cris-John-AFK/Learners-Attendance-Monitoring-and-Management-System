@@ -1,42 +1,51 @@
-import axios from 'axios';
+import api from '@/config/axios';
+import { reactive } from 'vue';
 
-// Base URL for the API
-const API_URL = 'http://localhost:8000/api';
+// Create a reactive state
+const state = reactive({
+    grades: [],
+    loading: false,
+    error: null
+});
 
-// Cache settings
-let gradeCache = null;
-let cacheTimestamp = null;
-const CACHE_TTL = 60000; // 1 minute cache lifetime
-
-export const GradeService = {
-    // Get all grades
+export const GradesService = {
+    // Get all grades - only from API, no fallback data
     async getGrades() {
         try {
-            // Check if we have a valid cache
-            const now = Date.now();
-            if (gradeCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
-                console.log('Using cached grade data');
-                return gradeCache;
+            state.loading = true;
+            console.log('Fetching grades from API...');
+
+            const response = await api.get('/api/grades');
+
+            // Process response
+            let data;
+            if (response.data && Array.isArray(response.data)) {
+                data = response.data;
+            } else if (response.data) {
+                data = [response.data];
+            } else {
+                console.warn('Invalid API response');
+                return [];
             }
 
-            console.log('Fetching grades from API...');
-            const response = await axios.get(`${API_URL}/grades`);
-
-            // Update cache
-            gradeCache = response.data;
-            cacheTimestamp = now;
-
-            return response.data;
+            // Update state
+            state.grades = data;
+            console.log('Successfully fetched grades from API:', data);
+            return data;
         } catch (error) {
-            console.error('Error fetching grades:', error);
-            throw error;
+            console.error('Error fetching grades from API:', error);
+            state.error = error;
+            // Return empty array instead of fallback data
+            return [];
+        } finally {
+            state.loading = false;
         }
     },
 
     // Get grade by ID
     async getGradeById(id) {
         try {
-            const response = await axios.get(`${API_URL}/grades/${id}`);
+            const response = await api.get(`/api/grades/${id}`);
             return response.data;
         } catch (error) {
             console.error('Error fetching grade by ID:', error);
@@ -48,14 +57,22 @@ export const GradeService = {
     async createGrade(grade) {
         try {
             console.log('Creating new grade:', grade);
-            const response = await axios.post(`${API_URL}/grades`, grade);
-
-            // Invalidate cache
-            this.clearCache();
-
+            const response = await api.post('/api/grades', grade);
+            console.log('Grade created successfully:', response.data);
             return response.data;
         } catch (error) {
             console.error('Error creating grade:', error);
+            if (error.response) {
+                console.error('Server responded with:', {
+                    status: error.response.status,
+                    data: error.response.data
+                });
+
+                // If the error is 422 but the grade was created, log this unusual situation
+                if (error.response.status === 422) {
+                    console.warn('Received 422 error but grade might have been created');
+                }
+            }
             throw error;
         }
     },
@@ -64,11 +81,7 @@ export const GradeService = {
     async updateGrade(id, grade) {
         try {
             console.log('Updating grade:', id, grade);
-            const response = await axios.put(`${API_URL}/grades/${id}`, grade);
-
-            // Invalidate cache
-            this.clearCache();
-
+            const response = await api.put(`/api/grades/${id}`, grade);
             return response.data;
         } catch (error) {
             console.error('Error updating grade:', error);
@@ -76,34 +89,26 @@ export const GradeService = {
         }
     },
 
-    // Delete/Archive a grade
-    async archiveGrade(id) {
+    // Delete a grade
+    async deleteGrade(id) {
         try {
-            console.log('Archiving grade:', id);
-            const response = await axios.put(`${API_URL}/grades/${id}/archive`);
-
-            // Invalidate cache
-            this.clearCache();
-
+            console.log('Deleting grade:', id);
+            const response = await api.delete(`/api/grades/${id}`);
             return response.data;
         } catch (error) {
-            console.error('Error archiving grade:', error);
+            console.error('Error deleting grade:', error);
             throw error;
         }
     },
 
-    // Restore an archived grade
-    async restoreGrade(id) {
+    // Toggle grade status
+    async toggleGradeStatus(id) {
         try {
-            console.log('Restoring grade:', id);
-            const response = await axios.put(`${API_URL}/grades/${id}/restore`);
-
-            // Invalidate cache
-            this.clearCache();
-
+            console.log('Toggling grade status:', id);
+            const response = await api.patch(`/api/grades/${id}/toggle-status`);
             return response.data;
         } catch (error) {
-            console.error('Error restoring grade:', error);
+            console.error('Error toggling grade status:', error);
             throw error;
         }
     },
@@ -112,7 +117,7 @@ export const GradeService = {
     async getSectionsByGrade(gradeId) {
         try {
             console.log('Fetching sections for grade:', gradeId);
-            const response = await axios.get(`${API_URL}/grades/${gradeId}/sections`);
+            const response = await api.get(`/api/grades/${gradeId}/sections`);
             return response.data;
         } catch (error) {
             console.error('Error fetching sections for grade:', error);
@@ -124,7 +129,7 @@ export const GradeService = {
     async createSection(gradeId, section) {
         try {
             console.log('Creating section in grade:', gradeId, section);
-            const response = await axios.post(`${API_URL}/grades/${gradeId}/sections`, section);
+            const response = await api.post(`/api/grades/${gradeId}/sections`, section);
             return response.data;
         } catch (error) {
             console.error('Error creating section:', error);
@@ -136,7 +141,7 @@ export const GradeService = {
     async updateSection(gradeId, sectionId, section) {
         try {
             console.log('Updating section:', gradeId, sectionId, section);
-            const response = await axios.put(`${API_URL}/grades/${gradeId}/sections/${sectionId}`, section);
+            const response = await api.put(`/api/grades/${gradeId}/sections/${sectionId}`, section);
             return response.data;
         } catch (error) {
             console.error('Error updating section:', error);
@@ -148,7 +153,7 @@ export const GradeService = {
     async archiveSection(gradeId, sectionId) {
         try {
             console.log('Archiving section:', gradeId, sectionId);
-            const response = await axios.put(`${API_URL}/grades/${gradeId}/sections/${sectionId}/archive`);
+            const response = await api.put(`/api/grades/${gradeId}/sections/${sectionId}/archive`);
             return response.data;
         } catch (error) {
             console.error('Error archiving section:', error);
@@ -160,7 +165,7 @@ export const GradeService = {
     async getSubjectsByGrade(gradeId) {
         try {
             console.log('Fetching subjects for grade:', gradeId);
-            const response = await axios.get(`${API_URL}/grades/${gradeId}/subjects`);
+            const response = await api.get(`/api/grades/${gradeId}/subjects`);
             return response.data;
         } catch (error) {
             console.error('Error fetching subjects for grade:', error);
@@ -173,8 +178,10 @@ export const GradeService = {
         console.log('Clearing grade cache');
         gradeCache = null;
         cacheTimestamp = null;
+        localStorage.removeItem('gradeData');
+        localStorage.removeItem('gradeCacheTimestamp');
     }
 };
 
-// Add an export alias after the main export to make both names available
-export const GradesService = GradeService;
+// Add an export alias for backward compatibility
+export const GradeService = GradesService;

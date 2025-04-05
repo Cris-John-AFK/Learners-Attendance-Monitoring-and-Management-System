@@ -1,122 +1,172 @@
 // src/router/service/TeacherService.js
 
-import axios from 'axios';
+import api from '@/config/axios';
 import { reactive } from 'vue';
-import { GradeService } from './Grades';
+import { GradesService } from './GradesService';
 
 // Create a reactive state to store all teachers
 const state = reactive({
-    teachers: [
-        {
-            id: 1,
-            name: 'Maria Santos Reyes',
-            department: 'Mathematics',
-            roomNumber: '101',
-            status: 'ACTIVE',
-            image: 'amyelsner.png',
-            assignedGrades: [{ gradeId: '3', sections: ['Aguinaldo', 'Quezon'] }]
-        },
-        {
-            id: 2,
-            name: 'Jose Cruz Mendoza',
-            department: 'Science',
-            roomNumber: '205',
-            status: 'ACTIVE',
-            image: 'asiyajavayant.png',
-            assignedGrades: [{ gradeId: '4', sections: ['Del Pilar', 'Luna'] }]
-        },
-        {
-            id: 3,
-            name: 'Carmela Bautista Lim',
-            department: 'Filipino',
-            roomNumber: '304',
-            status: 'ON_LEAVE',
-            image: 'xuxuefeng.png',
-            assignedGrades: [{ gradeId: '2', sections: ['Bonifacio', 'Mabini'] }]
-        },
-        {
-            id: 4,
-            name: 'Antonio dela Cruz',
-            department: 'Social Studies',
-            roomNumber: '202',
-            status: 'ACTIVE',
-            image: 'robertoortiz.png',
-            assignedGrades: [{ gradeId: '5', sections: ['Orchid', 'Jasmine'] }]
-        },
-        {
-            id: 5,
-            name: 'Rosario Fernandez',
-            department: 'English',
-            roomNumber: '103',
-            status: 'ACTIVE',
-            image: 'ionibowcher.png',
-            assignedGrades: [{ gradeId: '1', sections: ['Sampaguita', 'Rosal'] }]
-        }
-    ]
+    teachers: [],
+    loading: false,
+    error: null
 });
-
-// Base URL for the API
-const API_URL = 'http://localhost:8000/api';
 
 // Cache settings
 let teacherCache = null;
 let cacheTimestamp = null;
-const CACHE_TTL = 60000; // 1 minute cache lifetime
+let scheduleCache = new Map();
+const CACHE_TTL = 300000; // 5 minutes cache lifetime
+const API_TIMEOUT = 5000; // 5 seconds timeout (reduced from 30 seconds)
+
+// Default teachers data for fallback
+const defaultTeachers = [
+    { id: 1, name: 'Default Teacher 1', email: 'teacher1@school.edu', status: 'Active', is_active: true },
+    { id: 2, name: 'Default Teacher 2', email: 'teacher2@school.edu', status: 'Active', is_active: true }
+];
 
 export const TeacherService = {
     // Get all teachers
     async getTeachers() {
+        const now = Date.now();
+
         try {
-            // Check if we have a valid cache
-            const now = Date.now();
+            // First priority: Check if we already have default teachers
+            if (state.teachers.length > 0) {
+                console.log('Using memory cached teacher data from state');
+                return state.teachers;
+            }
+
+            // Second priority: Check memory cache
             if (teacherCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
-                console.log('Using cached teacher data');
+                console.log('Using memory cached teacher data');
                 return teacherCache;
             }
 
-            console.log('Fetching teachers from API...');
+            // Third priority: Check localStorage
             try {
-                const response = await axios.get(`${API_URL}/teachers`);
+                const cachedData = localStorage.getItem('teacherData');
+                const cacheTime = parseInt(localStorage.getItem('teacherCacheTimestamp'));
 
-                // Check if response has data and is an array
-                if (response.data && Array.isArray(response.data)) {
-                    // Update cache
-                    teacherCache = response.data;
-                    cacheTimestamp = now;
-                    return response.data;
-                } else {
-                    console.warn('API returned invalid data format, falling back to mock data');
-                    return state.teachers;
+                if (cachedData && cacheTime && now - cacheTime < CACHE_TTL) {
+                    console.log('Using localStorage cached teacher data');
+                    const data = JSON.parse(cachedData);
+                    teacherCache = data;
+                    cacheTimestamp = cacheTime;
+                    state.teachers = data; // Also update the state
+                    return data;
                 }
+            } catch (storageError) {
+                console.warn('Could not retrieve teacher data from localStorage:', storageError);
+            }
+
+            // Fourth priority: Get from API with very short timeout (1.5 seconds)
+            console.log('Fetching teachers from API with short timeout...');
+
+            // Use AbortController for better timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout
+
+            try {
+                const response = await api.get('/api/teachers', {
+                    timeout: 1500, // 1.5 seconds only
+                    signal: controller.signal,
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        Pragma: 'no-cache'
+                    }
+                });
+
+                clearTimeout(timeoutId);
+
+                // Validate and process the response
+                if (response.data && (Array.isArray(response.data) || typeof response.data === 'object')) {
+                    const data = Array.isArray(response.data) ? response.data : [response.data];
+
+                    // Update state and cache with valid data
+                    teacherCache = data;
+                    cacheTimestamp = now;
+                    state.teachers = data;
+
+                    // Update localStorage
+                    try {
+                        localStorage.setItem('teacherData', JSON.stringify(data));
+                        localStorage.setItem('teacherCacheTimestamp', now.toString());
+                    } catch (storageError) {
+                        console.warn('Could not store teacher data in localStorage:', storageError);
+                    }
+
+                    return data;
+                }
+
+                throw new Error('Invalid data format from API');
             } catch (apiError) {
-                console.warn('API request failed, falling back to mock data:', apiError);
-                return state.teachers;
+                clearTimeout(timeoutId);
+                console.warn('Fast API call failed, using defaults:', apiError.message);
+
+                // Fall back to default teachers immediately
+                const defaultData = this.getDefaultTeachers();
+
+                // Store in cache and state
+                teacherCache = defaultData;
+                cacheTimestamp = now;
+                state.teachers = defaultData;
+
+                // Try to store in localStorage
+                try {
+                    localStorage.setItem('teacherData', JSON.stringify(defaultData));
+                    localStorage.setItem('teacherCacheTimestamp', now.toString());
+                } catch (storageError) {
+                    console.warn('Could not store default teacher data in localStorage:', storageError);
+                }
+
+                return defaultData;
             }
         } catch (error) {
             console.error('Error in getTeachers:', error);
-            // Return mock data as a fallback
-            return state.teachers;
+            const defaultData = this.getDefaultTeachers();
+            state.teachers = defaultData;
+            return defaultData;
         }
     },
 
-    // Get teacher by ID
+    // Get default teachers data
+    getDefaultTeachers() {
+        return [
+            { id: 1, name: 'John Smith', email: 'john.smith@school.edu', status: 'Active', is_active: true },
+            { id: 2, name: 'Maria Garcia', email: 'maria.garcia@school.edu', status: 'Active', is_active: true },
+            { id: 3, name: 'James Johnson', email: 'james.johnson@school.edu', status: 'Active', is_active: true },
+            { id: 4, name: 'Sarah Williams', email: 'sarah.williams@school.edu', status: 'Active', is_active: true },
+            { id: 5, name: 'Robert Brown', email: 'robert.brown@school.edu', status: 'Active', is_active: true }
+        ];
+    },
+
+    // Get active teachers with caching
+    async getActiveTeachers() {
+        try {
+            const allTeachers = await this.getTeachers();
+            return allTeachers.filter((teacher) => teacher.is_active);
+        } catch (error) {
+            console.error('Error fetching active teachers:', error);
+            throw error;
+        }
+    },
+
+    // Get teachers by section with caching
+    async getTeachersBySection(sectionId) {
+        try {
+            const allTeachers = await this.getTeachers();
+            return allTeachers.filter((teacher) => teacher.sections?.includes(sectionId));
+        } catch (error) {
+            console.error('Error fetching teachers by section:', error);
+            throw error;
+        }
+    },
+
+    // Get teacher by ID with caching
     async getTeacherById(id) {
         try {
-            console.log('Fetching teacher by ID:', id);
-
-            try {
-                const response = await axios.get(`${API_URL}/teachers/${id}`);
-                return response.data;
-            } catch (apiError) {
-                console.warn('API request failed, falling back to mock data:', apiError);
-                // Find teacher in the mock data
-                const mockTeacher = state.teachers.find((t) => t.id == id);
-                if (mockTeacher) {
-                    return mockTeacher;
-                } else {
-                    throw new Error('Teacher not found in mock data');
-                }
-            }
+            const allTeachers = await this.getTeachers();
+            return allTeachers.find((teacher) => teacher.id === id);
         } catch (error) {
             console.error('Error fetching teacher by ID:', error);
             throw error;
@@ -127,7 +177,7 @@ export const TeacherService = {
     async createTeacher(teacher) {
         try {
             console.log('Creating new teacher:', teacher);
-            const response = await axios.post(`${API_URL}/teachers`, teacher);
+            const response = await api.post('/api/teachers', teacher);
 
             // Invalidate cache
             this.clearCache();
@@ -143,7 +193,7 @@ export const TeacherService = {
     async updateTeacher(id, teacher) {
         try {
             console.log('Updating teacher:', id, teacher);
-            const response = await axios.put(`${API_URL}/teachers/${id}`, teacher);
+            const response = await api.put(`/api/teachers/${id}`, teacher);
 
             // Invalidate cache
             this.clearCache();
@@ -159,7 +209,7 @@ export const TeacherService = {
     async archiveTeacher(id) {
         try {
             console.log('Archiving teacher:', id);
-            const response = await axios.put(`${API_URL}/teachers/${id}/archive`);
+            const response = await api.put(`/api/teachers/${id}/archive`);
 
             // Invalidate cache
             this.clearCache();
@@ -175,7 +225,7 @@ export const TeacherService = {
     async restoreTeacher(id) {
         try {
             console.log('Restoring teacher:', id);
-            const response = await axios.put(`${API_URL}/teachers/${id}/restore`);
+            const response = await api.put(`/api/teachers/${id}/restore`);
 
             // Invalidate cache
             this.clearCache();
@@ -191,7 +241,7 @@ export const TeacherService = {
     async assignHomeroom(teacherId, sectionId) {
         try {
             console.log('Assigning homeroom to teacher:', teacherId, sectionId);
-            const response = await axios.post(`${API_URL}/teachers/${teacherId}/homeroom`, { section_id: sectionId });
+            const response = await api.post(`/api/teachers/${teacherId}/homeroom`, { section_id: sectionId });
 
             // Invalidate cache
             this.clearCache();
@@ -207,7 +257,7 @@ export const TeacherService = {
     async removeHomeroom(teacherId) {
         try {
             console.log('Removing homeroom from teacher:', teacherId);
-            const response = await axios.delete(`${API_URL}/teachers/${teacherId}/homeroom`);
+            const response = await api.delete(`/api/teachers/${teacherId}/homeroom`);
 
             // Invalidate cache
             this.clearCache();
@@ -223,7 +273,7 @@ export const TeacherService = {
     async assignSubject(teacherId, subjectId) {
         try {
             console.log('Assigning subject to teacher:', teacherId, subjectId);
-            const response = await axios.post(`${API_URL}/teachers/${teacherId}/subjects`, { subject_id: subjectId });
+            const response = await api.post(`/api/teachers/${teacherId}/subjects`, { subject_id: subjectId });
 
             // Invalidate cache
             this.clearCache();
@@ -239,7 +289,7 @@ export const TeacherService = {
     async removeSubject(teacherId, subjectId) {
         try {
             console.log('Removing subject from teacher:', teacherId, subjectId);
-            const response = await axios.delete(`${API_URL}/teachers/${teacherId}/subjects/${subjectId}`);
+            const response = await api.delete(`/api/teachers/${teacherId}/subjects/${subjectId}`);
 
             // Invalidate cache
             this.clearCache();
@@ -251,12 +301,30 @@ export const TeacherService = {
         }
     },
 
-    // Get teacher schedule
+    // Get teacher schedule with caching
     async getTeacherSchedule(teacherId) {
         try {
+            const now = Date.now();
+            const cacheKey = `schedule_${teacherId}`;
+            const cached = scheduleCache.get(cacheKey);
+
+            if (cached && now - cached.timestamp < CACHE_TTL) {
+                console.log('Using cached schedule data for teacher:', teacherId);
+                return cached.data;
+            }
+
             console.log('Fetching teacher schedule:', teacherId);
-            const response = await axios.get(`${API_URL}/teachers/${teacherId}/schedule`);
-            return response.data;
+            const response = await api.get(`/api/teachers/${teacherId}/schedule`, {
+                timeout: 10000,
+                headers: {
+                    'Cache-Control': 'max-age=300',
+                    Pragma: 'cache'
+                }
+            });
+
+            const data = response.data;
+            scheduleCache.set(cacheKey, { data, timestamp: now });
+            return data;
         } catch (error) {
             console.error('Error fetching teacher schedule:', error);
             throw error;
@@ -267,7 +335,9 @@ export const TeacherService = {
     async checkScheduleConflicts(teacherId, schedule) {
         try {
             console.log('Checking teacher schedule conflicts:', teacherId, schedule);
-            const response = await axios.post(`${API_URL}/teachers/${teacherId}/schedule/check-conflicts`, schedule);
+            const response = await api.post(`/api/teachers/${teacherId}/schedule/check-conflicts`, schedule, {
+                timeout: 10000
+            });
             return response.data;
         } catch (error) {
             console.error('Error checking teacher schedule conflicts:', error);
@@ -280,57 +350,70 @@ export const TeacherService = {
         console.log('Clearing teacher cache');
         teacherCache = null;
         cacheTimestamp = null;
+        scheduleCache.clear();
+        localStorage.removeItem('teacherData');
+        localStorage.removeItem('teacherCacheTimestamp');
     },
 
-    // Get all sections assigned to a teacher
-    getTeacherAssignments(teacherId) {
-        const teacher = this.getTeacherById(teacherId);
-        if (!teacher) return [];
+    // Get all sections assigned to a teacher with caching
+    async getTeacherAssignments(teacherId) {
+        try {
+            const teacher = await this.getTeacherById(teacherId);
+            if (!teacher) return [];
 
-        const assignments = [];
+            const assignments = [];
+            const grades = await GradesService.getGrades();
 
-        for (const gradeAssignment of teacher.assignedGrades) {
-            const grade = GradeService.getGradeById(gradeAssignment.gradeId);
-            if (grade) {
-                for (const sectionName of gradeAssignment.sections) {
-                    assignments.push({
+            for (const gradeAssignment of teacher.assignedGrades || []) {
+                const grade = grades.find((g) => g.id === gradeAssignment.gradeId);
+                if (grade) {
+                    for (const sectionName of gradeAssignment.sections) {
+                        assignments.push({
+                            gradeId: grade.id,
+                            gradeName: grade.name,
+                            sectionName
+                        });
+                    }
+                }
+            }
+
+            return assignments;
+        } catch (error) {
+            console.error('Error getting teacher assignments:', error);
+            return [];
+        }
+    },
+
+    // Get available sections that can be assigned to a teacher with caching
+    async getAvailableSections(teacherId) {
+        try {
+            const [grades, teacher] = await Promise.all([GradesService.getGrades(), this.getTeacherById(teacherId)]);
+
+            if (!teacher) return [];
+
+            const availableSections = [];
+
+            for (const grade of grades) {
+                const assignedGrade = (teacher.assignedGrades || []).find((g) => g.gradeId === grade.id);
+                const assignedSections = assignedGrade ? assignedGrade.sections : [];
+
+                // Filter sections that are not already assigned to this teacher
+                const availableGradeSections = grade.sections.filter((section) => !assignedSections.includes(section));
+
+                if (availableGradeSections.length > 0) {
+                    availableSections.push({
                         gradeId: grade.id,
                         gradeName: grade.name,
-                        sectionName
+                        sections: availableGradeSections
                     });
                 }
             }
+
+            return availableSections;
+        } catch (error) {
+            console.error('Error getting available sections:', error);
+            return [];
         }
-
-        return assignments;
-    },
-
-    // Get available sections that can be assigned to a teacher
-    getAvailableSections(teacherId) {
-        const allGrades = GradeService.getGrades();
-        const teacher = this.getTeacherById(teacherId);
-
-        if (!teacher) return [];
-
-        const availableSections = [];
-
-        for (const grade of allGrades) {
-            const assignedGrade = teacher.assignedGrades.find((g) => g.gradeId === grade.id);
-            const assignedSections = assignedGrade ? assignedGrade.sections : [];
-
-            // Filter sections that are not already assigned to this teacher
-            const availableGradeSections = grade.sections.filter((section) => !assignedSections.includes(section));
-
-            if (availableGradeSections.length > 0) {
-                availableSections.push({
-                    gradeId: grade.id,
-                    gradeName: grade.name,
-                    sections: availableGradeSections
-                });
-            }
-        }
-
-        return availableSections;
     },
 
     // Add this method to your TeacherService object

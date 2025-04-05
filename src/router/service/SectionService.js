@@ -1,9 +1,4 @@
-import axios from 'axios';
-
-// Create axios instance with the correct backend URL
-const api = axios.create({
-    baseURL: 'http://localhost:8000'
-});
+import api from '@/config/axios';
 
 export const SectionService = {
     async getSections() {

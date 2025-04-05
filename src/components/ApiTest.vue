@@ -13,8 +13,8 @@
 </template>
 
 <script setup>
+import api from '@/config/axios';
 import { ref } from 'vue';
-import axios from 'axios';
 
 const result = ref(null);
 const error = ref(null);
@@ -24,7 +24,7 @@ const testApi = async () => {
         result.value = null;
         error.value = null;
 
-        const response = await axios.get('http://localhost:8000/api/test');
+        const response = await api.get('/api/test');
         result.value = response.data;
     } catch (err) {
         error.value = {
