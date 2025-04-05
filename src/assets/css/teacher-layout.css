@@ -1,0 +1,30 @@
+/* Teacher-specific layout customizations */
+
+/* Reduce spacing between sidebar and main content */
+.teacher-route .layout-main-container {
+    padding-left: 0.75rem; /* Even narrower spacing for teacher layout */
+}
+
+/* Make cards more compact */
+.teacher-route .grid-cols-1,
+.teacher-route .grid-cols-12,
+.teacher-route .grid-cols-2,
+.teacher-route .grid-cols-3,
+.teacher-route .grid-cols-4 {
+    gap: 0.75rem; /* Reduce gaps between grid items */
+}
+
+/* Reduce padding in cards */
+.teacher-route .rounded-xl {
+    padding: 1rem; /* Reduce padding in rounded cards */
+}
+
+/* Adjust header spacing */
+.teacher-route .mb-6 {
+    margin-bottom: 1rem; /* Reduce bottom margins */
+}
+
+/* Make table more compact */
+.teacher-route .p-datatable .p-datatable-tbody > tr > td {
+    padding: 0.5rem 0.75rem; /* Reduce cell padding */
+}

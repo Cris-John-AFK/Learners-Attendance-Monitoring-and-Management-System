@@ -716,7 +716,7 @@ function ensureStudentAttendanceService() {
 </script>
 
 <template>
-    <div class="teacher-dashboard p-4 bg-gray-50">
+    <div class="grid" style="margin: 0 1rem">
         <!-- Loading State -->
         <div v-if="loading" class="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
             <ProgressSpinner strokeWidth="4" class="text-blue-500" />
