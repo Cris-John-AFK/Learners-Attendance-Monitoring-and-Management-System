@@ -2,6 +2,8 @@
 import { useLayout } from '@/layout/composables/layout';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 
@@ -11,6 +13,7 @@ const scanning = ref(true); // Auto-start scanning
 const attendanceRecords = ref([]);
 const searchQuery = ref('');
 const selectedStudent = ref(null);
+const toast = useToast();
 
 // Mock student data instead of using AttendanceService.getData()
 const allStudents = ref([
@@ -56,8 +59,6 @@ const cameraError = ref(null);
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
-const lateArrivals = computed(() => attendanceRecords.value.filter((record) => record.status === 'late' && record.recordType === 'check-in').length);
-const unauthorizedAttempts = computed(() => attendanceRecords.value.filter((record) => record.status === 'unauthorized').length);
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
@@ -140,7 +141,7 @@ const onDetect = async (detectedCodes) => {
         }
     } catch (error) {
         console.error('Error in QR code detection:', error);
-        showScanFeedback('unauthorized', null, 'Error processing QR code');
+        showScanFeedback('error', null, 'Error processing QR code');
 
         // Restart scanner after error
         setTimeout(() => {
@@ -214,30 +215,20 @@ const processStudentScan = async (scannedId) => {
 
             console.log('Determined record type:', recordType);
 
-            // Determine status (simplified logic - in real app would check against schedule)
-            let status = 'on-time';
-            const currentHour = new Date().getHours();
-
-            // Only check for late status on check-ins
-            if (recordType === 'check-in' && currentHour >= 8) {
-                status = 'late';
-            }
-
             // Create record with unique ID
             const record = {
                 ...student,
                 timestamp: new Date().toLocaleTimeString(),
                 date: new Date().toLocaleDateString(),
-                status: status,
                 recordType: recordType,
                 recordId: `${student.id}-${Date.now()}` // Unique ID for each record
             };
 
             // Show feedback
-            showScanFeedback(status, recordType);
+            showScanFeedback(recordType);
 
-            // Play sound based on status
-            await playStatusSound(status);
+            // Play sound based on record type
+            await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
 
             // Add to records and show details
             attendanceRecords.value.unshift(record); // Add to beginning
@@ -248,31 +239,34 @@ const processStudentScan = async (scannedId) => {
         } else {
             // Invalid QR code
             console.log('Invalid student ID:', scannedId);
-            showScanFeedback('unauthorized', null, 'Invalid student ID');
-            await playStatusSound('unauthorized');
+            showScanFeedback('error', null, 'Invalid student ID');
+            await playStatusSound('error');
             return false;
         }
     } catch (error) {
         console.error('Error processing student scan:', error);
-        showScanFeedback('unauthorized', null, 'An error occurred while processing the scan');
+        showScanFeedback('error', null, 'An error occurred while processing the scan');
         return false;
     }
 };
 
-const showScanFeedback = (status, recordType, message = '') => {
-    // Default messages based on record type and status
+const showScanFeedback = (recordType, message = '') => {
+    // Default messages based on record type
     let defaultMessage = '';
+    let feedbackType = 'success';
+
     if (recordType === 'check-in') {
-        defaultMessage = status === 'on-time' ? 'Check-in successful' : status === 'late' ? 'Late check-in recorded' : 'Unauthorized check-in attempt';
+        defaultMessage = `Check-in successful`;
     } else if (recordType === 'check-out') {
         defaultMessage = 'Check-out successful';
-    } else {
+    } else if (recordType === 'error') {
         defaultMessage = 'Unauthorized scan';
+        feedbackType = 'error';
     }
 
     scanFeedback.value = {
         show: true,
-        type: status,
+        type: feedbackType,
         message: message || defaultMessage
     };
 
@@ -282,14 +276,14 @@ const showScanFeedback = (status, recordType, message = '') => {
     }, 3000);
 };
 
-const playStatusSound = async (status) => {
-    // In a real app, would play different sounds based on status
+const playStatusSound = async (type) => {
+    // In a real app, would play different sounds based on record type
     let sound;
 
-    if (status === 'on-time') {
+    if (type === 'success') {
         sound = new Audio('/demo/sounds/success.wav');
-    } else if (status === 'late') {
-        sound = new Audio('/demo/sounds/warning.mp3');
+    } else if (type === 'checkout') {
+        sound = new Audio('/demo/sounds/beep.mp3');
     } else {
         sound = new Audio('/demo/sounds/error.mp3');
     }
@@ -301,7 +295,7 @@ const playStatusSound = async (status) => {
         console.log('Sound play error:', e);
     }
 
-    console.log(`Playing ${status} sound`);
+    console.log(`Playing ${type} sound`);
 };
 
 const manualCheckIn = () => {
@@ -311,23 +305,107 @@ const manualCheckIn = () => {
     }
 };
 
-const exportReport = () => {
-    alert('Exporting attendance report...');
-    // In a real app, would generate CSV/PDF
+const exportReport = async () => {
+    try {
+        // First, show a loading message
+        toast.add({
+            severity: 'info',
+            summary: 'Generating Report',
+            detail: 'Preparing attendance report PDF...',
+            life: 3000
+        });
+
+        // Filter records for today only
+        const today = new Date().toLocaleDateString();
+        const todayRecords = attendanceRecords.value.filter((record) => record.date === today);
+
+        if (todayRecords.length === 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Records',
+                detail: 'No attendance records found for today',
+                life: 3000
+            });
+            return;
+        }
+
+        // Format date for filename (YYYY-MM-DD)
+        const dateForFilename = today.split('/').reverse().join('-');
+        const filename = `GH_${dateForFilename}.pdf`;
+
+        // Use jsPDF to generate the PDF
+        const { jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
+
+        // Create new PDF document
+        const doc = new jsPDF();
+
+        // Add title
+        doc.setFontSize(18);
+        doc.text('Attendance Report', 14, 22);
+
+        // Add date
+        doc.setFontSize(12);
+        doc.text(`Date: ${today}`, 14, 30);
+
+        // Add time generated
+        const timeGenerated = new Date().toLocaleTimeString();
+        doc.text(`Time Generated: ${timeGenerated}`, 14, 36);
+
+        // Add summary counts
+        const checkins = todayRecords.filter((r) => r.recordType === 'check-in').length;
+        const checkouts = todayRecords.filter((r) => r.recordType === 'check-out').length;
+
+        doc.text(`Total Check-ins: ${checkins}`, 14, 44);
+        doc.text(`Total Check-outs: ${checkouts}`, 14, 50);
+
+        // Prepare data for the table
+        const tableData = todayRecords.map((record) => [record.id, record.name, record.recordType === 'check-in' ? 'Check In' : 'Check Out', record.gradeLevel, record.section, record.timestamp]);
+
+        // Generate the table
+        autoTable(doc, {
+            startY: 58,
+            head: [['ID', 'Name', 'Type', 'Grade', 'Section', 'Time']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+            alternateRowStyles: { fillColor: [240, 245, 255] }
+        });
+
+        // Save the PDF
+        doc.save(filename);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Report Generated',
+            detail: `Report saved as ${filename}`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Export Failed',
+            detail: 'Failed to generate PDF report',
+            life: 3000
+        });
+    }
 };
 
 const filteredRecords = computed(() => {
     let records = attendanceRecords.value;
 
-    // Apply status filter
+    // Apply record type filter
     if (statusFilter.value !== 'all') {
-        records = records.filter((record) => record.status === statusFilter.value);
+        records = records.filter((record) => {
+            return record.recordType === statusFilter.value; // Filter by check-in or check-out
+        });
     }
 
     // Apply search filter
     if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        records = records.filter((record) => record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || record.gradeLevel.toString().toLowerCase().includes(query) || record.section.toLowerCase().includes(query));
+        records = records.filter((record) => record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || record.gradeLevel?.toString().toLowerCase().includes(query) || record.section?.toLowerCase().includes(query));
     }
 
     return records;
@@ -336,6 +414,7 @@ const filteredRecords = computed(() => {
 
 <template>
     <div class="layout-wrapper">
+        <Toast />
         <!-- Fixed Header -->
         <header class="dashboard-header">
             <div class="header-left">
@@ -407,18 +486,17 @@ const filteredRecords = computed(() => {
 
                         <!-- Scan feedback notification -->
                         <div v-if="scanFeedback.show" :class="['scan-feedback', 'feedback-' + scanFeedback.type]">
-                            <i :class="scanFeedback.type === 'on-time' ? 'pi pi-check-circle' : scanFeedback.type === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
+                            <i :class="scanFeedback.type === 'success' ? 'pi pi-check-circle' : scanFeedback.type === 'checkout' ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
                             {{ scanFeedback.message }}
                         </div>
                     </div>
 
                     <!-- Student Preview Section -->
                     <div class="student-preview" v-if="selectedStudent">
-                        <div class="preview-header" :class="`status-${selectedStudent.status}`">
-                            <div class="status-badge" :class="`status-${selectedStudent.status}`">
-                                <i :class="selectedStudent.status === 'on-time' ? 'pi pi-check-circle' : selectedStudent.status === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
+                        <div class="preview-header" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                            <div class="record-badge" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                                <i :class="selectedStudent.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
                                 {{ selectedStudent.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
-                                ({{ selectedStudent.status === 'on-time' ? 'On Time' : selectedStudent.status === 'late' ? 'Late' : 'Unauthorized' }})
                             </div>
                             <div class="timestamp">{{ selectedStudent.timestamp }}</div>
                         </div>
@@ -472,9 +550,8 @@ const filteredRecords = computed(() => {
 
                             <div class="filter-buttons">
                                 <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
-                                <button @click="statusFilter = 'on-time'" :class="['filter-button', statusFilter === 'on-time' ? 'active' : '']"><i class="pi pi-check-circle"></i> On Time</button>
-                                <button @click="statusFilter = 'late'" :class="['filter-button', statusFilter === 'late' ? 'active' : '']"><i class="pi pi-clock"></i> Late</button>
-                                <button @click="statusFilter = 'unauthorized'" :class="['filter-button', statusFilter === 'unauthorized' ? 'active' : '']"><i class="pi pi-exclamation-circle"></i> Unauthorized</button>
+                                <button @click="statusFilter = 'check-in'" :class="['filter-button', statusFilter === 'check-in' ? 'active' : '']"><i class="pi pi-sign-in"></i> Check-ins</button>
+                                <button @click="statusFilter = 'check-out'" :class="['filter-button', statusFilter === 'check-out' ? 'active' : '']"><i class="pi pi-sign-out"></i> Check-outs</button>
                             </div>
                         </div>
                     </div>
@@ -501,14 +578,6 @@ const filteredRecords = computed(() => {
                         <Column field="gradeLevel" header="Grade" :sortable="true"></Column>
                         <Column field="section" header="Section"></Column>
                         <Column field="timestamp" header="Time" :sortable="true"></Column>
-                        <Column field="status" header="Status" :sortable="true">
-                            <template #body="slotProps">
-                                <span class="status-badge" :class="`status-${slotProps.data.status}`">
-                                    <i :class="slotProps.data.status === 'on-time' ? 'pi pi-check-circle' : slotProps.data.status === 'late' ? 'pi pi-clock' : 'pi pi-exclamation-circle'"></i>
-                                    {{ slotProps.data.status === 'on-time' ? 'On Time' : slotProps.data.status === 'late' ? 'Late' : 'Unauthorized' }}
-                                </span>
-                            </template>
-                        </Column>
                     </DataTable>
                 </div>
             </div>
@@ -524,14 +593,6 @@ const filteredRecords = computed(() => {
                 <div class="stat-item">
                     <div class="stat-label">Check-outs</div>
                     <div class="stat-value">{{ totalCheckouts }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Late Arrivals</div>
-                    <div class="stat-value status-late">{{ lateArrivals }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Unauthorized</div>
-                    <div class="stat-value status-unauthorized">{{ unauthorizedAttempts }}</div>
                 </div>
             </div>
 
@@ -921,17 +982,17 @@ const filteredRecords = computed(() => {
     animation: fadeInOut 3s ease-in-out;
 }
 
-.feedback-on-time {
+.feedback-success {
     background: rgba(16, 185, 129, 0.9);
     color: white;
 }
 
-.feedback-late {
+.feedback-checkout {
     background: rgba(245, 158, 11, 0.9);
     color: white;
 }
 
-.feedback-unauthorized {
+.feedback-error {
     background: rgba(239, 68, 68, 0.9);
     color: white;
 }
@@ -967,6 +1028,14 @@ const filteredRecords = computed(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.preview-header.record-checkin {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.preview-header.record-checkout {
+    background: rgba(59, 130, 246, 0.1);
 }
 
 .preview-header.status-on-time {
@@ -1251,14 +1320,6 @@ const filteredRecords = computed(() => {
         font-size: 1.5rem;
         font-weight: 700;
         color: #1e293b;
-
-        &.status-late {
-            color: #f59e0b;
-        }
-
-        &.status-unauthorized {
-            color: #ef4444;
-        }
     }
 }
 
@@ -1331,5 +1392,33 @@ const filteredRecords = computed(() => {
         width: 100%;
         justify-content: space-between;
     }
+}
+
+/* Record Type Styling */
+.preview-header.record-checkin {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.preview-header.record-checkout {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.record-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+}
+
+.record-badge.record-checkin {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.record-badge.record-checkout {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
 }
 </style>
