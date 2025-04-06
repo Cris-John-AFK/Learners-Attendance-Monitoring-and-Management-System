@@ -12,6 +12,9 @@ class Section extends Model
 {
     use HasFactory, SoftDeletes;
 
+    // Disable timestamps since the table doesn't have timestamp columns
+    public $timestamps = false;
+
     protected $fillable = [
         'name',
         'curriculum_grade_id',
@@ -57,15 +60,13 @@ class Section extends Model
     public function teachers()
     {
         return $this->belongsToMany(Teacher::class, 'teacher_section_subject')
-            ->withPivot('subject_id', 'is_primary', 'is_active')
-            ->withTimestamps();
+            ->withPivot('subject_id', 'is_primary', 'is_active');
     }
 
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'teacher_section_subject')
-            ->withPivot('teacher_id', 'is_primary', 'is_active')
-            ->withTimestamps();
+            ->withPivot('teacher_id', 'is_primary', 'is_active');
     }
 
     public function schedules()
@@ -148,8 +149,7 @@ class Section extends Model
      */
     public function directSubjects()
     {
-        return $this->belongsToMany(Subject::class, 'section_subject')
-            ->withTimestamps();
+        return $this->belongsToMany(Subject::class, 'section_subject');
     }
 
     /**

@@ -88,15 +88,13 @@ class Teacher extends Authenticatable
     public function sections()
     {
         return $this->belongsToMany(Section::class, 'teacher_section_subject')
-            ->withPivot('subject_id', 'is_primary', 'is_active', 'role')
-            ->withTimestamps();
+            ->withPivot('subject_id', 'is_primary', 'is_active', 'role');
     }
 
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'teacher_section_subject')
-            ->withPivot('section_id', 'is_primary', 'is_active', 'role')
-            ->withTimestamps();
+            ->withPivot('section_id', 'is_primary', 'is_active', 'role');
     }
 
     public function scopeActive($query)

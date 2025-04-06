@@ -257,36 +257,70 @@ class SectionController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'grade_id' => 'required_without:grade|exists:grades,id',
-            'grade' => 'required_without:grade_id',
-            'description' => 'nullable|string'
+            'curriculum_grade_id' => 'required|exists:curriculum_grade,id',
+            'homeroom_teacher_id' => 'nullable|exists:teachers,id',
+            'description' => 'nullable|string',
+            'capacity' => 'nullable|integer|min:1'
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // If grade is provided as an object, extract the ID
-        $gradeId = $request->grade_id;
-        if (!$gradeId && isset($request->grade['id'])) {
-            $gradeId = $request->grade['id'];
-        }
+        try {
+            // Check if section name is unique within the curriculum grade (excluding current section)
+            if (!Section::isNameUniqueInCurriculumGrade($request->name, $request->curriculum_grade_id, $section->id)) {
+                return response()->json([
+                    'errors' => [
+                        'name' => ['Section name already exists in this grade.']
+                    ]
+                ], 422);
+            }
 
-        // Check if section name is unique within the grade (excluding current section)
-        if (!Section::isNameUniqueInGrade($request->name, $gradeId, $section->id)) {
+            // Begin a transaction for safe updates
+            DB::beginTransaction();
+
+            // Get original teacher ID for comparison
+            $originalTeacherId = $section->homeroom_teacher_id;
+
+            // Update basic section fields
+            $section->name = $request->name;
+            $section->curriculum_grade_id = $request->curriculum_grade_id;
+            $section->homeroom_teacher_id = $request->homeroom_teacher_id;
+            $section->description = $request->description;
+            $section->capacity = $request->capacity ?? $section->capacity;
+            $section->save();
+
+            // If the homeroom_teacher_id was changed, update or create the teacher-section-subject relationship
+            if ($request->homeroom_teacher_id !== null && $request->homeroom_teacher_id != $originalTeacherId) {
+                Log::info("Updating homeroom teacher relationship for section {$section->id}: teacher {$request->homeroom_teacher_id}");
+
+                // Create or update the teacher-section-subject relationship
+                TeacherSectionSubject::updateOrCreate(
+                    [
+                        'teacher_id' => $request->homeroom_teacher_id,
+                        'section_id' => $section->id,
+                        'role' => 'homeroom'
+                    ],
+                    [
+                        'is_primary' => true,
+                        'is_active' => true,
+                        'subject_id' => null
+                    ]
+                );
+            }
+
+            DB::commit();
+
+            return response()->json($section->load(['curriculumGrade.grade', 'homeroomTeacher']));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating section: ' . $e->getMessage());
             return response()->json([
-                'errors' => [
-                    'name' => ['Section name already exists in this grade.']
-                ]
-            ], 422);
+                'message' => 'Failed to update section',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $section->name = $request->name;
-        $section->grade_id = $gradeId;
-        $section->description = $request->description;
-        $section->save();
-
-        return response()->json($section->load('grade'));
     }
 
     /**
@@ -781,41 +815,110 @@ class SectionController extends Controller
     public function assignHomeRoomTeacher(Request $request, $curriculumId, $gradeId, $sectionId)
     {
         try {
+            Log::info("Assigning homeroom teacher to section {$sectionId}. Request data: " . json_encode($request->all()));
+
             $validated = $request->validate([
                 'teacher_id' => 'required|exists:teachers,id'
             ]);
 
+            Log::info("Validation passed. Teacher ID: {$validated['teacher_id']}");
+
+            // Verify section exists
+            $section = Section::find($sectionId);
+            if (!$section) {
+                Log::error("Section not found: {$sectionId}");
+                return response()->json([
+                    'message' => 'Section not found',
+                    'error' => 'Section with ID ' . $sectionId . ' does not exist'
+                ], 404);
+            }
+
+            // Verify teacher exists
+            $teacher = Teacher::find($validated['teacher_id']);
+            if (!$teacher) {
+                Log::error("Teacher not found: {$validated['teacher_id']}");
+                return response()->json([
+                    'message' => 'Teacher not found',
+                    'error' => 'Teacher with ID ' . $validated['teacher_id'] . ' does not exist'
+                ], 404);
+            }
+
             DB::beginTransaction();
+            Log::info("Beginning transaction to update section and create relationship");
 
             // Update the section's homeroom_teacher_id
-            $section = Section::findOrFail($sectionId);
             $section->homeroom_teacher_id = $validated['teacher_id'];
             $section->save();
+            Log::info("Section {$sectionId} updated with homeroom_teacher_id: {$validated['teacher_id']}");
 
-            // Create or update the teacher-section-subject relationship
-            TeacherSectionSubject::updateOrCreate(
-                [
-                    'teacher_id' => $validated['teacher_id'],
-                    'section_id' => $sectionId,
-                    'role' => 'homeroom'
-                ],
-                [
-                    'is_primary' => true,
-                    'is_active' => true,
-                    'subject_id' => null
-                ]
-            );
+            // Create or update the teacher-section-subject relationship for homeroom
+            // No subject_id is needed for homeroom role
+            $result = DB::statement("
+                INSERT INTO teacher_section_subject
+                (teacher_id, section_id, role, is_primary, is_active)
+                VALUES (?, ?, 'homeroom', true, true)
+                ON CONFLICT (teacher_id, section_id, subject_id)
+                WHERE subject_id IS NULL
+                DO UPDATE SET
+                    role = 'homeroom',
+                    is_primary = true,
+                    is_active = true,
+                    deleted_at = NULL
+            ", [$validated['teacher_id'], $sectionId]);
+
+            if (!$result) {
+                // If the ON CONFLICT fails (possibly due to database constraints),
+                // try a different approach by finding existing relationship first
+                $existingRelation = DB::table('teacher_section_subject')
+                    ->where('teacher_id', $validated['teacher_id'])
+                    ->where('section_id', $sectionId)
+                    ->where('role', 'homeroom')
+                    ->first();
+
+                if ($existingRelation) {
+                    // Update existing relation
+                    DB::table('teacher_section_subject')
+                        ->where('id', $existingRelation->id)
+                        ->update([
+                            'is_primary' => true,
+                            'is_active' => true,
+                            'deleted_at' => null
+                        ]);
+                } else {
+                    // Insert new relation
+                    DB::table('teacher_section_subject')->insert([
+                        'teacher_id' => $validated['teacher_id'],
+                        'section_id' => $sectionId,
+                        'role' => 'homeroom',
+                        'is_primary' => true,
+                        'is_active' => true
+                    ]);
+                }
+            }
+
+            Log::info("Teacher-section-subject relationship created/updated for homeroom teacher");
 
             DB::commit();
+            Log::info("Transaction committed successfully");
 
             return response()->json([
                 'message' => 'Homeroom teacher assigned successfully',
                 'teacher_id' => $validated['teacher_id'],
-                'section_id' => $sectionId
+                'section_id' => $sectionId,
+                'teacher' => $teacher->only(['id', 'user_id', 'first_name', 'last_name']),
+                'section' => $section->only(['id', 'name', 'homeroom_teacher_id'])
             ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            Log::error("Validation error assigning homeroom teacher: " . json_encode($e->errors()));
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error assigning homeroom teacher: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
             return response()->json([
                 'message' => 'Failed to assign homeroom teacher',
                 'error' => $e->getMessage()

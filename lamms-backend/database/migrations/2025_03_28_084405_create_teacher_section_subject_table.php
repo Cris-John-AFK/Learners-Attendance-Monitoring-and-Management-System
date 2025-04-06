@@ -19,7 +19,6 @@ return new class extends Migration
             $table->boolean('is_primary')->default(false);
             $table->boolean('is_active')->default(true);
             $table->string('role')->default('teacher');
-            $table->timestamps();
             $table->softDeletes();
 
             $table->unique(['teacher_id', 'section_id', 'subject_id']);

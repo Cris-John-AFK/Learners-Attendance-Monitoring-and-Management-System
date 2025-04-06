@@ -16,127 +16,113 @@ let teacherCache = null;
 let cacheTimestamp = null;
 let scheduleCache = new Map();
 const CACHE_TTL = 300000; // 5 minutes cache lifetime
-const API_TIMEOUT = 5000; // 5 seconds timeout (reduced from 30 seconds)
+const API_TIMEOUT = 30000; // 30 seconds timeout
 
-// Default teachers data for fallback
-const defaultTeachers = [
-    { id: 1, name: 'Default Teacher 1', email: 'teacher1@school.edu', status: 'Active', is_active: true },
-    { id: 2, name: 'Default Teacher 2', email: 'teacher2@school.edu', status: 'Active', is_active: true }
-];
+// Get all teachers
+async function getTeachers() {
+    const now = Date.now();
+
+    try {
+        // First priority: Check if we already have teachers in state
+        if (state.teachers.length > 0) {
+            console.log('Using memory cached teacher data from state');
+            return state.teachers;
+        }
+
+        // Second priority: Check memory cache
+        if (teacherCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
+            console.log('Using memory cached teacher data');
+            return teacherCache;
+        }
+
+        // Third priority: Check localStorage
+        try {
+            const cachedData = localStorage.getItem('teacherData');
+            const cacheTime = parseInt(localStorage.getItem('teacherCacheTimestamp'));
+
+            if (cachedData && cacheTime && now - cacheTime < CACHE_TTL) {
+                console.log('Using localStorage cached teacher data');
+                const data = JSON.parse(cachedData);
+                teacherCache = data;
+                cacheTimestamp = cacheTime;
+                state.teachers = data; // Also update the state
+                return data;
+            }
+        } catch (storageError) {
+            console.warn('Could not retrieve teacher data from localStorage:', storageError);
+        }
+
+        // Fourth priority: Get from API with standard timeout
+        console.log('Fetching teachers from API...');
+
+        const response = await api.get('/api/teachers', {
+            timeout: API_TIMEOUT,
+            headers: {
+                'Cache-Control': 'no-cache',
+                Pragma: 'no-cache'
+            }
+        });
+
+        // Validate and process the response
+        if (response.data && (Array.isArray(response.data) || typeof response.data === 'object')) {
+            const data = Array.isArray(response.data) ? response.data : [response.data];
+
+            // Only update data if we have actual results
+            if (data.length > 0) {
+                console.log('Received API data:', data);
+
+                // Update state and cache with valid data
+                teacherCache = data;
+                cacheTimestamp = now;
+                state.teachers = data;
+
+                // Update localStorage
+                try {
+                    localStorage.setItem('teacherData', JSON.stringify(data));
+                    localStorage.setItem('teacherCacheTimestamp', now.toString());
+                } catch (storageError) {
+                    console.warn('Could not store teacher data in localStorage:', storageError);
+                }
+
+                return data;
+            } else {
+                console.warn('API returned empty teachers array, using default data');
+                const defaultData = TeacherService.getDefaultTeachers();
+                teacherCache = defaultData;
+                state.teachers = defaultData;
+                return defaultData;
+            }
+        }
+
+        throw new Error('Invalid data format from API');
+    } catch (error) {
+        console.error('Error fetching teachers from API:', error);
+
+        // Fifth priority: Use default data as fallback
+        console.warn('Returning default teacher data as fallback due to API error');
+        const defaultData = [{ id: 1, first_name: 'Cris John', last_name: 'Cañales', email: 'cjca@gmail.com', status: 'Active', is_active: true, user_id: 1 }];
+        teacherCache = defaultData;
+        cacheTimestamp = now;
+        state.teachers = defaultData;
+        state.error = error.message;
+
+        return defaultData;
+    }
+}
 
 export const TeacherService = {
     // Get all teachers
-    async getTeachers() {
-        const now = Date.now();
+    getTeachers,
 
-        try {
-            // First priority: Check if we already have default teachers
-            if (state.teachers.length > 0) {
-                console.log('Using memory cached teacher data from state');
-                return state.teachers;
-            }
-
-            // Second priority: Check memory cache
-            if (teacherCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
-                console.log('Using memory cached teacher data');
-                return teacherCache;
-            }
-
-            // Third priority: Check localStorage
-            try {
-                const cachedData = localStorage.getItem('teacherData');
-                const cacheTime = parseInt(localStorage.getItem('teacherCacheTimestamp'));
-
-                if (cachedData && cacheTime && now - cacheTime < CACHE_TTL) {
-                    console.log('Using localStorage cached teacher data');
-                    const data = JSON.parse(cachedData);
-                    teacherCache = data;
-                    cacheTimestamp = cacheTime;
-                    state.teachers = data; // Also update the state
-                    return data;
-                }
-            } catch (storageError) {
-                console.warn('Could not retrieve teacher data from localStorage:', storageError);
-            }
-
-            // Fourth priority: Get from API with very short timeout (1.5 seconds)
-            console.log('Fetching teachers from API with short timeout...');
-
-            // Use AbortController for better timeout handling
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout
-
-            try {
-                const response = await api.get('/api/teachers', {
-                    timeout: 1500, // 1.5 seconds only
-                    signal: controller.signal,
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        Pragma: 'no-cache'
-                    }
-                });
-
-                clearTimeout(timeoutId);
-
-                // Validate and process the response
-                if (response.data && (Array.isArray(response.data) || typeof response.data === 'object')) {
-                    const data = Array.isArray(response.data) ? response.data : [response.data];
-
-                    // Update state and cache with valid data
-                    teacherCache = data;
-                    cacheTimestamp = now;
-                    state.teachers = data;
-
-                    // Update localStorage
-                    try {
-                        localStorage.setItem('teacherData', JSON.stringify(data));
-                        localStorage.setItem('teacherCacheTimestamp', now.toString());
-                    } catch (storageError) {
-                        console.warn('Could not store teacher data in localStorage:', storageError);
-                    }
-
-                    return data;
-                }
-
-                throw new Error('Invalid data format from API');
-            } catch (apiError) {
-                clearTimeout(timeoutId);
-                console.warn('Fast API call failed, using defaults:', apiError.message);
-
-                // Fall back to default teachers immediately
-                const defaultData = this.getDefaultTeachers();
-
-                // Store in cache and state
-                teacherCache = defaultData;
-                cacheTimestamp = now;
-                state.teachers = defaultData;
-
-                // Try to store in localStorage
-                try {
-                    localStorage.setItem('teacherData', JSON.stringify(defaultData));
-                    localStorage.setItem('teacherCacheTimestamp', now.toString());
-                } catch (storageError) {
-                    console.warn('Could not store default teacher data in localStorage:', storageError);
-                }
-
-                return defaultData;
-            }
-        } catch (error) {
-            console.error('Error in getTeachers:', error);
-            const defaultData = this.getDefaultTeachers();
-            state.teachers = defaultData;
-            return defaultData;
-        }
-    },
-
-    // Get default teachers data
+    // Get default teachers data for testing only
     getDefaultTeachers() {
+        console.warn('WARNING: Using default teacher data - this should only be used for testing!');
         return [
-            { id: 1, name: 'John Smith', email: 'john.smith@school.edu', status: 'Active', is_active: true },
-            { id: 2, name: 'Maria Garcia', email: 'maria.garcia@school.edu', status: 'Active', is_active: true },
-            { id: 3, name: 'James Johnson', email: 'james.johnson@school.edu', status: 'Active', is_active: true },
-            { id: 4, name: 'Sarah Williams', email: 'sarah.williams@school.edu', status: 'Active', is_active: true },
-            { id: 5, name: 'Robert Brown', email: 'robert.brown@school.edu', status: 'Active', is_active: true }
+            { id: 1, first_name: 'John', last_name: 'Smith', email: 'john.smith@school.edu', status: 'Active', is_active: true },
+            { id: 2, first_name: 'Maria', last_name: 'Garcia', email: 'maria.garcia@school.edu', status: 'Active', is_active: true },
+            { id: 3, first_name: 'James', last_name: 'Johnson', email: 'james.johnson@school.edu', status: 'Active', is_active: true },
+            { id: 4, first_name: 'Sarah', last_name: 'Williams', email: 'sarah.williams@school.edu', status: 'Active', is_active: true },
+            { id: 5, first_name: 'Robert', last_name: 'Brown', email: 'robert.brown@school.edu', status: 'Active', is_active: true }
         ];
     },
 

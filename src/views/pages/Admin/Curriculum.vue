@@ -16,6 +16,7 @@ import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 const toast = useToast();
 const confirmDialog = useConfirm();
@@ -110,17 +111,12 @@ const subject = ref({
 });
 
 // Teacher management
-const teachers = ref([
-    { id: 1, name: 'Maria Santos Reyes', department: 'Mathematics' },
-    { id: 2, name: 'Jose Cruz Mendoza', department: 'Science' },
-    { id: 3, name: 'Carmela Bautista Lim', department: 'Filipino' },
-    { id: 4, name: 'Antonio dela Cruz', department: 'Social Studies' },
-    { id: 5, name: 'Rosario Fernandez', department: 'English' }
-]);
+const teachers = ref([]);
 const teacherDialog = ref(false);
 const selectedTeacher = ref(null);
 const homeRoomTeacherAssignmentDialog = ref(false);
 const subjectTeacherAssignmentDialog = ref(false);
+const teacherSubmitted = ref(false); // Flag for teacher selection validation
 
 // Schedule management
 const scheduleDialog = ref(false);
@@ -545,7 +541,7 @@ const loadGradeLevels = async () => {
     try {
         // Only get curriculum-specific grades - no fallbacks
         const data = await CurriculumService.getGradesByCurriculum(selectedCurriculum.value.id);
-            console.log('Grade levels loaded from API:', data);
+        console.log('Grade levels loaded from API:', data);
 
         // Ensure we have a valid array
         grades.value = Array.isArray(data) ? data : [];
@@ -589,7 +585,13 @@ async function loadSubjects() {
 
 async function loadTeachers() {
     try {
+        console.log('Loading teachers from API...');
         const data = await TeacherService.getTeachers();
+
+        if (!data) {
+            throw new Error('No data returned from teachers API');
+        }
+
         teachers.value = Array.isArray(data) ? data : [];
 
         if (teachers.value.length === 0) {
@@ -601,14 +603,14 @@ async function loadTeachers() {
                 life: 5000
             });
         } else {
-            console.log(`Successfully loaded ${teachers.value.length} teachers`);
+            console.log(`Successfully loaded ${teachers.value.length} teachers:`, teachers.value);
         }
     } catch (error) {
         console.error('Error loading teachers:', error);
         toast.add({
             severity: 'error',
             summary: 'Database Error',
-            detail: 'Failed to load teachers from database',
+            detail: 'Failed to load teachers from database: ' + (error.message || 'Unknown error'),
             life: 5000
         });
         teachers.value = [];
@@ -940,6 +942,17 @@ const openSectionList = async (grade) => {
         selectedGrade.value = grade;
         console.log('Opening section list for grade:', grade.id, 'in curriculum:', selectedCurriculum.value.id);
 
+        // Store IDs in component state for nested dialogs
+        // This will ensure we can access these IDs even when route params aren't available
+        if (selectedCurriculum.value && selectedCurriculum.value.id) {
+            localStorage.setItem('currentCurriculumId', selectedCurriculum.value.id);
+        }
+        if (grade && grade.id) {
+            localStorage.setItem('currentGradeId', grade.id);
+        }
+
+        console.log('Stored curriculum and grade IDs in localStorage for nested dialogs');
+
         // Show dialog immediately
         showSectionListDialog.value = true;
 
@@ -955,7 +968,7 @@ const openSectionList = async (grade) => {
         // Filter out invalid sections (such as fallback sections with invalid IDs)
         let validSections = [];
         if (Array.isArray(sectionsForGrade)) {
-            validSections = sectionsForGrade.filter(section => {
+            validSections = sectionsForGrade.filter((section) => {
                 // Ensure the section has a valid ID that's not a fallback format
                 return section && section.id && !String(section.id).includes('grade_');
             });
@@ -985,11 +998,7 @@ const openSectionList = async (grade) => {
                         // Load subjects if needed
                         if (!section.subjects) {
                             console.log(`Loading subjects for section with ID: ${section.id}`);
-                            const sectionSubjects = await CurriculumService.getSubjectsBySection(
-                                selectedCurriculum.value.id,
-                                selectedGrade.value.id,
-                                section.id
-                            );
+                            const sectionSubjects = await CurriculumService.getSubjectsBySection(selectedCurriculum.value.id, selectedGrade.value.id, section.id);
 
                             if (Array.isArray(sectionSubjects) && sectionSubjects.length > 0) {
                                 section.subjects = sectionSubjects;
@@ -1070,15 +1079,11 @@ const refreshSectionSubjects = async () => {
         }
 
         // Fetch fresh data - specifically only user-added subjects
-        const response = await CurriculumService.getSubjectsBySection(
-            selectedCurriculum.value.id,
-            selectedGrade.value.id,
-            selectedSection.value.id
-        );
+        const response = await CurriculumService.getSubjectsBySection(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id);
 
         if (Array.isArray(response)) {
             console.log('Successfully refreshed subjects:', response.length);
-            console.log('Subject names:', response.map(s => s.name).join(', '));
+            console.log('Subject names:', response.map((s) => s.name).join(', '));
 
             // Load schedules for each subject
             const subjectsWithSchedules = await Promise.all(
@@ -1258,11 +1263,7 @@ const saveSection = async () => {
 
         // First try using nested endpoint for better association
         try {
-            await CurriculumService.addSectionToGrade(
-                selectedCurriculum.value.id,
-                selectedGrade.value.id,
-                sectionData
-            );
+            await CurriculumService.addSectionToGrade(selectedCurriculum.value.id, selectedGrade.value.id, sectionData);
             console.log('Successfully added section using nested endpoint');
             sectionCreated = true;
         } catch (nestedError) {
@@ -1271,7 +1272,7 @@ const saveSection = async () => {
             // Only try direct endpoint if the nested endpoint didn't work
             try {
                 // Fall back to direct endpoint if nested fails
-        await CurriculumService.addSection(sectionData);
+                await CurriculumService.addSection(sectionData);
                 console.log('Successfully added section using direct endpoint');
                 sectionCreated = true;
             } catch (directError) {
@@ -1290,10 +1291,7 @@ const saveSection = async () => {
 
         // Reload sections
         try {
-            const sectionsForGrade = await CurriculumService.getSectionsByGrade(
-                selectedCurriculum.value.id,
-                selectedGrade.value.id
-            );
+            const sectionsForGrade = await CurriculumService.getSectionsByGrade(selectedCurriculum.value.id, selectedGrade.value.id);
 
             if (Array.isArray(sectionsForGrade)) {
                 sections.value = sectionsForGrade;
@@ -1301,7 +1299,7 @@ const saveSection = async () => {
 
                 // If we got a 500 error but find our section in the list, then it was created
                 if (!sectionCreated) {
-                    const sectionExists = sectionsForGrade.some(s => s.name === sectionData.name);
+                    const sectionExists = sectionsForGrade.some((s) => s.name === sectionData.name);
                     if (sectionExists) {
                         sectionCreated = true;
                         console.log('Section was created despite API errors');
@@ -1326,12 +1324,12 @@ const saveSection = async () => {
         sectionDialog.value = false;
 
         if (sectionCreated) {
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Section added successfully',
-            life: 3000
-        });
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Section added successfully',
+                life: 3000
+            });
         } else {
             toast.add({
                 severity: 'info',
@@ -1452,17 +1450,17 @@ const openSubjectList = async (section) => {
 
             if (response.data && Array.isArray(response.data)) {
                 console.log('Successfully retrieved user-added subjects:', response.data.length);
-                console.log('Subject names:', response.data.map(s => s.name).join(', '));
+                console.log('Subject names:', response.data.map((s) => s.name).join(', '));
 
-            // Load schedules for each subject
-            const subjectsWithSchedules = await Promise.all(
+                // Load schedules for each subject
+                const subjectsWithSchedules = await Promise.all(
                     response.data.map(async (subject) => {
                         try {
-                    const schedules = await loadSubjectSchedules(section.id, subject.id);
-                    return {
-                        ...subject,
-                        schedules: schedules
-                    };
+                            const schedules = await loadSubjectSchedules(section.id, subject.id);
+                            return {
+                                ...subject,
+                                schedules: schedules
+                            };
                         } catch (scheduleErr) {
                             console.warn(`Could not load schedules for subject ${subject.id}:`, scheduleErr);
                             return {
@@ -1473,7 +1471,7 @@ const openSubjectList = async (section) => {
                     })
                 );
 
-            selectedSubjects.value = subjectsWithSchedules;
+                selectedSubjects.value = subjectsWithSchedules;
                 console.log('Loaded subjects with schedules:', selectedSubjects.value.length);
             } else {
                 console.log('No subjects found or invalid response format');
@@ -1552,12 +1550,12 @@ const closeSubjectListDialog = () => {
         // If schedule dialog is not open, then also reset variables
         // Wait briefly before resetting variables to ensure dialog closes smoothly
         setTimeout(() => {
-    // Reset all related variables
-    selectedSection.value = null;
-    selectedSubjects.value = [];
-    selectedSubjectForTeacher.value = null;
-    selectedSubjectForSchedule.value = null;
-    selectedTeacher.value = null;
+            // Reset all related variables
+            selectedSection.value = null;
+            selectedSubjects.value = [];
+            selectedSubjectForTeacher.value = null;
+            selectedSubjectForSchedule.value = null;
+            selectedTeacher.value = null;
 
             // Also ensure schedule dialog is closed
             showScheduleDialog.value = false;
@@ -1566,7 +1564,6 @@ const closeSubjectListDialog = () => {
         console.log('Schedule dialog is open, preserving section/subject context');
     }
 };
-
 // Track if we're already handling a schedule dialog close
 const isScheduleClosing = ref(false);
 
@@ -1575,8 +1572,8 @@ const handleScheduleDialogClose = () => {
     // Prevent handling this event multiple times
     if (isScheduleClosing.value) {
         console.log('Already handling schedule dialog close, ignoring duplicate event');
-            return;
-        }
+        return;
+    }
 
     isScheduleClosing.value = true;
     console.log('Schedule dialog closed');
@@ -1600,49 +1597,47 @@ const handleScheduleDialogClose = () => {
                 console.log('Restoring subject dialog with section:', storedSection.name);
 
                 // Load subjects for this section
-                CurriculumService.getSubjectsBySection(
-                    selectedCurriculum.value.id,
-                    selectedGrade.value.id,
-                    storedSection.id
-                ).then(subjects => {
-                    if (Array.isArray(subjects)) {
-                        selectedSubjects.value = subjects;
-                    }
-                    // Then show the dialog after data is loaded
-                    setTimeout(() => {
-                        showSubjectListDialog.value = true;
-
-                        // If a schedule was saved, refresh the subjects list
-                        if (scheduleWasSaved) {
-                            setTimeout(() => {
-                                refreshSectionSubjects();
-                            }, 500);
+                CurriculumService.getSubjectsBySection(selectedCurriculum.value.id, selectedGrade.value.id, storedSection.id)
+                    .then((subjects) => {
+                        if (Array.isArray(subjects)) {
+                            selectedSubjects.value = subjects;
                         }
+                        // Then show the dialog after data is loaded
+                        setTimeout(() => {
+                            showSubjectListDialog.value = true;
 
-                        // Reset the flag after restoring dialogs
+                            // If a schedule was saved, refresh the subjects list
+                            if (scheduleWasSaved) {
+                                setTimeout(() => {
+                                    refreshSectionSubjects();
+                                }, 500);
+                            }
+
+                            // Reset the flag after restoring dialogs
+                            setTimeout(() => {
+                                isScheduleClosing.value = false;
+                            }, 300);
+                        }, 200);
+                    })
+                    .catch((error) => {
+                        console.error('Error reloading subjects:', error);
+                        // Still show the dialog even if reload fails
                         setTimeout(() => {
-                            isScheduleClosing.value = false;
-                        }, 300);
-                    }, 200);
-                }).catch(error => {
-                    console.error('Error reloading subjects:', error);
-                    // Still show the dialog even if reload fails
-                    setTimeout(() => {
-                        showSubjectListDialog.value = true;
-                        // Reset the flag after restoring dialogs
-                        setTimeout(() => {
-                            isScheduleClosing.value = false;
-                        }, 300);
-                    }, 200);
-                });
+                            showSubjectListDialog.value = true;
+                            // Reset the flag after restoring dialogs
+                            setTimeout(() => {
+                                isScheduleClosing.value = false;
+                            }, 300);
+                        }, 200);
+                    });
             } else {
                 console.warn('No stored section data found');
                 isScheduleClosing.value = false;
-        }
-    } catch (error) {
+            }
+        } catch (error) {
             console.error('Error restoring subject dialog:', error);
             isScheduleClosing.value = false;
-    } finally {
+        } finally {
             // Clean up temp storage
             localStorage.removeItem('temp_subject_dialog_was_open');
             localStorage.removeItem('temp_selected_section');
@@ -1702,6 +1697,19 @@ const saveSchedule = async () => {
             return;
         }
 
+        // Check for schedule conflicts
+        const conflict = checkForScheduleConflicts(schedule.value);
+        if (conflict.hasConflict) {
+            toast.add({
+                severity: 'error',
+                summary: 'Schedule Conflict',
+                detail: `This time conflicts with ${conflict.conflictWith} (${conflict.existingTime})`,
+                life: 5000
+            });
+            loading.value = false;
+            return;
+        }
+
         try {
             // Format the schedule data using the stored section_id
             const scheduleData = {
@@ -1721,13 +1729,7 @@ const saveSchedule = async () => {
             const sectionId = schedule.value.section_id;
 
             // Call the API using the correct method name
-            await CurriculumService.setSubjectSchedule(
-                curriculumId,
-                gradeId,
-                sectionId,
-                selectedSubjectForSchedule.value.id,
-                scheduleData
-            );
+            await CurriculumService.setSubjectSchedule(curriculumId, gradeId, sectionId, selectedSubjectForSchedule.value.id, scheduleData);
 
             // Initialize the schedules array if it doesn't exist
             if (!selectedSubjectForSchedule.value.schedules) {
@@ -1803,20 +1805,14 @@ const assignTeacher = async () => {
             console.log('To subject:', selectedSubjectForTeacher.value);
 
             // Call the API
-            await CurriculumService.assignTeacherToSubject(
-                selectedCurriculum.value.id,
-                selectedGrade.value.id,
-                selectedSection.value.id,
-                selectedSubjectForTeacher.value.id,
-                { teacher_id: selectedTeacher.value.id }
-            );
+            await CurriculumService.assignTeacherToSubject(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, selectedSubjectForTeacher.value.id, { teacher_id: selectedTeacher.value.id });
 
             // Update the subject with the teacher in the local data
             selectedSubjectForTeacher.value.teacher = selectedTeacher.value;
             selectedSubjectForTeacher.value.teacher_id = selectedTeacher.value.id;
 
             // Update the subject in the selectedSubjects array
-            const subjectIndex = selectedSubjects.value.findIndex(s => s.id === selectedSubjectForTeacher.value.id);
+            const subjectIndex = selectedSubjects.value.findIndex((s) => s.id === selectedSubjectForTeacher.value.id);
             if (subjectIndex !== -1) {
                 selectedSubjects.value[subjectIndex].teacher = selectedTeacher.value;
                 selectedSubjects.value[subjectIndex].teacher_id = selectedTeacher.value.id;
@@ -1872,12 +1868,16 @@ const selectedTeacherDetails = computed(() => {
     }
 });
 
-// Add this ref for teacher form validation
-const teacherSubmitted = ref(false);
-
 // Update the assignHomeRoomTeacher function
 const assignHomeRoomTeacher = async () => {
     try {
+        // Debug which version is running
+        console.log('Running assignHomeRoomTeacher from src/views/pages/Admin/Curriculum.vue');
+
+        // Set submitted flag for validation
+        teacherSubmitted.value = true;
+
+        // Validate teacher selection
         if (!selectedTeacher.value) {
             toast.add({
                 severity: 'warn',
@@ -1888,22 +1888,109 @@ const assignHomeRoomTeacher = async () => {
             return;
         }
 
+        // Get IDs from multiple sources
+        let curriculumId = selectedCurriculum.value?.id;
+        let gradeId = selectedGrade.value?.id;
+        let sectionId = selectedSection.value?.id;
+
+        // If component state doesn't have IDs, try route params
+        if (!curriculumId) {
+            curriculumId = route.params.id || route.params.curriculumId;
+        }
+        if (!gradeId) {
+            gradeId = route.params.gradeId;
+        }
+
+        // If route params don't have IDs, try localStorage (set by openSectionList)
+        if (!curriculumId) {
+            curriculumId = localStorage.getItem('currentCurriculumId');
+        }
+        if (!gradeId) {
+            gradeId = localStorage.getItem('currentGradeId');
+        }
+
+        // Parse numeric IDs
+        if (curriculumId) curriculumId = parseInt(curriculumId);
+        if (gradeId) gradeId = parseInt(gradeId);
+
+        console.log('IDs from assignHomeRoomTeacher:');
+        console.log('- Curriculum ID:', curriculumId);
+        console.log('- Grade ID:', gradeId);
+        console.log('- Section ID:', sectionId);
+
+        // Validate that we have all the required IDs
+        if (!curriculumId) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No curriculum selected',
+                life: 3000
+            });
+            return;
+        }
+
+        if (!gradeId) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No grade selected',
+                life: 3000
+            });
+            return;
+        }
+
+        if (!sectionId) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No section selected',
+                life: 3000
+            });
+            return;
+        }
+
         loading.value = true;
 
-        // Make API call to assign teacher
-        await CurriculumService.assignTeacherToSection(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, { teacher_id: selectedTeacher.value.id });
+        // Extract teacher ID - handle both object and direct ID cases
+        const teacherId = typeof selectedTeacher.value === 'object' ?
+            (selectedTeacher.value.id || null) :
+            parseInt(selectedTeacher.value, 10);
 
-        // Update local state
-        const updatedSection = {
-            ...selectedSection.value,
-            teacher_id: selectedTeacher.value.id,
-            teacher: selectedTeacher.value
+        if (!teacherId || isNaN(teacherId)) {
+            throw new Error('Invalid teacher ID');
+        }
+
+        console.log('Assigning homeroom teacher with ID:', teacherId);
+        console.log('selectedSection:', selectedSection.value);
+        console.log('selectedGrade:', selectedGrade.value);
+        console.log('selectedCurriculum:', selectedCurriculum.value);
+
+        // Use dedicated endpoint for homeroom teacher assignment
+        const url = `/api/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/teacher`;
+
+        console.log('Using dedicated homeroom teacher endpoint:', url);
+
+        // Send only teacher_id in the payload
+        const payload = {
+            teacher_id: teacherId
         };
 
+        console.log('Sending payload:', payload);
+        const response = await api.post(url, payload);
+
+        console.log('Assignment successful:', response.data);
+
+        // Update local state
+        if (selectedSection.value) {
+            selectedSection.value.homeroom_teacher_id = teacherId;
+        }
+
         // Update sections array
-        const sectionIndex = sections.value.findIndex((s) => s.id === selectedSection.value.id);
-        if (sectionIndex !== -1) {
-            sections.value[sectionIndex] = updatedSection;
+        if (sections.value && sections.value.length > 0) {
+            const sectionIndex = sections.value.findIndex((s) => s.id === sectionId);
+            if (sectionIndex !== -1) {
+                sections.value[sectionIndex].homeroom_teacher_id = teacherId;
+            }
         }
 
         toast.add({
@@ -1915,54 +2002,34 @@ const assignHomeRoomTeacher = async () => {
 
         // Reset state and close dialog
         selectedTeacher.value = null;
-        selectedSection.value = null;
         homeRoomTeacherAssignmentDialog.value = false;
     } catch (error) {
         console.error('Error assigning homeroom teacher:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to assign homeroom teacher',
-            life: 3000
-        });
-    } finally {
-        loading.value = false;
-    }
-};
+        if (error.response) {
+            console.error('Error details:', error.response.data);
 
-// Update the openAssignHomeRoomTeacherDialog function
-const openAssignHomeRoomTeacherDialog = async (sectionData) => {
-    try {
-        loading.value = true;
-        selectedSection.value = { ...sectionData }; // Create a copy to avoid reference issues
-        section.value = { ...sectionData };
-        selectedTeacher.value = null;
-
-        // Load teachers if not already loaded
-        if (!teachers.value || teachers.value.length === 0) {
-            const response = await TeacherService.getTeachers();
-            if (Array.isArray(response)) {
-                teachers.value = response;
-            } else {
-                console.warn('Invalid teacher data format:', response);
-                teachers.value = [];
+            // Show the specific SQL error to help debugging
+            if (error.response.data && error.response.data.error) {
+                console.error('SQL Error:', error.response.data.error);
+                toast.add({
+                    severity: 'error',
+                    summary: 'Database Error',
+                    detail: 'SQL Error: ' + error.response.data.error.substring(0, 100) + '...',
+                    life: 5000
+                });
             }
         }
-
-        homeRoomTeacherAssignmentDialog.value = true;
-    } catch (error) {
-        console.error('Error in openAssignHomeRoomTeacherDialog:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load teachers',
+            detail: error.message || 'Failed to assign homeroom teacher',
             life: 3000
         });
     } finally {
         loading.value = false;
+        teacherSubmitted.value = false;
     }
 };
-
 // Add the openScheduleDialog function after closeSubjectListDialog
 const openScheduleDialog = async (subject) => {
     try {
@@ -1971,13 +2038,17 @@ const openScheduleDialog = async (subject) => {
 
         console.log('Opening schedule dialog for subject:', subject.name);
 
-        // Initialize schedule with default values
+        // Get suggested non-conflicting time slot
+        const defaultDay = 'Monday';
+        const suggestedTimeSlot = getNextAvailableTimeSlot(defaultDay);
+
+        // Initialize schedule with suggested values
         schedule.value = {
-            day: 'Monday',
-            start_time: '08:00',
-            end_time: '09:00',
+            day: defaultDay,
+            start_time: suggestedTimeSlot.start_time,
+            end_time: suggestedTimeSlot.end_time,
             subject_id: subject.id,
-            teacher_id: currentGradeHasSubjectTeachers ? (subject.teacher?.id || null) : null,
+            teacher_id: currentGradeHasSubjectTeachers ? subject.teacher?.id || null : null,
             section_id: selectedSection.value.id
         };
 
@@ -2053,7 +2124,7 @@ const openTeacherDialog = async (subject) => {
 
     // If the subject already has a teacher assigned, pre-select it
     if (subject.teacher_id) {
-        const existingTeacher = teachers.value.find(t => t.id === subject.teacher_id);
+        const existingTeacher = teachers.value.find((t) => t.id === subject.teacher_id);
         if (existingTeacher) {
             selectedTeacher.value = existingTeacher;
             console.log('Pre-selected existing teacher:', existingTeacher);
@@ -2065,12 +2136,26 @@ const openTeacherDialog = async (subject) => {
 const getTeacherName = (teacherId) => {
     if (!teacherId) return 'No teacher selected';
 
-    if (typeof teacherId === 'object' && teacherId.name) {
-        return teacherId.name;
+    // If the full teacher object is passed
+    if (typeof teacherId === 'object') {
+        if (teacherId.first_name && teacherId.last_name) {
+            return `${teacherId.first_name} ${teacherId.last_name}`;
+        } else if (teacherId.name) {
+            return teacherId.name;
+        }
     }
 
+    // If just the ID is passed, look up the teacher in the teachers array
     const teacher = teachers.value.find((t) => t.id === teacherId);
-    return teacher ? teacher.name : `Teacher ${teacherId}`;
+    if (teacher) {
+        if (teacher.first_name && teacher.last_name) {
+            return `${teacher.first_name} ${teacher.last_name}`;
+        } else if (teacher.name) {
+            return teacher.name;
+        }
+    }
+
+    return `Teacher ${teacherId}`;
 };
 
 // Add this function after loadSubjects
@@ -2165,17 +2250,12 @@ const removeSubjectFromSection = async (subjectId) => {
 
         // First try using the nested API endpoint
         try {
-            await CurriculumService.removeSubjectFromSection(
-                selectedCurriculum.value.id,
-                selectedGrade.value.id,
-                selectedSection.value.id,
-                subjectId
-            );
+            await CurriculumService.removeSubjectFromSection(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, subjectId);
 
             console.log('Successfully removed subject from section');
 
             // Update the UI by removing the subject from the list
-            selectedSubjects.value = selectedSubjects.value.filter(s => s.id !== subjectId);
+            selectedSubjects.value = selectedSubjects.value.filter((s) => s.id !== subjectId);
 
             toast.add({
                 severity: 'success',
@@ -2192,7 +2272,7 @@ const removeSubjectFromSection = async (subjectId) => {
                 await api.delete(`/api/sections/${selectedSection.value.id}/subjects/${subjectId}`);
 
                 // Update the UI by removing the subject from the list
-                selectedSubjects.value = selectedSubjects.value.filter(s => s.id !== subjectId);
+                selectedSubjects.value = selectedSubjects.value.filter((s) => s.id !== subjectId);
 
                 toast.add({
                     severity: 'success',
@@ -2252,20 +2332,15 @@ const addSubjectToSection = async (subjectId) => {
 
         // First try using the nested API endpoint
         try {
-            await CurriculumService.addSubjectToSection(
-                selectedCurriculum.value.id,
-                selectedGrade.value.id,
-                selectedSection.value.id,
-                subjectData
-            );
+            await CurriculumService.addSubjectToSection(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, subjectData);
 
             console.log('Successfully added subject to section');
 
             // Get the subject details
-            const subject = subjects.value.find(s => s.id === actualSubjectId);
+            const subject = subjects.value.find((s) => s.id === actualSubjectId);
 
             // Add the subject to the local list if it's not already there
-            if (subject && !selectedSubjects.value.some(s => s.id === actualSubjectId)) {
+            if (subject && !selectedSubjects.value.some((s) => s.id === actualSubjectId)) {
                 selectedSubjects.value.push({
                     ...subject,
                     schedules: []
@@ -2293,10 +2368,10 @@ const addSubjectToSection = async (subjectId) => {
                 await api.post(`/api/sections/${selectedSection.value.id}/subjects`, { subject_id: actualSubjectId });
 
                 // Get the subject details
-                const subject = subjects.value.find(s => s.id === actualSubjectId);
+                const subject = subjects.value.find((s) => s.id === actualSubjectId);
 
                 // Add the subject to the local list if it's not already there
-                if (subject && !selectedSubjects.value.some(s => s.id === actualSubjectId)) {
+                if (subject && !selectedSubjects.value.some((s) => s.id === actualSubjectId)) {
                     selectedSubjects.value.push({
                         ...subject,
                         schedules: []
@@ -2359,6 +2434,286 @@ const assignSubjectTeacher = (subject) => {
     selectedSubjectForTeacher.value = subject;
     openTeacherAssignmentDialog();
 };
+
+// Add this function to check for schedule conflicts
+const checkForScheduleConflicts = (newSchedule) => {
+    if (!selectedSubjects.value || !selectedSection.value) return false;
+
+    // Convert the new schedule's times to minutes for easier comparison
+    const newStartMinutes = convertTimeToMinutes(newSchedule.start_time);
+    const newEndMinutes = convertTimeToMinutes(newSchedule.end_time);
+    const newDay = newSchedule.day;
+
+    // Check each subject's schedules for conflicts
+    for (const subject of selectedSubjects.value) {
+        // Skip the current subject being edited
+        if (subject.id === selectedSubjectForSchedule.value?.id) continue;
+
+        if (subject.schedules && subject.schedules.length > 0) {
+            for (const existingSchedule of subject.schedules) {
+                // Only check schedules for the same day
+                if (existingSchedule.day !== newDay) continue;
+
+                const existingStartMinutes = convertTimeToMinutes(existingSchedule.start_time);
+                const existingEndMinutes = convertTimeToMinutes(existingSchedule.end_time);
+
+                // Check for overlap
+                if (
+                    // New schedule starts during an existing schedule
+                    (newStartMinutes >= existingStartMinutes && newStartMinutes < existingEndMinutes) ||
+                    // New schedule ends during an existing schedule
+                    (newEndMinutes > existingStartMinutes && newEndMinutes <= existingEndMinutes) ||
+                    // New schedule completely contains an existing schedule
+                    (newStartMinutes <= existingStartMinutes && newEndMinutes >= existingEndMinutes)
+                ) {
+                    return {
+                        hasConflict: true,
+                        conflictWith: subject.name,
+                        existingTime: `${existingSchedule.start_time} - ${existingSchedule.end_time}`
+                    };
+                }
+            }
+        }
+    }
+
+    return { hasConflict: false };
+};
+
+// Helper function to convert time string (HH:MM) to minutes for comparison
+const convertTimeToMinutes = (timeString) => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+};
+
+// Function to suggest next available time slot for a day
+const getNextAvailableTimeSlot = (day) => {
+    if (!selectedSubjects.value || selectedSubjects.value.length === 0) {
+        return { start_time: '08:00', end_time: '09:00' }; // Default if no schedules exist
+    }
+
+    // Collect all schedules for the given day
+    const daySchedules = [];
+    for (const subject of selectedSubjects.value) {
+        if (subject.schedules && subject.schedules.length > 0) {
+            for (const schedule of subject.schedules) {
+                if (schedule.day === day) {
+                    daySchedules.push({
+                        start: convertTimeToMinutes(schedule.start_time),
+                        end: convertTimeToMinutes(schedule.end_time)
+                    });
+                }
+            }
+        }
+    }
+
+    if (daySchedules.length === 0) {
+        return { start_time: '08:00', end_time: '09:00' }; // Default if no schedules for this day
+    }
+
+    // Sort schedules by start time
+    daySchedules.sort((a, b) => a.start - b.start);
+
+    // Find latest end time
+    const latestEnd = Math.max(...daySchedules.map((s) => s.end));
+
+    // Convert minutes back to HH:MM format
+    const startHour = Math.floor(latestEnd / 60);
+    const startMinute = latestEnd % 60;
+    const endHour = Math.floor((latestEnd + 60) / 60); // Default to 1 hour later
+    const endMinute = (latestEnd + 60) % 60;
+
+    // Format times with leading zeros
+    const formatTime = (h, m) => `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+    return {
+        start_time: formatTime(startHour, startMinute),
+        end_time: formatTime(endHour, endMinute)
+    };
+};
+
+// Function to open homeroom teacher assignment dialog
+const openHomeRoomTeacherDialog = async (section) => {
+    try {
+        console.log('Opening homeroom teacher dialog for section:', section);
+
+        // Get IDs from multiple sources - try route params first, then localStorage
+        let curriculumId = route.params.id || route.params.curriculumId;
+        let gradeId = route.params.gradeId;
+
+        // If route params are missing, try localStorage (set by openSectionList)
+        if (!curriculumId) {
+            curriculumId = localStorage.getItem('currentCurriculumId');
+            console.log('Retrieved curriculum ID from localStorage:', curriculumId);
+        }
+
+        if (!gradeId) {
+            gradeId = localStorage.getItem('currentGradeId');
+            console.log('Retrieved grade ID from localStorage:', gradeId);
+        }
+
+        console.log('IDs for homeroom teacher assignment:');
+        console.log('- Route params:', route.params);
+        console.log('- Curriculum ID:', curriculumId);
+        console.log('- Grade ID:', gradeId);
+
+        if (!curriculumId || !gradeId) {
+            console.error('Missing route parameters:', { curriculumId, gradeId });
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Missing curriculum or grade information. Please try again from the main curriculum view.',
+                life: 5000
+            });
+            return;
+        }
+
+        // Parse IDs to integers
+        curriculumId = parseInt(curriculumId);
+        gradeId = parseInt(gradeId);
+
+        // Make sure curriculum and grade data is loaded
+        if (!curriculums.value.length) {
+            await loadCurriculums();
+        }
+
+        // Set the selected section first
+        selectedSection.value = section;
+
+        // Find and set selected curriculum and grade from their IDs
+        selectedCurriculum.value = curriculums.value.find(c => c.id === curriculumId);
+
+        if (!selectedCurriculum.value) {
+            console.error('Selected curriculum not found for ID:', curriculumId);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Curriculum not found',
+                life: 3000
+            });
+            return;
+        }
+
+        // Make sure grades are loaded for this curriculum
+        if (!grades.value.length) {
+            await loadGrades(selectedCurriculum.value.id);
+        }
+
+        selectedGrade.value = grades.value.find(g => g.id === gradeId);
+
+        if (!selectedGrade.value) {
+            console.error('Selected grade not found for ID:', gradeId);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Grade not found',
+                life: 3000
+            });
+            return;
+        }
+
+        console.log('Selected data before opening dialog:');
+        console.log('- Curriculum:', selectedCurriculum.value);
+        console.log('- Grade:', selectedGrade.value);
+        console.log('- Section:', selectedSection.value);
+
+        // Pre-select the current teacher if one is assigned
+        if (section.homeroom_teacher_id) {
+            console.log('Pre-selecting teacher with ID:', section.homeroom_teacher_id);
+            selectedTeacher.value = section.homeroom_teacher_id;
+        } else {
+            selectedTeacher.value = null;
+        }
+
+        // Now use our function to handle teacher loading and dialog display
+        if (!teachers.value || teachers.value.length === 0) {
+            console.log('No teachers found, loading teachers...');
+            try {
+                await loadTeachers();
+                if (teachers.value.length === 0) {
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'No Teachers',
+                        detail: 'No teachers found in the database. Please add teachers first.',
+                        life: 5000
+                    });
+                    return;
+                }
+                // Open dialog after teachers are loaded
+                homeRoomTeacherAssignmentDialog.value = true;
+            } catch (error) {
+                console.error('Failed to load teachers:', error);
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to load teachers: ' + error.message,
+                    life: 5000
+                });
+            }
+        } else {
+            // Teachers already loaded, open dialog
+            homeRoomTeacherAssignmentDialog.value = true;
+        }
+    } catch (error) {
+        console.error('Error opening homeroom teacher dialog:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to open homeroom teacher assignment dialog: ' + error.message,
+            life: 5000
+        });
+    }
+};
+
+// Add a watch to update time slots when day changes
+watch(
+    () => schedule.value.day,
+    (newDay) => {
+        if (newDay && showScheduleDialog.value) {
+            // Get suggested time slot for the new day
+            const suggestedTimes = getNextAvailableTimeSlot(newDay);
+
+            // Update the schedule times
+            schedule.value.start_time = suggestedTimes.start_time;
+            schedule.value.end_time = suggestedTimes.end_time;
+
+            console.log(`Updated schedule times for ${newDay}: ${suggestedTimes.start_time} - ${suggestedTimes.end_time}`);
+        }
+    }
+);
+
+const openAssignTeacherDialog = () => {
+    if (!teachers.value || teachers.value.length === 0) {
+        console.log('No teachers found, loading teachers...');
+        loadTeachers().then(() => {
+            if (teachers.value.length === 0) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Teachers',
+                    detail: 'No teachers found in the database. Please add teachers first.',
+                    life: 5000
+                });
+            } else {
+                // Continue opening the dialog if teachers were found
+                selectedTeacher.value = null;
+                homeRoomTeacherAssignmentDialog.value = true;
+            }
+        }).catch(error => {
+            console.error('Failed to load teachers:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load teachers: ' + error.message,
+                life: 5000
+            });
+        });
+    } else {
+        // Teachers already loaded, open dialog
+        selectedTeacher.value = null;
+        homeRoomTeacherAssignmentDialog.value = true;
+    }
+};
+
+const route = useRoute();
 </script>
 <template>
     <div class="curriculum-wrapper">
@@ -2616,17 +2971,17 @@ const assignSubjectTeacher = (subject) => {
                     <Button v-tooltip.top="'Repair Section-Grade Relationships'" icon="pi pi-wrench" class="p-button-outlined p-button-secondary" @click="repairSectionGradeRelationships" :loading="loading" />
                     <Button label="Add Section" icon="pi pi-plus" class="p-button-success" @click="openAddSectionDialog" />
                 </div>
-                    </div>
+            </div>
 
             <div v-if="loading" class="flex justify-content-center">
-                        <ProgressSpinner />
-                    </div>
+                <ProgressSpinner />
+            </div>
 
             <div v-else-if="sections.length === 0" class="text-center p-4">
                 <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
-                        <p>No sections assigned to this grade level.</p>
+                <p>No sections assigned to this grade level.</p>
                 <p>Click "Add Section" to create a section.</p>
-                    </div>
+            </div>
 
             <div v-else class="section-grid">
                 <div v-for="section in sections" :key="section.id" class="section-card p-3 border-round shadow-2">
@@ -2635,17 +2990,17 @@ const assignSubjectTeacher = (subject) => {
                             <h4 class="m-0 mb-1 text-xl">Section {{ section.name }}</h4>
                             <p v-if="section.capacity" class="mt-0 mb-1">Capacity: {{ section.capacity }} students</p>
                             <p v-if="section.description" class="m-0 text-sm text-500">{{ section.description }}</p>
-                                </div>
+                        </div>
                         <div class="flex gap-2">
                             <Button icon="pi pi-book" class="p-button-rounded p-button-primary p-button-outlined" @click="openSubjectList(section)" v-tooltip.top="'Manage Subjects'" />
                             <Button v-if="!section.homeroom_teacher_id" icon="pi pi-user" class="p-button-rounded p-button-success p-button-outlined" @click="openHomeRoomTeacherDialog(section)" v-tooltip.top="'Assign Teacher'" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="confirmRemoveSection(section)" v-tooltip.top="'Remove Section'" />
-                                </div>
-                            </div>
+                        </div>
+                    </div>
                     <div v-if="section.homeroom_teacher_id" class="teacher-info flex align-items-center gap-2 mt-2">
                         <i class="pi pi-user text-primary"></i>
                         <span>Teacher: {{ getTeacherName(section.homeroom_teacher_id) }}</span>
-                        </div>
+                    </div>
                     <div v-else class="teacher-info flex align-items-center gap-2 mt-2 text-500">
                         <i class="pi pi-user text-gray-400"></i>
                         <span>No homeroom teacher assigned</span>
@@ -2666,24 +3021,29 @@ const assignSubjectTeacher = (subject) => {
                     <button class="custom-close-button" @click="showScheduleDialog = false">&times;</button>
                 </div>
                 <div class="custom-dialog-content">
-            <div class="field">
+                    <div class="field">
                         <label for="day">Day</label>
                         <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" />
-            </div>
+                    </div>
 
-            <div class="field">
+                    <div class="field">
                         <label for="startTime">Start Time</label>
                         <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
-            </div>
+                    </div>
 
-            <div class="field">
+                    <div class="field">
                         <label for="endTime">End Time</label>
                         <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
-            </div>
+                    </div>
 
                     <div v-if="currentGradeHasSubjectTeachers" class="field">
                         <label for="teacher">Teacher</label>
                         <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" />
+                    </div>
+
+                    <div class="helper-message mt-3 p-2 bg-blue-50 border-round">
+                        <i class="pi pi-info-circle text-blue-500 mr-2"></i>
+                        <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
                     </div>
                 </div>
                 <div class="custom-dialog-footer">
@@ -2694,21 +3054,14 @@ const assignSubjectTeacher = (subject) => {
         </div>
 
         <!-- Subject List Dialog -->
-        <Dialog v-model:visible="showSubjectListDialog"
-            :header="'Subjects for Section ' + (selectedSection?.name || '')"
-            modal
-            class="p-fluid"
-            :style="{ width: '800px' }"
-            :closable="true"
-            @hide="closeSubjectListDialog"
-        >
+        <Dialog v-model:visible="showSubjectListDialog" :header="'Subjects for Section ' + (selectedSection?.name || '')" modal class="p-fluid" :style="{ width: '800px' }" :closable="true" @hide="closeSubjectListDialog">
             <div class="flex justify-content-between align-items-center mb-3">
                 <h3 class="m-0">Subjects</h3>
-                    <div class="flex gap-2">
+                <div class="flex gap-2">
                     <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
                     <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
-                    </div>
                 </div>
+            </div>
 
             <div v-if="loading" class="flex justify-content-center">
                 <ProgressSpinner />
@@ -2718,13 +3071,13 @@ const assignSubjectTeacher = (subject) => {
                 <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
                 <p>No subjects assigned to this section.</p>
                 <p>Click "Add Subject" to add subjects to this section.</p>
-                </div>
+            </div>
 
-                <div v-else class="subject-grid">
-                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
-                            <div class="flex justify-content-between align-items-start mb-3">
-                                <div>
-                                    <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+            <div v-else class="subject-grid">
+                <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                    <div class="flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
                             <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
                             <div v-if="currentGradeHasSubjectTeachers">
                                 <div v-if="subject.teacher" class="teacher-display mt-2">
@@ -2740,33 +3093,29 @@ const assignSubjectTeacher = (subject) => {
                                 <i class="pi pi-info-circle mr-2"></i>
                                 <span class="text-sm text-gray-500">No teacher required for this grade level</span>
                             </div>
-                            </div>
+                        </div>
                         <div class="flex gap-2">
-                            <Button v-if="currentGradeHasSubjectTeachers"
-                                   icon="pi pi-user"
-                                   class="p-button-rounded p-button-primary p-button-outlined"
-                                   @click="openTeacherDialog(subject)"
-                                   v-tooltip.top="'Assign Teacher'" />
+                            <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
                             <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
                         </div>
-                                </div>
+                    </div>
 
                     <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
                         <h5 class="mt-0 mb-2">Schedule</h5>
                         <ul class="schedule-list">
                             <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
-                                            <div class="flex align-items-center gap-2">
+                                <div class="flex align-items-center gap-2">
                                     <span class="schedule-day-badge">{{ schedule.day }}</span>
                                     <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                                </div>
+                                </div>
                                 <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
                                     <i class="pi pi-user mr-1"></i>
                                     <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                                </div>
+                                </div>
                             </li>
                         </ul>
-                                            </div>
+                    </div>
                     <div v-else class="no-schedules text-center mt-3">
                         <i class="pi pi-calendar-times text-3xl"></i>
                         <p class="m-0">No schedules set</p>
@@ -2781,31 +3130,32 @@ const assignSubjectTeacher = (subject) => {
 
         <!-- Add Subject Dialog (positioned last in the DOM to ensure it's on top) -->
         <Teleport to="body">
-            <Dialog v-model:visible="subjectDialog" header="Add Subject" modal class="p-fluid"
-                :style="{ width: '450px', zIndex: 9999 }"
-                :closable="true"
-                appendTo="body"
-            >
-            <div class="field">
-                <label for="subject">Select Subject</label>
-                <Select id="subject" v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" :class="{ 'p-invalid': submitted && !selectedSubject }" />
-                <small class="p-error" v-if="submitted && !selectedSubject">Please select a subject.</small>
-            </div>
+            <Dialog v-model:visible="subjectDialog" header="Add Subject" modal class="p-fluid" :style="{ width: '450px', zIndex: 9999 }" :closable="true" appendTo="body">
+                <div class="field">
+                    <label for="subject">Select Subject</label>
+                    <Select id="subject" v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" :class="{ 'p-invalid': submitted && !selectedSubject }" />
+                    <small class="p-error" v-if="submitted && !selectedSubject">Please select a subject.</small>
+                </div>
 
-            <template #footer>
+                <template #footer>
                     <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="closeAddSubjectDialog" />
-                <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" />
-            </template>
-        </Dialog>
+                    <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" />
+                </template>
+            </Dialog>
         </Teleport>
 
         <!-- Homeroom Teacher Dialog -->
         <Dialog v-model:visible="homeRoomTeacherAssignmentDialog" :style="{ width: '450px' }" header="Assign Homeroom Teacher" :modal="true" class="p-fluid" :closable="true" @hide="selectedTeacher = null">
-            <div class="field">
+            <div v-if="loading" class="flex justify-content-center">
+                <ProgressSpinner />
+            </div>
+            <div v-else class="field">
                 <label for="teacher">Select Homeroom Teacher</label>
                 <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
                     <option value="">Select a teacher</option>
-                    <option v-for="teacher in teachers" :key="teacher.id" :value="teacher">{{ teacher.first_name }} {{ teacher.last_name }}</option>
+                    <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">
+                        {{ teacher.first_name }} {{ teacher.last_name }}
+                    </option>
                 </select>
                 <small class="p-error" v-if="teacherSubmitted && !selectedTeacher">Please select a teacher.</small>
             </div>
@@ -2852,16 +3202,7 @@ const assignSubjectTeacher = (subject) => {
 
         <!-- Teacher Assignment Dialog -->
         <Teleport to="body">
-            <Dialog
-                v-model:visible="showTeacherAssignmentDialog"
-                header="Assign Subject Teacher"
-                modal
-                class="p-fluid"
-                :style="{ width: '450px', zIndex: 9999 }"
-                :closable="true"
-                appendTo="body"
-                @hide="selectedTeacher = null"
-            >
+            <Dialog v-model:visible="showTeacherAssignmentDialog" header="Assign Subject Teacher" modal class="p-fluid" :style="{ width: '450px', zIndex: 9999 }" :closable="true" appendTo="body" @hide="selectedTeacher = null">
                 <div class="field">
                     <label for="subject-name">Subject</label>
                     <div class="p-field-value">{{ selectedSubjectForTeacher?.name }}</div>
@@ -2871,7 +3212,7 @@ const assignSubjectTeacher = (subject) => {
                     <label for="teacher">Select Teacher</label>
                     <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
                         <option value="">Select a teacher</option>
-                        <option v-for="teacher in teachers" :key="teacher.id" :value="teacher">
+                        <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">
                             {{ teacher.first_name }} {{ teacher.last_name }}
                         </option>
                     </select>
@@ -3403,8 +3744,12 @@ const assignSubjectTeacher = (subject) => {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 :deep(.p-dialog.schedule-dialog) {
@@ -3427,7 +3772,7 @@ body > .p-dialog-mask {
 }
 
 :deep(.p-dialog-mask.p-component-overlay) {
-    background-color: rgba(0,0,0,0.4) !important;
+    background-color: rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Make sure the schedule dialog mask is on top */
@@ -3437,88 +3782,105 @@ body > .p-dialog-mask {
 
 /* Special styling for the schedule dialog */
 .schedule-dialog {
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Custom Schedule Dialog styles */
 .custom-schedule-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999999; /* Extremely high z-index */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999; /* Extremely high z-index */
 }
 
 .custom-schedule-dialog {
-  background-color: white;
-  border-radius: 8px;
-  width: 450px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  display: flex;
-  flex-direction: column;
-  animation: dialogFadeIn 0.2s ease-out;
+    background-color: white;
+    border-radius: 8px;
+    width: 450px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    animation: dialogFadeIn 0.2s ease-out;
 }
 
 .custom-dialog-header {
-  padding: 1rem 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e9ecef;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e9ecef;
 }
 
 .custom-dialog-header span {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #333;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #333;
 }
 
 .custom-close-button {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #6c757d;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
 }
 
 .custom-close-button:hover {
-  background-color: #f0f0f0;
-  color: #333;
+    background-color: #f0f0f0;
+    color: #333;
 }
 
 .custom-dialog-content {
-  padding: 1.5rem;
-  overflow-y: auto;
-  max-height: 60vh;
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: 60vh;
 }
 
 .custom-dialog-footer {
-  padding: 1rem 1.5rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  border-top: 1px solid #e9ecef;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    border-top: 1px solid #e9ecef;
 }
 
 @keyframes dialogFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.helper-message {
+    display: flex;
+    align-items: center;
+    color: #2c3e50;
+    background-color: #e3f2fd;
+    border: 1px solid #bbdefb;
+    padding: 0.75rem;
+    border-radius: 5px;
+    margin-top: 1rem;
+}
+
+.helper-message i {
+    font-size: 1.2rem;
+    margin-right: 0.5rem;
+    color: #1976d2;
 }
 </style>

@@ -17,6 +17,9 @@ class Curriculum extends Model
      */
     protected $table = 'curricula';
 
+    // Disable timestamps
+    public $timestamps = false;
+
     protected $fillable = [
         'name',
         'start_year',
@@ -55,8 +58,7 @@ class Curriculum extends Model
     public function grades()
     {
         return $this->belongsToMany(Grade::class, 'curriculum_grade')
-                    ->withPivot('display_order')
-                    ->withTimestamps();
+                    ->withPivot('display_order');
     }
 
     public function sections()

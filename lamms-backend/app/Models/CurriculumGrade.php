@@ -13,6 +13,9 @@ class CurriculumGrade extends Model
 
     protected $table = 'curriculum_grade';
 
+    // Disable timestamps
+    public $timestamps = false;
+
     protected $fillable = [
         'curriculum_id',
         'grade_id',
