@@ -46,7 +46,7 @@ const filteredSubjects = computed(() => {
     }
 
     const query = searchQuery.value.toLowerCase();
-    return subjects.value.filter(subject => {
+    return subjects.value.filter((subject) => {
         const nameMatch = subject.name?.toLowerCase().includes(query);
         const descMatch = subject.description?.toLowerCase().includes(query);
         return nameMatch || descMatch;
@@ -116,7 +116,7 @@ const saveSubject = async () => {
             console.log('Subject updated:', updated);
 
             // Update local data
-            const index = subjects.value.findIndex(s => s.id === subject.value.id);
+            const index = subjects.value.findIndex((s) => s.id === subject.value.id);
             if (index !== -1) {
                 subjects.value[index] = { ...updated };
             }
@@ -182,7 +182,7 @@ const confirmDeleteSubject = (subjectToDelete) => {
 const deleteSubject = async () => {
     try {
         await SubjectService.deleteSubject(subject.value.id);
-        subjects.value = subjects.value.filter(s => s.id !== subject.value.id);
+        subjects.value = subjects.value.filter((s) => s.id !== subject.value.id);
 
         deleteSubjectDialog.value = false;
 
@@ -243,7 +243,7 @@ const saveDetailsEdit = async () => {
         });
 
         // Update in local array
-        const index = subjects.value.findIndex(s => s.id === subject.value.id);
+        const index = subjects.value.findIndex((s) => s.id === subject.value.id);
         if (index !== -1) {
             subjects.value[index] = { ...updated };
         }
@@ -287,7 +287,7 @@ onMounted(async () => {
             <!-- Top Section -->
             <div class="top-nav-bar">
                 <div class="nav-left">
-                    <h2 class="text-2xl font-semibold ">Subject Management</h2>
+                    <h2 class="text-2xl font-semibold">Subject Management</h2>
                 </div>
                 <div class="search-container">
                     <div class="search-input-wrapper">
@@ -399,47 +399,21 @@ onMounted(async () => {
             <div class="dialog-particle"></div>
 
             <div class="field animated-field p-5">
-                <label for="name">
-                    <i class="pi pi-book mr-2"></i>Subject Name
-                </label>
-                <InputText
-                    id="name"
-                    v-model="subject.name"
-                    required
-                    placeholder="Enter subject name"
-                    :class="{ 'p-invalid': submitted && !subject.name }"
-                />
+                <label for="name"> <i class="pi pi-book mr-2"></i>Subject Name </label>
+                <InputText id="name" v-model="subject.name" required placeholder="Enter subject name" :class="{ 'p-invalid': submitted && !subject.name }" />
                 <small class="p-error" v-if="submitted && !subject.name">Name is required.</small>
             </div>
 
             <div class="field animated-field p-5">
-                <label for="description">
-                    <i class="pi pi-info-circle mr-2"></i>Description
-                </label>
-                <Textarea
-                    id="description"
-                    v-model="subject.description"
-                    rows="3"
-                    placeholder="Enter a short description of the subject"
-                    autoResize
-                />
+                <label for="description"> <i class="pi pi-info-circle mr-2"></i>Description </label>
+                <Textarea id="description" v-model="subject.description" rows="3" placeholder="Enter a short description of the subject" autoResize />
             </div>
         </div>
 
         <template #footer>
             <div class="dialog-footer-buttons p-5">
-                <Button
-                    label="Cancel"
-                    icon="pi pi-times"
-                    class="p-button-text cancel-button"
-                    @click="subjectDialog = false"
-                />
-                <Button
-                    label="Save"
-                    icon="pi pi-check"
-                    class="p-button-raised p-button-primary save-button-custom"
-                    @click="saveSubject"
-                />
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text cancel-button" @click="subjectDialog = false" />
+                <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSubject" />
             </div>
         </template>
     </Dialog>
@@ -480,7 +454,8 @@ onMounted(async () => {
     border-radius: 0 0 24px 0;
 }
 .nav-right {
-    display: flex; align-items: center;
+    display: flex;
+    align-items: center;
 }
 /* Base styles for all geometric shapes */
 .geometric-shape {
@@ -509,7 +484,9 @@ onMounted(async () => {
     bottom: 10%;
     left: -80px;
     transform: rotate(30deg);
-    animation: rotate 25s linear infinite, float 18s ease-in-out infinite;
+    animation:
+        rotate 25s linear infinite,
+        float 18s ease-in-out infinite;
 }
 
 /* Triangle shape */
@@ -522,7 +499,9 @@ onMounted(async () => {
     top: 40%;
     right: -100px;
     opacity: 0.15;
-    animation: float 22s ease-in-out infinite, opacity-pulse 15s ease-in-out infinite;
+    animation:
+        float 22s ease-in-out infinite,
+        opacity-pulse 15s ease-in-out infinite;
 }
 
 /* Rectangle shape */
@@ -544,12 +523,15 @@ onMounted(async () => {
     transform: rotate(45deg);
     top: 15%;
     left: 10%;
-    animation: float 23s ease-in-out infinite reverse, opacity-pulse 18s ease-in-out infinite;
+    animation:
+        float 23s ease-in-out infinite reverse,
+        opacity-pulse 18s ease-in-out infinite;
 }
 
 /* Simple float animation */
 @keyframes float {
-    0%, 100% {
+    0%,
+    100% {
         transform: translate(0, 0) rotate(0deg);
     }
     25% {
@@ -575,7 +557,8 @@ onMounted(async () => {
 
 /* Subtle opacity animation */
 @keyframes opacity-pulse {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 0.05;
     }
     50% {
@@ -641,58 +624,183 @@ onMounted(async () => {
     animation-duration: 10s;
 }
 
-.subject-card:nth-child(3n+1) .symbol {
+.subject-card:nth-child(3n + 1) .symbol {
     animation-duration: 7s;
 }
 
-.subject-card .symbol:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
-.subject-card .symbol:nth-child(2) { top: 30%; left: 80%; animation-delay: 1s; }
-.subject-card .symbol:nth-child(3) { top: 70%; left: 30%; animation-delay: 2s; }
-.subject-card .symbol:nth-child(4) { top: 60%; left: 70%; animation-delay: 3s; }
-.subject-card .symbol:nth-child(5) { top: 20%; left: 50%; animation-delay: 4s; }
+.subject-card .symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.subject-card .symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.subject-card .symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.subject-card .symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.subject-card .symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
+}
 
 /* Math symbol content variations */
-.subject-card:nth-child(7n) .symbol:nth-child(1)::after { content: "π"; font-size: 18px; }
-.subject-card:nth-child(7n) .symbol:nth-child(2)::after { content: "∑"; font-size: 20px; }
-.subject-card:nth-child(7n) .symbol:nth-child(3)::after { content: "∞"; font-size: 24px; }
-.subject-card:nth-child(7n) .symbol:nth-child(4)::after { content: "√"; font-size: 20px; }
-.subject-card:nth-child(7n) .symbol:nth-child(5)::after { content: "θ"; font-size: 18px; }
+.subject-card:nth-child(7n) .symbol:nth-child(1)::after {
+    content: 'π';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(2)::after {
+    content: '∑';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(3)::after {
+    content: '∞';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(4)::after {
+    content: '√';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(5)::after {
+    content: 'θ';
+    font-size: 18px;
+}
 
-.subject-card:nth-child(7n+1) .symbol:nth-child(1)::after { content: "H₂O"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(2)::after { content: "CO₂"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(3)::after { content: "E=mc²"; font-size: 14px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(4)::after { content: "H⁺"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(5)::after { content: "NaCl"; font-size: 16px; }
+.subject-card:nth-child(7n + 1) .symbol:nth-child(1)::after {
+    content: 'H₂O';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(2)::after {
+    content: 'CO₂';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(3)::after {
+    content: 'E=mc²';
+    font-size: 14px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(4)::after {
+    content: 'H⁺';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(5)::after {
+    content: 'NaCl';
+    font-size: 16px;
+}
 
-.subject-card:nth-child(7n+2) .symbol:nth-child(1)::after { content: "A"; font-size: 22px; }
-.subject-card:nth-child(7n+2) .symbol:nth-child(2)::after { content: "B"; font-size: 24px; }
-.subject-card:nth-child(7n+2) .symbol:nth-child(3)::after { content: "C"; font-size: 20px; }
-.subject-card:nth-child(7n+2) .symbol:nth-child(4)::after { content: "X"; font-size: 18px; }
-.subject-card:nth-child(7n+2) .symbol:nth-child(5)::after { content: "Y"; font-size: 22px; }
+.subject-card:nth-child(7n + 2) .symbol:nth-child(1)::after {
+    content: 'A';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 2) .symbol:nth-child(2)::after {
+    content: 'B';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 2) .symbol:nth-child(3)::after {
+    content: 'C';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n + 2) .symbol:nth-child(4)::after {
+    content: 'X';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n + 2) .symbol:nth-child(5)::after {
+    content: 'Y';
+    font-size: 22px;
+}
 
-.subject-card:nth-child(7n+3) .symbol:nth-child(1)::after { content: "1"; font-size: 22px; }
-.subject-card:nth-child(7n+3) .symbol:nth-child(2)::after { content: "2"; font-size: 24px; }
-.subject-card:nth-child(7n+3) .symbol:nth-child(3)::after { content: "3"; font-size: 18px; }
-.subject-card:nth-child(7n+3) .symbol:nth-child(4)::after { content: "7"; font-size: 20px; }
-.subject-card:nth-child(7n+3) .symbol:nth-child(5)::after { content: "9"; font-size: 22px; }
+.subject-card:nth-child(7n + 3) .symbol:nth-child(1)::after {
+    content: '1';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 3) .symbol:nth-child(2)::after {
+    content: '2';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 3) .symbol:nth-child(3)::after {
+    content: '3';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n + 3) .symbol:nth-child(4)::after {
+    content: '7';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n + 3) .symbol:nth-child(5)::after {
+    content: '9';
+    font-size: 22px;
+}
 
-.subject-card:nth-child(7n+4) .symbol:nth-child(1)::after { content: "∫"; font-size: 22px; }
-.subject-card:nth-child(7n+4) .symbol:nth-child(2)::after { content: "∂"; font-size: 20px; }
-.subject-card:nth-child(7n+4) .symbol:nth-child(3)::after { content: "∇"; font-size: 24px; }
-.subject-card:nth-child(7n+4) .symbol:nth-child(4)::after { content: "∆"; font-size: 22px; }
-.subject-card:nth-child(7n+4) .symbol:nth-child(5)::after { content: "Ω"; font-size: 20px; }
+.subject-card:nth-child(7n + 4) .symbol:nth-child(1)::after {
+    content: '∫';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 4) .symbol:nth-child(2)::after {
+    content: '∂';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n + 4) .symbol:nth-child(3)::after {
+    content: '∇';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 4) .symbol:nth-child(4)::after {
+    content: '∆';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 4) .symbol:nth-child(5)::after {
+    content: 'Ω';
+    font-size: 20px;
+}
 
-.subject-card:nth-child(7n+5) .symbol:nth-child(1)::after { content: "α"; font-size: 20px; }
-.subject-card:nth-child(7n+5) .symbol:nth-child(2)::after { content: "β"; font-size: 22px; }
-.subject-card:nth-child(7n+5) .symbol:nth-child(3)::after { content: "γ"; font-size: 24px; }
-.subject-card:nth-child(7n+5) .symbol:nth-child(4)::after { content: "δ"; font-size: 18px; }
-.subject-card:nth-child(7n+5) .symbol:nth-child(5)::after { content: "ω"; font-size: 20px; }
+.subject-card:nth-child(7n + 5) .symbol:nth-child(1)::after {
+    content: 'α';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n + 5) .symbol:nth-child(2)::after {
+    content: 'β';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 5) .symbol:nth-child(3)::after {
+    content: 'γ';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 5) .symbol:nth-child(4)::after {
+    content: 'δ';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n + 5) .symbol:nth-child(5)::after {
+    content: 'ω';
+    font-size: 20px;
+}
 
-.subject-card:nth-child(7n+6) .symbol:nth-child(1)::after { content: "+"; font-size: 24px; }
-.subject-card:nth-child(7n+6) .symbol:nth-child(2)::after { content: "−"; font-size: 24px; }
-.subject-card:nth-child(7n+6) .symbol:nth-child(3)::after { content: "×"; font-size: 22px; }
-.subject-card:nth-child(7n+6) .symbol:nth-child(4)::after { content: "÷"; font-size: 20px; }
-.subject-card:nth-child(7n+6) .symbol:nth-child(5)::after { content: "="; font-size: 24px; }
+.subject-card:nth-child(7n + 6) .symbol:nth-child(1)::after {
+    content: '+';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 6) .symbol:nth-child(2)::after {
+    content: '−';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n + 6) .symbol:nth-child(3)::after {
+    content: '×';
+    font-size: 22px;
+}
+.subject-card:nth-child(7n + 6) .symbol:nth-child(4)::after {
+    content: '÷';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n + 6) .symbol:nth-child(5)::after {
+    content: '=';
+    font-size: 24px;
+}
 
 @keyframes float-symbol {
     0% {
@@ -1156,7 +1264,8 @@ onMounted(async () => {
         top: -50%;
         left: -50%;
     }
-    30%, 100% {
+    30%,
+    100% {
         top: 150%;
         left: 150%;
     }

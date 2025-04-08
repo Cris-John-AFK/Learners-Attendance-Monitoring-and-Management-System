@@ -1233,6 +1233,7 @@ function ensureStudentAttendanceService() {
     transition:
         background-color 0.2s,
         box-shadow 0.2s;
+    background-color: #f8fafc;
 }
 
 .modern-table :deep(.p-datatable-tbody > tr:hover) {

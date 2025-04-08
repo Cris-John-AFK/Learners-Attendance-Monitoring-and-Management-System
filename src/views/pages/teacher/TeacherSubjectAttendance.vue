@@ -305,6 +305,9 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
     // Get the student
     const student = getStudentById(seat.studentId);
 
+    // Add a timestamp for this attendance record (crucial for chronological ordering)
+    const timestamp = new Date().toISOString();
+
     // Save to attendance records
     const recordKey = `${seat.studentId}-${currentDate.value}`;
 
@@ -322,7 +325,7 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
             studentName: student?.name || 'Unknown Student',
             status,
             remarks,
-            timestamp: new Date().toISOString()
+            timestamp
         };
 
         const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === seat.studentId);
@@ -339,12 +342,22 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
         date: currentDate.value,
         status,
         remarks: remarks || '',
-        timestamp: new Date().toISOString()
+        timestamp
     };
 
     // Save to localStorage
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
+
+    // Also update the cache to ensure our most recent changes persist across refreshes
+    const today = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    const cacheData = {
+        timestamp,
+        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    console.log('Updated attendance cache with latest status changes');
 
     // Show success message
     toast.add({
@@ -542,13 +555,45 @@ const fetchAttendanceHistory = async () => {
     try {
         if (!subjectId.value) return;
 
+        // Get current day's records from localStorage first, as these are the most recent
+        const todayRecords = {};
+        const today = currentDate.value;
+        Object.keys(attendanceRecords.value).forEach((key) => {
+            // Check if the record is for today
+            if (key.includes(today)) {
+                todayRecords[key] = attendanceRecords.value[key];
+            }
+        });
+
+        // Now fetch server records - only if we need historical data
         const records = await AttendanceService.getAttendanceRecords(subjectId.value);
         console.log('Fetched attendance records:', records);
 
-        // Group records by student ID and find the most recent status for each student
-        updateSeatPlanStatuses(records);
+        // Merge records, but give priority to localStorage records for today
+        const mergedRecords = [...records];
+
+        // Add today's records from localStorage (they take precedence)
+        Object.values(todayRecords).forEach((record) => {
+            // Check if this record already exists in the server records
+            const existingIndex = mergedRecords.findIndex((r) => r.studentId === record.studentId && r.date === record.date);
+
+            if (existingIndex >= 0) {
+                // Replace the existing record
+                mergedRecords[existingIndex] = record;
+            } else {
+                // Add the record
+                mergedRecords.push(record);
+            }
+        });
+
+        // Update seat plan with merged records, prioritizing the most recent
+        updateSeatPlanStatuses(mergedRecords);
     } catch (error) {
         console.error('Error fetching attendance history:', error);
+
+        // If server fetch fails, still use localStorage records
+        const localRecords = Object.values(attendanceRecords.value);
+        updateSeatPlanStatuses(localRecords);
     }
 };
 
@@ -599,15 +644,50 @@ const formatDate = (dateString) => {
 
 // Mark all students as present
 const markAllPresent = () => {
+    // Add a timestamp for this bulk update
+    const timestamp = new Date().toISOString();
+    const today = currentDate.value;
+
     // Mark all seats in the grid as Present
     for (let i = 0; i < seatPlan.value.length; i++) {
         for (let j = 0; j < seatPlan.value[i].length; j++) {
             if (seatPlan.value[i][j].isOccupied) {
+                const studentId = seatPlan.value[i][j].studentId;
+
+                // Update seat status
                 seatPlan.value[i][j].status = 'Present';
-                saveAttendanceRecord(seatPlan.value[i][j].studentId, 'Present');
+
+                // Save attendance record with timestamp
+                const recordKey = `${studentId}-${today}`;
+                attendanceRecords.value[recordKey] = {
+                    studentId: studentId,
+                    date: today,
+                    status: 'Present',
+                    remarks: '',
+                    timestamp: timestamp
+                };
+
+                // Remove from remarks panel if exists
+                remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== studentId);
+
+                // Also save to service if needed
+                saveAttendanceRecord(studentId, 'Present');
             }
         }
     }
+
+    // Save to localStorage
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+    localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
+
+    // Update the cache
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    const cacheData = {
+        timestamp,
+        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    console.log('Updated attendance cache with all students marked present');
 
     toast.add({
         severity: 'success',
@@ -620,7 +700,7 @@ const markAllPresent = () => {
 // Update resetAllAttendance function
 const resetAllAttendance = () => {
     if (confirm('Are you sure you want to reset all attendance statuses?')) {
-        // Reset all seat statuses
+        // Reset all seat statuses to null
         seatPlan.value.forEach((row) => {
             row.forEach((seat) => {
                 if (seat.isOccupied) {
@@ -629,25 +709,40 @@ const resetAllAttendance = () => {
             });
         });
 
-        // Clear attendance records for current date
+        // Get the current date for filtering records
         const today = currentDate.value;
+
+        // Identify keys to remove (all records for today)
+        const keysToRemove = [];
         Object.keys(attendanceRecords.value).forEach((key) => {
             if (key.includes(today)) {
-                delete attendanceRecords.value[key];
+                keysToRemove.push(key);
             }
         });
 
-        // Clear remarks panel
-        remarksPanel.value = [];
+        // Remove all of today's records
+        keysToRemove.forEach((key) => {
+            delete attendanceRecords.value[key];
+        });
 
-        // Update localStorage
+        // Clear remarks panel for today's students
+        remarksPanel.value = remarksPanel.value.filter((remark) => {
+            // Keep remarks from other days
+            const recordKey = `${remark.studentId}-${today}`;
+            return !keysToRemove.includes(recordKey);
+        });
+
+        // Update localStorage - make sure to save the cleaned data
         localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
         localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
+
+        // Force clear any cached data that might be used on reload
+        localStorage.removeItem(`attendanceCache_${subjectId.value}_${today}`);
 
         toast.add({
             severity: 'success',
             summary: 'Attendance Reset',
-            detail: 'All attendance statuses and remarks have been cleared',
+            detail: 'All attendance statuses for today have been cleared',
             life: 3000
         });
     }
@@ -821,7 +916,7 @@ onMounted(async () => {
         // Set all students as unassigned initially
         unassignedStudents.value = [...students.value];
 
-        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
+        // Load saved attendance records from localStorage
         try {
             const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
             if (savedAttendanceRecords) {
@@ -836,13 +931,31 @@ onMounted(async () => {
             console.warn('Error loading attendance records from localStorage:', err);
         }
 
-        // Fetch attendance history
-        await fetchAttendanceHistory();
-
         // First try to load the saved layout
         const layoutLoaded = loadSavedLayout();
 
-        if (!layoutLoaded) {
+        if (layoutLoaded) {
+            toast.add({
+                severity: 'info',
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
+            });
+
+            // After layout is loaded, prioritize checking for cached attendance data
+            // This ensures the most recent attendance statuses are applied
+            const cachedDataLoaded = loadCachedAttendanceData();
+
+            if (!cachedDataLoaded) {
+                // If no cached data, apply attendance statuses from the records
+                applyAttendanceStatusesToSeatPlan();
+            }
+
+            // Fetch attendance history in the background (but don't apply it directly)
+            fetchAttendanceHistory().then(() => {
+                console.log('Background attendance history fetch completed');
+            });
+        } else {
             // If no saved layout, try to load templates
             await loadSavedTemplates();
 
@@ -863,31 +976,68 @@ onMounted(async () => {
                 if (defaultTemplate) {
                     loadTemplate(defaultTemplate);
 
-                    // Apply attendance statuses after loading template
-                    applyAttendanceStatusesToSeatPlan();
+                    // Check for cached data first, then fall back to stored records
+                    const cachedDataLoaded = loadCachedAttendanceData();
+                    if (!cachedDataLoaded) {
+                        applyAttendanceStatusesToSeatPlan();
+                    }
                 }
             }
-        } else {
-            toast.add({
-                severity: 'info',
-                summary: 'Layout Loaded',
-                detail: 'Previous seat plan layout has been restored',
-                life: 3000
-            });
         }
     } catch (error) {
         console.error('Error initializing data:', error);
     }
 });
 
+// Add this function to check for and load the latest cached status data
+const loadCachedAttendanceData = () => {
+    const today = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+
+    try {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            const { timestamp, seatPlan: cachedSeatPlan } = JSON.parse(cachedData);
+            console.log(`Found cached attendance data from ${new Date(timestamp).toLocaleTimeString()}`);
+
+            // Apply the cached seat plan to the current one
+            if (cachedSeatPlan && Array.isArray(cachedSeatPlan)) {
+                cachedSeatPlan.forEach((row, rowIndex) => {
+                    if (rowIndex < seatPlan.value.length) {
+                        row.forEach((cachedSeat, colIndex) => {
+                            if (colIndex < seatPlan.value[rowIndex].length) {
+                                // Only copy the status - preserve other seat properties
+                                if (seatPlan.value[rowIndex][colIndex].studentId === cachedSeat.studentId) {
+                                    seatPlan.value[rowIndex][colIndex].status = cachedSeat.status;
+                                }
+                            }
+                        });
+                    }
+                });
+                console.log('Applied cached attendance statuses');
+                return true;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading cached attendance data:', error);
+    }
+    return false;
+};
+
 // Show status selection dialog
 const showStatusSelection = (rowIndex, colIndex) => {
-    const seat = seatPlan.value[rowIndex][colIndex];
-    if (!seat.isOccupied || isEditMode.value) return;
-
+    // Store the selected seat for reference in the status selection handler
     selectedSeat.value = { rowIndex, colIndex };
-    selectedStudent.value = getStudentById(seat.studentId);
-    showStatusDialog.value = true;
+
+    // Open the status selection dialog
+    showAttendanceDialog.value = true;
+
+    // Clear any pending status/remarks
+    pendingStatus.value = '';
+    attendanceRemarks.value = '';
+
+    // Log for debugging
+    console.log('Opening status selection dialog for seat:', rowIndex, colIndex, 'Student:', seatPlan.value[rowIndex][colIndex].studentId, 'Current status:', seatPlan.value[rowIndex][colIndex].status);
 };
 
 // Function to handle drag start
@@ -1036,32 +1186,53 @@ const handleSeatClick = (rowIndex, colIndex) => {
 
 // Function to set attendance status
 const setAttendanceStatus = (status) => {
-    if (!selectedSeat.value) return;
-
-    // If status is Absent or Excused, show remarks dialog
+    // Check if this is a status that needs remarks
     if (status === 'Absent' || status === 'Excused') {
+        // Store the pending status and open remarks dialog
         pendingStatus.value = status;
-        showAttendanceDialog.value = false;
         showRemarksDialog.value = true;
         return;
     }
 
+    // For Present/Late statuses, no remarks needed so save immediately
     saveAttendanceWithRemarks(status);
+
+    // Extra step to ensure changes are saved properly
+    const today = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    const cacheData = {
+        timestamp: new Date().toISOString(),
+        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 };
 
-// Add new function to save attendance with remarks
+// Save remarks for the selected status
 const saveRemarks = () => {
-    if (!attendanceRemarks.value.trim()) {
+    if (!pendingStatus.value) return;
+
+    // Don't allow empty remarks for Absent/Excused status
+    if ((!attendanceRemarks.value || attendanceRemarks.value.trim() === '') && (pendingStatus.value === 'Absent' || pendingStatus.value === 'Excused')) {
         toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Please enter remarks',
+            severity: 'warn',
+            summary: 'Remarks Required',
+            detail: 'Please enter remarks for this status',
             life: 3000
         });
         return;
     }
 
+    // Save attendance with the entered remarks
     saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
+
+    // Extra step to ensure changes are saved properly
+    const today = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    const cacheData = {
+        timestamp: new Date().toISOString(),
+        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 };
 
 // Add this function to show the attendance method dialog
@@ -1380,21 +1551,33 @@ const applyAttendanceStatusesToSeatPlan = () => {
     // Get today's date
     const today = currentDate.value;
 
-    // Apply attendance statuses to the seat plan
+    // Group records by student ID to ensure we're using the most recent record for each student
+    const studentLatestRecords = {};
+
+    // Process all records to find the most recent one for each student
+    Object.entries(attendanceRecords.value).forEach(([key, record]) => {
+        // Only process records for the current day
+        if (!key.includes(today)) return;
+
+        const studentId = record.studentId;
+
+        // If we don't have a record for this student yet, or this record is newer
+        if (!studentLatestRecords[studentId] || (record.timestamp && studentLatestRecords[studentId].timestamp && new Date(record.timestamp) > new Date(studentLatestRecords[studentId].timestamp))) {
+            studentLatestRecords[studentId] = record;
+        }
+    });
+
+    // Apply attendance statuses to the seat plan using the most recent records
     seatPlan.value.forEach((row) => {
         row.forEach((seat) => {
             if (seat.isOccupied && seat.studentId) {
-                // Look for a record matching this student on current date
-                // Check both formats: studentId-date and studentId_date
-                const recordKey1 = `${seat.studentId}-${today}`;
-                const recordKey2 = `${seat.studentId}_${today}`;
+                // Get the latest record for this student
+                const latestRecord = studentLatestRecords[seat.studentId];
 
-                const record = attendanceRecords.value[recordKey1] || attendanceRecords.value[recordKey2];
-
-                if (record) {
+                if (latestRecord) {
                     // Apply the status from the record
-                    seat.status = record.status;
-                    console.log(`Applied status ${record.status} to student ${seat.studentId}`);
+                    seat.status = latestRecord.status;
+                    console.log(`Applied status ${latestRecord.status} to student ${seat.studentId} (timestamp: ${latestRecord.timestamp || 'none'})`);
                 }
             }
         });
@@ -1488,7 +1671,7 @@ onMounted(async () => {
         // Set all students as unassigned initially
         unassignedStudents.value = [...students.value];
 
-        // Load saved attendance records (IMPORTANT: This must be done BEFORE loading the layout)
+        // Load saved attendance records from localStorage
         try {
             const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
             if (savedAttendanceRecords) {
@@ -1976,16 +2159,19 @@ watch(showStudentIds, (newValue) => {
 .seat-container {
     flex: 1;
     min-width: 100px;
+    aspect-ratio: 1/1;
 }
 
 .seat {
     height: 100%;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     transition: all 0.2s ease;
+    aspect-ratio: 1/1;
 }
 
 .student-info {
