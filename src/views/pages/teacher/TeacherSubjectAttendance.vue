@@ -1,5 +1,5 @@
 <script setup>
-import { AttendanceService } from '@/router/service/Students';
+import { AttendanceService } from '@/router/service/Estudyante';
 import { SubjectService } from '@/router/service/Subjects';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useToast } from 'primevue/usetoast';

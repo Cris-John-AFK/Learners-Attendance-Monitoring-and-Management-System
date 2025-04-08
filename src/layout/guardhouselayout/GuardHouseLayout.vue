@@ -419,7 +419,7 @@ const filteredRecords = computed(() => {
         <header class="dashboard-header">
             <div class="header-left">
                 <img src="/demo/images/logo.png" alt="School Logo" class="school-logo" />
-                <h1>Attendance Monitoring System</h1>
+                <h1>Learner's Attendance Monitoring and Management System (LAMMS)</h1>
             </div>
             <div class="header-center">
                 <div class="date-time">
