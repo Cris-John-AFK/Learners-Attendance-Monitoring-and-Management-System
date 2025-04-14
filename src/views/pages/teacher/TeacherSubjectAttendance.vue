@@ -506,18 +506,20 @@ const deleteTemplate = (template, event) => {
 // Load saved templates from local storage
 const loadSavedTemplates = async () => {
     try {
-        const storageKey = `seatPlan_${subjectId.value}`;
-        const savedData = localStorage.getItem(storageKey);
+        // Use the correct storage key for templates
+        const savedData = localStorage.getItem('seatPlanTemplates');
 
         if (savedData) {
             const parsed = JSON.parse(savedData);
             if (Array.isArray(parsed)) {
                 savedTemplates.value = parsed;
+                console.log('Loaded saved templates:', savedTemplates.value.length);
             } else {
-                console.warn('Saved data is not an array, initializing empty array');
+                console.warn('Saved template data is not an array, initializing empty array');
                 savedTemplates.value = [];
             }
         } else {
+            console.log('No saved templates found');
             savedTemplates.value = [];
         }
     } catch (error) {
@@ -901,12 +903,21 @@ onMounted(async () => {
 
             // Create sample students for testing
             students.value = [
-                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
-                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
-                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
-                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
+                { id: '101', name: 'Student 1' },
+                { id: '102', name: 'Student 2' },
+                { id: '103', name: 'Student 3' },
+                { id: '104', name: 'Student 4' },
+                { id: '105', name: 'Student 5' },
+                { id: '106', name: 'Student 6' },
+                { id: '107', name: 'Student 7' },
+                { id: '108', name: 'Student 8' },
+                { id: '109', name: 'Student 9' },
+                { id: '110', name: 'Student 10' },
+                { id: '111', name: 'Student 11' },
+                { id: '112', name: 'Student 12' },
+                { id: '113', name: 'Student 13' },
+                { id: '114', name: 'Student 14' },
+                { id: '115', name: 'Student 15' }
             ];
         }
 
@@ -916,7 +927,11 @@ onMounted(async () => {
         // Set all students as unassigned initially
         unassignedStudents.value = [...students.value];
 
-        // Load saved attendance records from localStorage
+        // Always load saved templates first, so they're available for use
+        await loadSavedTemplates();
+        console.log('Templates loaded, count:', savedTemplates.value.length);
+
+        // Load attendance records from localStorage if available
         try {
             const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
             if (savedAttendanceRecords) {
@@ -956,10 +971,7 @@ onMounted(async () => {
                 console.log('Background attendance history fetch completed');
             });
         } else {
-            // If no saved layout, try to load templates
-            await loadSavedTemplates();
-
-            // Use default layout if no templates exist
+            // If no saved layout, use templates
             if (savedTemplates.value.length === 0) {
                 toast.add({
                     severity: 'info',
@@ -976,11 +988,8 @@ onMounted(async () => {
                 if (defaultTemplate) {
                     loadTemplate(defaultTemplate);
 
-                    // Check for cached data first, then fall back to stored records
-                    const cachedDataLoaded = loadCachedAttendanceData();
-                    if (!cachedDataLoaded) {
-                        applyAttendanceStatusesToSeatPlan();
-                    }
+                    // Apply attendance statuses after loading template
+                    applyAttendanceStatusesToSeatPlan();
                 }
             }
         }
@@ -1629,49 +1638,30 @@ const loadSavedLayout = () => {
 // Update onMounted to load attendance records first, before loading the layout
 onMounted(async () => {
     try {
-        // Get subject ID from route params
-        if (route.params.subjectId) {
-            subjectId.value = route.params.subjectId;
+        // Load mock students first
+        students.value = [
+            { id: '101', name: 'Student 1' },
+            { id: '102', name: 'Student 2' },
+            { id: '103', name: 'Student 3' },
+            { id: '104', name: 'Student 4' },
+            { id: '105', name: 'Student 5' },
+            { id: '106', name: 'Student 6' },
+            { id: '107', name: 'Student 7' },
+            { id: '108', name: 'Student 8' },
+            { id: '109', name: 'Student 9' },
+            { id: '110', name: 'Student 10' },
+            { id: '111', name: 'Student 11' },
+            { id: '112', name: 'Student 12' },
+            { id: '113', name: 'Student 13' },
+            { id: '114', name: 'Student 14' },
+            { id: '115', name: 'Student 15' }
+        ];
 
-            // Format subject name from ID
-            subjectName.value = formatSubjectName(subjectId.value);
+        // Always load saved templates first, so they're available for use
+        await loadSavedTemplates();
+        console.log('Templates loaded, count:', savedTemplates.value.length);
 
-            // Try to fetch actual subject data
-            try {
-                const subject = await SubjectService.getSubjectById(subjectId.value);
-                if (subject && subject.name) {
-                    subjectName.value = subject.name;
-                }
-            } catch (err) {
-                console.warn('Could not fetch subject details', err);
-            }
-        }
-
-        // Fetch students
-        const studentsData = await AttendanceService.getData();
-        if (studentsData && studentsData.length > 0) {
-            students.value = studentsData;
-        } else {
-            console.error('No students found in the database!');
-
-            // Create sample students for testing
-            students.value = [
-                { id: 1, name: 'Juan Dela Cruz', gradeLevel: 3, section: 'Magalang' },
-                { id: 2, name: 'Maria Santos', gradeLevel: 3, section: 'Magalang' },
-                { id: 3, name: 'Pedro Penduko', gradeLevel: 3, section: 'Magalang' },
-                { id: 4, name: 'Ana Reyes', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 5, name: 'Jose Rizal', gradeLevel: 3, section: 'Mahinahon' },
-                { id: 6, name: 'Gabriela Silang', gradeLevel: 3, section: 'Mahinahon' }
-            ];
-        }
-
-        // Initialize an empty seat plan for grid layout
-        initializeSeatPlan();
-
-        // Set all students as unassigned initially
-        unassignedStudents.value = [...students.value];
-
-        // Load saved attendance records from localStorage
+        // Load attendance records from localStorage if available
         try {
             const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
             if (savedAttendanceRecords) {
@@ -1693,9 +1683,6 @@ onMounted(async () => {
         const layoutLoaded = loadSavedLayout();
 
         if (!layoutLoaded) {
-            // If no saved layout, try to load templates
-            await loadSavedTemplates();
-
             // Use default layout if no templates exist
             if (savedTemplates.value.length === 0) {
                 toast.add({
@@ -1724,6 +1711,13 @@ onMounted(async () => {
                 detail: 'Previous seat plan layout has been restored',
                 life: 3000
             });
+
+            // Load cached attendance data after loading layout
+            const cachedDataLoaded = loadCachedAttendanceData();
+            if (!cachedDataLoaded) {
+                // If no cached data, apply attendance statuses from records
+                applyAttendanceStatusesToSeatPlan();
+            }
         }
     } catch (error) {
         console.error('Error initializing data:', error);
