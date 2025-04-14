@@ -35,21 +35,28 @@ const gradeTypes = ref([
 const selectedGradeType = ref(null);
 const gradeValue = ref(null);
 
-// Watch for changes in grade type and value to update code and name
-watch([selectedGradeType, gradeValue], ([newType, newValue]) => {
-    if (newType && newValue !== null) {
-        if (newType.value === 'KINDER') {
-            grade.value.code = `K${newValue}`;
-            grade.value.name = `Kinder ${newValue}`;
-        } else if (newType.value === 'GRADE') {
-            grade.value.code = `${newValue}`;
-            grade.value.name = `Grade ${newValue}`;
-        } else if (newType.value === 'ALS') {
-            grade.value.code = `ALS${newValue}`;
-            grade.value.name = `ALS ${newValue}`;
+// Watch for changes in grade type and value to update code, name and level
+watch(
+    [selectedGradeType, gradeValue],
+    ([newType, newValue]) => {
+        if (newType && newValue !== null) {
+            if (newType.value === 'KINDER') {
+                grade.value.code = `K${newValue}`;
+                grade.value.name = `Kinder ${newValue}`;
+                grade.value.level = '0'; // All kinder levels are level 0
+            } else if (newType.value === 'GRADE') {
+                grade.value.code = `${newValue}`;
+                grade.value.name = `Grade ${newValue}`;
+                grade.value.level = newValue.toString(); // Grade level is the same as its number
+            } else if (newType.value === 'ALS') {
+                grade.value.code = `ALS${newValue}`;
+                grade.value.name = `ALS ${newValue}`;
+                grade.value.level = (100 + Number(newValue)).toString(); // ALS levels are 100+
+            }
         }
-    }
-}, { immediate: true });
+    },
+    { immediate: true }
+);
 
 // Computed property for display order
 const calculateDisplayOrder = (gradeType, value) => {
@@ -88,7 +95,10 @@ const openNew = () => {
     grade.value = {
         code: '',
         name: '',
-        is_active: true
+        is_active: true,
+        level: '0', // Set default level
+        display_order: 0, // Set default display order
+        description: '' // Add empty description
     };
     selectedGradeType.value = null;
     gradeValue.value = null;
@@ -97,16 +107,42 @@ const openNew = () => {
 };
 
 const editGrade = (editGrade) => {
+    // Create a copy of the grade to avoid reference issues
     grade.value = { ...editGrade };
+
+    // Ensure all required fields have values
+    if (!grade.value.description) {
+        grade.value.description = '';
+    }
+
+    // Ensure level field is present with correct data type
+    if (!grade.value.level && grade.value.level !== 0) {
+        if (grade.value.code.startsWith('K')) {
+            grade.value.level = '0'; // Kinder level
+        } else if (!isNaN(grade.value.code)) {
+            grade.value.level = grade.value.code; // Regular grade number
+        } else if (grade.value.code.startsWith('ALS')) {
+            const alsLevel = grade.value.code.replace('ALS', '');
+            grade.value.level = (100 + (!isNaN(alsLevel) ? parseInt(alsLevel) : 0)).toString();
+        } else {
+            grade.value.level = '0'; // Default level
+        }
+    }
+
+    // Ensure display_order has a value
+    if ((!grade.value.display_order && grade.value.display_order !== 0) || isNaN(grade.value.display_order)) {
+        grade.value.display_order = parseInt(grade.value.level) || 0;
+    }
+
     // Parse existing grade to set form values
     if (grade.value.code.startsWith('K')) {
-        selectedGradeType.value = gradeTypes.value[0];
+        selectedGradeType.value = gradeTypes.value[0]; // Kinder
         gradeValue.value = grade.value.code.substring(1);
     } else if (grade.value.code.startsWith('ALS')) {
-        selectedGradeType.value = gradeTypes.value[2];
+        selectedGradeType.value = gradeTypes.value[2]; // ALS
         gradeValue.value = grade.value.code.substring(3);
     } else {
-        selectedGradeType.value = gradeTypes.value[1];
+        selectedGradeType.value = gradeTypes.value[1]; // Regular grade
         gradeValue.value = grade.value.code;
     }
     gradeDialog.value = true;
@@ -166,8 +202,7 @@ const saveGrade = async () => {
             await getGrades();
 
             // Check if the grade was created despite the error
-            const newlyCreatedGrade = grades.value.find(g =>
-                g.code === grade.value.code && g.name === grade.value.name);
+            const newlyCreatedGrade = grades.value.find((g) => g.code === grade.value.code && g.name === grade.value.name);
 
             if (newlyCreatedGrade) {
                 toast.add({
@@ -190,7 +225,7 @@ const hideDialog = () => {
 const deleteGrade = async () => {
     try {
         await GradesService.deleteGrade(grade.value.id);
-        grades.value = grades.value.filter(g => g.id !== grade.value.id);
+        grades.value = grades.value.filter((g) => g.id !== grade.value.id);
         deleteGradeDialog.value = false;
         toast.add({ severity: 'success', summary: 'Success', detail: 'Grade Deleted', life: 3000 });
     } catch (error) {
@@ -207,7 +242,7 @@ const deleteGrade = async () => {
 const toggleGradeStatus = async (gradeItem) => {
     try {
         const updatedGrade = await GradesService.toggleGradeStatus(gradeItem.id);
-        const index = grades.value.findIndex(g => g.id === gradeItem.id);
+        const index = grades.value.findIndex((g) => g.id === gradeItem.id);
         if (index !== -1) {
             grades.value[index] = updatedGrade;
         }
@@ -238,7 +273,7 @@ onMounted(() => {
             <div class="top-nav-bar">
                 <div class="nav-left">
                     <h2 class="text-2xl font-semibold">Grade Level Management</h2>
-                    </div>
+                </div>
                 <div class="search-container">
                     <div class="search-input-wrapper">
                         <i class="pi pi-search search-icon"></i>
@@ -251,13 +286,13 @@ onMounted(() => {
                 <div class="nav-right">
                     <Button label="Add New Grade" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
                 </div>
-                </div>
+            </div>
 
             <!-- Loading State -->
             <div v-if="loading" class="loading-container">
                 <ProgressSpinner />
                 <p>Loading grades...</p>
-                </div>
+            </div>
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
@@ -274,10 +309,10 @@ onMounted(() => {
                         <div class="card-actions">
                             <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editGrade(grade)" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDeleteGrade(grade)" />
-                            </div>
                         </div>
-                        </div>
-                            </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Empty State -->
             <div v-if="grades.length === 0 && !loading" class="empty-state">
@@ -290,38 +325,17 @@ onMounted(() => {
             <div class="dialog-form-container p-4">
                 <div class="field mb-4">
                     <label for="gradeType">Grade Type</label>
-                    <Dropdown
-                        id="gradeType"
-                        v-model="selectedGradeType"
-                        :options="gradeTypes"
-                        optionLabel="label"
-                        placeholder="Select Grade Type"
-                        :class="{ 'p-invalid': submitted && !selectedGradeType }"
-                    />
+                    <Dropdown id="gradeType" v-model="selectedGradeType" :options="gradeTypes" optionLabel="label" placeholder="Select Grade Type" :class="{ 'p-invalid': submitted && !selectedGradeType }" />
                     <small class="p-error" v-if="submitted && !selectedGradeType">Grade type is required.</small>
                 </div>
 
                 <div class="field mb-4" v-if="selectedGradeType">
-                    <label :for="selectedGradeType.value === 'ALS' ? 'alsValue' : 'gradeValue'">
-                        {{ selectedGradeType.label }} {{ selectedGradeType.value === 'ALS' ? 'Level' : 'Number' }}
-                    </label>
+                    <label :for="selectedGradeType.value === 'ALS' ? 'alsValue' : 'gradeValue'"> {{ selectedGradeType.label }} {{ selectedGradeType.value === 'ALS' ? 'Level' : 'Number' }} </label>
                     <div v-if="selectedGradeType.value === 'ALS'">
-                        <InputText
-                            id="alsValue"
-                            v-model="gradeValue"
-                            placeholder="Enter ALS level"
-                            :class="{ 'p-invalid': submitted && !gradeValue }"
-                        />
+                        <InputText id="alsValue" v-model="gradeValue" placeholder="Enter ALS level" :class="{ 'p-invalid': submitted && !gradeValue }" />
                     </div>
                     <div v-else>
-                        <InputNumber
-                            id="gradeValue"
-                            v-model="gradeValue"
-                            :min="1"
-                            :max="selectedGradeType.value === 'KINDER' ? 2 : 6"
-                            placeholder="Enter number"
-                            :class="{ 'p-invalid': submitted && !gradeValue }"
-                        />
+                        <InputNumber id="gradeValue" v-model="gradeValue" :min="1" :max="selectedGradeType.value === 'KINDER' ? 2 : 6" placeholder="Enter number" :class="{ 'p-invalid': submitted && !gradeValue }" />
                     </div>
                     <small class="p-error" v-if="submitted && !gradeValue">Value is required.</small>
                     <small class="helper-text" v-if="selectedGradeType.value === 'KINDER'">Enter 1 or 2 for Kinder level</small>
@@ -359,7 +373,10 @@ onMounted(() => {
                 <i class="pi pi-exclamation-triangle mr-3 warning-icon" />
                 <div class="confirmation-message">
                     <h3>Delete Grade?</h3>
-                    <p>Are you sure you want to delete <b>{{ grade.name }}</b>?</p>
+                    <p>
+                        Are you sure you want to delete <b>{{ grade.name }}</b
+                        >?
+                    </p>
                     <p class="text-sm">This action cannot be undone.</p>
                 </div>
             </div>
@@ -426,7 +443,9 @@ onMounted(() => {
     bottom: 10%;
     left: -80px;
     transform: rotate(30deg);
-    animation: rotate 25s linear infinite, float 18s ease-in-out infinite;
+    animation:
+        rotate 25s linear infinite,
+        float 18s ease-in-out infinite;
 }
 
 /* Triangle shape */
@@ -439,7 +458,9 @@ onMounted(() => {
     top: 40%;
     right: -100px;
     opacity: 0.15;
-    animation: float 22s ease-in-out infinite, opacity-pulse 15s ease-in-out infinite;
+    animation:
+        float 22s ease-in-out infinite,
+        opacity-pulse 15s ease-in-out infinite;
 }
 
 /* Rectangle shape */
@@ -461,12 +482,15 @@ onMounted(() => {
     transform: rotate(45deg);
     top: 15%;
     left: 10%;
-    animation: float 23s ease-in-out infinite reverse, opacity-pulse 18s ease-in-out infinite;
+    animation:
+        float 23s ease-in-out infinite reverse,
+        opacity-pulse 18s ease-in-out infinite;
 }
 
 /* Simple float animation */
 @keyframes float {
-    0%, 100% {
+    0%,
+    100% {
         transform: translate(0, 0) rotate(0deg);
     }
     25% {
@@ -492,7 +516,8 @@ onMounted(() => {
 
 /* Subtle opacity animation */
 @keyframes opacity-pulse {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 0.05;
     }
     50% {
@@ -572,7 +597,9 @@ onMounted(() => {
 
 .subject-card:hover {
     transform: translateY(-8px);
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15), 0 0 25px rgba(74, 135, 213, 0.4);
+    box-shadow:
+        0 15px 30px rgba(0, 0, 0, 0.15),
+        0 0 25px rgba(74, 135, 213, 0.4);
     border: 1px solid rgba(74, 135, 213, 0.5);
 }
 
@@ -590,28 +617,78 @@ onMounted(() => {
     animation-duration: 10s;
 }
 
-.subject-card:nth-child(3n+1) .symbol {
+.subject-card:nth-child(3n + 1) .symbol {
     animation-duration: 7s;
 }
 
-.subject-card .symbol:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
-.subject-card .symbol:nth-child(2) { top: 30%; left: 80%; animation-delay: 1s; }
-.subject-card .symbol:nth-child(3) { top: 70%; left: 30%; animation-delay: 2s; }
-.subject-card .symbol:nth-child(4) { top: 60%; left: 70%; animation-delay: 3s; }
-.subject-card .symbol:nth-child(5) { top: 20%; left: 50%; animation-delay: 4s; }
+.subject-card .symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.subject-card .symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.subject-card .symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.subject-card .symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.subject-card .symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
+}
 
 /* Math symbol content variations */
-.subject-card:nth-child(7n) .symbol:nth-child(1)::after { content: "K"; font-size: 18px; }
-.subject-card:nth-child(7n) .symbol:nth-child(2)::after { content: "1"; font-size: 20px; }
-.subject-card:nth-child(7n) .symbol:nth-child(3)::after { content: "2"; font-size: 24px; }
-.subject-card:nth-child(7n) .symbol:nth-child(4)::after { content: "3"; font-size: 20px; }
-.subject-card:nth-child(7n) .symbol:nth-child(5)::after { content: "4"; font-size: 18px; }
+.subject-card:nth-child(7n) .symbol:nth-child(1)::after {
+    content: 'K';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(2)::after {
+    content: '1';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(3)::after {
+    content: '2';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(4)::after {
+    content: '3';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(5)::after {
+    content: '4';
+    font-size: 18px;
+}
 
-.subject-card:nth-child(7n+1) .symbol:nth-child(1)::after { content: "5"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(2)::after { content: "6"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(3)::after { content: "K1"; font-size: 14px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(4)::after { content: "K2"; font-size: 16px; }
-.subject-card:nth-child(7n+1) .symbol:nth-child(5)::after { content: "G1"; font-size: 16px; }
+.subject-card:nth-child(7n + 1) .symbol:nth-child(1)::after {
+    content: '5';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(2)::after {
+    content: '6';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(3)::after {
+    content: 'K1';
+    font-size: 14px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(4)::after {
+    content: 'K2';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(5)::after {
+    content: 'G1';
+    font-size: 16px;
+}
 
 @keyframes float-symbol {
     0% {

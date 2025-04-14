@@ -56,23 +56,111 @@ export const GradesService = {
     // Create a new grade
     async createGrade(grade) {
         try {
-            console.log('Creating new grade:', grade);
-            const response = await api.post('/api/grades', grade);
+            // Make a copy of the grade to avoid modifying the original
+            const gradeData = { ...grade };
+
+            // Check and ensure all required fields are present and properly formatted
+            if (!gradeData.code) {
+                throw new Error('Grade code is required');
+            }
+
+            if (!gradeData.name) {
+                throw new Error('Grade name is required');
+            }
+
+            // Make sure level field is set and is a string
+            if (!gradeData.level && gradeData.level !== 0) {
+                // Set level based on code value (defaults to code value if not a recognizable format)
+                let level = 0;
+                if (gradeData.code.startsWith('K')) {
+                    // Kinder grade levels are level 0
+                    level = 0;
+                } else if (!isNaN(gradeData.code)) {
+                    // Regular grade levels (1-12) are themselves
+                    level = parseInt(gradeData.code);
+                } else if (gradeData.code.startsWith('ALS')) {
+                    // ALS grades are set to level 100+
+                    const alsLevel = gradeData.code.replace('ALS', '');
+                    level = 100 + (!isNaN(alsLevel) ? parseInt(alsLevel) : 0);
+                }
+
+                gradeData.level = level.toString();
+            }
+
+            // Set display_order if not provided
+            if ((!gradeData.display_order && gradeData.display_order !== 0) || isNaN(gradeData.display_order)) {
+                // Convert level to integer for ordering
+                const levelNum = parseInt(gradeData.level) || 0;
+                gradeData.display_order = levelNum;
+            }
+
+            // Ensure is_active is boolean
+            if (gradeData.is_active === undefined) {
+                gradeData.is_active = true;
+            }
+
+            // Ensure proper data types for all fields
+            gradeData.code = String(gradeData.code).trim();
+            gradeData.name = String(gradeData.name).trim();
+            gradeData.level = String(gradeData.level).trim();
+            gradeData.display_order = Number(gradeData.display_order);
+            gradeData.is_active = Boolean(gradeData.is_active);
+
+            // If description is empty, set to null or empty string
+            if (!gradeData.description) {
+                gradeData.description = '';
+            }
+
+            console.log('Creating new grade with validated data:', gradeData);
+
+            // Make the API call with a longer timeout
+            const response = await api.post('/api/grades', gradeData, {
+                timeout: 30000 // 30 seconds timeout
+            });
+
             console.log('Grade created successfully:', response.data);
             return response.data;
         } catch (error) {
             console.error('Error creating grade:', error);
+
+            // Detailed error logging for debugging
             if (error.response) {
                 console.error('Server responded with:', {
                     status: error.response.status,
                     data: error.response.data
                 });
 
-                // If the error is 422 but the grade was created, log this unusual situation
-                if (error.response.status === 422) {
-                    console.warn('Received 422 error but grade might have been created');
+                // Get detailed error message from response if available
+                if (error.response.data) {
+                    if (error.response.data.message) {
+                        console.error('Error message:', error.response.data.message);
+                    }
+                    if (error.response.data.errors) {
+                        console.error('Validation errors:', error.response.data.errors);
+                    }
+                    // Log full response data for more context
+                    console.error('Full response data:', JSON.stringify(error.response.data));
                 }
+
+                // If it's a server error (500), try to get more detailed message
+                if (error.response.status === 500 && error.response.data) {
+                    console.error('Server error details:', error.response.data);
+                    if (error.response.data.exception) {
+                        console.error('Exception:', error.response.data.exception);
+                    }
+                    if (error.response.data.file) {
+                        console.error('Error in file:', error.response.data.file, 'line:', error.response.data.line);
+                    }
+                    if (error.response.data.trace) {
+                        console.error('Error trace (first few items):', error.response.data.trace.slice(0, 3));
+                    }
+                }
+            } else if (error.request) {
+                console.error('No response received from server, request was:', error.request);
+            } else {
+                console.error('Error setting up request:', error.message);
             }
+
             throw error;
         }
     },
@@ -80,8 +168,37 @@ export const GradesService = {
     // Update a grade
     async updateGrade(id, grade) {
         try {
-            console.log('Updating grade:', id, grade);
-            const response = await api.put(`/api/grades/${id}`, grade);
+            // Make a copy of the grade to avoid modifying the original
+            const gradeData = { ...grade };
+
+            // Check and ensure level field is set properly
+            if (!gradeData.level && gradeData.level !== 0) {
+                // Set level based on code value (defaults to code value if not a recognizable format)
+                let level = 0;
+                if (gradeData.code.startsWith('K')) {
+                    // Kinder grade levels are level 0
+                    level = 0;
+                } else if (!isNaN(gradeData.code)) {
+                    // Regular grade levels (1-12) are themselves
+                    level = parseInt(gradeData.code);
+                } else if (gradeData.code.startsWith('ALS')) {
+                    // ALS grades are set to level 100+
+                    const alsLevel = gradeData.code.replace('ALS', '');
+                    level = 100 + (!isNaN(alsLevel) ? parseInt(alsLevel) : 0);
+                }
+
+                gradeData.level = level.toString();
+            }
+
+            // Ensure proper data types for all fields
+            if (gradeData.code) gradeData.code = String(gradeData.code).trim();
+            if (gradeData.name) gradeData.name = String(gradeData.name).trim();
+            if (gradeData.level) gradeData.level = String(gradeData.level).trim();
+            if (gradeData.display_order !== undefined) gradeData.display_order = Number(gradeData.display_order);
+            if (gradeData.is_active !== undefined) gradeData.is_active = Boolean(gradeData.is_active);
+
+            console.log('Updating grade:', id, gradeData);
+            const response = await api.put(`/api/grades/${id}`, gradeData);
             return response.data;
         } catch (error) {
             console.error('Error updating grade:', error);

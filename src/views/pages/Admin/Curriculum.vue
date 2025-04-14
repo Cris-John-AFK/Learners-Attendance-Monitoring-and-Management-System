@@ -40,27 +40,29 @@ const curriculum = ref({
     name: 'Curriculum',
     yearRange: { start: null, end: null },
     description: '',
-    status: 'Active',
-    is_active: true,
+    status: 'Draft', // Changed from 'Not Active' to 'Draft'
+    is_active: false, // Set to false since this is a new curriculum
     grade_levels: []
 });
 const years = ref(['2023', '2024', '2025', '2026', '2027', '2028', '2029', '2030']);
 const availableStartYears = computed(() => {
+    // Generate year options from current year - 5 to current year + 5
     const currentYear = new Date().getFullYear();
     const years = [];
-    for (let year = currentYear - 1; year <= currentYear + 5; year++) {
-        years.push(year.toString());
+    for (let i = currentYear - 5; i <= currentYear + 5; i++) {
+        years.push(i.toString());
     }
     return years;
 });
 
 const availableEndYears = computed(() => {
-    if (!curriculum.value.yearRange.start) return [];
+    // Generate end years based on selected start year
+    if (!curriculum.value.yearRange?.start) return [];
+
     const startYear = parseInt(curriculum.value.yearRange.start);
     const years = [];
-    for (let year = startYear + 1; year <= startYear + 4; year++) {
-        years.push(year.toString());
-    }
+    // Allow end year to be only start year + 1 (typical school year format)
+    years.push((startYear + 1).toString());
     return years;
 });
 
@@ -169,13 +171,21 @@ const normalizeYearRange = (curriculum) => {
         };
     }
 
+    // The actual valid status values for our application
+    const validStatusValues = ['Active', 'Draft', 'Archived'];
+
     // Make sure status is properly set
     if (!curriculumCopy.status && (curriculumCopy.is_active === true || curriculumCopy.is_active === 1)) {
+        // If no status but is active, set to Active
         console.log(`Setting status to Active for curriculum ${curriculumCopy.id} based on is_active=${curriculumCopy.is_active}`);
         curriculumCopy.status = 'Active';
     } else if (!curriculumCopy.status) {
         // Default to Draft if no status is provided and not active
         curriculumCopy.status = 'Draft';
+    } else if (!validStatusValues.includes(curriculumCopy.status)) {
+        // If status is invalid, set to a valid default based on is_active
+        console.warn(`Invalid status value "${curriculumCopy.status}" detected. Valid values are: ${validStatusValues.join(', ')}. Defaulting based on is_active.`);
+        curriculumCopy.status = curriculumCopy.is_active ? 'Active' : 'Draft';
     }
 
     return curriculumCopy;
@@ -200,7 +210,7 @@ const hideWarning = computed(() => {
     return !!selectedGradeToAdd.value;
 });
 
-// Filter active curriculums
+// Filter all curriculums
 const filteredCurriculums = computed(() => {
     let filtered = curriculums.value.filter((c) => c); // Ensure curriculum exists
 
@@ -209,22 +219,23 @@ const filteredCurriculums = computed(() => {
         filtered = filtered.filter((c) => c.yearRange && (c.yearRange.start === searchYear.value || c.yearRange.end === searchYear.value || `${c.yearRange.start}-${c.yearRange.end}` === searchYear.value));
     }
 
-    // Check for active status using either the status field or is_active field
-    filtered = filtered.filter((c) => {
-        // Check if the status field is explicitly set to 'Active'
-        const activeByStatus = c.status === 'Active';
-
-        // Check if the is_active field is true (as a fallback)
-        const activeByFlag = c.is_active === true || c.is_active === 1;
-
-        // Debug status check
-        console.log(`Curriculum ${c.id} (${c.name}): status=${c.status}, is_active=${c.is_active}, active=${activeByStatus || activeByFlag}`);
-
-        // Show curriculum if either condition is met
-        return activeByStatus || activeByFlag;
+    // Log all curricula for debugging
+    filtered.forEach((c) => {
+        console.log(`Curriculum ${c.id} (${c.name}): status=${c.status}, is_active=${c.is_active}, years=${c.yearRange?.start}-${c.yearRange?.end}`);
     });
 
     return filtered;
+});
+
+// Additional computed property for active curriculums only (if needed later)
+const activeCurriculums = computed(() => {
+    return filteredCurriculums.value.filter((c) => {
+        // Check if the status field is explicitly set to 'Active'
+        const activeByStatus = c.status === 'Active';
+        // Check if the is_active field is true (as a fallback)
+        const activeByFlag = c.is_active === true || c.is_active === 1;
+        return activeByStatus || activeByFlag;
+    });
 });
 
 // Add the getRandomGradient function from Admin-Subject.vue to generate gradients
@@ -303,11 +314,40 @@ const clearLocalData = (sectionId = null) => {
     }
 };
 
-// Extend onMounted to load all necessary data
+// Add this function to clear any incorrect notifications
+onMounted(async () => {
+    try {
+        console.log('Mounting Curriculum component');
+        // Clear any existing toasts that might be showing the wrong message
+        if (toast && toast.removeAllGroups) {
+            toast.removeAllGroups();
+        }
+
+        // Load initial data
+        await loadCurriculums();
+    } catch (error) {
+        console.error('Error in component mount:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load curriculum data: ' + (error.message || 'Unknown error'),
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+});
+
+// Consolidate the two onMounted functions
 onMounted(async () => {
     try {
         console.log('Component mounted, loading data...');
         loading.value = true;
+
+        // Clear any existing toasts that might be showing the wrong message
+        if (toast && toast.removeAllGroups) {
+            toast.removeAllGroups();
+        }
 
         // First load curriculums
         await loadCurriculums();
@@ -441,38 +481,16 @@ watch([() => selectedCurriculum.value, () => selectedGrade.value], async ([newCu
 
 // Main data loading functions
 const loadCurriculums = async () => {
+    loading.value = true;
     try {
-        loading.value = true;
-        console.log('Calling CurriculumService.getCurriculums()...');
+        console.log('Loading curriculums...');
         const response = await CurriculumService.getCurriculums();
-        console.log('Raw response from API:', response);
 
-        // Make sure we have an array and normalize each curriculum
         if (Array.isArray(response)) {
             curriculums.value = response.map((curriculum) => normalizeYearRange(curriculum));
-            console.log('Normalized curriculums:', curriculums.value);
-
-            // Log filtered curriculums
-            console.log('Filtered curriculums:', filteredCurriculums.value);
-
-            // If none are displayed but we have data, check why they're filtered out
-            if (curriculums.value.length > 0 && filteredCurriculums.value.length === 0) {
-                console.warn('Curriculums are filtered out. Check status values:');
-                curriculums.value.forEach((curr) => {
-                    console.log(`Curriculum ID ${curr.id}, Name: ${curr.name}, Status: ${curr.status}, Active: ${curr.is_active}`);
-
-                    // Auto-fix status if it's not set properly but is_active is true
-                    if (!curr.status && curr.is_active) {
-                        console.log(`Auto-fixing status for curriculum ID ${curr.id}`);
-                        curr.status = 'Active';
-                    }
-                });
-
-                // Check filtered curriculums again after fixes
-                console.log('Filtered curriculums after fixes:', filteredCurriculums.value);
-            }
+            console.log(`Loaded ${curriculums.value.length} curriculums`);
         } else {
-            console.error('API did not return an array:', response);
+            console.warn('Invalid curriculum data format:', response);
             curriculums.value = [];
         }
     } catch (error) {
@@ -480,9 +498,10 @@ const loadCurriculums = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load curriculums: ' + (error.message || 'Unknown error'),
+            detail: 'Failed to load curricula from database',
             life: 3000
         });
+        curriculums.value = [];
     } finally {
         loading.value = false;
     }
@@ -645,17 +664,32 @@ const loadAllGrades = async () => {
 
 // Curriculum CRUD operations
 const openNew = () => {
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    const nextYear = currentYear + 1;
+
     curriculum.value = {
         id: null,
-        name: 'Curriculum',
-        yearRange: { start: null, end: null },
+        name: `Curriculum ${currentYear}-${nextYear}`, // Default name with valid years
+        yearRange: {
+            start: currentYear.toString(),
+            end: nextYear.toString()
+        },
         description: '',
-        status: 'Active',
-        is_active: true,
+        status: 'Draft',
+        is_active: false,
         grade_levels: []
     };
     submitted.value = false;
     curriculumDialog.value = true;
+
+    // Show info message about naming convention
+    toast.add({
+        severity: 'info',
+        summary: 'Info',
+        detail: 'Curriculum name will be automatically generated based on the selected years',
+        life: 5000
+    });
 };
 
 const editCurriculum = (curr) => {
@@ -666,47 +700,84 @@ const editCurriculum = (curr) => {
 const saveCurriculum = async () => {
     try {
         loading.value = true;
-        submitted.value = true;
+        submitted.value = true; // Set to true to trigger validation
 
-        // Validation
-        if (!curriculum.value.name || !curriculum.value.yearRange?.start || !curriculum.value.yearRange?.end) {
-            toast.add({ severity: 'error', summary: 'Error', detail: 'Please fill in all required fields', life: 3000 });
+        // Basic validation
+        if (!curriculum.value.yearRange?.start || !curriculum.value.yearRange?.end) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Please select both start and end years', life: 3000 });
             loading.value = false;
             return;
         }
 
-        // Prepare data for saving
-        const saveData = {
-            ...curriculum.value,
-            start_year: curriculum.value.yearRange?.start,
-            end_year: curriculum.value.yearRange?.end
-        };
+        // Ensure year range values are strings
+        curriculum.value.yearRange.start = String(curriculum.value.yearRange.start);
+        curriculum.value.yearRange.end = String(curriculum.value.yearRange.end);
 
+        // Automatically generate the name based on year range
+        curriculum.value.name = `Curriculum ${curriculum.value.yearRange.start}-${curriculum.value.yearRange.end}`;
+
+        console.log(`Saving curriculum ${curriculum.value.id ? 'update' : 'new'}: ${curriculum.value.name}`);
+        console.log('Year range:', curriculum.value.yearRange);
+
+        // Save to backend
         let result;
         if (curriculum.value.id) {
-            // Update existing curriculum
-            result = await CurriculumService.updateCurriculum(curriculum.value.id, saveData);
+            // Update existing
+            const curriculumUpdate = { ...curriculum.value };
+            delete curriculumUpdate.status; // Don't send status on update
+            result = await CurriculumService.updateCurriculum(curriculumUpdate);
         } else {
-            // Create new curriculum
-            result = await CurriculumService.createCurriculum(saveData);
+            // Create new
+            result = await CurriculumService.createCurriculum(curriculum.value);
         }
 
+        // On success
         curriculumDialog.value = false;
-        await loadCurriculums();
-
         toast.add({
             severity: 'success',
             summary: 'Success',
             detail: curriculum.value.id ? 'Curriculum Updated' : 'Curriculum Created',
             life: 3000
         });
+
+        // Refresh data
+        await loadCurriculums();
     } catch (error) {
         console.error('Error saving curriculum:', error);
+
+        // User-friendly error message
+        let message = 'An error occurred while saving the curriculum.';
+
+        if (error.response) {
+            // Check for duplicate year range error specifically
+            if (error.response.status === 422) {
+                if (error.response.data?.message?.includes('year range already exists')) {
+                    const yearRange = curriculum.value.yearRange;
+                    message = `A curriculum for years ${yearRange.start}-${yearRange.end} already exists. Year ranges must be unique.`;
+                } else if (error.response.data?.errors) {
+                    // Format validation errors
+                    const errorDetails = Object.entries(error.response.data.errors)
+                        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                        .join('; ');
+                    message = `Validation error: ${errorDetails}`;
+                } else {
+                    message = error.response.data?.message || 'Validation failed. Please check your input.';
+                }
+            } else if (error.response.status === 500) {
+                message = 'Database error occurred. Please try again later.';
+            } else {
+                message = error.response.data?.message || error.message || 'Unknown error';
+            }
+        } else if (error.message) {
+            // Handle direct error messages (like those thrown from the service)
+            message = error.message;
+        }
+
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to save curriculum: ' + (error.message || 'Unknown error'),
-            life: 3000
+            detail: message,
+            life: 5000
         });
     } finally {
         loading.value = false;
@@ -771,25 +842,105 @@ const restoreCurriculum = async (curr) => {
     }
 };
 
-const activateCurriculum = async (curr) => {
+// Toggle the active status directly from the card
+const toggleActiveCurriculum = async (curr) => {
     try {
-        await CurriculumService.activateCurriculum(curr.id);
-        await loadCurriculums();
+        // Store the previous state
+        const wasActive = curr.is_active;
 
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Curriculum activated successfully',
-            life: 3000
-        });
+        // If we're trying to activate the curriculum
+        if (!wasActive) {
+            // Immediately update UI for better responsiveness
+            loading.value = true;
+
+            // Call the API to activate
+            await CurriculumService.activateCurriculum(curr.id);
+
+            // Update local state to show active status without full reload
+            curriculums.value.forEach((c) => {
+                // Deactivate all other curriculums
+                if (c.id !== curr.id) {
+                    c.is_active = false;
+                    c.status = 'Draft';
+                }
+            });
+
+            // Set this curriculum as active
+            curr.is_active = true;
+            curr.status = 'Active';
+
+            // Only show success message after API succeeds
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Curriculum activated successfully',
+                life: 3000
+            });
+
+            // Delay the reload to allow animation to complete
+            setTimeout(async () => {
+                await loadCurriculums();
+                loading.value = false;
+            }, 2500); // Wait for 2.5 seconds for the animation to play
+
+            return; // Exit early to prevent the finally block from running too soon
+        }
+        // Else if we're deactivating
+        else {
+            // Check if this is the only active curriculum
+            const isOnlyActiveCurriculum = !curriculums.value.some((c) => c.id !== curr.id && (c.is_active === true || c.status === 'Active'));
+
+            if (!isOnlyActiveCurriculum) {
+                // If there's another active curriculum, allow deactivation
+                await CurriculumService.updateCurriculum({
+                    ...curr,
+                    is_active: false,
+                    status: 'Draft'
+                });
+
+                // Update local state without full reload
+                curr.is_active = false;
+                curr.status = 'Draft';
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: 'Curriculum deactivated successfully',
+                    life: 3000
+                });
+
+                // Delay the reload for consistency
+                setTimeout(async () => {
+                    await loadCurriculums();
+                    loading.value = false;
+                }, 500);
+
+                return; // Exit early
+            } else {
+                // Cannot have no active curriculum
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Warning',
+                    detail: 'There must be an active curriculum. Please activate another curriculum first.',
+                    life: 5000
+                });
+                loading.value = false;
+            }
+        }
     } catch (error) {
-        console.error('Error activating curriculum:', error);
+        console.error('Error toggling curriculum status:', error);
+
+        // Show error message
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to activate curriculum: ' + (error.message || 'Unknown error'),
+            detail: 'Failed to update curriculum status: ' + (error.message || 'Unknown error'),
             life: 3000
         });
+
+        // Reload to reset UI state
+        await loadCurriculums();
+        loading.value = false;
     }
 };
 
@@ -1164,7 +1315,7 @@ const openAddSectionDialog = async () => {
             grade_id: selectedGrade.value.id,
             curriculum_id: selectedCurriculum.value.id,
             capacity: 25,
-            is_active: true,
+            is_active: true, // Always set to true by default without showing toggle
             teacher_id: null
         };
 
@@ -1241,7 +1392,7 @@ const saveSection = async () => {
             curriculum_id: selectedCurriculum.value.id,
             grade_id: selectedGrade.value.id,
             capacity: section.value.capacity || 25,
-            is_active: section.value.is_active !== undefined ? section.value.is_active : true,
+            is_active: true, // Always set to true
             description: section.value.description || '',
             teacher_id: section.value.teacher_id || null
         };
@@ -1420,7 +1571,6 @@ const openSubjectList = async (section) => {
             const cacheKey = `section_subjects_${section.id}`;
             localStorage.removeItem(cacheKey);
             localStorage.removeItem(`${cacheKey}_timestamp`);
-            console.log('Cleared cache for section:', section.id);
         } catch (e) {
             console.warn('Could not clear cache:', e);
         }
@@ -1952,9 +2102,7 @@ const assignHomeRoomTeacher = async () => {
         loading.value = true;
 
         // Extract teacher ID - handle both object and direct ID cases
-        const teacherId = typeof selectedTeacher.value === 'object' ?
-            (selectedTeacher.value.id || null) :
-            parseInt(selectedTeacher.value, 10);
+        const teacherId = typeof selectedTeacher.value === 'object' ? selectedTeacher.value.id || null : parseInt(selectedTeacher.value, 10);
 
         if (!teacherId || isNaN(teacherId)) {
             throw new Error('Invalid teacher ID');
@@ -2580,7 +2728,7 @@ const openHomeRoomTeacherDialog = async (section) => {
         selectedSection.value = section;
 
         // Find and set selected curriculum and grade from their IDs
-        selectedCurriculum.value = curriculums.value.find(c => c.id === curriculumId);
+        selectedCurriculum.value = curriculums.value.find((c) => c.id === curriculumId);
 
         if (!selectedCurriculum.value) {
             console.error('Selected curriculum not found for ID:', curriculumId);
@@ -2598,7 +2746,7 @@ const openHomeRoomTeacherDialog = async (section) => {
             await loadGrades(selectedCurriculum.value.id);
         }
 
-        selectedGrade.value = grades.value.find(g => g.id === gradeId);
+        selectedGrade.value = grades.value.find((g) => g.id === gradeId);
 
         if (!selectedGrade.value) {
             console.error('Selected grade not found for ID:', gradeId);
@@ -2684,28 +2832,30 @@ watch(
 const openAssignTeacherDialog = () => {
     if (!teachers.value || teachers.value.length === 0) {
         console.log('No teachers found, loading teachers...');
-        loadTeachers().then(() => {
-            if (teachers.value.length === 0) {
+        loadTeachers()
+            .then(() => {
+                if (teachers.value.length === 0) {
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'No Teachers',
+                        detail: 'No teachers found in the database. Please add teachers first.',
+                        life: 5000
+                    });
+                } else {
+                    // Continue opening the dialog if teachers were found
+                    selectedTeacher.value = null;
+                    homeRoomTeacherAssignmentDialog.value = true;
+                }
+            })
+            .catch((error) => {
+                console.error('Failed to load teachers:', error);
                 toast.add({
-                    severity: 'warn',
-                    summary: 'No Teachers',
-                    detail: 'No teachers found in the database. Please add teachers first.',
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to load teachers: ' + error.message,
                     life: 5000
                 });
-            } else {
-                // Continue opening the dialog if teachers were found
-                selectedTeacher.value = null;
-                homeRoomTeacherAssignmentDialog.value = true;
-            }
-        }).catch(error => {
-            console.error('Failed to load teachers:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to load teachers: ' + error.message,
-                life: 5000
             });
-        });
     } else {
         // Teachers already loaded, open dialog
         selectedTeacher.value = null;
@@ -2714,6 +2864,27 @@ const openAssignTeacherDialog = () => {
 };
 
 const route = useRoute();
+
+// Add a watch to update the curriculum name when year range changes
+watch(
+    () => [curriculum.value.yearRange.start, curriculum.value.yearRange.end],
+    ([newStart, newEnd]) => {
+        if (newStart && newEnd) {
+            curriculum.value.name = `Curriculum ${newStart}-${newEnd}`;
+        }
+    }
+);
+
+// Add a watch for yearRange to update the name automatically
+watch(
+    () => curriculum.value.yearRange,
+    (newYearRange) => {
+        if (newYearRange && newYearRange.start && newYearRange.end) {
+            curriculum.value.name = `Curriculum ${newYearRange.start}-${newYearRange.end}`;
+        }
+    },
+    { deep: true }
+);
 </script>
 <template>
     <div class="curriculum-wrapper">
@@ -2752,7 +2923,7 @@ const route = useRoute();
             <!-- Content Grid -->
             <div v-if="!loading" class="cards-grid">
                 <!-- Active Curriculums -->
-                <div v-for="curr in filteredCurriculums" :key="curr.id" class="curriculum-card" :class="{ 'is-active': curr.is_active }">
+                <div v-for="curr in filteredCurriculums" :key="curr.id" class="curriculum-card" :class="{ 'is-active': curr.is_active, 'active-animation': curr.is_active }" @click="openGradeLevelManagement(curr)">
                     <div class="card-header">
                         <h3 class="curriculum-name">{{ curr.name }}</h3>
                         <div class="status-badge" :class="{ active: curr.status === 'Active', archived: curr.status === 'Archived' }">
@@ -2761,15 +2932,20 @@ const route = useRoute();
                     </div>
                     <div class="year-range">
                         <i class="pi pi-calendar"></i>
-                        <span>{{ curr.yearRange?.start }} - {{ curr.yearRange?.end }}</span>
+                        <span class="year-badge">{{ curr.yearRange?.start }} - {{ curr.yearRange?.end }}</span>
                     </div>
                     <p v-if="curr.description" class="description">{{ curr.description }}</p>
-                    <div class="card-actions">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editCurriculum(curr)" />
-                        <Button v-if="curr.status === 'Active'" icon="pi pi-list" class="p-button-rounded p-button-text" @click="openGradeLevelManagement(curr)" tooltip="Manage Grade Levels" />
-                        <Button v-if="curr.status === 'Archived'" icon="pi pi-refresh" class="p-button-rounded p-button-text" @click="restoreCurriculum(curr)" tooltip="Restore" />
-                        <Button v-if="curr.status === 'Active' && !curr.is_active" icon="pi pi-check" class="p-button-rounded p-button-text p-button-success" @click="activateCurriculum(curr)" tooltip="Activate" />
-                        <Button v-if="curr.status === 'Active'" icon="pi pi-inbox" class="p-button-rounded p-button-text p-button-secondary" @click="openArchiveConfirmation(curr)" tooltip="Archive" />
+
+                    <!-- Active Status Toggle on the Card -->
+                    <div class="active-status-toggle" @click.stop>
+                        <div class="flex align-items-center justify-content-between">
+                            <div class="toggle-label">
+                                <span class="font-medium">{{ curr.is_active ? 'Active Curriculum' : 'Make Active' }}</span>
+                                <small v-if="curr.is_active" class="active-hint">This is the currently active curriculum</small>
+                                <small v-else class="inactive-hint">Click to make this the active curriculum</small>
+                            </div>
+                            <InputSwitch :modelValue="curr.is_active" @click="!curr.is_active && toggleActiveCurriculum(curr)" />
+                        </div>
                     </div>
                 </div>
 
@@ -2804,41 +2980,29 @@ const route = useRoute();
                         <span class="p-inputgroup-addon">
                             <i class="pi pi-book"></i>
                         </span>
-                        <InputText id="name" v-model="curriculum.name" disabled class="p-inputtext-lg" />
+                        <InputText id="name" v-model="curriculum.name" readonly class="p-inputtext-lg" />
                     </div>
-                    <small class="text-gray-500 mt-1">Curriculum name is automatically set</small>
+                    <small class="text-gray-500 mt-1">Curriculum name is automatically generated from the selected years</small>
                 </div>
 
-                <!-- Year Range field -->
+                <!-- Year Range fields -->
                 <div class="field mb-4">
-                    <label class="font-medium mb-2 block">Academic Year Range</label>
-                    <div class="grid">
-                        <div class="col-6">
-                            <label for="startYear" class="block text-sm mb-1">Start Year</label>
-                            <Select
-                                id="startYear"
-                                v-model="curriculum.yearRange.start"
-                                :options="availableStartYears"
-                                placeholder="Select Start Year"
-                                class="w-full"
-                                :class="{ 'p-invalid': submitted && !curriculum.yearRange?.start }"
-                                @change="handleStartYearChange"
-                            />
-                        </div>
-                        <div class="col-6">
-                            <label for="endYear" class="block text-sm mb-1">End Year</label>
-                            <Select
-                                id="endYear"
-                                v-model="curriculum.yearRange.end"
-                                :options="availableEndYears"
-                                placeholder="Select End Year"
-                                class="w-full"
-                                :class="{ 'p-invalid': submitted && !curriculum.yearRange?.end }"
-                                :disabled="!curriculum.yearRange.start"
-                            />
+                    <label for="yearRange" class="font-medium mb-2 block">School Year</label>
+                    <div class="p-inputgroup">
+                        <span class="p-inputgroup-addon">
+                            <i class="pi pi-calendar"></i>
+                        </span>
+                        <div class="flex align-items-center gap-2 w-full">
+                            <Select v-model="curriculum.yearRange.start" :options="availableStartYears" placeholder="Start Year" :class="{ 'p-invalid': submitted && !curriculum.yearRange.start }" class="flex-1" />
+                            <span>-</span>
+                            <Select v-model="curriculum.yearRange.end" :options="availableEndYears" placeholder="End Year" :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }" class="flex-1" :disabled="!curriculum.yearRange.start" />
                         </div>
                     </div>
-                    <small class="p-error block mt-1" v-if="submitted && (!curriculum.yearRange?.start || !curriculum.yearRange?.end)"> Please select both start and end years </small>
+                    <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)"> Please select both start and end years. </small>
+                    <small class="helper-text mt-2">
+                        <i class="pi pi-info-circle mr-1"></i>
+                        Year ranges must be unique. No two curricula can have the same start and end years.
+                    </small>
                 </div>
 
                 <!-- Description field -->
@@ -2852,13 +3016,12 @@ const route = useRoute();
                     </div>
                 </div>
 
-                <!-- Active Status -->
-                <div class="field-checkbox">
-                    <div class="flex align-items-center gap-2 mb-1">
-                        <ToggleSwitch v-model="curriculum.is_active" />
-                        <label for="is_active" class="font-medium">Active Status</label>
+                <!-- Note about active status -->
+                <div class="info-box p-3 bg-blue-50 border-left-3 border-blue-500 border-round mb-3">
+                    <div class="flex align-items-center gap-2">
+                        <i class="pi pi-info-circle text-blue-500"></i>
+                        <span class="text-sm">You can toggle the active status directly from the curriculum card on the main page.</span>
                     </div>
-                    <small class="text-gray-500">Toggle to set curriculum status as active or inactive</small>
                 </div>
             </div>
 
@@ -3153,9 +3316,7 @@ const route = useRoute();
                 <label for="teacher">Select Homeroom Teacher</label>
                 <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
                     <option value="">Select a teacher</option>
-                    <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">
-                        {{ teacher.first_name }} {{ teacher.last_name }}
-                    </option>
+                    <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">{{ teacher.first_name }} {{ teacher.last_name }}</option>
                 </select>
                 <small class="p-error" v-if="teacherSubmitted && !selectedTeacher">Please select a teacher.</small>
             </div>
@@ -3187,11 +3348,6 @@ const route = useRoute();
                     <label for="description">Description (Optional)</label>
                     <InputText id="description" v-model="section.description" />
                 </div>
-
-                <div class="field-checkbox">
-                    <InputSwitch v-model="section.is_active" />
-                    <label for="is_active" class="ml-2">Active</label>
-                </div>
             </div>
 
             <template #footer>
@@ -3212,9 +3368,7 @@ const route = useRoute();
                     <label for="teacher">Select Teacher</label>
                     <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
                         <option value="">Select a teacher</option>
-                        <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">
-                            {{ teacher.first_name }} {{ teacher.last_name }}
-                        </option>
+                        <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">{{ teacher.first_name }} {{ teacher.last_name }}</option>
                     </select>
                     <small class="p-error" v-if="teacherSubmitted && !selectedTeacher">Please select a teacher.</small>
                 </div>
@@ -3228,13 +3382,15 @@ const route = useRoute();
     </div>
 </template>
 <style scoped>
+:root {
+    --primary-color-rgb: 86, 141, 229; /* RGB value of #568de5 primary color */
+}
+
 .curriculum-wrapper {
     position: relative;
-    overflow: hidden;
     min-height: 100vh;
-    background-color: #e0f2ff;
-    border-radius: 0 0 24px 0;
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    background-color: #f8f9fa;
 }
 
 .curriculum-container {
@@ -3498,12 +3654,19 @@ const route = useRoute();
 
 /* Year filter badges */
 .year-badge {
-    display: inline-flex;
-    align-items: center;
-    background: #e1f5fe;
-    border-radius: 20px;
+    background-color: rgba(var(--primary-color-rgb), 0.15);
+    color: var(--primary-color);
     padding: 0.25rem 0.75rem;
-    gap: 0.5rem;
+    border-radius: 20px;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+.year-range {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    color: var(--text-color-secondary);
 }
 
 .clear-year {
@@ -3882,5 +4045,340 @@ body > .p-dialog-mask {
     font-size: 1.2rem;
     margin-right: 0.5rem;
     color: #1976d2;
+}
+
+.curriculum-card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer; /* Make it clear the card is clickable */
+}
+
+.curriculum-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.curriculum-card.is-active {
+    border-left: 4px solid var(--primary-color);
+}
+
+.curriculum-card:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 50px 50px 0;
+    border-color: transparent #f0f0f0 transparent transparent;
+    transition: border-color 0.3s ease;
+}
+
+.curriculum-card.is-active:before {
+    border-color: transparent var(--primary-color) transparent transparent;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.curriculum-name {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-color);
+}
+
+.year-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-color-secondary);
+    margin-bottom: 1rem;
+}
+
+.description {
+    color: var(--text-color-secondary);
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+/* Status badge styles */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    background-color: #eee;
+}
+
+.status-badge.active {
+    background-color: var(--green-100);
+    color: var(--green-700);
+}
+
+.status-badge.archived {
+    background-color: var(--gray-100);
+    color: var(--gray-700);
+}
+
+/* Active status toggle */
+.active-status-toggle {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border-left: 3px solid var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.active-status-toggle:hover {
+    background-color: #f1f5f9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.toggle-label {
+    display: flex;
+    flex-direction: column;
+}
+
+.active-hint {
+    color: var(--green-600);
+    margin-top: 0.25rem;
+}
+
+.inactive-hint {
+    color: var(--text-color-secondary);
+    margin-top: 0.25rem;
+}
+
+/* Animation for active curriculum */
+.curriculum-card.is-active {
+    border-left: 4px solid var(--primary-color);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes activatePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb), 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 15px rgba(var(--primary-color-rgb), 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb), 0);
+    }
+}
+
+.active-animation {
+    animation: activatePulse 2s ease-out 1;
+}
+
+/* Empty state styles */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.empty-icon {
+    font-size: 3rem;
+    color: var(--text-color-secondary);
+    margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+    margin: 0 0 0.5rem;
+    color: var(--text-color);
+}
+
+.empty-state p {
+    margin: 0 0 1.5rem;
+    color: var(--text-color-secondary);
+}
+
+/* Loading styles */
+.loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+}
+
+/* Archive styles */
+.archive-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.archive-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    border-radius: 6px;
+}
+
+.archive-item-details h4 {
+    margin: 0 0 0.25rem;
+}
+
+.archive-item-details p {
+    margin: 0;
+    color: var(--text-color-secondary);
+}
+
+.empty-archive {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-color-secondary);
+}
+
+/* Grade management styles */
+.grade-management-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.curriculum-info {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.curriculum-info h3 {
+    margin: 0;
+    color: var(--text-color);
+}
+
+.grade-list-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.grade-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.grade-header h4 {
+    margin: 0;
+}
+
+.grade-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.grade-card {
+    background-color: white;
+    border-radius: 6px;
+    padding: 1rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.grade-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.empty-grades {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-color-secondary);
+}
+
+/* Customizations for dialog contents */
+.p-dialog .p-dialog-header {
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.p-dialog .p-dialog-footer {
+    border-top: 1px solid var(--surface-border);
+    padding: 1rem 1.5rem;
+}
+
+.curriculum-form .field:last-child {
+    margin-bottom: 0;
+}
+
+/* Grid layout for cards */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+/* Filter / actions bar */
+.filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.filter-section,
+.action-section {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.confirm-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.confirm-content i {
+    color: var(--orange-500);
+}
+
+.confirm-content p {
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    .cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-bar {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .action-section {
+        width: 100%;
+    }
 }
 </style>

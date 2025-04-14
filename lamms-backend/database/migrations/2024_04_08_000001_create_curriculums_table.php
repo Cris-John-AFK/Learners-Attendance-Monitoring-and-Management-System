@@ -6,27 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
+    public function up()
     {
         Schema::create('curricula', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->integer('start_year');
+            $table->integer('end_year');
+            $table->boolean('is_active')->default(false);
+            $table->enum('status', ['Draft', 'Active', 'Archived'])->default('Draft');
             $table->text('description')->nullable();
-            $table->year('start_year');
-            $table->year('end_year');
-            $table->boolean('is_active')->default(true);
             $table->timestamps();
-            $table->softDeletes();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('curricula');
     }

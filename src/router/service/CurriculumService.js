@@ -70,27 +70,8 @@ export const CurriculumService = {
     async getCurriculums() {
         const now = Date.now(); // Define now at the start of the function
 
-        // First try to get from memory cache
-        if (curriculumCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
-            console.log('Using memory cached curriculum data');
-            return curriculumCache;
-        }
-
-        // Then try localStorage
-        try {
-            const cachedData = localStorage.getItem('curriculumData');
-            const cacheTime = parseInt(localStorage.getItem('curriculumCacheTimestamp'));
-
-            if (cachedData && cacheTime && now - cacheTime < CACHE_TTL) {
-                console.log('Using localStorage cached data');
-                const data = JSON.parse(cachedData);
-                curriculumCache = data;
-                cacheTimestamp = cacheTime;
-                return data;
-            }
-        } catch (storageError) {
-            console.warn('Could not retrieve curriculum data from localStorage:', storageError);
-        }
+        // Force refresh data by clearing the cache first
+        this.clearCache();
 
         // If no cache, fetch from API
         try {
@@ -98,11 +79,14 @@ export const CurriculumService = {
             const response = await api.get('/api/curriculums', {
                 timeout: 30000, // Increase timeout to 30 seconds
                 headers: {
-                    'Cache-Control': 'max-age=300', // Allow browser caching for 5 minutes
-                    Pragma: 'cache'
+                    'Cache-Control': 'no-cache, no-store, must-revalidate', // Prevent caching
+                    Pragma: 'no-cache',
+                    Expires: '0'
                 },
                 params: {
-                    fields: 'id,name,status,is_active,start_year,end_year' // Only fetch needed fields
+                    fields: 'id,name,status,is_active,start_year,end_year', // Only fetch needed fields
+                    include_all: true, // Signal to backend that we want all curricula
+                    timestamp: Date.now() // Cache busting
                 }
             });
 
@@ -114,20 +98,55 @@ export const CurriculumService = {
             // Ensure we have an array and normalize it immediately
             const data = Array.isArray(response.data) ? response.data : [response.data];
 
+            console.log('Fetched curricula:', data);
+
+            // Process data to ensure all records have required fields
+            const processedData = data.map((curriculum) => {
+                // Create a standardized curriculum object
+                return {
+                    id: curriculum.id,
+                    name: curriculum.name || 'Unnamed Curriculum',
+                    status: curriculum.status || 'Draft',
+                    is_active: curriculum.is_active !== undefined ? curriculum.is_active : false,
+                    yearRange: {
+                        start: curriculum.start_year || curriculum.yearRange?.start || '',
+                        end: curriculum.end_year || curriculum.yearRange?.end || ''
+                    },
+                    description: curriculum.description || ''
+                };
+            });
+
             // Update both memory and localStorage cache
-            curriculumCache = data;
+            curriculumCache = processedData;
             cacheTimestamp = now;
 
             try {
-                localStorage.setItem('curriculumData', JSON.stringify(data));
+                localStorage.setItem('curriculumData', JSON.stringify(processedData));
                 localStorage.setItem('curriculumCacheTimestamp', now.toString());
             } catch (storageError) {
                 console.warn('Could not store curriculum data in localStorage:', storageError);
             }
 
-            return data;
+            return processedData;
         } catch (error) {
             console.error('Error fetching curriculums:', error);
+
+            // Log more detailed error information
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                console.error('Response data:', error.response.data);
+                console.error('Response status:', error.response.status);
+                console.error('Response headers:', error.response.headers);
+            } else if (error.request) {
+                // The request was made but no response was received
+                console.error('Request made but no response received:', error.request);
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                console.error('Error setting up request:', error.message);
+            }
+
+            // Return default/fallback data if available, otherwise empty array
             return [];
         }
     },
@@ -159,8 +178,47 @@ export const CurriculumService = {
     // Create a new curriculum
     async createCurriculum(curriculum) {
         try {
-            console.log('Creating new curriculum:', curriculum);
-            const response = await api.post('/api/curriculums', curriculum);
+            console.log('Creating new curriculum');
+
+            // Ensure we have proper year format
+            if (!curriculum.yearRange?.start || !curriculum.yearRange?.end) {
+                throw new Error('Year range is required with both start and end years');
+            }
+
+            // Map our application status values to what the API expects
+            const statusMapping = {
+                Active: 'Active',
+                'Not Active': 'Draft', // Changed from 'Planned' to 'Draft' to match database expectation
+                Archive: 'Archived'
+            };
+
+            // Create data that works with the API
+            const apiData = {
+                name: curriculum.name || `Curriculum ${curriculum.yearRange.start}-${curriculum.yearRange.end}`,
+                yearRange: {
+                    start: String(curriculum.yearRange.start).padStart(4, '0'),
+                    end: String(curriculum.yearRange.end).padStart(4, '0')
+                }
+            };
+
+            // Add description if it exists
+            if (curriculum.description !== undefined) {
+                apiData.description = curriculum.description;
+            }
+
+            // Map our application status to API status
+            if (curriculum.status) {
+                apiData.status = statusMapping[curriculum.status] || 'Draft';
+            } else {
+                apiData.status = 'Draft'; // Default to Draft (Not Active) for new curricula
+            }
+
+            // Add is_active based on status
+            apiData.is_active = curriculum.status === 'Active';
+
+            console.log('Data being sent to server:', JSON.stringify(apiData, null, 2));
+
+            const response = await api.post('/api/curriculums', apiData);
 
             // Normalize the response data
             const newCurriculum = response.data;
@@ -174,29 +232,174 @@ export const CurriculumService = {
                 newCurriculum.yearRange = { start: '', end: '' };
             }
 
+            // Map the API status back to our application status if needed
+            if (newCurriculum.status) {
+                // Reverse mapping
+                const reverseStatusMapping = {
+                    Active: 'Active',
+                    Draft: 'Not Active',
+                    Archived: 'Archive'
+                };
+
+                newCurriculum.status = reverseStatusMapping[newCurriculum.status] || 'Not Active';
+            }
+
             // Clear cache
             this.clearCache();
 
             return newCurriculum;
         } catch (error) {
             console.error('Error creating curriculum:', error);
+
+            // Check for validation errors and provide more specific messages
+            if (error.response && error.response.status === 422) {
+                console.error('Validation error details:', error.response.data);
+
+                // If it's a duplicate year range error, provide a specific message
+                if (error.response.data.message && error.response.data.message.includes('year range already exists')) {
+                    throw new Error(`A curriculum with this year range already exists. Year ranges must be unique.`);
+                }
+
+                // Extract validation errors
+                if (error.response.data.errors) {
+                    const errorMessages = Object.entries(error.response.data.errors)
+                        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                        .join('; ');
+                    throw new Error(`Validation error: ${errorMessages}`);
+                }
+            }
+
             throw error;
         }
     },
 
-    // Update a curriculum
-    async updateCurriculum(id, curriculum) {
+    // Update an existing curriculum
+    async updateCurriculum(curriculum) {
         try {
-            console.log('Updating curriculum:', id, curriculum);
-            const response = await api.put(`/api/curriculums/${id}`, curriculum);
+            console.log('Updating curriculum:', curriculum);
+
+            // Check if curriculum has a valid ID
+            if (!curriculum || !curriculum.id) {
+                console.error('Cannot update curriculum: Missing curriculum ID');
+                throw new Error('Missing curriculum ID');
+            }
+
+            // Map our application status values to what the API expects
+            const statusMapping = {
+                Active: 'Active',
+                'Not Active': 'Draft', // Changed from 'Planned' to 'Draft' to match database expectation
+                Archive: 'Archived'
+            };
+
+            // Create data that works with the API
+            const apiData = {
+                name: curriculum.name,
+                yearRange: {
+                    start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
+                    end: String(curriculum.yearRange?.end || '').padStart(4, '0')
+                }
+            };
+
+            // Add description if it exists
+            if (curriculum.description !== undefined) {
+                apiData.description = curriculum.description;
+            }
+
+            // Map our application status to API status - make sure we're sending a valid value
+            // Either don't send it at all (let server use default) or make sure it's valid
+            if (curriculum.status && statusMapping[curriculum.status]) {
+                apiData.status = statusMapping[curriculum.status];
+                console.log(`Mapped status ${curriculum.status} to ${apiData.status}`);
+            } else if (curriculum.status) {
+                console.warn(`Unknown status value: ${curriculum.status}, not sending status to API`);
+            }
+
+            // Add is_active based on status
+            apiData.is_active = curriculum.status === 'Active';
+
+            console.log('Data being sent to server:', JSON.stringify(apiData, null, 2));
+            console.log('Curriculum ID for update:', curriculum.id);
+
+            // Make the API call
+            const response = await api.put(`/api/curriculums/${curriculum.id}`, apiData);
+
+            // Normalize the response data
+            const updatedCurriculum = response.data;
+            if (!updatedCurriculum.yearRange && (updatedCurriculum.start_year || updatedCurriculum.end_year)) {
+                updatedCurriculum.yearRange = {
+                    start: updatedCurriculum.start_year,
+                    end: updatedCurriculum.end_year
+                };
+            }
+            if (!updatedCurriculum.yearRange) {
+                updatedCurriculum.yearRange = { start: '', end: '' };
+            }
+
+            // Map the API status back to our application status if needed
+            if (updatedCurriculum.status) {
+                // Reverse mapping
+                const reverseStatusMapping = {
+                    Active: 'Active',
+                    Draft: 'Not Active',
+                    Archived: 'Archive'
+                };
+
+                updatedCurriculum.status = reverseStatusMapping[updatedCurriculum.status] || 'Not Active';
+            }
 
             // Clear cache
             this.clearCache();
 
-            return response.data;
+            return updatedCurriculum;
         } catch (error) {
             console.error('Error updating curriculum:', error);
-            throw error;
+
+            // Log more detailed error info for validation errors
+            if (error.response && error.response.status === 422) {
+                console.error('Validation error details:', error.response.data);
+
+                // If the error is related to status, try again without status
+                if (error.response.data?.errors?.status && curriculum && curriculum.id) {
+                    try {
+                        console.log('Status validation error - retrying without status field');
+                        const minimalData = {
+                            name: curriculum.name,
+                            yearRange: {
+                                start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
+                                end: String(curriculum.yearRange?.end || '').padStart(4, '0')
+                            }
+                        };
+
+                        if (curriculum.description !== undefined) {
+                            minimalData.description = curriculum.description;
+                        }
+
+                        const retryResponse = await api.put(`/api/curriculums/${curriculum.id}`, minimalData);
+                        this.clearCache();
+                        return retryResponse.data;
+                    } catch (retryError) {
+                        console.error('Status-free retry also failed:', retryError);
+                        throw error; // Throw the original error
+                    }
+                }
+            }
+
+            // For serious errors, try a simpler update with just the name
+            if (error.response && error.response.status === 500 && curriculum && curriculum.id) {
+                try {
+                    console.log('Server error, trying minimal update with just name');
+                    const minimalResponse = await api.put(`/api/curriculums/${curriculum.id}`, {
+                        name: curriculum.name
+                    });
+                    this.clearCache();
+                    return minimalResponse.data;
+                } catch (minimalError) {
+                    console.error('Even minimal update failed:', minimalError);
+                    throw error; // Throw the original error
+                }
+            } else {
+                throw error;
+            }
         }
     },
 
@@ -238,7 +441,22 @@ export const CurriculumService = {
             console.log('Activating curriculum:', id);
             const response = await api.put(`/api/curriculums/${id}/activate`);
 
-            // Clear cache
+            // Log the response for debugging
+            console.log('Activation response:', response.data);
+
+            // Update local state to reflect that this is now the active curriculum
+            // and all others are inactive
+            if (this.getCurriculums && typeof this.getCurriculums === 'function') {
+                const curriculums = await this.getCurriculums();
+                if (Array.isArray(curriculums)) {
+                    curriculums.forEach((c) => {
+                        c.is_active = c.id === id;
+                        c.status = c.id === id ? 'Active' : 'Draft';
+                    });
+                }
+            }
+
+            // Clear cache to ensure fresh data is loaded
             this.clearCache();
 
             return response.data;
@@ -273,6 +491,33 @@ export const CurriculumService = {
             return grades;
         } catch (error) {
             console.error('Error fetching grades for curriculum:', error);
+
+            // More detailed error logging
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                console.error('Server responded with error:', {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    data: error.response.data
+                });
+
+                // Display specific error message for 404 (curriculum not found)
+                if (error.response.status === 404) {
+                    console.error('Curriculum not found');
+                }
+                // Display specific error message for 500 (server error)
+                else if (error.response.status === 500) {
+                    console.error('Server error occurred. Please check server logs for details.');
+                }
+            } else if (error.request) {
+                // The request was made but no response was received
+                console.error('No response received from server:', error.request);
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                console.error('Error setting up request:', error.message);
+            }
+
             return []; // Return empty array on error, no fallbacks
         }
     },

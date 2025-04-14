@@ -15,7 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('code')->unique();
             $table->string('name');
-            $table->string('description')->nullable();
+            $table->string('level');
+            $table->text('description')->nullable();
             $table->integer('display_order')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();

@@ -17,14 +17,15 @@ class Curriculum extends Model
      */
     protected $table = 'curricula';
 
-    // Disable timestamps
-    public $timestamps = false;
+    // Enable timestamps to match database schema
+    public $timestamps = true;
 
     protected $fillable = [
         'name',
         'start_year',
         'end_year',
         'description',
+        'status',
         'is_active'
     ];
 
@@ -57,8 +58,7 @@ class Curriculum extends Model
     // Relationships
     public function grades()
     {
-        return $this->belongsToMany(Grade::class, 'curriculum_grade')
-                    ->withPivot('display_order');
+        return $this->belongsToMany(Grade::class, 'curriculum_grade');
     }
 
     public function sections()

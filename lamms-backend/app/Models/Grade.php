@@ -13,6 +13,7 @@ class Grade extends Model
     protected $fillable = [
         'code',
         'name',
+        'level',
         'description',
         'display_order',
         'is_active'

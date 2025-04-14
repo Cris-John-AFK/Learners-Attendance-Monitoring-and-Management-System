@@ -30,6 +30,7 @@ class GradeController extends Controller
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:10|unique:grades',
             'name' => 'required|string|max:100',
+            'level' => 'required|string|max:10',
             'description' => 'nullable|string',
             'display_order' => 'nullable|integer',
             'is_active' => 'nullable|boolean'
@@ -69,6 +70,7 @@ class GradeController extends Controller
         $validator = Validator::make($request->all(), [
             'code' => 'sometimes|required|string|max:10|unique:grades,code,' . $id,
             'name' => 'sometimes|required|string|max:100',
+            'level' => 'sometimes|required|string|max:10',
             'description' => 'nullable|string',
             'display_order' => 'nullable|integer',
             'is_active' => 'nullable|boolean'

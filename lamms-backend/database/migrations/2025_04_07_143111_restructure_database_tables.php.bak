@@ -1,0 +1,160 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        // Use a direct SQL statement to drop tables in the right order with CASCADE
+        DB::statement('DROP TABLE IF EXISTS curriculum_grade_subject CASCADE');
+        DB::statement('DROP TABLE IF EXISTS teacher_section_subject CASCADE');
+        DB::statement('DROP TABLE IF EXISTS grade_subject CASCADE');
+        DB::statement('DROP TABLE IF EXISTS subject_schedules CASCADE');
+        DB::statement('DROP TABLE IF EXISTS section_subject CASCADE');
+        DB::statement('DROP TABLE IF EXISTS curriculum_grade CASCADE');
+
+        // Modify curricula table
+        if (Schema::hasTable('curricula')) {
+            Schema::table('curricula', function (Blueprint $table) {
+                if (Schema::hasColumn('curricula', 'description')) {
+                    $table->dropColumn('description');
+                }
+                if (Schema::hasColumn('curricula', 'created_by')) {
+                    $table->dropColumn('created_by');
+                }
+                if (Schema::hasColumn('curricula', 'is_active')) {
+                    $table->boolean('is_active')->default(false)->change();
+                }
+            });
+        }
+
+        // Modify sections table
+        if (Schema::hasTable('sections')) {
+            // First check if we need to drop the foreign key
+            $constraintExists = DB::select("
+                SELECT * FROM information_schema.table_constraints
+                WHERE constraint_name = 'sections_curriculum_grade_id_foreign'
+                AND table_name = 'sections'
+            ");
+
+            if ($constraintExists) {
+                DB::statement('ALTER TABLE sections DROP CONSTRAINT sections_curriculum_grade_id_foreign');
+            }
+
+            Schema::table('sections', function (Blueprint $table) {
+                if (Schema::hasColumn('sections', 'curriculum_grade_id')) {
+                    $table->dropColumn('curriculum_grade_id');
+                }
+
+                if (!Schema::hasColumn('sections', 'curriculum_id')) {
+                    $table->foreignId('curriculum_id')->nullable()->constrained('curricula')->onDelete('cascade');
+                }
+
+                if (!Schema::hasColumn('sections', 'grade_id')) {
+                    $table->foreignId('grade_id')->nullable()->constrained()->onDelete('cascade');
+                }
+
+                if (!Schema::hasColumn('sections', 'teacher_id')) {
+                    $table->foreignId('teacher_id')->nullable()->constrained()->onDelete('set null');
+                }
+
+                if (!Schema::hasColumn('sections', 'room_number')) {
+                    $table->string('room_number')->nullable();
+                }
+
+                if (!Schema::hasColumn('sections', 'max_students')) {
+                    $table->integer('max_students')->default(40);
+                }
+
+                if (!Schema::hasColumn('sections', 'is_active')) {
+                    $table->boolean('is_active')->default(true);
+                }
+            });
+        }
+
+        // Create curriculum_subject_section table
+        if (!Schema::hasTable('curriculum_subject_section')) {
+            Schema::create('curriculum_subject_section', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('curriculum_id')->constrained('curricula')->onDelete('cascade');
+                $table->foreignId('subject_id')->constrained()->onDelete('cascade');
+                $table->foreignId('section_id')->constrained()->onDelete('cascade');
+                $table->foreignId('teacher_id')->nullable()->constrained()->onDelete('set null');
+                $table->time('schedule_start')->nullable();
+                $table->time('schedule_end')->nullable();
+                $table->string('day_of_week')->nullable();
+                $table->string('room_number')->nullable();
+                $table->timestamps();
+
+                $table->unique(['curriculum_id', 'subject_id', 'section_id', 'day_of_week', 'schedule_start'], 'unique_schedule');
+            });
+        }
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('curriculum_subject_section');
+
+        Schema::table('sections', function (Blueprint $table) {
+            $table->dropForeign(['curriculum_id']);
+            $table->dropForeign(['grade_id']);
+            $table->dropForeign(['teacher_id']);
+            $table->dropColumn(['curriculum_id', 'grade_id', 'teacher_id', 'room_number', 'max_students', 'is_active']);
+            $table->foreignId('curriculum_grade_id')->constrained()->onDelete('cascade');
+        });
+
+        Schema::table('curriculums', function (Blueprint $table) {
+            $table->string('description')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->boolean('is_active')->default(false);
+        });
+
+        // Recreate dropped tables
+        Schema::create('teacher_section_subject', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('teacher_id')->constrained()->onDelete('cascade');
+            $table->foreignId('section_id')->constrained()->onDelete('cascade');
+            $table->foreignId('subject_id')->constrained()->onDelete('cascade');
+            $table->boolean('is_primary')->default(false);
+            $table->string('role')->nullable();
+        });
+
+        Schema::create('curriculum_grade', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('curriculum_id')->constrained()->onDelete('cascade');
+            $table->foreignId('grade_id')->constrained()->onDelete('cascade');
+        });
+
+        Schema::create('grade_subject', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('grade_id')->constrained()->onDelete('cascade');
+            $table->foreignId('subject_id')->constrained()->onDelete('cascade');
+        });
+
+        Schema::create('subject_schedules', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('section_id')->constrained()->onDelete('cascade');
+            $table->foreignId('subject_id')->constrained()->onDelete('cascade');
+            $table->time('start_time');
+            $table->time('end_time');
+            $table->string('day_of_week');
+            $table->timestamps();
+        });
+
+        Schema::create('section_subject', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('section_id')->constrained()->onDelete('cascade');
+            $table->foreignId('subject_id')->constrained()->onDelete('cascade');
+        });
+    }
+};
