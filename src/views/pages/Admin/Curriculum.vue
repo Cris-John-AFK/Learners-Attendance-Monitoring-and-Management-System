@@ -17,6 +17,7 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import Dropdown from 'primevue/dropdown';
 
 const toast = useToast();
 const confirmDialog = useConfirm();
@@ -1860,6 +1861,22 @@ const saveSchedule = async () => {
             return;
         }
 
+        // Check if a schedule for this day already exists for this subject
+        if (selectedSubjectForSchedule.value.schedules && selectedSubjectForSchedule.value.schedules.length > 0) {
+            const dayExists = selectedSubjectForSchedule.value.schedules.some((existingSchedule) => existingSchedule.day === schedule.value.day);
+
+            if (dayExists) {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Duplicate Day',
+                    detail: `A schedule for ${schedule.value.day} already exists for this subject. Each day can only be scheduled once.`,
+                    life: 5000
+                });
+                loading.value = false;
+                return;
+            }
+        }
+
         try {
             // Format the schedule data using the stored section_id
             const scheduleData = {
@@ -2181,7 +2198,7 @@ const assignHomeRoomTeacher = async () => {
 // Add the openScheduleDialog function after closeSubjectListDialog
 const openScheduleDialog = async (subject) => {
     try {
-        // Store the subject reference (without hiding the subject dialog)
+        // Store the subject reference
         selectedSubjectForSchedule.value = subject;
 
         console.log('Opening schedule dialog for subject:', subject.name);
@@ -2233,6 +2250,18 @@ const openScheduleDialog = async (subject) => {
         });
     }
 };
+
+// Add a watch for the schedule dialog to restore subject list dialog when closed
+watch(showScheduleDialog, (newValue) => {
+    // When schedule dialog is closed and subject list was previously open
+    if (!newValue && wasSubjectListOpen.value) {
+        // Re-open the subject list dialog
+        setTimeout(() => {
+            showSubjectListDialog.value = true;
+            wasSubjectListOpen.value = false;
+        }, 50); // Small delay to ensure proper closing of schedule dialog first
+    }
+});
 
 // Add the openTeacherDialog function before openScheduleDialog
 const openTeacherDialog = async (subject) => {
@@ -2885,6 +2914,9 @@ watch(
     },
     { deep: true }
 );
+
+// At the top of the script with other refs, add:
+const wasSubjectListOpen = ref(false);
 </script>
 <template>
     <div class="curriculum-wrapper">
@@ -3176,120 +3208,138 @@ watch(
             </template>
         </Dialog>
 
-        <!-- Schedule Dialog - completely custom implementation -->
-        <div v-if="showScheduleDialog" class="custom-schedule-overlay">
-            <div class="custom-schedule-dialog">
-                <div class="custom-dialog-header">
-                    <span>Set Schedule for {{ selectedSubjectForSchedule?.name || 'Subject' }}</span>
-                    <button class="custom-close-button" @click="showScheduleDialog = false">&times;</button>
+        <!-- Schedule Dialog -->
+        <Teleport to="body">
+            <Dialog v-model:visible="showScheduleDialog" :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`" modal class="p-fluid schedule-dialog" :style="{ width: '450px', zIndex: 99999 }" :closable="true" appendTo="body">
+                <div class="p-field mb-3">
+                    <label for="day" class="font-medium mb-2 block">Day</label>
+                    <Dropdown id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
                 </div>
-                <div class="custom-dialog-content">
-                    <div class="field">
-                        <label for="day">Day</label>
-                        <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" />
-                    </div>
 
-                    <div class="field">
-                        <label for="startTime">Start Time</label>
+                <div class="p-field mb-3">
+                    <label for="startTime" class="font-medium mb-2 block">Start Time</label>
+                    <div class="p-inputgroup">
+                        <span class="p-inputgroup-addon">
+                            <i class="pi pi-clock"></i>
+                        </span>
                         <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
                     </div>
+                </div>
 
-                    <div class="field">
-                        <label for="endTime">End Time</label>
+                <div class="p-field mb-3">
+                    <label for="endTime" class="font-medium mb-2 block">End Time</label>
+                    <div class="p-inputgroup">
+                        <span class="p-inputgroup-addon">
+                            <i class="pi pi-clock"></i>
+                        </span>
                         <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
                     </div>
-
-                    <div v-if="currentGradeHasSubjectTeachers" class="field">
-                        <label for="teacher">Teacher</label>
-                        <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" />
-                    </div>
-
-                    <div class="helper-message mt-3 p-2 bg-blue-50 border-round">
-                        <i class="pi pi-info-circle text-blue-500 mr-2"></i>
-                        <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
-                    </div>
                 </div>
-                <div class="custom-dialog-footer">
-                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
-                    <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
+
+                <div v-if="currentGradeHasSubjectTeachers" class="p-field mb-3">
+                    <label for="teacher" class="font-medium mb-2 block">Teacher</label>
+                    <Dropdown id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" class="w-full" />
                 </div>
-            </div>
-        </div>
+
+                <div class="flex align-items-center p-3 border-round bg-blue-50 mb-3">
+                    <i class="pi pi-info-circle text-blue-500 mr-2"></i>
+                    <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
+                </div>
+
+                <template #footer>
+                    <div class="flex justify-content-end gap-2">
+                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
+                        <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
+                    </div>
+                </template>
+            </Dialog>
+        </Teleport>
 
         <!-- Subject List Dialog -->
-        <Dialog v-model:visible="showSubjectListDialog" :header="'Subjects for Section ' + (selectedSection?.name || '')" modal class="p-fluid" :style="{ width: '800px' }" :closable="true" @hide="closeSubjectListDialog">
-            <div class="flex justify-content-between align-items-center mb-3">
-                <h3 class="m-0">Subjects</h3>
-                <div class="flex gap-2">
-                    <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
-                    <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
-                </div>
-            </div>
-
-            <div v-if="loading" class="flex justify-content-center">
-                <ProgressSpinner />
-            </div>
-
-            <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
-                <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
-                <p>No subjects assigned to this section.</p>
-                <p>Click "Add Subject" to add subjects to this section.</p>
-            </div>
-
-            <div v-else class="subject-grid">
-                <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
-                    <div class="flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
-                            <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                            <div v-if="currentGradeHasSubjectTeachers">
-                                <div v-if="subject.teacher" class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
-                                </div>
-                                <div v-else class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="no-teacher-text">No teacher assigned</span>
-                                </div>
-                            </div>
-                            <div v-else class="teacher-display mt-2 text-muted">
-                                <i class="pi pi-info-circle mr-2"></i>
-                                <span class="text-sm text-gray-500">No teacher required for this grade level</span>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
-                            <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
-                        </div>
-                    </div>
-
-                    <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
-                        <h5 class="mt-0 mb-2">Schedule</h5>
-                        <ul class="schedule-list">
-                            <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
-                                <div class="flex align-items-center gap-2">
-                                    <span class="schedule-day-badge">{{ schedule.day }}</span>
-                                    <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                </div>
-                                <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
-                                    <i class="pi pi-user mr-1"></i>
-                                    <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                    <div v-else class="no-schedules text-center mt-3">
-                        <i class="pi pi-calendar-times text-3xl"></i>
-                        <p class="m-0">No schedules set</p>
+        <Teleport to="body">
+            <Dialog
+                v-model:visible="showSubjectListDialog"
+                :header="'Subjects for Section ' + (selectedSection?.name || '')"
+                modal
+                class="p-fluid subject-list-dialog"
+                :style="{ width: '800px', zIndex: 9000 }"
+                :closable="true"
+                @hide="closeSubjectListDialog"
+                appendTo="body"
+            >
+                <div class="flex justify-content-between align-items-center mb-3">
+                    <h3 class="m-0">Subjects</h3>
+                    <div class="flex gap-2">
+                        <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
+                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
                     </div>
                 </div>
-            </div>
 
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
-            </template>
-        </Dialog>
+                <div v-if="loading" class="flex justify-content-center">
+                    <ProgressSpinner />
+                </div>
+
+                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
+                    <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
+                    <p>No subjects assigned to this section.</p>
+                    <p>Click "Add Subject" to add subjects to this section.</p>
+                </div>
+
+                <div v-else class="subject-grid">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                        <div class="flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+                                <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
+                                <div v-if="currentGradeHasSubjectTeachers">
+                                    <div v-if="subject.teacher" class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="teacher-name">{{ subject.teacher.name }}</span>
+                                    </div>
+                                    <div v-else class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="no-teacher-text">No teacher assigned</span>
+                                    </div>
+                                </div>
+                                <div v-else class="teacher-display mt-2 text-muted">
+                                    <i class="pi pi-info-circle mr-2"></i>
+                                    <span class="text-sm text-gray-500">No teacher required for this grade level</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
+                                <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
+                                <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
+                            </div>
+                        </div>
+
+                        <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
+                            <h5 class="mt-0 mb-2">Schedule</h5>
+                            <ul class="schedule-list">
+                                <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
+                                    <div class="flex align-items-center gap-2">
+                                        <span class="schedule-day-badge">{{ schedule.day }}</span>
+                                        <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                    </div>
+                                    <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
+                                        <i class="pi pi-user mr-1"></i>
+                                        <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        <div v-else class="no-schedules text-center mt-3">
+                            <i class="pi pi-calendar-times text-3xl"></i>
+                            <p class="m-0">No schedules set</p>
+                        </div>
+                    </div>
+                </div>
+
+                <template #footer>
+                    <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
+                </template>
+            </Dialog>
+        </Teleport>
 
         <!-- Add Subject Dialog (positioned last in the DOM to ensure it's on top) -->
         <Teleport to="body">
@@ -3945,7 +3995,49 @@ body > .p-dialog-mask {
 
 /* Special styling for the schedule dialog */
 .schedule-dialog {
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+    max-width: 450px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+}
+
+.schedule-dialog .p-dialog-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1.25rem 1.5rem;
+}
+
+.schedule-dialog .p-dialog-title {
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+
+.schedule-dialog .p-dialog-content {
+    padding: 1.5rem 1.5rem 1rem 1.5rem;
+}
+
+.schedule-dialog .p-dialog-footer {
+    padding: 1rem 1.5rem 1.5rem 1.5rem;
+    border-top: 1px solid #f0f0f0;
+}
+
+.schedule-dialog .p-inputtext:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px rgba(var(--primary-color-rgb), 0.2);
+}
+
+/* Special styling for dropdown in schedule dialog */
+.schedule-dialog .p-dropdown {
+    border-radius: 6px;
+}
+
+.schedule-dialog .p-dropdown:hover {
+    border-color: var(--primary-color);
+}
+
+.schedule-dialog .p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+    background-color: rgba(var(--primary-color-rgb), 0.1);
+    color: var(--primary-color);
 }
 
 /* Custom Schedule Dialog styles */
@@ -4380,5 +4472,93 @@ body > .p-dialog-mask {
     .action-section {
         width: 100%;
     }
+}
+
+/* Special styling for the schedule dialog */
+.schedule-dialog {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Time slot and schedule display styles */
+.schedule-section {
+    margin-top: 1rem;
+    border-top: 1px solid #f0f0f0;
+    padding-top: 1rem;
+}
+
+.schedule-section h5 {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.schedule-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.schedule-item {
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+
+.schedule-day-badge {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+}
+
+.schedule-time-badge {
+    font-size: 0.85rem;
+}
+
+.teacher-info {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.no-schedules {
+    color: #999;
+    font-size: 0.9rem;
+}
+
+.no-schedules i {
+    margin-bottom: 0.5rem;
+    color: #ccc;
+}
+
+.schedule-dialog {
+    z-index: 99999 !important;
+}
+
+.subject-list-dialog {
+    z-index: 9000 !important;
+}
+
+/* Add these high-specificity rules to ensure the schedule dialog appears on top */
+:deep(.schedule-dialog) {
+    z-index: 9999999 !important;
+    position: relative !important;
+}
+
+:deep(.p-dialog-mask[data-pc-section='mask']) {
+    z-index: auto !important;
+}
+
+:deep(.schedule-dialog .p-dialog-mask) {
+    z-index: 9999998 !important;
+}
+
+:deep(.subject-list-dialog) {
+    z-index: 9000 !important;
+}
+
+/* Force the highest stacking context */
+:deep(.schedule-dialog) {
+    transform: translateZ(0);
 }
 </style>
