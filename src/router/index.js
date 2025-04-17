@@ -81,10 +81,22 @@ const router = createRouter({
                     component: () => import('@/views/pages/Admin/Admin-Teacher.vue')
                 },
                 {
+                    path: '/admin-enrollment',
+                    name: 'admin-enrollment',
+                    component: () => import('@/views/pages/Admin/Admin-Enrollment.vue')
+                },
+
+                {
                     path: '/admin-student',
                     name: 'admin-student',
                     component: () => import('@/views/pages/Admin/Admin-Student.vue')
                 },
+                {
+                    path: '/admin-admission',
+                    name: 'admin-admission',
+                    component: () => import('@/views/pages/Admin/Admin-Admission.vue')
+                },
+
                 {
                     path: '/admin-section',
                     name: 'admin-section',
