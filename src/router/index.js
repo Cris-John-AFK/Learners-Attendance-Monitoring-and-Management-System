@@ -5,6 +5,7 @@ import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
+import StudentQRCodes from '@/views/pages/teacher/StudentQRCodes.vue';
 import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
@@ -63,6 +64,11 @@ const router = createRouter({
                     path: '/subject/:subject',
                     name: 'subject-attendance',
                     component: TeacherSubjectAttendance
+                },
+                {
+                    path: '/pages/student-qrcodes',
+                    name: 'student-qrcodes',
+                    component: StudentQRCodes
                 }
             ]
         },

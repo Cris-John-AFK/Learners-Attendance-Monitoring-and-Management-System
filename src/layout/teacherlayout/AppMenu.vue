@@ -49,6 +49,16 @@ const model = ref([
     },
     {
         separator: true
+    },
+    {
+        label: 'Tools',
+        items: [
+            {
+                label: 'Student QR Codes',
+                icon: 'pi pi-fw pi-qrcode',
+                to: '/pages/student-qrcodes'
+            }
+        ]
     }
 ]);
 </script>

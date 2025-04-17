@@ -1,9 +1,10 @@
 <script setup>
 import { AttendanceService } from '@/router/service/Estudyante';
+import { QRCodeService } from '@/router/service/QRCodeService';
 import { SubjectService } from '@/router/service/Subjects';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 import { useToast } from 'primevue/usetoast';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { QrcodeStream } from 'vue-qrcode-reader';
 import { useRoute } from 'vue-router';
 
 // Add OverlayPanel and Menu components
@@ -58,12 +59,11 @@ const showStatusDialog = ref(false);
 const showAttendanceMethodModal = ref(false);
 const showQRScanner = ref(false);
 const showRollCall = ref(false);
-const isCameraLoading = ref(false);
-const videoElement = ref(null);
+const scanning = ref(false);
+const cameraError = ref(null);
 const currentStudentIndex = ref(0);
 const currentStudent = ref(null);
 const scannedStudents = ref([]);
-let codeReader = null;
 
 // Rename to avoid conflict
 const showAttendanceDialog = ref(false);
@@ -246,9 +246,20 @@ const getStudentInitials = (student) => {
 };
 
 // Get student data by ID
-const getStudentById = (id) => {
-    if (!id) return null;
-    return students.value.find((student) => student.id === id) || null;
+const getStudentById = (studentId) => {
+    if (!studentId) return null;
+
+    // Convert to string for comparison if needed
+    const idStr = studentId.toString();
+
+    // Find the student with the matching ID
+    const student = students.value.find((s) => s.id.toString() === idStr);
+
+    if (!student) {
+        console.warn(`Student with ID ${studentId} not found`);
+    }
+
+    return student || null;
 };
 
 // Update the other drop functions to also clean up
@@ -1099,51 +1110,56 @@ const allowDrop = (event) => {
 
 // Function to mark a student as present
 const markStudentPresent = (student) => {
-    // Find if student is already assigned to a seat
-    let found = false;
-    let rowIndex = -1;
-    let colIndex = -1;
+    if (!student) return;
 
-    // Search in seat plan
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
+    console.log(`Marking student ${student.name} (ID: ${student.id}) as present`);
+
+    // First check if the student is assigned to a seat
+    let seatFound = false;
+
+    // Search all seats
+    for (let i = 0; i < seatPlan.value.length && !seatFound; i++) {
+        for (let j = 0; j < seatPlan.value[i].length && !seatFound; j++) {
             if (seatPlan.value[i][j].studentId === student.id) {
-                rowIndex = i;
-                colIndex = j;
-                found = true;
-                break;
+                // Update seat status
+                seatPlan.value[i][j].status = 'Present';
+                seatFound = true;
+
+                console.log(`Found student ${student.name} in seat at row ${i}, col ${j}`);
             }
         }
-        if (found) break;
     }
 
-    if (found) {
-        // Update existing seat
-        seatPlan.value[rowIndex][colIndex].status = 'Present';
-
-        // Save attendance record
-        const recordKey = `${student.id}_${currentDate.value}`;
-        attendanceRecords.value[recordKey] = {
-            studentId: student.id,
-            date: currentDate.value,
-            status: 'Present',
-            time: new Date().toLocaleTimeString(),
-            remarks: ''
-        };
-    } else {
-        // Student isn't assigned to a seat, just record attendance
-        const recordKey = `${student.id}_${currentDate.value}`;
-        attendanceRecords.value[recordKey] = {
-            studentId: student.id,
-            date: currentDate.value,
-            status: 'Present',
-            time: new Date().toLocaleTimeString(),
-            remarks: ''
-        };
+    // If student not found in any seat, log a warning but still mark attendance
+    if (!seatFound) {
+        console.warn(`Student ${student.name} not found in any seat. Marking attendance in records only.`);
     }
+
+    // Save attendance record with timestamp
+    const recordKey = `${student.id}-${currentDate.value}`;
+    const timestamp = new Date().toISOString();
+
+    attendanceRecords.value[recordKey] = {
+        studentId: student.id,
+        date: currentDate.value,
+        status: 'Present',
+        remarks: '',
+        timestamp
+    };
 
     // Save to localStorage
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+
+    // Also update the cache to ensure our most recent changes persist across refreshes
+    const today = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    const cacheData = {
+        timestamp,
+        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+
+    console.log(`Attendance for student ${student.name} marked as Present and saved to records and cache`);
 };
 
 // Roll Call Methods
@@ -1168,10 +1184,9 @@ const startRollCall = () => {
 
 // Clean up on component unmount
 onUnmounted(() => {
-    if (codeReader) {
-        codeReader.reset();
-        codeReader = null;
-    }
+    // Stop scanning to release camera resources
+    scanning.value = false;
+    console.log('Component unmounting, camera resources released');
 });
 
 // Add computed property for sorted unassigned students
@@ -1244,92 +1259,117 @@ const saveRemarks = () => {
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 };
 
-// Add this function to show the attendance method dialog
+// Fix openAttendanceMethodDialog function
 const openAttendanceMethodDialog = () => {
-    showAttendanceMethodModal.value = true;
-
-    // Reset any previous selection
+    // Reset any previous selections
     showQRScanner.value = false;
     showRollCall.value = false;
+    scannedStudents.value = [];
 
-    console.log('Opening attendance method dialog');
+    // Open the attendance method selection dialog
+    showAttendanceMethodModal.value = true;
+
+    console.log('Opening attendance method dialog', showAttendanceMethodModal.value);
 };
 
-// Add these functions for handling attendance methods
-const startQRScanner = async () => {
+// Simplified QR scanner functions using vue-qrcode-reader
+const startQRScanner = () => {
+    // Close the method selection dialog and show QR scanner
+    showAttendanceMethodModal.value = false;
     showQRScanner.value = true;
     showRollCall.value = false;
-    showAttendanceMethodModal.value = false;
-    isCameraLoading.value = true;
+    scanning.value = true;
 
+    console.log('Starting QR scanner...');
+
+    toast.add({
+        severity: 'info',
+        summary: 'QR Scanner',
+        detail: 'QR Scanner is active. Scan student ID QR codes.',
+        life: 3000
+    });
+};
+
+const stopQRScanner = () => {
+    console.log('Stopping QR scanner...');
+    scanning.value = false;
+    showQRScanner.value = false;
+};
+
+const onDetect = async (detectedCodes) => {
     try {
-        // Initialize QR code scanner
-        codeReader = new BrowserMultiFormatReader();
+        console.log('QR Code Detected:', detectedCodes);
+        if (detectedCodes.length > 0) {
+            // Pause scanning while processing to avoid multiple scans of the same code
+            scanning.value = false;
 
-        // Get available video devices
-        const videoDevices = await codeReader.listVideoInputDevices();
+            const qrData = detectedCodes[0].rawValue;
+            console.log('Detected QR code:', qrData);
 
-        if (videoDevices.length === 0) {
-            throw new Error('No camera devices found');
+            // Process the QR code data
+            await processQRCode(qrData);
+
+            // Wait a moment before restarting the scanner to avoid rapid scanning
+            setTimeout(() => {
+                scanning.value = true;
+            }, 1000);
         }
-
-        // Use first video device
-        const selectedDeviceId = videoDevices[0].deviceId;
-
-        // Wait for video element to be available in the DOM
-        await nextTick();
-
-        if (!videoElement.value) {
-            throw new Error('Video element not found');
-        }
-
-        // Start decoding from video stream
-        codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement.value, (result, error) => {
-            if (result) {
-                handleQRCodeResult(result.getText());
-            }
-            if (error && error.name !== 'NotFoundException') {
-                console.error('QR Scanner error:', error);
-            }
-        });
-
-        isCameraLoading.value = false;
-
-        toast.add({
-            severity: 'info',
-            summary: 'QR Scanner',
-            detail: 'QR Scanner is active. Scan student ID QR codes.',
-            life: 3000
-        });
     } catch (error) {
-        console.error('Error starting QR scanner:', error);
-        isCameraLoading.value = false;
-        showQRScanner.value = false;
-
+        console.error('Error in QR code detection:', error);
         toast.add({
             severity: 'error',
-            summary: 'Scanner Error',
-            detail: 'Could not start QR scanner: ' + error.message,
-            life: 5000
+            summary: 'QR Error',
+            detail: 'Error processing QR code: ' + error.message,
+            life: 3000
         });
+
+        // Restart scanner after error
+        setTimeout(() => {
+            scanning.value = true;
+        }, 2000);
     }
 };
 
-// Handle QR code result
-const handleQRCodeResult = (qrData) => {
-    try {
-        // Extract student ID from QR code data
-        const studentId = parseInt(qrData.trim());
+const onCameraError = (error) => {
+    console.error('Camera Error:', error);
+    cameraError.value = error.message || 'Failed to access camera';
+    scanning.value = false;
 
-        if (isNaN(studentId)) {
-            throw new Error('Invalid QR code format');
+    toast.add({
+        severity: 'error',
+        summary: 'Camera Error',
+        detail: error.message || 'Failed to access camera',
+        life: 5000
+    });
+};
+
+const restartCamera = () => {
+    cameraError.value = null;
+    scanning.value = false;
+
+    // Use a short timeout to ensure component unmounts and remounts properly
+    setTimeout(() => {
+        scanning.value = true;
+        console.log('Camera restarted');
+    }, 500);
+};
+
+const processQRCode = async (qrData) => {
+    try {
+        console.log('Processing QR code:', qrData);
+
+        // Use QRCodeService to get the student ID from the QR code
+        const studentId = QRCodeService.getStudentIdFromQR(qrData.trim());
+
+        if (!studentId) {
+            throw new Error('Invalid QR code or QR code not registered');
         }
 
         // Find the student
         const student = getStudentById(studentId);
 
         if (!student) {
-            throw new Error('Student not found');
+            throw new Error(`Student with ID ${studentId} not found`);
         }
 
         // Check if already scanned
@@ -1355,6 +1395,8 @@ const handleQRCodeResult = (qrData) => {
             detail: `${student.name} marked as present`,
             life: 2000
         });
+
+        return true;
     } catch (error) {
         console.error('Error processing QR code:', error);
         toast.add({
@@ -1363,16 +1405,9 @@ const handleQRCodeResult = (qrData) => {
             detail: error.message,
             life: 3000
         });
+        return false;
     }
 };
-
-// Clean up camera resources on unmount
-onUnmounted(() => {
-    if (codeReader) {
-        codeReader.reset();
-        codeReader = null;
-    }
-});
 
 // Add this function for the Roll Call feature
 const markRollCallStatus = (status) => {
@@ -1740,6 +1775,9 @@ watch(showStudentIds, (newValue) => {
     // Save layout when student IDs visibility is changed
     saveCurrentLayout(false);
 });
+
+// Fix reference to isDropTarget
+const isDropTarget = ref(false);
 </script>
 
 <template>
@@ -2068,33 +2106,53 @@ watch(showStudentIds, (newValue) => {
         </Dialog>
 
         <!-- QR Scanner Dialog -->
-        <Dialog v-model:visible="showQRScanner" header="QR Scanner" :modal="true" :closable="true" style="width: 500px">
+        <Dialog v-model:visible="showQRScanner" header="QR Scanner" :modal="true" :closable="true" style="width: 500px" @hide="stopQRScanner">
             <div class="p-4">
-                <div v-if="isCameraLoading" class="flex items-center justify-center p-6">
-                    <i class="pi pi-spin pi-spinner text-3xl text-blue-500 mr-3"></i>
-                    <span>Loading camera...</span>
-                </div>
+                <div class="scanner-container" :class="{ 'scanning-active': scanning }">
+                    <!-- Show camera feed when scanning -->
+                    <QrcodeStream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'" :track="true"></QrcodeStream>
 
-                <div v-else class="qr-scanner-container">
-                    <video ref="videoElement" class="w-full h-64 bg-black rounded"></video>
+                    <!-- Show paused message when not scanning -->
+                    <div v-else-if="!scanning && !cameraError" class="scanner-paused">
+                        <i class="pi pi-camera-off"></i>
+                        <p>Scanner paused</p>
+                    </div>
 
-                    <div class="mt-4">
-                        <p class="text-sm text-gray-600 mb-2">Point the camera at a student ID QR code</p>
+                    <!-- Show error message when camera fails -->
+                    <div v-else class="scanner-error">
+                        <i class="pi pi-exclamation-triangle"></i>
+                        <p>{{ cameraError || 'Camera error occurred' }}</p>
+                        <button @click="restartCamera" class="restart-button">
+                            <i class="pi pi-refresh"></i>
+                            Retry Camera
+                        </button>
+                    </div>
 
-                        <div v-if="scannedStudents.length > 0" class="mt-4">
-                            <h4 class="text-sm font-medium mb-2">Scanned Students: {{ scannedStudents.length }}</h4>
-                            <ul class="text-sm max-h-32 overflow-y-auto">
-                                <li v-for="id in scannedStudents" :key="id" class="py-1 px-2 bg-green-50 rounded mb-1 flex items-center">
-                                    <i class="pi pi-check-circle text-green-500 mr-2"></i>
-                                    {{ getStudentById(id)?.name || `Student ID: ${id}` }}
-                                </li>
-                            </ul>
+                    <!-- Scanner overlay with corners -->
+                    <div class="scanner-overlay">
+                        <div class="scanner-corners">
+                            <span></span>
                         </div>
                     </div>
+                </div>
 
-                    <div class="flex justify-end mt-4">
-                        <Button icon="pi pi-times" label="Close" @click="showQRScanner = false" />
+                <div v-if="scannedStudents.length > 0" class="mt-4">
+                    <h4 class="text-sm font-semibold mb-2">Students Marked Present: {{ scannedStudents.length }}</h4>
+                    <ul class="text-sm max-h-60 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
+                        <li v-for="id in scannedStudents" :key="id" class="py-2 px-3 bg-green-50 rounded mb-1 flex items-center">
+                            <i class="pi pi-check-circle text-green-500 mr-2"></i>
+                            {{ getStudentById(id)?.name || `Student ID: ${id}` }}
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="flex justify-between mt-4">
+                    <div>
+                        <Button icon="pi pi-replay" label="Reset" class="p-button-outlined p-button-danger" @click="scannedStudents = []" :disabled="scannedStudents.length === 0" />
+                        <Button icon="pi pi-pause" v-if="scanning" label="Pause" class="p-button-outlined ml-2" @click="scanning = false" />
+                        <Button icon="pi pi-play" v-else label="Resume" class="p-button-outlined ml-2" @click="scanning = true" />
                     </div>
+                    <Button icon="pi pi-times" label="Close" @click="stopQRScanner" />
                 </div>
             </div>
         </Dialog>
@@ -2384,5 +2442,158 @@ watch(showStudentIds, (newValue) => {
 .remark-card:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.qr-scanner-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.qr-scanner-container video {
+    border: 2px solid #2563eb;
+    min-height: 300px;
+    background-color: #000;
+    border-radius: 8px;
+    position: relative;
+}
+
+.qr-scanner-container video::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid rgba(59, 130, 246, 0.5);
+    border-radius: 8px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.3;
+        transform: scale(0.98);
+    }
+    100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+}
+
+.scanner-container {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    border: 2px dashed #2563eb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.scanner-paused {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #2563eb;
+}
+
+.scanner-error {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 0, 0, 0.8);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: white;
+}
+
+.scanner-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px dashed #2563eb;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.scanner-corners {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.scanner-corners span {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background-color: #2563eb;
+    border-radius: 50%;
+}
+
+.scanner-corners span:nth-child(1) {
+    top: 0;
+    left: 0;
+}
+.scanner-corners span:nth-child(2) {
+    top: 0;
+    right: 0;
+}
+.scanner-corners span:nth-child(3) {
+    bottom: 0;
+    left: 0;
+}
+.scanner-corners span:nth-child(4) {
+    bottom: 0;
+    right: 0;
+}
+
+.qr-scanner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.restart-button {
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 1rem;
+}
+
+.restart-button:hover {
+    background-color: #1d4fb8;
 }
 </style>

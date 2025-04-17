@@ -187,7 +187,7 @@ function generateMockStudents() {
     const students = [];
 
     // Generate 200 mock students
-    for (let i = 1; i <= 200; i++) {
+    for (let i = 1; i <= 30; i++) {
         const gradeLevel = Math.floor(Math.random() * 7); // 0-6 (Kinder to Grade 6)
         const section = sections[Math.floor(Math.random() * sections.length)];
 
