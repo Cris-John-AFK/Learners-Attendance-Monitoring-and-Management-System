@@ -1,6 +1,4 @@
 <script setup>
-import { GradeService } from '@/router/service/Grades';
-import { AttendanceService } from '@/router/service/Students';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 
@@ -15,8 +13,8 @@ const student = ref({
     id: null,
     name: '',
     gender: 'Male',
-    gradeLevel: 1,
-    section: 'A',
+    gradeLevel: '',
+    section: '',
     email: '',
     phone: '',
     address: '',
@@ -30,17 +28,36 @@ const filters = ref({
     searchTerm: ''
 });
 const sections = ref([]);
+const totalStudents = ref(0);
+
+// Grade levels for filtering
+const gradeLevels = [
+    { name: 'Grade 7', code: 'Grade 7' },
+    { name: 'Grade 8', code: 'Grade 8' },
+    { name: 'Grade 9', code: 'Grade 9' },
+    { name: 'Grade 10', code: 'Grade 10' },
+    { name: 'Grade 11', code: 'Grade 11' },
+    { name: 'Grade 12', code: 'Grade 12' }
+];
+
+// Sections for each grade level
+const sectionsByGrade = {
+    'Grade 7': ['Rizal', 'Bonifacio', 'Mabini'],
+    'Grade 8': ['Rizal', 'Bonifacio', 'Mabini'],
+    'Grade 9': ['Rizal', 'Bonifacio', 'Mabini'],
+    'Grade 10': ['Rizal', 'Bonifacio', 'Mabini'],
+    'Grade 11': ['STEM', 'ABM', 'HUMSS'],
+    'Grade 12': ['STEM', 'ABM', 'HUMSS']
+};
 
 // Load all grade levels and sections
-const loadGradesAndSections = async () => {
+const loadGradesAndSections = () => {
     try {
-        // Get all grades - using the centralized service
-        const gradesData = await GradeService.getGrades();
-        grades.value = gradesData;
-
+        grades.value = gradeLevels;
+        
         // Set default sections based on first grade
-        if (gradesData.length > 0) {
-            sections.value = gradesData[0].sections;
+        if (gradeLevels.length > 0) {
+            sections.value = sectionsByGrade[gradeLevels[0].code] || [];
         }
     } catch (error) {
         console.error('Error loading grade data:', error);
@@ -53,14 +70,39 @@ const loadGradesAndSections = async () => {
     }
 };
 
-// Load all students - using the centralized student service
-const loadStudents = async () => {
+// Load all students from localStorage
+const loadStudents = () => {
     try {
         loading.value = true;
-        // Get from centralized store
-        const data = await AttendanceService.getData();
-        students.value = data;
-        loading.value = false;
+        
+        // Get enrolled students from localStorage
+        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        
+        // Format students for display
+        const formattedStudents = enrolledStudents.map((student, index) => {
+            return {
+                id: index + 1,
+                studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
+                name: student.name || `${student.firstName} ${student.lastName}`,
+                firstName: student.firstName,
+                lastName: student.lastName,
+                email: student.email || 'N/A',
+                gender: student.sex || 'Male',
+                age: calculateAge(student.birthdate),
+                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
+                address: formatAddress(student),
+                contact: student.contact || student.mother?.contactNumber || 'N/A',
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
+                gradeLevel: student.gradeLevel,
+                section: student.section,
+                enrollmentDate: student.enrollmentDate || new Date().toLocaleDateString(),
+                // Store original data for reference
+                originalData: student
+            };
+        });
+        
+        students.value = formattedStudents;
+        totalStudents.value = formattedStudents.length;
     } catch (error) {
         console.error('Error loading student data:', error);
         toast.add({
@@ -69,15 +111,52 @@ const loadStudents = async () => {
             detail: 'Failed to load student data',
             life: 3000
         });
+    } finally {
         loading.value = false;
     }
 };
+
+// Calculate age from birthdate
+function calculateAge(birthdate) {
+    if (!birthdate) return 'N/A';
+    
+    const birthDate = new Date(birthdate);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    
+    return age;
+}
+
+// Format address for display
+function formatAddress(student) {
+    if (student.currentAddress) {
+        const addr = student.currentAddress;
+        const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter(part => part);
+        return parts.join(', ') || 'N/A';
+    }
+    return student.address || 'N/A';
+}
+
+// Update sections when grade changes
+function updateSections() {
+    if (filters.value.grade) {
+        sections.value = sectionsByGrade[filters.value.grade] || [];
+        filters.value.section = null; // Reset section when grade changes
+    } else {
+        sections.value = [];
+    }
+}
 
 // Now the computed property will work properly with the import
 const filteredStudents = computed(() => {
     return students.value.filter((student) => {
         // Apply grade filter
-        if (filters.value.grade && student.gradeLevel !== parseInt(filters.value.grade)) {
+        if (filters.value.grade && student.gradeLevel !== filters.value.grade) {
             return false;
         }
 
@@ -94,15 +173,18 @@ const filteredStudents = computed(() => {
         // Apply search term
         if (filters.value.searchTerm) {
             const term = filters.value.searchTerm.toLowerCase();
-            return student.name.toLowerCase().includes(term) || student.id.toString().includes(term);
+            return student.name.toLowerCase().includes(term) || 
+                   student.studentId.toString().includes(term) ||
+                   (student.firstName && student.firstName.toLowerCase().includes(term)) ||
+                   (student.lastName && student.lastName.toLowerCase().includes(term));
         }
 
         return true;
     });
 });
 
-// Save student - using centralized service for create/update
-const saveStudent = async () => {
+// Save student
+const saveStudent = () => {
     submitted.value = true;
 
     if (!student.value.name.trim()) {
@@ -116,17 +198,36 @@ const saveStudent = async () => {
     }
 
     try {
+        // Get current students from localStorage
+        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        
         if (student.value.id) {
-            // Update existing student using centralized service
-            await AttendanceService.updateStudent(student.value.id, student.value);
+            // Update existing student
+            const index = enrolledStudents.findIndex(s => s.id === student.value.id);
+            if (index !== -1) {
+                enrolledStudents[index] = {
+                    ...enrolledStudents[index],
+                    ...student.value
+                };
+            }
         } else {
-            // Create new student using centralized service
-            await AttendanceService.createStudent(student.value);
+            // Create new student
+            const newStudent = {
+                ...student.value,
+                id: enrolledStudents.length + 1,
+                studentId: `STU${String(enrolledStudents.length + 1).padStart(5, '0')}`,
+                enrollmentDate: new Date().toISOString().split('T')[0],
+                status: 'Enrolled'
+            };
+            enrolledStudents.push(newStudent);
         }
-
-        // Reload from centralized store
-        await loadStudents();
-
+        
+        // Save back to localStorage
+        localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+        
+        // Reload students
+        loadStudents();
+        
         studentDialog.value = false;
         toast.add({
             severity: 'success',
@@ -145,14 +246,33 @@ const saveStudent = async () => {
     }
 };
 
-// Delete student - using centralized service
-const deleteStudent = async () => {
+// Edit student
+function editStudent(studentData) {
+    student.value = { ...studentData };
+    studentDialog.value = true;
+}
+
+// Confirm delete student
+function confirmDeleteStudent(studentData) {
+    student.value = { ...studentData };
+    deleteStudentDialog.value = true;
+}
+
+// Delete student
+const deleteStudent = () => {
     try {
-        await AttendanceService.deleteStudent(student.value.id);
-
-        // Reload from centralized store
-        await loadStudents();
-
+        // Get current students from localStorage
+        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        
+        // Filter out the student to delete
+        const updatedStudents = enrolledStudents.filter(s => s.id !== student.value.id);
+        
+        // Save back to localStorage
+        localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
+        
+        // Reload students
+        loadStudents();
+        
         deleteStudentDialog.value = false;
         toast.add({
             severity: 'success',
@@ -172,68 +292,151 @@ const deleteStudent = async () => {
 };
 
 // Initialize component
-onMounted(async () => {
-    await loadGradesAndSections();
-    await loadStudents();
+onMounted(() => {
+    loadGradesAndSections();
+    loadStudents();
 });
 </script>
 
 <template>
     <div class="card p-6 shadow-lg rounded-lg bg-white">
-        <h2 class="text-2xl font-semibold mb-6">Student Management</h2>
-
         <div class="flex justify-between items-center mb-4">
-            <Button label="Create" icon="pi pi-plus" class="p-button-success" @click="studentDialog = true" />
-
-            <InputText v-model="filters.searchTerm" placeholder="Search students..." class="p-inputtext-lg w-1/3" />
+            <div>
+                <h2 class="text-2xl font-semibold mb-1"><i class="pi pi-users mr-2"></i>Student Management</h2>
+                <p class="text-color-secondary">Total Students: <span class="font-bold">{{ totalStudents }}</span></p>
+            </div>
+            <div class="flex gap-2">
+                <span class="p-input-icon-left w-full md:w-20rem">
+                    <i class="pi pi-search" />
+                    <InputText v-model="filters.searchTerm" placeholder="Search students..." class="w-full" />
+                </span>
+                <Button label="Add Student" icon="pi pi-plus" class="p-button-success" @click="studentDialog = true" />
+            </div>
         </div>
 
-        <DataTable v-model:expandedRows="expandedRows" :value="filteredStudents" dataKey="id" class="p-datatable-striped">
-            <Column expander style="width: 3rem" />
-            <Column field="name" header="Name" sortable />
-            <Column field="id" header="QR ID" sortable />
-            <Column field="gradeLevel" header="Grade Level" sortable />
-            <Column header="Age" sortable>
-                <template #body>
-                    <span>--</span>
-                    <!-- Placeholder for age -->
-                </template>
-            </Column>
-            <Column header="Birthdate" sortable>
-                <template #body>
-                    <span>--</span>
-                    <!-- Placeholder for birthdate -->
-                </template>
-            </Column>
+        <!-- Filters -->
+        <div class="flex flex-wrap gap-3 mb-4">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Grade Level</label>
+                <Dropdown v-model="filters.grade" :options="grades" optionLabel="name" optionValue="code" 
+                    placeholder="Select Grade" class="w-full" @change="updateSections" />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Section</label>
+                <Dropdown v-model="filters.section" :options="sections" placeholder="Select Section" 
+                    class="w-full" :disabled="!filters.grade" />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Gender</label>
+                <Dropdown v-model="filters.gender" :options="[{name: 'Male', value: 'Male'}, {name: 'Female', value: 'Female'}]" 
+                    optionLabel="name" optionValue="value" placeholder="Select Gender" class="w-full" />
+            </div>
+        </div>
 
-            <template #expansion="slotProps">
-                <div class="p-4 bg-gray-100 rounded-md shadow-md">
-                    <h5 class="text-lg font-semibold">Details for {{ slotProps.data.name }}</h5>
-                    <p class="mt-2"><strong>QR ID:</strong> {{ slotProps.data.id }}</p>
-                    <p><strong>Grade Level:</strong> {{ slotProps.data.gradeLevel }}</p>
-                    <p><strong>Section:</strong> {{ slotProps.data.section }}</p>
-                    <p><strong>Gender:</strong> {{ slotProps.data.gender }}</p>
-                    <div class="flex justify-end mt-3">
-                        <Button
-                            icon="pi pi-pencil"
-                            class="p-button-warning mr-2"
-                            @click="
-                                student = { ...slotProps.data };
-                                studentDialog = true;
-                            "
-                        />
-                        <Button
-                            icon="pi pi-trash"
-                            class="p-button-danger"
-                            @click="
-                                student = { ...slotProps.data };
-                                deleteStudentDialog = true;
-                            "
-                        />
-                    </div>
-                </div>
-            </template>
-        </DataTable>
+        <!-- Student List -->
+        <div class="grid">
+            <div class="col-12">
+                <DataTable v-model:expandedRows="expandedRows" :value="filteredStudents" dataKey="id" 
+                    class="p-datatable-sm" :loading="loading" stripedRows 
+                    responsiveLayout="scroll" :paginator="filteredStudents.length > 10" :rows="10">
+                    <Column expander style="width: 3rem" />
+                    <Column header="Student" style="min-width: 200px">
+                        <template #body="slotProps">
+                            <div class="flex align-items-center">
+                                <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
+                                <div>
+                                    <div class="font-bold">{{ slotProps.data.name }}</div>
+                                    <div class="text-sm text-color-secondary">{{ slotProps.data.studentId }}</div>
+                                </div>
+                            </div>
+                        </template>
+                    </Column>
+                    <Column field="gradeLevel" header="Grade" sortable style="width: 120px" />
+                    <Column field="section" header="Section" sortable style="width: 120px" />
+                    <Column field="age" header="Age" sortable style="width: 80px">
+                        <template #body="slotProps">
+                            <span>{{ slotProps.data.age }}</span>
+                        </template>
+                    </Column>
+                    <Column header="Gender" sortable style="width: 100px">
+                        <template #body="slotProps">
+                            <Tag :value="slotProps.data.gender" :severity="slotProps.data.gender === 'Male' ? 'info' : 'success'" />
+                        </template>
+                    </Column>
+                    <Column field="email" header="Email" sortable style="min-width: 200px" />
+                    <Column field="contact" header="Contact" style="width: 130px" />
+                    <Column header="Actions" style="width: 8rem">
+                        <template #body="slotProps">
+                            <div class="flex gap-1">
+                                <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editStudent(slotProps.data)" />
+                                <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click="confirmDeleteStudent(slotProps.data)" />
+                            </div>
+                        </template>
+                    </Column>
+                    <template #expansion="slotProps">
+                        <div class="p-4 surface-hover border-round-bottom">
+                            <h5 class="mb-3">Student Details</h5>
+                            <div class="grid">
+                                <div class="col-12 md:col-6 lg:col-4">
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Full Name</div>
+                                        <div>{{ slotProps.data.name }}</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Student ID</div>
+                                        <div>{{ slotProps.data.studentId }}</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Birthdate</div>
+                                        <div>{{ slotProps.data.birthdate }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-12 md:col-6 lg:col-4">
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Email</div>
+                                        <div>{{ slotProps.data.email }}</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Contact</div>
+                                        <div>{{ slotProps.data.contact }}</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Address</div>
+                                        <div>{{ slotProps.data.address }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-12 md:col-6 lg:col-4">
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Grade & Section</div>
+                                        <div>{{ slotProps.data.gradeLevel }} - {{ slotProps.data.section }}</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="text-sm text-color-secondary mb-1">Enrollment Date</div>
+                                        <div>{{ slotProps.data.enrollmentDate }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Empty state -->
+                    <template #empty>
+                        <div class="p-4 text-center">
+                            <i class="pi pi-search text-4xl text-color-secondary mb-3"></i>
+                            <p>No students found. Try adjusting your filters or add a new student.</p>
+                        </div>
+                    </template>
+                    
+                    <!-- Loading state -->
+                    <template #loading>
+                        <div class="p-4 text-center">
+                            <i class="pi pi-spin pi-spinner text-4xl text-color-secondary mb-3"></i>
+                            <p>Loading student data...</p>
+                        </div>
+                    </template>
+                </DataTable>
+            </div>
+        </div>
 
         <!-- Student Dialog -->
         <Dialog v-model:visible="studentDialog" modal header="Student Details" :style="{ width: '500px' }">

@@ -10,10 +10,11 @@ import TabView from 'primevue/tabview';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const search = ref('');
+const loading = ref(true);
 
 const requirements = [
     { key: 'form138', label: 'Form 138' },
@@ -31,51 +32,80 @@ const requirementsList = computed(() => {
     }));
 });
 
-const applicants = ref([
-    {
-        id: 1,
-        name: 'Juan Dela Cruz',
-        email: 'juan@email.com',
-        birthdate: '2007-05-20',
-        address: 'Brgy. Example, City',
-        contact: '09123456789',
-        photo: 'https://randomuser.me/api/portraits/men/1.jpg',
-        requirements: { form138: true, psa: true, goodMoral: true, others: false },
-        status: 'Pending',
-        studentId: ''
-    },
-    {
-        id: 2,
-        name: 'Maria Santos',
-        email: 'maria@email.com',
-        birthdate: '2008-08-15',
-        address: 'Purok 2, Another City',
-        contact: '09987654321',
-        photo: 'https://randomuser.me/api/portraits/women/2.jpg',
-        requirements: { form138: false, psa: true, goodMoral: false, others: false },
-        status: 'Pending',
-        studentId: ''
-    },
-    {
-        id: 3,
-        name: 'Pedro Reyes',
-        email: 'pedro@email.com',
-        birthdate: '2006-11-03',
-        address: 'Sitio Mabuhay, Barangay Matahimik',
-        contact: '09765432109',
-        photo: 'https://randomuser.me/api/portraits/men/3.jpg',
-        requirements: { form138: true, psa: true, goodMoral: true, others: true },
-        status: 'Pending',
-        studentId: ''
-    }
-]);
+// Initialize with empty array, will be loaded from localStorage
+const applicants = ref([]);
 
 const selectedApplicant = ref(null);
 
 const filteredApplicants = computed(() => {
     if (!search.value) return applicants.value;
-    return applicants.value.filter((a) => a.name.toLowerCase().includes(search.value.toLowerCase()));
+    return applicants.value.filter((a) => {
+        const searchTerm = search.value.toLowerCase();
+        return a.name?.toLowerCase().includes(searchTerm) || 
+               a.firstName?.toLowerCase().includes(searchTerm) || 
+               a.lastName?.toLowerCase().includes(searchTerm);
+    });
 });
+
+// Load applicants from localStorage on component mount
+onMounted(() => {
+    loadApplicants();
+});
+
+// Load pending applications from localStorage
+function loadApplicants() {
+    loading.value = true;
+    try {
+        // Get pending applicants from localStorage
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+        
+        // Get admitted applicants from localStorage
+        const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
+        
+        // Combine and format applicants for display
+        const formattedApplicants = [...pendingApplicants, ...admittedApplicants].map((applicant, index) => {
+            return {
+                id: index + 1,
+                // Use name if available, otherwise construct from first and last name
+                name: applicant.name || `${applicant.firstName} ${applicant.lastName}`,
+                firstName: applicant.firstName,
+                lastName: applicant.lastName,
+                email: applicant.email || 'N/A',
+                birthdate: applicant.birthdate ? new Date(applicant.birthdate).toLocaleDateString() : 'N/A',
+                address: formatAddress(applicant),
+                contact: applicant.contact || 'N/A',
+                photo: applicant.photo || `https://randomuser.me/api/portraits/${applicant.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
+                requirements: applicant.requirements || { form138: false, psa: false, goodMoral: false, others: false },
+                status: applicant.status || 'Pending',
+                studentId: applicant.studentId || '',
+                // Store the original data for reference
+                originalData: applicant
+            };
+        });
+        
+        applicants.value = formattedApplicants;
+    } catch (error) {
+        console.error('Error loading applicants:', error);
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error Loading Data', 
+            detail: 'Failed to load applicant data.', 
+            life: 3000 
+        });
+    } finally {
+        loading.value = false;
+    }
+}
+
+// Format address for display
+function formatAddress(applicant) {
+    if (applicant.currentAddress) {
+        const addr = applicant.currentAddress;
+        const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter(part => part);
+        return parts.join(', ') || 'N/A';
+    }
+    return applicant.address || 'N/A';
+}
 
 function selectApplicant(applicant) {
     selectedApplicant.value = applicant;
@@ -87,22 +117,113 @@ const allRequirementsComplete = computed(() => {
 });
 
 function admitApplicant() {
+    if (!selectedApplicant.value) return;
+    
     if (!allRequirementsComplete.value) {
         toast.add({ severity: 'warn', summary: 'Incomplete Requirements', detail: 'Please complete all requirements before admitting.', life: 3000 });
         return;
     }
-    selectedApplicant.value.status = 'Admitted';
-    selectedApplicant.value.studentId = 'STU' + String(selectedApplicant.value.id).padStart(5, '0');
-    toast.add({ severity: 'success', summary: 'Admitted', detail: `Student ${selectedApplicant.value.name} has been admitted.`, life: 3000 });
+    
+    try {
+        // Update the applicant status
+        selectedApplicant.value.status = 'Admitted';
+        selectedApplicant.value.studentId = 'STU' + String(selectedApplicant.value.id).padStart(5, '0');
+        
+        // Update in local storage
+        updateApplicantInStorage(selectedApplicant.value);
+        
+        toast.add({ 
+            severity: 'success', 
+            summary: 'Admitted', 
+            detail: `Student ${selectedApplicant.value.name} has been admitted.`, 
+            life: 3000 
+        });
+    } catch (error) {
+        console.error('Error admitting applicant:', error);
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: 'Failed to admit applicant.', 
+            life: 3000 
+        });
+    }
+}
+
+function updateApplicantInStorage(applicant) {
+    // Get current data from localStorage
+    const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+    const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
+    
+    if (applicant.status === 'Admitted') {
+        // Remove from pending if present
+        const updatedPending = pendingApplicants.filter(app => 
+            app.firstName !== applicant.firstName || 
+            app.lastName !== applicant.lastName);
+        
+        // Add to admitted with updated status
+        const updatedApplicant = {
+            ...applicant.originalData,
+            status: 'Admitted',
+            studentId: applicant.studentId,
+            requirements: applicant.requirements
+        };
+        admittedApplicants.push(updatedApplicant);
+        
+        // Save back to localStorage
+        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
+        localStorage.setItem('admittedApplicants', JSON.stringify(admittedApplicants));
+    } else if (applicant.status === 'Rejected') {
+        // Remove from pending
+        const updatedPending = pendingApplicants.filter(app => 
+            app.firstName !== applicant.firstName || 
+            app.lastName !== applicant.lastName);
+        
+        // Save back to localStorage
+        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
+    } else {
+        // Just update requirements
+        const updatedPending = pendingApplicants.map(app => {
+            if (app.firstName === applicant.firstName && app.lastName === applicant.lastName) {
+                return {
+                    ...app,
+                    requirements: applicant.requirements
+                };
+            }
+            return app;
+        });
+        
+        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
+    }
 }
 
 function markIncomplete() {
-    toast.add({ severity: 'info', summary: 'Marked Incomplete', detail: 'Applicant marked as incomplete requirements.', life: 3000 });
+    if (!selectedApplicant.value) return;
+    
+    toast.add({ 
+        severity: 'info', 
+        summary: 'Marked Incomplete', 
+        detail: 'Applicant marked as incomplete requirements.', 
+        life: 3000 
+    });
+    
+    // Update in local storage
+    updateApplicantInStorage(selectedApplicant.value);
 }
 
 function rejectApplicant() {
+    if (!selectedApplicant.value) return;
+    
     selectedApplicant.value.status = 'Rejected';
-    toast.add({ severity: 'error', summary: 'Rejected', detail: `Student ${selectedApplicant.value.name}'s application has been rejected.`, life: 3000 });
+    
+    // Update in local storage
+    updateApplicantInStorage(selectedApplicant.value);
+    
+    toast.add({ 
+        severity: 'error', 
+        summary: 'Rejected', 
+        detail: `Student ${selectedApplicant.value.name}'s application has been rejected.`, 
+        life: 3000 
+    });
 }
 </script>
 

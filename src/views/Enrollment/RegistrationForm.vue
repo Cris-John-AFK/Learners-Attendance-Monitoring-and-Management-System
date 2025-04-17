@@ -195,27 +195,54 @@ const validateCurrentStep = () => {
 };
 
 // Submit the form
-const submitForm = () => {
+const submitForm = async () => {
     if (validateCurrentStep()) {
-        // Here you would typically send the data to your backend
-        toast.add({
-            severity: 'success',
-            summary: 'Form Submitted',
-            detail: 'Your enrollment form has been submitted successfully',
-            life: 3000
-        });
+        try {
+            // Prepare student data with 'pending' status
+            const studentData = {
+                ...student,
+                status: 'Pending',
+                submissionDate: new Date().toISOString(),
+                requirements: {
+                    form138: false,
+                    psa: false,
+                    goodMoral: false,
+                    others: false
+                }
+            };
+            
+            // In a real implementation, you would send this to your backend API
+            // For example: await axios.post('/api/enrollment/register', studentData);
+            
+            // For demo purposes, we'll simulate a successful submission
+            console.log('Student registration submitted:', studentData);
+            
+            // Show success message
+            toast.add({
+                severity: 'success',
+                summary: 'Registration Complete',
+                detail: 'Your registration has been submitted successfully. Your application is now pending approval.',
+                life: 3000
+            });
 
-        // Redirect to confirmation page or dashboard
+        // Store in localStorage for demo purposes (in a real app, this would be in a database)
+        const existingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+        existingApplicants.push(studentData);
+        localStorage.setItem('pendingApplicants', JSON.stringify(existingApplicants));
+        
+        // Reset form or redirect
         setTimeout(() => {
-            router.push('/enrollment/confirmation');
+            router.push('/enrollment/landing');
         }, 2000);
-    } else {
-        toast.add({
-            severity: 'error',
-            summary: 'Validation Error',
-            detail: 'Please accept the terms to continue',
-            life: 3000
-        });
+        } catch (error) {
+            console.error('Error submitting form:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Submission Failed',
+                detail: 'There was an error submitting your registration. Please try again.',
+                life: 3000
+            });
+        }
     }
 };
 

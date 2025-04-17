@@ -11,58 +11,19 @@ import TabView from 'primevue/tabview';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const search = ref('');
+const loading = ref(true);
 const enrollmentDialog = ref(false);
 const confirmationDialog = ref(false);
 const selectedStudent = ref(null);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
 
-// Mock data for admitted students ready for enrollment
-const students = ref([
-    {
-        id: 1,
-        studentId: 'STU00001',
-        name: 'Juan Dela Cruz',
-        email: 'juan@email.com',
-        birthdate: '2007-05-20',
-        address: 'Brgy. Example, City',
-        contact: '09123456789',
-        photo: 'https://randomuser.me/api/portraits/men/1.jpg',
-        status: 'Admitted',
-        enrollmentStatus: 'Not Enrolled'
-    },
-    {
-        id: 2,
-        studentId: 'STU00002',
-        name: 'Maria Santos',
-        email: 'maria@email.com',
-        birthdate: '2008-08-15',
-        address: 'Purok 2, Another City',
-        contact: '09987654321',
-        photo: 'https://randomuser.me/api/portraits/women/2.jpg',
-        status: 'Admitted',
-        enrollmentStatus: 'Not Enrolled'
-    },
-    {
-        id: 3,
-        studentId: 'STU00003',
-        name: 'Pedro Reyes',
-        email: 'pedro@email.com',
-        birthdate: '2006-11-03',
-        address: 'Sitio Mabuhay, Barangay Matahimik',
-        contact: '09765432109',
-        photo: 'https://randomuser.me/api/portraits/men/3.jpg',
-        status: 'Admitted',
-        enrollmentStatus: 'Enrolled',
-        gradeLevel: 'Grade 8',
-        section: 'Rizal',
-        enrollmentDate: '2025-04-15'
-    }
-]);
+// Initialize with empty array, will be loaded from localStorage
+const students = ref([]);
 
 // Grade levels and sections
 const gradeLevels = [
@@ -101,12 +62,82 @@ const subjects = {
     }
 };
 
+// Load data on component mount
+onMounted(() => {
+    loadAdmittedStudents();
+});
+
+// Load admitted students from localStorage
+function loadAdmittedStudents() {
+    loading.value = true;
+    try {
+        // Get admitted students from localStorage
+        const admittedStudents = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
+        
+        // Get enrolled students from localStorage
+        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        
+        // Format admitted students for display
+        const formattedStudents = admittedStudents.map((student, index) => {
+            // Check if student is already enrolled
+            const enrolledStudent = enrolledStudents.find(es => 
+                es.studentId === student.studentId || 
+                (es.firstName === student.firstName && es.lastName === student.lastName));
+            
+            return {
+                id: index + 1,
+                studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
+                name: student.name || `${student.firstName} ${student.lastName}`,
+                firstName: student.firstName,
+                lastName: student.lastName,
+                email: student.email || 'N/A',
+                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
+                address: formatAddress(student),
+                contact: student.contact || 'N/A',
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
+                status: 'Admitted',
+                enrollmentStatus: enrolledStudent ? 'Enrolled' : 'Not Enrolled',
+                gradeLevel: enrolledStudent?.gradeLevel || '',
+                section: enrolledStudent?.section || '',
+                enrollmentDate: enrolledStudent?.enrollmentDate || '',
+                // Store original data for reference
+                originalData: student
+            };
+        });
+        
+        students.value = formattedStudents;
+    } catch (error) {
+        console.error('Error loading admitted students:', error);
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error Loading Data', 
+            detail: 'Failed to load student data.', 
+            life: 3000 
+        });
+    } finally {
+        loading.value = false;
+    }
+}
+
+// Format address for display
+function formatAddress(student) {
+    if (student.currentAddress) {
+        const addr = student.currentAddress;
+        const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter(part => part);
+        return parts.join(', ') || 'N/A';
+    }
+    return student.address || 'N/A';
+}
+
 // Computed properties
 const filteredStudents = computed(() => {
     if (!search.value) return students.value;
+    const searchTerm = search.value.toLowerCase();
     return students.value.filter((s) => 
-        s.name.toLowerCase().includes(search.value.toLowerCase()) || 
-        s.studentId.toLowerCase().includes(search.value.toLowerCase())
+        (s.name?.toLowerCase().includes(searchTerm)) || 
+        (s.studentId?.toLowerCase().includes(searchTerm)) ||
+        (s.firstName?.toLowerCase().includes(searchTerm)) ||
+        (s.lastName?.toLowerCase().includes(searchTerm))
     );
 });
 
@@ -170,20 +201,53 @@ function proceedToConfirmation() {
 }
 
 function confirmEnrollment() {
-    // Update student record
-    selectedStudent.value.enrollmentStatus = 'Enrolled';
-    selectedStudent.value.gradeLevel = selectedGradeLevel.value.name;
-    selectedStudent.value.section = selectedSection.value.name;
-    selectedStudent.value.enrollmentDate = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+    try {
+        // Update student record in the UI
+        selectedStudent.value.enrollmentStatus = 'Enrolled';
+        selectedStudent.value.gradeLevel = selectedGradeLevel.value.name;
+        selectedStudent.value.section = selectedSection.value.name;
+        selectedStudent.value.enrollmentDate = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+        
+        // Update in localStorage
+        updateEnrollmentInStorage(selectedStudent.value);
+        
+        // Close dialog and show success message
+        confirmationDialog.value = false;
+        toast.add({ 
+            severity: 'success', 
+            summary: 'Enrollment Successful', 
+            detail: `${selectedStudent.value.name} has been enrolled in ${selectedGradeLevel.value.name} - ${selectedSection.value.name}.`, 
+            life: 3000 
+        });
+    } catch (error) {
+        console.error('Error enrolling student:', error);
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: 'Failed to enroll student.', 
+            life: 3000 
+        });
+    }
+}
+
+function updateEnrollmentInStorage(student) {
+    // Get current data from localStorage
+    const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
     
-    // Close dialog and show success message
-    confirmationDialog.value = false;
-    toast.add({ 
-        severity: 'success', 
-        summary: 'Enrollment Successful', 
-        detail: `${selectedStudent.value.name} has been enrolled in ${selectedGradeLevel.value.name} - ${selectedSection.value.name}.`, 
-        life: 3000 
-    });
+    // Create enrollment record
+    const enrollmentRecord = {
+        ...student.originalData,
+        enrollmentStatus: 'Enrolled',
+        gradeLevel: student.gradeLevel,
+        section: student.section,
+        enrollmentDate: student.enrollmentDate
+    };
+    
+    // Add to enrolled students
+    enrolledStudents.push(enrollmentRecord);
+    
+    // Save back to localStorage
+    localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
 }
 </script>
 
