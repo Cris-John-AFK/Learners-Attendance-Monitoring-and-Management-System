@@ -459,7 +459,7 @@ const filteredRecords = computed(() => {
 
                     <div class="scanner-container" :class="{ 'scanning-active': scanning }">
                         <!-- Show camera feed when scanning -->
-                        <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'" :track="true"></qrcode-stream>
+                        <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'"></qrcode-stream>
 
                         <!-- Show paused message when not scanning -->
                         <div v-else-if="!scanning && !cameraError" class="scanner-paused">
@@ -623,6 +623,20 @@ const filteredRecords = computed(() => {
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Override QR code reader styles to remove blue circle */
+:deep(.qrcode-stream) .qrcode-stream__inner-wrapper::after {
+    display: none !important;
+}
+
+:deep(.qrcode-stream) .qrcode-stream__overlay {
+    display: none !important;
+}
+
+:deep(.qrcode-stream) .qrcode-stream__camera {
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 /* Global Styles */
