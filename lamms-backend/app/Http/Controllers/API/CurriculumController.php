@@ -89,35 +89,19 @@ class CurriculumController extends Controller
             Log::info('Attempting to create curriculum with data:', $request->all());
 
             $validated = $request->validate([
-                'name' => 'nullable|string|max:255',
+                'name' => 'required|string|max:255',
                 'yearRange.start' => 'required|string|size:4',
                 'yearRange.end' => 'required|string|size:4',
                 'description' => 'nullable|string',
                 'is_active' => 'sometimes|boolean'
             ]);
 
-            // Check if a curriculum with the same year range already exists
-            $startYear = $validated['yearRange']['start'];
-            $endYear = $validated['yearRange']['end'];
-            $existingCurriculum = Curriculum::where('start_year', $startYear)
-                ->where('end_year', $endYear)
-                ->first();
-
-            if ($existingCurriculum) {
-                return response()->json([
-                    'message' => 'A curriculum with this year range already exists',
-                    'error' => 'Duplicate year range: ' . $startYear . '-' . $endYear
-                ], 422);
-            }
-
             $curriculum = new Curriculum();
-            // Generate a consistent name format using the year range
-            $curriculum->name = 'Curriculum ' . $startYear . '-' . $endYear;
-            $curriculum->start_year = $startYear;
-            $curriculum->end_year = $endYear;
+            $curriculum->name = $validated['name'];
+            $curriculum->start_year = $validated['yearRange']['start'];
+            $curriculum->end_year = $validated['yearRange']['end'];
             $curriculum->description = $validated['description'] ?? null;
-            $curriculum->is_active = $validated['is_active'] ?? false;
-            $curriculum->status = 'Draft';
+            $curriculum->is_active = $validated['is_active'] ?? true;
 
             Log::info('Saving curriculum with data:', [
                 'name' => $curriculum->name,
@@ -127,7 +111,7 @@ class CurriculumController extends Controller
                 'is_active' => $curriculum->is_active
             ]);
 
-            $curriculum->save();
+                $curriculum->save();
 
             Log::info('Curriculum created successfully with ID: ' . $curriculum->id);
             return response()->json($curriculum, 201);
@@ -160,28 +144,9 @@ class CurriculumController extends Controller
             'yearRange.start' => 'sometimes|string|size:4',
             'yearRange.end' => 'sometimes|string|size:4',
             'description' => 'nullable|string',
-            'status' => 'sometimes|string|in:Active,Draft,Archived',
+            'status' => 'sometimes|string|in:Active,Archived,Planned',
             'is_active' => 'sometimes|boolean'
         ]);
-
-        // If updating the year range, check for duplicates
-        if (isset($validated['yearRange']['start']) && isset($validated['yearRange']['end'])) {
-            $startYear = $validated['yearRange']['start'];
-            $endYear = $validated['yearRange']['end'];
-
-            // Check if another curriculum with the same year range exists
-            $existingCurriculum = Curriculum::where('start_year', $startYear)
-                ->where('end_year', $endYear)
-                ->where('id', '!=', $id) // Exclude the current curriculum
-                ->first();
-
-            if ($existingCurriculum) {
-                return response()->json([
-                    'message' => 'Another curriculum with this year range already exists',
-                    'error' => 'Duplicate year range: ' . $startYear . '-' . $endYear
-                ], 422);
-            }
-        }
 
         if (isset($validated['name'])) {
             $curriculum->name = $validated['name'];
@@ -193,11 +158,6 @@ class CurriculumController extends Controller
 
         if (isset($validated['yearRange']['end'])) {
             $curriculum->end_year = $validated['yearRange']['end'];
-        }
-
-        // Update the name if both start and end years are being updated
-        if (isset($validated['yearRange']['start']) && isset($validated['yearRange']['end'])) {
-            $curriculum->name = 'Curriculum ' . $validated['yearRange']['start'] . '-' . $validated['yearRange']['end'];
         }
 
         if (array_key_exists('description', $validated)) {
@@ -237,17 +197,12 @@ class CurriculumController extends Controller
     public function activate($id)
     {
         DB::transaction(function () use ($id) {
-            // Set all curriculums to inactive and Draft status
-            Curriculum::where('is_active', true)
-                ->update([
-                    'is_active' => false,
-                    'status' => 'Draft'
-                ]);
+            // Set all curriculums to inactive
+            Curriculum::where('is_active', true)->update(['is_active' => false]);
 
-            // Set this curriculum to active with Active status
+            // Set this curriculum to active
             $curriculum = Curriculum::findOrFail($id);
             $curriculum->is_active = true;
-            $curriculum->status = 'Active';
             $curriculum->save();
         });
 

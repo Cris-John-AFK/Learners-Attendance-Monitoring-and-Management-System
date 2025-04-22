@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('curricula', function (Blueprint $table) {
-            // Add a unique constraint on the combination of start_year and end_year
-            $table->unique(['start_year', 'end_year'], 'curricula_year_range_unique');
+            // Add a unique constraint to prevent duplicates with the same name, start_year, and end_year
+            $table->unique(['name', 'start_year', 'end_year'], 'curricula_unique_year_range');
         });
     }
 
@@ -23,8 +23,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('curricula', function (Blueprint $table) {
-            // Drop the unique constraint
-            $table->dropUnique('curricula_year_range_unique');
+            // Drop the unique constraint if rolling back
+            $table->dropUnique('curricula_unique_year_range');
         });
     }
 };

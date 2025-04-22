@@ -180,11 +180,6 @@ export const CurriculumService = {
         try {
             console.log('Creating new curriculum');
 
-            // Ensure we have proper year format
-            if (!curriculum.yearRange?.start || !curriculum.yearRange?.end) {
-                throw new Error('Year range is required with both start and end years');
-            }
-
             // Map our application status values to what the API expects
             const statusMapping = {
                 Active: 'Active',
@@ -194,10 +189,10 @@ export const CurriculumService = {
 
             // Create data that works with the API
             const apiData = {
-                name: curriculum.name || `Curriculum ${curriculum.yearRange.start}-${curriculum.yearRange.end}`,
+                name: curriculum.name,
                 yearRange: {
-                    start: String(curriculum.yearRange.start).padStart(4, '0'),
-                    end: String(curriculum.yearRange.end).padStart(4, '0')
+                    start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
+                    end: String(curriculum.yearRange?.end || '').padStart(4, '0')
                 }
             };
 
@@ -250,25 +245,6 @@ export const CurriculumService = {
             return newCurriculum;
         } catch (error) {
             console.error('Error creating curriculum:', error);
-
-            // Check for validation errors and provide more specific messages
-            if (error.response && error.response.status === 422) {
-                console.error('Validation error details:', error.response.data);
-
-                // If it's a duplicate year range error, provide a specific message
-                if (error.response.data.message && error.response.data.message.includes('year range already exists')) {
-                    throw new Error(`A curriculum with this year range already exists. Year ranges must be unique.`);
-                }
-
-                // Extract validation errors
-                if (error.response.data.errors) {
-                    const errorMessages = Object.entries(error.response.data.errors)
-                        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
-                        .join('; ');
-                    throw new Error(`Validation error: ${errorMessages}`);
-                }
-            }
-
             throw error;
         }
     },
@@ -441,22 +417,7 @@ export const CurriculumService = {
             console.log('Activating curriculum:', id);
             const response = await api.put(`/api/curriculums/${id}/activate`);
 
-            // Log the response for debugging
-            console.log('Activation response:', response.data);
-
-            // Update local state to reflect that this is now the active curriculum
-            // and all others are inactive
-            if (this.getCurriculums && typeof this.getCurriculums === 'function') {
-                const curriculums = await this.getCurriculums();
-                if (Array.isArray(curriculums)) {
-                    curriculums.forEach((c) => {
-                        c.is_active = c.id === id;
-                        c.status = c.id === id ? 'Active' : 'Draft';
-                    });
-                }
-            }
-
-            // Clear cache to ensure fresh data is loaded
+            // Clear cache
             this.clearCache();
 
             return response.data;

@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('curricula', function (Blueprint $table) {
-            $table->string('status')->default('Draft')->after('is_active');
+            if (!Schema::hasColumn('curricula', 'status')) {
+                $table->string('status')->default('Draft')->after('is_active');
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('curricula', function (Blueprint $table) {
-            $table->dropColumn('status');
+            if (Schema::hasColumn('curricula', 'status')) {
+                $table->dropColumn('status');
+            }
         });
     }
 };

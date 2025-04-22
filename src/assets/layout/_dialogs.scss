@@ -168,3 +168,59 @@
     z-index: 1000 !important;
     padding: 0 !important;
 }
+
+/* Dialog stacking order system */
+.p-dialog-mask {
+  /* Base z-index for regular dialogs */
+  z-index: 1000 !important;
+
+  /* Higher priority dialogs */
+  &.higher-priority {
+    z-index: 2000 !important;
+  }
+
+  /* Highest priority for important dialogs */
+  &.highest-priority {
+    z-index: 3000 !important;
+  }
+
+  /* Special case for nested dialogs that must appear on top */
+  &:has(.schedule-dialog) {
+    z-index: 9999 !important;
+  }
+
+  /* Special case for nested dialogs that must appear on top */
+  &:has(.nested-dialog) {
+    z-index: 99999 !important;
+  }
+}
+
+/* Individual dialog z-index values for specific cases */
+.p-dialog {
+  &.schedule-dialog {
+    z-index: 9999 !important;
+    position: relative !important;
+  }
+
+  &.nested-dialog {
+    z-index: 99999 !important;
+  }
+
+  /* Specific cases by dialog purpose */
+  &.subject-list-dialog {
+    z-index: 1500 !important;
+  }
+}
+
+/* Fix for PrimeVue's specificity issues with multiple dialogs */
+body.showing-schedule-dialog {
+  .p-dialog.schedule-dialog,
+  .p-dialog.nested-dialog {
+    z-index: 99999 !important;
+  }
+
+  .p-dialog-mask:has(.schedule-dialog),
+  .p-dialog-mask:has(.nested-dialog) {
+    z-index: 99998 !important;
+  }
+}
