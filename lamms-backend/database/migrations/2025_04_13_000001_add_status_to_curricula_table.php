@@ -9,11 +9,14 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
+    public function up()
     {
-        Schema::table('curricula', function (Blueprint $table) {
-            $table->string('status')->default('Draft')->after('is_active');
-        });
+        // Check if the status column doesn't exist before adding it
+        if (!Schema::hasColumn('curricula', 'status')) {
+            Schema::table('curricula', function (Blueprint $table) {
+                $table->string('status')->default('Draft');
+            });
+        }
     }
 
     /**
