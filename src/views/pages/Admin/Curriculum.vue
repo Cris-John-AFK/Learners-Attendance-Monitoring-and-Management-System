@@ -757,10 +757,10 @@ const saveCurriculum = async () => {
                     message = `A curriculum for years ${yearRange.start}-${yearRange.end} already exists. Year ranges must be unique.`;
                 } else if (error.response.data?.errors) {
                     // Format validation errors
-                    const errorDetails = Object.entries(error.response.data.errors)
-                        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
-                        .join('; ');
-                    message = `Validation error: ${errorDetails}`;
+                const errorDetails = Object.entries(error.response.data.errors)
+                    .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                    .join('; ');
+                message = `Validation error: ${errorDetails}`;
                 } else {
                     message = error.response.data?.message || 'Validation failed. Please check your input.';
                 }
@@ -893,26 +893,26 @@ const toggleActiveCurriculum = async (curr) => {
 
             if (!isOnlyActiveCurriculum) {
                 // If there's another active curriculum, allow deactivation
-                await CurriculumService.updateCurriculum({
-                    ...curr,
+            await CurriculumService.updateCurriculum({
+                ...curr,
                     is_active: false,
                     status: 'Draft'
-                });
+            });
 
                 // Update local state without full reload
                 curr.is_active = false;
                 curr.status = 'Draft';
 
-                toast.add({
+            toast.add({
                     severity: 'success',
                     summary: 'Success',
                     detail: 'Curriculum deactivated successfully',
-                    life: 3000
-                });
+                life: 3000
+            });
 
                 // Delay the reload for consistency
                 setTimeout(async () => {
-                    await loadCurriculums();
+        await loadCurriculums();
                     loading.value = false;
                 }, 500);
 
@@ -2975,9 +2975,9 @@ const wasSubjectListOpen = ref(false);
                                 <span class="font-medium">{{ curr.is_active ? 'Active Curriculum' : 'Make Active' }}</span>
                                 <small v-if="curr.is_active" class="active-hint">This is the currently active curriculum</small>
                                 <small v-else class="inactive-hint">Click to make this the active curriculum</small>
-                            </div>
-                            <InputSwitch :modelValue="curr.is_active" @click="!curr.is_active && toggleActiveCurriculum(curr)" />
                         </div>
+                            <InputSwitch :modelValue="curr.is_active" @click="!curr.is_active && toggleActiveCurriculum(curr)" />
+                    </div>
                     </div>
                 </div>
 
@@ -3029,7 +3029,7 @@ const wasSubjectListOpen = ref(false);
                             <span>-</span>
                             <Select v-model="curriculum.yearRange.end" :options="availableEndYears" placeholder="End Year" :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }" class="flex-1" :disabled="!curriculum.yearRange.start" />
                         </div>
-                    </div>
+                        </div>
                     <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)"> Please select both start and end years. </small>
                     <small class="helper-text mt-2">
                         <i class="pi pi-info-circle mr-1"></i>
@@ -3214,7 +3214,7 @@ const wasSubjectListOpen = ref(false);
                 <div class="p-field mb-3">
                     <label for="day" class="font-medium mb-2 block">Day</label>
                     <Dropdown id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
-                </div>
+                    </div>
 
                 <div class="p-field mb-3">
                     <label for="startTime" class="font-medium mb-2 block">Start Time</label>
@@ -3224,7 +3224,7 @@ const wasSubjectListOpen = ref(false);
                         </span>
                         <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
                     </div>
-                </div>
+                    </div>
 
                 <div class="p-field mb-3">
                     <label for="endTime" class="font-medium mb-2 block">End Time</label>
@@ -3234,23 +3234,23 @@ const wasSubjectListOpen = ref(false);
                         </span>
                         <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
                     </div>
-                </div>
+                    </div>
 
                 <div v-if="currentGradeHasSubjectTeachers" class="p-field mb-3">
                     <label for="teacher" class="font-medium mb-2 block">Teacher</label>
                     <Dropdown id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" class="w-full" />
-                </div>
+                    </div>
 
                 <div class="flex align-items-center p-3 border-round bg-blue-50 mb-3">
-                    <i class="pi pi-info-circle text-blue-500 mr-2"></i>
-                    <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
-                </div>
+                        <i class="pi pi-info-circle text-blue-500 mr-2"></i>
+                        <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
+                    </div>
 
                 <template #footer>
                     <div class="flex justify-content-end gap-2">
-                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
-                        <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
-                    </div>
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
+                </div>
                 </template>
             </Dialog>
         </Teleport>
@@ -3267,78 +3267,78 @@ const wasSubjectListOpen = ref(false);
                 @hide="closeSubjectListDialog"
                 appendTo="body"
             >
-                <div class="flex justify-content-between align-items-center mb-3">
-                    <h3 class="m-0">Subjects</h3>
-                    <div class="flex gap-2">
-                        <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
-                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
-                    </div>
+            <div class="flex justify-content-between align-items-center mb-3">
+                <h3 class="m-0">Subjects</h3>
+                <div class="flex gap-2">
+                    <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
+                    <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
                 </div>
+            </div>
 
-                <div v-if="loading" class="flex justify-content-center">
-                    <ProgressSpinner />
-                </div>
+            <div v-if="loading" class="flex justify-content-center">
+                <ProgressSpinner />
+            </div>
 
-                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
-                    <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
-                    <p>No subjects assigned to this section.</p>
-                    <p>Click "Add Subject" to add subjects to this section.</p>
-                </div>
+            <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
+                <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
+                <p>No subjects assigned to this section.</p>
+                <p>Click "Add Subject" to add subjects to this section.</p>
+            </div>
 
-                <div v-else class="subject-grid">
-                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
-                        <div class="flex justify-content-between align-items-start mb-3">
-                            <div>
-                                <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
-                                <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                                <div v-if="currentGradeHasSubjectTeachers">
-                                    <div v-if="subject.teacher" class="teacher-display mt-2">
-                                        <i class="pi pi-user mr-2"></i>
-                                        <span class="teacher-name">{{ subject.teacher.name }}</span>
-                                    </div>
-                                    <div v-else class="teacher-display mt-2">
-                                        <i class="pi pi-user mr-2"></i>
-                                        <span class="no-teacher-text">No teacher assigned</span>
-                                    </div>
+            <div v-else class="subject-grid">
+                <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                    <div class="flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+                            <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
+                            <div v-if="currentGradeHasSubjectTeachers">
+                                <div v-if="subject.teacher" class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
                                 </div>
-                                <div v-else class="teacher-display mt-2 text-muted">
-                                    <i class="pi pi-info-circle mr-2"></i>
-                                    <span class="text-sm text-gray-500">No teacher required for this grade level</span>
+                                <div v-else class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="no-teacher-text">No teacher assigned</span>
                                 </div>
                             </div>
-                            <div class="flex gap-2">
-                                <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
-                                <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
-                                <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
+                            <div v-else class="teacher-display mt-2 text-muted">
+                                <i class="pi pi-info-circle mr-2"></i>
+                                <span class="text-sm text-gray-500">No teacher required for this grade level</span>
                             </div>
                         </div>
-
-                        <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
-                            <h5 class="mt-0 mb-2">Schedule</h5>
-                            <ul class="schedule-list">
-                                <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
-                                    <div class="flex align-items-center gap-2">
-                                        <span class="schedule-day-badge">{{ schedule.day }}</span>
-                                        <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                    </div>
-                                    <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
-                                        <i class="pi pi-user mr-1"></i>
-                                        <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                    </div>
-                                </li>
-                            </ul>
-                        </div>
-                        <div v-else class="no-schedules text-center mt-3">
-                            <i class="pi pi-calendar-times text-3xl"></i>
-                            <p class="m-0">No schedules set</p>
+                        <div class="flex gap-2">
+                            <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
+                            <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
                         </div>
                     </div>
-                </div>
 
-                <template #footer>
-                    <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
-                </template>
-            </Dialog>
+                    <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
+                        <h5 class="mt-0 mb-2">Schedule</h5>
+                        <ul class="schedule-list">
+                            <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
+                                <div class="flex align-items-center gap-2">
+                                    <span class="schedule-day-badge">{{ schedule.day }}</span>
+                                    <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                </div>
+                                <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
+                                    <i class="pi pi-user mr-1"></i>
+                                    <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div v-else class="no-schedules text-center mt-3">
+                        <i class="pi pi-calendar-times text-3xl"></i>
+                        <p class="m-0">No schedules set</p>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
+            </template>
+        </Dialog>
         </Teleport>
 
         <!-- Add Subject Dialog (positioned last in the DOM to ensure it's on top) -->
