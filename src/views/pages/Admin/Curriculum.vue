@@ -1691,11 +1691,14 @@ const getLocalSubjects = (sectionId) => {
 const closeSubjectListDialog = () => {
     console.log('Closing subject list dialog');
 
+    // Check if we're in the process of opening a schedule dialog
+    const isOpeningSchedule = wasSubjectListOpen.value;
+
     // Only hide the dialog initially
     showSubjectListDialog.value = false;
 
-    // Check if schedule dialog is visible
-    if (!showScheduleDialog.value) {
+    // If we're NOT transitioning to schedule dialog
+    if (!isOpeningSchedule && !showScheduleDialog.value) {
         console.log('No other dialogs open, cleaning up resources');
 
         // If schedule dialog is not open, then also reset variables
@@ -1712,7 +1715,7 @@ const closeSubjectListDialog = () => {
             showScheduleDialog.value = false;
         }, 100);
     } else {
-        console.log('Schedule dialog is open, preserving section/subject context');
+        console.log('Preserving section/subject context for another dialog');
     }
 };
 // Track if we're already handling a schedule dialog close
@@ -1799,9 +1802,13 @@ const handleScheduleDialogClose = () => {
     }
 };
 
-// Update the saveSchedule function to not reopen the subject list dialog
+// Update the saveSchedule function to use the correct API endpoint
 const saveSchedule = async () => {
     try {
+        console.log('Schedule data:', schedule.value);
+        console.log('Selected subject:', selectedSubjectForSchedule.value);
+        console.log('Selected section:', selectedSection.value);
+
         // Basic validation
         if (!schedule.value.day || !schedule.value.start_time || !schedule.value.end_time) {
             toast.add({
@@ -1813,12 +1820,35 @@ const saveSchedule = async () => {
             return;
         }
 
-        // Ensure the subject and section are selected
-        if (!selectedSubjectForSchedule.value || !selectedSection.value) {
+        // Ensure the subject_id and section_id are in the schedule
+        if (!schedule.value.subject_id || !schedule.value.section_id) {
+            // Try to get them from the context if they exist
+            if (selectedSubjectForSchedule.value && selectedSection.value) {
+                schedule.value.subject_id = selectedSubjectForSchedule.value.id;
+                schedule.value.section_id = selectedSection.value.id;
+            } else {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Missing subject or section information',
+                    life: 3000
+                });
+                return;
+            }
+        }
+
+        // Get necessary IDs for the API call
+        const curriculumId = selectedCurriculum.value?.id;
+        const gradeId = selectedGrade.value?.id;
+        const sectionId = selectedSection.value.id;
+        const subjectId = selectedSubjectForSchedule.value.id;
+
+        // Validate that we have all required IDs
+        if (!curriculumId || !gradeId || !sectionId || !subjectId) {
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: 'Missing subject or section information',
+                detail: 'Missing curriculum, grade, section, or subject ID',
                 life: 3000
             });
             return;
@@ -1832,15 +1862,14 @@ const saveSchedule = async () => {
             day: schedule.value.day,
             start_time: schedule.value.start_time,
             end_time: schedule.value.end_time,
-            subject_id: selectedSubjectForSchedule.value.id,
-            section_id: selectedSection.value.id,
             teacher_id: schedule.value.teacher_id || null
         };
 
         console.log('Saving schedule with data:', scheduleData);
+        console.log('Using CurriculumService.setSubjectSchedule with:', curriculumId, gradeId, sectionId, subjectId);
 
-        // Save to API
-        const response = await api.post('/api/schedules', scheduleData);
+        // Save using the correct CurriculumService method
+        await CurriculumService.setSubjectSchedule(curriculumId, gradeId, sectionId, subjectId, scheduleData);
 
         // Show success message
         toast.add({
@@ -1850,7 +1879,7 @@ const saveSchedule = async () => {
             life: 3000
         });
 
-        // Close the schedule dialog - the watcher will handle reopening the subject list dialog
+        // Close the schedule dialog - the onDialogHide will handle reopening the subject list dialog
         showScheduleDialog.value = false;
 
         // Refresh subject list to show updated schedules
@@ -2132,21 +2161,24 @@ const openScheduleDialog = async (subject) => {
         // Store whether the subject list dialog was open
         wasSubjectListOpen.value = showSubjectListDialog.value;
 
-        // Store the subject for scheduling
+        // Store the subject and section information BEFORE closing any dialogs
         selectedSubjectForSchedule.value = subject;
 
-        // Suggest a time slot
-        if (!schedule.value.day) {
-            schedule.value.day = 'Monday';
-        }
+        // Capture section information before closing dialog
+        const currentSection = { ...selectedSection.value };
 
-        // Set default times if not already set
-        if (!schedule.value.start_time) {
-            schedule.value.start_time = '08:00';
-        }
-        if (!schedule.value.end_time) {
-            schedule.value.end_time = '09:00';
-        }
+        // Initialize the schedule data with a valid day option
+        schedule.value = {
+            day: dayOptions[0].value, // Use the first day option (Monday)
+            start_time: '08:00',
+            end_time: '09:00',
+            subject_id: subject.id,
+            section_id: currentSection.id,
+            teacher_id: subject.teacher?.id || null
+        };
+
+        console.log('Captured section info:', currentSection);
+        console.log('Prepared schedule data:', schedule.value);
 
         // Load teachers if we haven't already
         if (!teachers.value || teachers.value.length === 0) {
@@ -2175,6 +2207,11 @@ const openScheduleDialog = async (subject) => {
 
             // Wait for the subject list dialog to close before opening the schedule dialog
             setTimeout(() => {
+                // Make sure the section is still available
+                if (!selectedSection.value) {
+                    selectedSection.value = currentSection;
+                }
+
                 showScheduleDialog.value = true;
                 console.log('Schedule dialog opened after closing subject list dialog');
             }, 300);
@@ -2195,16 +2232,17 @@ const openScheduleDialog = async (subject) => {
 };
 
 // Add a watch for the schedule dialog to restore subject list dialog when closed
-watch(showScheduleDialog, (newValue) => {
-    // When schedule dialog is closed and subject list was previously open
-    if (!newValue && wasSubjectListOpen.value) {
-        // Re-open the subject list dialog
-        setTimeout(() => {
-            showSubjectListDialog.value = true;
-            wasSubjectListOpen.value = false;
-        }, 300); // Small delay to ensure proper closing of schedule dialog first
-    }
-});
+// Not needed anymore - replaced by onDialogHide function
+// watch(showScheduleDialog, (newValue) => {
+//     // When schedule dialog is closed and subject list was previously open
+//     if (!newValue && wasSubjectListOpen.value) {
+//         // Re-open the subject list dialog
+//         setTimeout(() => {
+//             showSubjectListDialog.value = true;
+//             wasSubjectListOpen.value = false;
+//         }, 300); // Small delay to ensure proper closing of schedule dialog first
+//     }
+// });
 
 // Add the openTeacherDialog function before openScheduleDialog
 const openTeacherDialog = async (subject) => {
@@ -2860,6 +2898,27 @@ watch(
 
 // At the top of the script with other refs, add:
 const wasSubjectListOpen = ref(false);
+
+// Add a debug watcher for wasSubjectListOpen
+watch(wasSubjectListOpen, (newValue) => {
+    console.log('wasSubjectListOpen changed to:', newValue);
+});
+
+// Add a watch to handle dialog hide event
+const onDialogHide = () => {
+    console.log('Schedule dialog hidden, wasSubjectListOpen:', wasSubjectListOpen.value);
+
+    // If we previously had the subject list dialog open
+    if (wasSubjectListOpen.value) {
+        // Give a small delay to ensure clean transition
+        setTimeout(() => {
+            console.log('Reopening subject list dialog');
+            showSubjectListDialog.value = true;
+            // Reset the flag after reopening
+            wasSubjectListOpen.value = false;
+        }, 300);
+    }
+};
 </script>
 <template>
     <div class="curriculum-wrapper">
@@ -3153,7 +3212,16 @@ const wasSubjectListOpen = ref(false);
 
         <!-- Schedule Dialog -->
         <Teleport to="body">
-            <Dialog v-model:visible="showScheduleDialog" :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`" modal class="p-fluid schedule-dialog" :style="{ width: '450px' }" :closable="true" appendTo="body">
+            <Dialog
+                v-model:visible="showScheduleDialog"
+                :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`"
+                modal
+                class="p-fluid schedule-dialog"
+                :style="{ width: '450px' }"
+                :closable="true"
+                appendTo="body"
+                @hide="onDialogHide"
+            >
                 <div class="p-field mb-3">
                     <label for="day" class="font-medium mb-2 block">Day</label>
                     <Dropdown id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
