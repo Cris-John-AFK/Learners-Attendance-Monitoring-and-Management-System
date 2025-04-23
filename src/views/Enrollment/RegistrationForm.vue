@@ -2,11 +2,23 @@
 import { useToast } from 'primevue/usetoast';
 import { reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import Dropdown from 'primevue/dropdown';
 
 const router = useRouter();
 const toast = useToast();
 const currentStep = ref(1);
 const submitted = ref(false);
+
+// Grade levels for dropdown
+const gradeLevels = [
+    { name: 'Kindergarten', code: 'KG' },
+    { name: 'Grade 1', code: 'G1' },
+    { name: 'Grade 2', code: 'G2' },
+    { name: 'Grade 3', code: 'G3' },
+    { name: 'Grade 4', code: 'G4' },
+    { name: 'Grade 5', code: 'G5' },
+    { name: 'Grade 6', code: 'G6' }
+];
 
 // Define student data structure
 const student = reactive({
@@ -196,53 +208,71 @@ const validateCurrentStep = () => {
 
 // Submit the form
 const submitForm = async () => {
-    if (validateCurrentStep()) {
-        try {
-            // Prepare student data with 'pending' status
-            const studentData = {
-                ...student,
-                status: 'Pending',
-                submissionDate: new Date().toISOString(),
-                requirements: {
-                    form138: false,
-                    psa: false,
-                    goodMoral: false,
-                    others: false
-                }
-            };
-            
-            // In a real implementation, you would send this to your backend API
-            // For example: await axios.post('/api/enrollment/register', studentData);
-            
-            // For demo purposes, we'll simulate a successful submission
-            console.log('Student registration submitted:', studentData);
-            
-            // Show success message
-            toast.add({
-                severity: 'success',
-                summary: 'Registration Complete',
-                detail: 'Your registration has been submitted successfully. Your application is now pending approval.',
-                life: 3000
-            });
-
-        // Store in localStorage for demo purposes (in a real app, this would be in a database)
-        const existingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
-        existingApplicants.push(studentData);
-        localStorage.setItem('pendingApplicants', JSON.stringify(existingApplicants));
+    submitted.value = true;
+    
+    if (!validateCurrentStep()) {
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: 'Please complete all required fields',
+            life: 3000
+        });
+        return;
+    }
+    
+    try {
+        // Create a unique ID for the application
+        const applicationId = 'APP' + Date.now().toString();
         
+        // Format the student data for storage
+        const applicationData = {
+            id: applicationId,
+            ...student,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            email: '', // Can be added later in the admin interface
+            sex: student.sex,
+            birthdate: student.birthdate,
+            applicationDate: new Date().toISOString(),
+            status: 'Pending',
+            // Add default requirements status
+            requirements: {
+                form138: false,
+                psa: false,
+                goodMoral: false,
+                others: false
+            }
+        };
+        
+        // Get existing pending applications from localStorage
+        const existingApplications = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+        
+        // Add the new application
+        existingApplications.push(applicationData);
+        
+        // Save back to localStorage
+        localStorage.setItem('pendingApplicants', JSON.stringify(existingApplications));
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Registration Complete',
+            detail: 'Your application has been submitted successfully and is pending review',
+            life: 5000
+        });
+
         // Reset form or redirect
         setTimeout(() => {
             router.push('/enrollment/landing');
         }, 2000);
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Submission Failed',
-                detail: 'There was an error submitting your registration. Please try again.',
-                life: 3000
-            });
-        }
+    } catch (error) {
+        console.error('Error submitting form:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Submission Failed',
+            detail: 'There was an error submitting your registration. Please try again.',
+            life: 3000
+        });
     }
 };
 
@@ -367,7 +397,7 @@ const floatingItems = reactive([
 
                 <div class="form-group">
                     <label for="gradeLevel">Grade level to Enroll</label>
-                    <InputText id="gradeLevel" v-model="student.gradeLevel" maxlength="3" />
+                    <Dropdown id="gradeLevel" v-model="student.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select Grade Level" class="w-full" />
                     <small v-if="submitted && !student.gradeLevel" class="p-error">Grade level is required</small>
                 </div>
 

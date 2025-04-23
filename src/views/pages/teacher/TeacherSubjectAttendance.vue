@@ -5,17 +5,22 @@ import { SubjectService } from '@/router/service/Subjects';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 // Add OverlayPanel and Menu components
 
 // Add Dialog component if not already imported
 
 const route = useRoute();
+const router = useRouter();
 const toast = useToast();
 const subjectName = ref('Subject');
 const subjectId = ref('');
 const currentDate = ref(new Date().toISOString().split('T')[0]);
+const currentDateTime = ref(new Date());
+
+// Timer reference for cleanup
+const timeInterval = ref(null);
 
 // Modals and UI states
 const showTemplateManager = ref(false);
@@ -1187,6 +1192,12 @@ onUnmounted(() => {
     // Stop scanning to release camera resources
     scanning.value = false;
     console.log('Component unmounting, camera resources released');
+
+    // Clear the time interval
+    if (timeInterval.value) {
+        clearInterval(timeInterval.value);
+        timeInterval.value = null;
+    }
 });
 
 // Add computed property for sorted unassigned students
@@ -1670,8 +1681,18 @@ const loadSavedLayout = () => {
     }
 };
 
+// Function to navigate to attendance records page
+const viewAttendanceRecords = () => {
+    router.push('/teacher/attendance-records');
+};
+
 // Update onMounted to load attendance records first, before loading the layout
 onMounted(async () => {
+    // Update time every second
+    timeInterval.value = setInterval(() => {
+        currentDateTime.value = new Date();
+    }, 1000);
+
     try {
         // Load mock students first
         students.value = [
@@ -1786,6 +1807,10 @@ const isDropTarget = ref(false);
         <div class="flex justify-between items-center mb-4">
             <h5 class="text-xl font-semibold">{{ subjectName }} Attendance</h5>
             <div class="flex gap-2 align-items-center">
+                <div class="date-time-display mr-3">
+                    <div class="date">{{ currentDateTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</div>
+                    <div class="time">{{ currentDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}</div>
+                </div>
                 <Calendar v-model="currentDate" dateFormat="yy-mm-dd" class="mr-2" />
                 <Button icon="pi pi-list-check" label="Take Attendance" class="p-button-primary" @click="openAttendanceMethodDialog" />
             </div>
@@ -1802,6 +1827,8 @@ const isDropTarget = ref(false);
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
 
             <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" />
+
+            <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
         </div>
 
         <!-- Main content with seat plan - always visible -->
@@ -2595,5 +2622,23 @@ const isDropTarget = ref(false);
 
 .restart-button:hover {
     background-color: #1d4fb8;
+}
+
+/* Date and time display styles */
+.date-time-display {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.9rem;
+}
+
+.date-time-display .date {
+    font-weight: 500;
+    color: #4b5563;
+}
+
+.date-time-display .time {
+    font-weight: 600;
+    color: #2563eb;
 }
 </style>

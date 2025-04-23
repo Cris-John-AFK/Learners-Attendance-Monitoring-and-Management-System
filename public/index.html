@@ -1,40 +1,61 @@
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <link rel="icon" href="<%= BASE_URL %>favicon.ico">
-  <title><%= htmlWebpackPlugin.options.title %></title>
-  <!-- Dialog fix styles -->
-  <style>
-    .p-dialog {
-      z-index: 1200 !important;
-      display: block !important;
-    }
-    .p-dialog-mask {
-      z-index: 1100 !important;
-      background-color: rgba(0, 0, 0, 0.4) !important;
-    }
-    .p-component, .p-component * {
-      box-sizing: border-box;
-    }
-    .p-dialog .p-dialog-content {
-      background: #ffffff;
-      color: #495057;
-      padding: 1.5rem;
-    }
-    .p-dialog .p-dialog-header {
-      background: #ffffff;
-      color: #495057;
-      padding: 1.25rem;
-      border-top-right-radius: 6px;
-      border-top-left-radius: 6px;
-    }
-    .p-dialog .p-dialog-footer {
-      background: #ffffff;
-      color: #495057;
-      padding: 1.25rem;
-      border-bottom-right-radius: 6px;
-      border-bottom-left-radius: 6px;
-    }
-  </style>
-</head>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico" />
+    <title><%= htmlWebpackPlugin.options.title %></title>
+    <link
+      id="theme-css"
+      rel="stylesheet"
+      type="text/css"
+      href="<%= BASE_URL %>themes/lara-light-indigo/theme.css"
+    />
+    <style>
+      /* Global CSS for proper dialog stacking */
+      .p-dialog-mask.higher-priority {
+        z-index: 2000 !important;
+      }
+      .p-dialog-mask.highest-priority {
+        z-index: 9999999 !important;
+      }
+
+      /* Ensure schedule dialog appears on top */
+      body.showing-schedule-dialog .p-dialog-mask:has(.schedule-dialog) {
+        z-index: 9999999 !important;
+      }
+
+      /* Special case for nested dialogs */
+      .p-dialog.schedule-dialog {
+        z-index: 9999999 !important;
+        position: relative !important;
+      }
+
+      /* Specific styling for nested dialogs */
+      .nested-dialog {
+        z-index: 99999999 !important;
+      }
+
+      .nested-dialog + .p-dialog-mask {
+        z-index: 99999998 !important;
+      }
+
+      /* Make sure dialog masks don't interfere with each other */
+      .p-dialog-mask {
+        pointer-events: auto !important;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <strong
+        >We're sorry but <%= htmlWebpackPlugin.options.title %> doesn't work
+        properly without JavaScript enabled. Please enable it to
+        continue.</strong
+      >
+    </noscript>
+    <div id="app"></div>
+    <!-- built files will be auto injected -->
+  </body>
+</html>

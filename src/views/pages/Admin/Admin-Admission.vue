@@ -15,6 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 const toast = useToast();
 const search = ref('');
 const loading = ref(true);
+const activeTab = ref(0); // 0 = Pending, 1 = Admitted
 
 const requirements = [
     { key: 'form138', label: 'Form 138' },
@@ -37,15 +38,31 @@ const applicants = ref([]);
 
 const selectedApplicant = ref(null);
 
+// Filter applicants by status based on active tab
 const filteredApplicants = computed(() => {
-    if (!search.value) return applicants.value;
-    return applicants.value.filter((a) => {
+    const statusFilter = activeTab.value === 0 ? 'Pending' : 'Admitted';
+    let filtered = applicants.value.filter(a => a.status === statusFilter);
+    
+    if (search.value) {
         const searchTerm = search.value.toLowerCase();
-        return a.name?.toLowerCase().includes(searchTerm) || 
-               a.firstName?.toLowerCase().includes(searchTerm) || 
-               a.lastName?.toLowerCase().includes(searchTerm);
-    });
+        filtered = filtered.filter((a) => {
+            return a.name?.toLowerCase().includes(searchTerm) || 
+                   a.firstName?.toLowerCase().includes(searchTerm) || 
+                   a.lastName?.toLowerCase().includes(searchTerm);
+        });
+    }
+    
+    return filtered;
 });
+
+// Count of pending and admitted applicants
+const pendingCount = computed(() => 
+    applicants.value.filter(a => a.status === 'Pending').length
+);
+
+const admittedCount = computed(() => 
+    applicants.value.filter(a => a.status === 'Admitted').length
+);
 
 // Load applicants from localStorage on component mount
 onMounted(() => {
@@ -62,8 +79,20 @@ function loadApplicants() {
         // Get admitted applicants from localStorage
         const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
         
-        // Combine and format applicants for display
-        const formattedApplicants = [...pendingApplicants, ...admittedApplicants].map((applicant, index) => {
+        // Create a map to track unique applicants by email or studentId
+        const uniqueApplicantsMap = new Map();
+        
+        // Process all applicants and keep only unique ones
+        [...pendingApplicants, ...admittedApplicants].forEach((applicant) => {
+            const uniqueKey = applicant.email || applicant.studentId || `${applicant.firstName}-${applicant.lastName}`;
+            // Only add if not already in the map
+            if (!uniqueApplicantsMap.has(uniqueKey)) {
+                uniqueApplicantsMap.set(uniqueKey, applicant);
+            }
+        });
+        
+        // Convert map values to array and format for display
+        const formattedApplicants = Array.from(uniqueApplicantsMap.values()).map((applicant, index) => {
             return {
                 id: index + 1,
                 // Use name if available, otherwise construct from first and last name
@@ -119,34 +148,61 @@ const allRequirementsComplete = computed(() => {
 function admitApplicant() {
     if (!selectedApplicant.value) return;
     
+    // Check if all requirements are complete
     if (!allRequirementsComplete.value) {
-        toast.add({ severity: 'warn', summary: 'Incomplete Requirements', detail: 'Please complete all requirements before admitting.', life: 3000 });
+        toast.add({
+            severity: 'warn',
+            summary: 'Requirements Incomplete',
+            detail: 'Please ensure all requirements are complete before admitting the student.',
+            life: 3000
+        });
         return;
     }
     
-    try {
-        // Update the applicant status
-        selectedApplicant.value.status = 'Admitted';
-        selectedApplicant.value.studentId = 'STU' + String(selectedApplicant.value.id).padStart(5, '0');
-        
-        // Update in local storage
-        updateApplicantInStorage(selectedApplicant.value);
-        
-        toast.add({ 
-            severity: 'success', 
-            summary: 'Admitted', 
-            detail: `Student ${selectedApplicant.value.name} has been admitted.`, 
-            life: 3000 
-        });
-    } catch (error) {
-        console.error('Error admitting applicant:', error);
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Error', 
-            detail: 'Failed to admit applicant.', 
-            life: 3000 
-        });
-    }
+    // Update student status to admitted
+    selectedApplicant.value.status = 'Admitted';
+    
+    // Generate a student ID
+    selectedApplicant.value.studentId = 'STU' + String(Date.now()).slice(-8);
+    
+    // Update the data in localStorage
+    updateApplicantInStorage(selectedApplicant.value);
+    
+    // Get the original data to create an admitted student record
+    const originalData = selectedApplicant.value.originalData || selectedApplicant.value;
+    
+    // Create a student record for enrollment
+    const admittedStudent = {
+        ...originalData,
+        studentId: selectedApplicant.value.studentId,
+        name: selectedApplicant.value.name || `${originalData.firstName} ${originalData.lastName}`,
+        status: 'Admitted',
+        enrollmentStatus: 'Not Enrolled', // Initial status for enrollment
+        admissionDate: new Date().toISOString()
+    };
+    
+    // Get existing admitted students from localStorage
+    const admittedStudents = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
+    
+    // Add the new admitted student
+    admittedStudents.push(admittedStudent);
+    
+    // Save back to localStorage
+    localStorage.setItem('admittedApplicants', JSON.stringify(admittedStudents));
+    
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Student Admitted',
+        detail: `${selectedApplicant.value.name} has been successfully admitted with Student ID: ${selectedApplicant.value.studentId}`,
+        life: 3000
+    });
+    
+    // Reload the applicant list
+    loadApplicants();
+    
+    // Switch to Admitted tab
+    activeTab.value = 1;
 }
 
 function updateApplicantInStorage(applicant) {
@@ -242,11 +298,30 @@ function rejectApplicant() {
             </div>
         </div>
 
+        <!-- Main Tab View -->
+        <TabView v-model:activeIndex="activeTab" class="mb-4">
+            <TabPanel header="Pending Applications">
+                <div class="status-indicator">
+                    <i class="pi pi-clock text-blue-500 mr-2"></i>
+                    <span class="font-semibold">Pending Applications ({{ pendingCount }})</span>
+                </div>
+            </TabPanel>
+            <TabPanel header="Admitted Students">
+                <div class="status-indicator">
+                    <i class="pi pi-check-circle text-green-500 mr-2"></i>
+                    <span class="font-semibold">Admitted Students ({{ admittedCount }})</span>
+                </div>
+            </TabPanel>
+        </TabView>
+
         <div class="grid">
             <!-- Applicant List Panel -->
             <div class="col-12 md:col-5 lg:col-4">
                 <div class="card mb-0">
-                    <h5>Applicants ({{ filteredApplicants.length }})</h5>
+                    <h5>
+                        {{ activeTab === 0 ? 'Pending Applicants' : 'Admitted Students' }}
+                        ({{ filteredApplicants.length }})
+                    </h5>
                     <div class="applicant-list p-2">
                         <div
                             v-for="applicant in filteredApplicants"
@@ -261,11 +336,16 @@ function rejectApplicant() {
                                 <div class="text-sm text-color-secondary flex align-items-center">
                                     <i class="pi pi-tag mr-1"></i>
                                     <Tag :severity="applicant.status === 'Pending' ? 'info' : applicant.status === 'Admitted' ? 'success' : 'danger'" :value="applicant.status" />
+                                    <span v-if="applicant.studentId" class="ml-2">
+                                        <i class="pi pi-id-card mr-1"></i>{{ applicant.studentId }}
+                                    </span>
                                 </div>
                             </div>
                             <i class="pi pi-chevron-right text-color-secondary"></i>
                         </div>
-                        <div v-if="filteredApplicants.length === 0" class="p-4 text-center text-color-secondary">No applicants found</div>
+                        <div v-if="filteredApplicants.length === 0" class="p-4 text-center text-color-secondary">
+                            {{ activeTab === 0 ? 'No pending applications found' : 'No admitted students found' }}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -365,7 +445,8 @@ function rejectApplicant() {
                 <div v-else class="card flex align-items-center justify-content-center" style="min-height: 400px">
                     <div class="text-center">
                         <i class="pi pi-user text-4xl text-color-secondary mb-3"></i>
-                        <h5>Select an applicant to view details</h5>
+                        <h5 class="mt-0">No Applicant Selected</h5>
+                        <p class="text-color-secondary">Select an applicant from the list to view details</p>
                     </div>
                 </div>
             </div>
@@ -380,99 +461,46 @@ function rejectApplicant() {
     cursor: pointer;
     transition: all 0.2s;
     background-color: var(--surface-card);
-    border: 1px solid var(--surface-border);
+    box-shadow: var(--card-shadow);
 }
 
 .applicant-item:hover {
     background-color: var(--surface-hover);
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
 }
 
 .selected-applicant {
+    background-color: var(--primary-50) !important;
     border-left: 4px solid var(--primary-color);
-    background-color: var(--primary-50);
 }
 
-/* Tab panel styling */
+.applicant-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Status indicator styling */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    background-color: var(--surface-50);
+}
+
+/* Smooth tab transitions */
+:deep(.p-tabview-panels) {
+    padding: 0;
+    transition: all 0.3s;
+}
+
 :deep(.p-tabview-nav) {
-    border-bottom: 2px solid var(--surface-border);
+    border-radius: 0.5rem;
+    background-color: var(--surface-50);
 }
 
 :deep(.p-tabview-nav li.p-highlight .p-tabview-nav-link) {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-}
-
-:deep(.p-tabview-panels) {
-    padding: 1.5rem 0;
-}
-
-/* DataTable styling */
-:deep(.p-datatable-sm .p-datatable-thead > tr > th) {
-    padding: 0.75rem 1rem;
-    background-color: var(--surface-ground);
-    font-weight: 600;
-}
-
-:deep(.p-datatable-sm .p-datatable-tbody > tr > td) {
-    padding: 0.75rem 1rem;
-}
-
-:deep(.p-datatable-sm .p-datatable-tbody > tr:nth-child(even)) {
-    background-color: var(--surface-hover);
-}
-
-/* Card styling */
-:deep(.card) {
-    background: var(--surface-card);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    box-shadow:
-        0 2px 1px -1px rgba(0, 0, 0, 0.1),
-        0 1px 1px 0 rgba(0, 0, 0, 0.07),
-        0 1px 3px 0 rgba(0, 0, 0, 0.06);
-}
-
-/* Button styling */
-:deep(.p-button) {
-    border-radius: 6px;
-}
-
-/* Status colors */
-.bg-green-50 {
-    background-color: #f0fdf4;
-}
-
-.bg-red-50 {
-    background-color: #fef2f2;
-}
-
-.text-green-500 {
-    color: #22c55e;
-}
-
-.text-red-500 {
-    color: #ef4444;
-}
-
-.text-green-700 {
-    color: #15803d;
-}
-
-.text-red-700 {
-    color: #b91c1c;
-}
-
-/* Responsive adjustments */
-@media screen and (max-width: 768px) {
-    .grid > .col-12 {
-        padding: 0.5rem;
-    }
-
-    :deep(.p-tabview-panels) {
-        padding: 1rem 0;
-    }
+    background-color: var(--surface-0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 </style>

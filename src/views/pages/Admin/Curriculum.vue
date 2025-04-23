@@ -757,10 +757,10 @@ const saveCurriculum = async () => {
                     message = `A curriculum for years ${yearRange.start}-${yearRange.end} already exists. Year ranges must be unique.`;
                 } else if (error.response.data?.errors) {
                     // Format validation errors
-                const errorDetails = Object.entries(error.response.data.errors)
-                    .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
-                    .join('; ');
-                message = `Validation error: ${errorDetails}`;
+                    const errorDetails = Object.entries(error.response.data.errors)
+                        .map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+                        .join('; ');
+                    message = `Validation error: ${errorDetails}`;
                 } else {
                     message = error.response.data?.message || 'Validation failed. Please check your input.';
                 }
@@ -893,26 +893,26 @@ const toggleActiveCurriculum = async (curr) => {
 
             if (!isOnlyActiveCurriculum) {
                 // If there's another active curriculum, allow deactivation
-            await CurriculumService.updateCurriculum({
-                ...curr,
+                await CurriculumService.updateCurriculum({
+                    ...curr,
                     is_active: false,
                     status: 'Draft'
-            });
+                });
 
                 // Update local state without full reload
                 curr.is_active = false;
                 curr.status = 'Draft';
 
-            toast.add({
+                toast.add({
                     severity: 'success',
                     summary: 'Success',
                     detail: 'Curriculum deactivated successfully',
-                life: 3000
-            });
+                    life: 3000
+                });
 
                 // Delay the reload for consistency
                 setTimeout(async () => {
-        await loadCurriculums();
+                    await loadCurriculums();
                     loading.value = false;
                 }, 500);
 
@@ -1802,140 +1802,69 @@ const handleScheduleDialogClose = () => {
 // Update the saveSchedule function to not reopen the subject list dialog
 const saveSchedule = async () => {
     try {
-        if (!selectedSubjectForSchedule.value) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'No subject selected',
-                life: 3000
-            });
-            return;
-        }
-
+        // Basic validation
         if (!schedule.value.day || !schedule.value.start_time || !schedule.value.end_time) {
             toast.add({
                 severity: 'warn',
                 summary: 'Warning',
-                detail: 'Please fill in all schedule fields',
+                detail: 'Please fill in all required fields',
                 life: 3000
             });
             return;
         }
 
-        // Check if we have a valid section_id directly in the schedule object
-        if (!schedule.value.section_id) {
+        // Ensure the subject and section are selected
+        if (!selectedSubjectForSchedule.value || !selectedSection.value) {
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: 'No section selected. Please try again.',
+                detail: 'Missing subject or section information',
                 life: 3000
             });
-            loading.value = false;
             return;
         }
 
+        // Show loading state
         loading.value = true;
 
-        // Validate time format
-        if (schedule.value.start_time >= schedule.value.end_time) {
-            toast.add({
-                severity: 'error',
-                summary: 'Invalid Time Range',
-                detail: 'Start time must be before end time',
-                life: 3000
-            });
-            loading.value = false;
-            return;
-        }
+        // Create schedule data
+        const scheduleData = {
+            day: schedule.value.day,
+            start_time: schedule.value.start_time,
+            end_time: schedule.value.end_time,
+            subject_id: selectedSubjectForSchedule.value.id,
+            section_id: selectedSection.value.id,
+            teacher_id: schedule.value.teacher_id || null
+        };
 
-        // Check for schedule conflicts
-        const conflict = checkForScheduleConflicts(schedule.value);
-        if (conflict.hasConflict) {
-            toast.add({
-                severity: 'error',
-                summary: 'Schedule Conflict',
-                detail: `This time conflicts with ${conflict.conflictWith} (${conflict.existingTime})`,
-                life: 5000
-            });
-            loading.value = false;
-            return;
-        }
+        console.log('Saving schedule with data:', scheduleData);
 
-        // Check if a schedule for this day already exists for this subject
-        if (selectedSubjectForSchedule.value.schedules && selectedSubjectForSchedule.value.schedules.length > 0) {
-            const dayExists = selectedSubjectForSchedule.value.schedules.some((existingSchedule) => existingSchedule.day === schedule.value.day);
+        // Save to API
+        const response = await api.post('/api/schedules', scheduleData);
 
-            if (dayExists) {
-                toast.add({
-                    severity: 'error',
-                    summary: 'Duplicate Day',
-                    detail: `A schedule for ${schedule.value.day} already exists for this subject. Each day can only be scheduled once.`,
-                    life: 5000
-                });
-                loading.value = false;
-                return;
-            }
-        }
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Schedule saved successfully',
+            life: 3000
+        });
 
-        try {
-            // Format the schedule data using the stored section_id
-            const scheduleData = {
-                day: schedule.value.day,
-                start_time: schedule.value.start_time,
-                end_time: schedule.value.end_time,
-                teacher_id: currentGradeHasSubjectTeachers ? schedule.value.teacher_id : null,
-                subject_id: selectedSubjectForSchedule.value.id,
-                section_id: schedule.value.section_id
-            };
+        // Close the schedule dialog - the watcher will handle reopening the subject list dialog
+        showScheduleDialog.value = false;
 
-            console.log('Saving schedule with data:', scheduleData);
-
-            // Get curriculum and grade IDs from selected values
-            const curriculumId = selectedCurriculum.value.id;
-            const gradeId = selectedGrade.value.id;
-            const sectionId = schedule.value.section_id;
-
-            // Call the API using the correct method name
-            await CurriculumService.setSubjectSchedule(curriculumId, gradeId, sectionId, selectedSubjectForSchedule.value.id, scheduleData);
-
-            // Initialize the schedules array if it doesn't exist
-            if (!selectedSubjectForSchedule.value.schedules) {
-                selectedSubjectForSchedule.value.schedules = [];
-            }
-
-            // Add the schedule to the subject
-            selectedSubjectForSchedule.value.schedules.push(scheduleData);
-
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
-                detail: 'Schedule added successfully',
-                life: 3000
-            });
-
-            // Close the schedule dialog
-            showScheduleDialog.value = false;
-
-            // Refresh the subjects list to show the updated schedules
-            refreshSectionSubjects();
-        } catch (error) {
-            console.error('Error adding schedule:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to add schedule: ' + (error.message || 'Unknown error'),
-                life: 3000
-            });
-        }
+        // Refresh subject list to show updated schedules
+        refreshSectionSubjects();
     } catch (error) {
-        console.error('Error in saveSchedule:', error);
+        console.error('Error saving schedule:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'An unexpected error occurred',
+            detail: 'Failed to save schedule: ' + (error.message || 'Unknown error'),
             life: 3000
         });
     } finally {
+        // Hide loading state
         loading.value = false;
     }
 };
@@ -2198,54 +2127,68 @@ const assignHomeRoomTeacher = async () => {
 // Add the openScheduleDialog function after closeSubjectListDialog
 const openScheduleDialog = async (subject) => {
     try {
-        // Store the subject reference
+        console.log('Opening schedule dialog for subject:', subject);
+
+        // Store whether the subject list dialog was open
+        wasSubjectListOpen.value = showSubjectListDialog.value;
+
+        // Store the subject for scheduling
         selectedSubjectForSchedule.value = subject;
 
-        console.log('Opening schedule dialog for subject:', subject.name);
+        // Suggest a time slot
+        if (!schedule.value.day) {
+            schedule.value.day = 'Monday';
+        }
 
-        // Get suggested non-conflicting time slot
-        const defaultDay = 'Monday';
-        const suggestedTimeSlot = getNextAvailableTimeSlot(defaultDay);
+        // Set default times if not already set
+        if (!schedule.value.start_time) {
+            schedule.value.start_time = '08:00';
+        }
+        if (!schedule.value.end_time) {
+            schedule.value.end_time = '09:00';
+        }
 
-        // Initialize schedule with suggested values
-        schedule.value = {
-            day: defaultDay,
-            start_time: suggestedTimeSlot.start_time,
-            end_time: suggestedTimeSlot.end_time,
-            subject_id: subject.id,
-            teacher_id: currentGradeHasSubjectTeachers ? subject.teacher?.id || null : null,
-            section_id: selectedSection.value.id
-        };
-
-        // Load teachers if needed
+        // Load teachers if we haven't already
         if (!teachers.value || teachers.value.length === 0) {
-            loading.value = true;
             try {
-                const teachersData = await TeacherService.getTeachers();
-                teachers.value = Array.isArray(teachersData) ? teachersData : [];
-                console.log(`Loaded ${teachers.value.length} teachers`);
+                console.log('Loading teachers...');
+                loadingTeachers.value = true;
+                const response = await api.get('/api/teachers');
+                teachers.value = response.data;
+                console.log('Teachers loaded:', teachers.value);
             } catch (error) {
-                console.error('Error loading teachers:', error);
+                console.error('Failed to load teachers:', error);
                 toast.add({
-                    severity: 'warn',
-                    summary: 'Warning',
-                    detail: 'Could not load teachers list',
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to load teachers: ' + (error.message || 'Unknown error'),
                     life: 3000
                 });
-                teachers.value = [];
             } finally {
-                loading.value = false;
+                loadingTeachers.value = false;
             }
         }
 
-        // Show the custom schedule dialog
-        showScheduleDialog.value = true;
+        // Close the subject list dialog if it's open
+        if (showSubjectListDialog.value) {
+            showSubjectListDialog.value = false;
+
+            // Wait for the subject list dialog to close before opening the schedule dialog
+            setTimeout(() => {
+                showScheduleDialog.value = true;
+                console.log('Schedule dialog opened after closing subject list dialog');
+            }, 300);
+        } else {
+            // Just open the schedule dialog if subject list dialog wasn't open
+            showScheduleDialog.value = true;
+            console.log('Schedule dialog opened directly');
+        }
     } catch (error) {
-        console.error('Error in openScheduleDialog:', error);
+        console.error('Error opening schedule dialog:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to open schedule dialog',
+            detail: 'Failed to open schedule dialog: ' + (error.message || 'Unknown error'),
             life: 3000
         });
     }
@@ -2259,7 +2202,7 @@ watch(showScheduleDialog, (newValue) => {
         setTimeout(() => {
             showSubjectListDialog.value = true;
             wasSubjectListOpen.value = false;
-        }, 50); // Small delay to ensure proper closing of schedule dialog first
+        }, 300); // Small delay to ensure proper closing of schedule dialog first
     }
 });
 
@@ -2975,9 +2918,9 @@ const wasSubjectListOpen = ref(false);
                                 <span class="font-medium">{{ curr.is_active ? 'Active Curriculum' : 'Make Active' }}</span>
                                 <small v-if="curr.is_active" class="active-hint">This is the currently active curriculum</small>
                                 <small v-else class="inactive-hint">Click to make this the active curriculum</small>
-                        </div>
+                            </div>
                             <InputSwitch :modelValue="curr.is_active" @click="!curr.is_active && toggleActiveCurriculum(curr)" />
-                    </div>
+                        </div>
                     </div>
                 </div>
 
@@ -3029,7 +2972,7 @@ const wasSubjectListOpen = ref(false);
                             <span>-</span>
                             <Select v-model="curriculum.yearRange.end" :options="availableEndYears" placeholder="End Year" :class="{ 'p-invalid': submitted && !curriculum.yearRange.end }" class="flex-1" :disabled="!curriculum.yearRange.start" />
                         </div>
-                        </div>
+                    </div>
                     <small class="p-error" v-if="submitted && (!curriculum.yearRange.start || !curriculum.yearRange.end)"> Please select both start and end years. </small>
                     <small class="helper-text mt-2">
                         <i class="pi pi-info-circle mr-1"></i>
@@ -3210,11 +3153,11 @@ const wasSubjectListOpen = ref(false);
 
         <!-- Schedule Dialog -->
         <Teleport to="body">
-            <Dialog v-model:visible="showScheduleDialog" :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`" modal class="p-fluid schedule-dialog" :style="{ width: '450px', zIndex: 99999 }" :closable="true" appendTo="body">
+            <Dialog v-model:visible="showScheduleDialog" :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`" modal class="p-fluid schedule-dialog" :style="{ width: '450px' }" :closable="true" appendTo="body">
                 <div class="p-field mb-3">
                     <label for="day" class="font-medium mb-2 block">Day</label>
                     <Dropdown id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
-                    </div>
+                </div>
 
                 <div class="p-field mb-3">
                     <label for="startTime" class="font-medium mb-2 block">Start Time</label>
@@ -3224,7 +3167,7 @@ const wasSubjectListOpen = ref(false);
                         </span>
                         <input type="time" id="startTime" v-model="schedule.start_time" class="p-inputtext w-full" />
                     </div>
-                    </div>
+                </div>
 
                 <div class="p-field mb-3">
                     <label for="endTime" class="font-medium mb-2 block">End Time</label>
@@ -3234,23 +3177,23 @@ const wasSubjectListOpen = ref(false);
                         </span>
                         <input type="time" id="endTime" v-model="schedule.end_time" class="p-inputtext w-full" />
                     </div>
-                    </div>
+                </div>
 
                 <div v-if="currentGradeHasSubjectTeachers" class="p-field mb-3">
                     <label for="teacher" class="font-medium mb-2 block">Teacher</label>
                     <Dropdown id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" class="w-full" />
-                    </div>
+                </div>
 
                 <div class="flex align-items-center p-3 border-round bg-blue-50 mb-3">
-                        <i class="pi pi-info-circle text-blue-500 mr-2"></i>
-                        <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
-                    </div>
+                    <i class="pi pi-info-circle text-blue-500 mr-2"></i>
+                    <span class="text-sm">Time slots are automatically suggested to avoid conflicts. The system prevents scheduling two subjects at the same time.</span>
+                </div>
 
                 <template #footer>
                     <div class="flex justify-content-end gap-2">
-                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
-                    <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
-                </div>
+                        <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showScheduleDialog = false" />
+                        <Button label="Save" icon="pi pi-check" class="p-button-primary" @click="saveSchedule" />
+                    </div>
                 </template>
             </Dialog>
         </Teleport>
@@ -3262,83 +3205,83 @@ const wasSubjectListOpen = ref(false);
                 :header="'Subjects for Section ' + (selectedSection?.name || '')"
                 modal
                 class="p-fluid subject-list-dialog"
-                :style="{ width: '800px', zIndex: 9000 }"
+                :style="{ width: '800px' }"
                 :closable="true"
                 @hide="closeSubjectListDialog"
                 appendTo="body"
             >
-            <div class="flex justify-content-between align-items-center mb-3">
-                <h3 class="m-0">Subjects</h3>
-                <div class="flex gap-2">
-                    <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
-                    <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
-                </div>
-            </div>
-
-            <div v-if="loading" class="flex justify-content-center">
-                <ProgressSpinner />
-            </div>
-
-            <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
-                <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
-                <p>No subjects assigned to this section.</p>
-                <p>Click "Add Subject" to add subjects to this section.</p>
-            </div>
-
-            <div v-else class="subject-grid">
-                <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
-                    <div class="flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
-                            <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                            <div v-if="currentGradeHasSubjectTeachers">
-                                <div v-if="subject.teacher" class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
-                                </div>
-                                <div v-else class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="no-teacher-text">No teacher assigned</span>
-                                </div>
-                            </div>
-                            <div v-else class="teacher-display mt-2 text-muted">
-                                <i class="pi pi-info-circle mr-2"></i>
-                                <span class="text-sm text-gray-500">No teacher required for this grade level</span>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
-                            <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
-                        </div>
-                    </div>
-
-                    <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
-                        <h5 class="mt-0 mb-2">Schedule</h5>
-                        <ul class="schedule-list">
-                            <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
-                                <div class="flex align-items-center gap-2">
-                                    <span class="schedule-day-badge">{{ schedule.day }}</span>
-                                    <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                </div>
-                                <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
-                                    <i class="pi pi-user mr-1"></i>
-                                    <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                    <div v-else class="no-schedules text-center mt-3">
-                        <i class="pi pi-calendar-times text-3xl"></i>
-                        <p class="m-0">No schedules set</p>
+                <div class="flex justify-content-between align-items-center mb-3">
+                    <h3 class="m-0">Subjects</h3>
+                    <div class="flex gap-2">
+                        <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
+                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
                     </div>
                 </div>
-            </div>
 
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
-            </template>
-        </Dialog>
+                <div v-if="loading" class="flex justify-content-center">
+                    <ProgressSpinner />
+                </div>
+
+                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
+                    <i class="pi pi-exclamation-circle text-5xl text-primary mb-3"></i>
+                    <p>No subjects assigned to this section.</p>
+                    <p>Click "Add Subject" to add subjects to this section.</p>
+                </div>
+
+                <div v-else class="subject-grid">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                        <div class="flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+                                <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
+                                <div v-if="currentGradeHasSubjectTeachers">
+                                    <div v-if="subject.teacher" class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="teacher-name">{{ subject.teacher.name }}</span>
+                                    </div>
+                                    <div v-else class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="no-teacher-text">No teacher assigned</span>
+                                    </div>
+                                </div>
+                                <div v-else class="teacher-display mt-2 text-muted">
+                                    <i class="pi pi-info-circle mr-2"></i>
+                                    <span class="text-sm text-gray-500">No teacher required for this grade level</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <Button v-if="currentGradeHasSubjectTeachers" icon="pi pi-user" class="p-button-rounded p-button-primary p-button-outlined" @click="openTeacherDialog(subject)" v-tooltip.top="'Assign Teacher'" />
+                                <Button icon="pi pi-calendar" class="p-button-rounded p-button-success p-button-outlined" @click="openScheduleDialog(subject)" v-tooltip.top="'Set Schedule'" />
+                                <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
+                            </div>
+                        </div>
+
+                        <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
+                            <h5 class="mt-0 mb-2">Schedule</h5>
+                            <ul class="schedule-list">
+                                <li v-for="(schedule, index) in subject.schedules" :key="index" class="mb-2 p-2 schedule-item flex align-items-center justify-content-between">
+                                    <div class="flex align-items-center gap-2">
+                                        <span class="schedule-day-badge">{{ schedule.day }}</span>
+                                        <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                    </div>
+                                    <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
+                                        <i class="pi pi-user mr-1"></i>
+                                        <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        <div v-else class="no-schedules text-center mt-3">
+                            <i class="pi pi-calendar-times text-3xl"></i>
+                            <p class="m-0">No schedules set</p>
+                        </div>
+                    </div>
+                </div>
+
+                <template #footer>
+                    <Button label="Close" icon="pi pi-times" class="p-button-text" @click="closeSubjectListDialog" />
+                </template>
+            </Dialog>
         </Teleport>
 
         <!-- Add Subject Dialog (positioned last in the DOM to ensure it's on top) -->
