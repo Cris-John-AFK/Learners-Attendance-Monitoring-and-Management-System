@@ -1,6 +1,7 @@
 <script setup>
 import { AttendanceService } from '@/router/service/Estudyante';
 import { SubjectService } from '@/router/service/Subjects';
+import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Column from 'primevue/column';
@@ -10,6 +11,10 @@ import InputText from 'primevue/inputtext';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue'; // Added missing watch import
+
+// Configure axios to handle CORS
+axios.defaults.headers.common['Access-Control-Allow-Origin'] = '*';
+axios.defaults.withCredentials = false;
 
 const toast = useToast();
 const loading = ref(true);
@@ -97,22 +102,74 @@ const loadAttendanceRecords = async () => {
         // Load students for this subject
         students.value = await AttendanceService.getStudentsBySubject(selectedSubject.value.code);
 
-        // Load attendance records from localStorage
+        // Get attendance data from seat plan
+        const seatPlanKey = `seatPlan_${selectedSubject.value.code}`;
+        const seatPlanData = localStorage.getItem(seatPlanKey);
+
+        // Get attendance records from localStorage as fallback
         const allRecords = JSON.parse(localStorage.getItem('attendanceRecords') || '{}');
 
-        // Filter records for the selected subject and date range
+        // Initialize attendance records
         attendanceRecords.value = {};
-        Object.entries(allRecords).forEach(([key, record]) => {
-            // Check if record is for a student in this subject
-            const studentExists = students.value.some((s) => s.id.toString() === record.studentId.toString());
 
-            // Check if record date is within range
-            const recordDate = new Date(record.date);
-            const isInDateRange = recordDate >= startDate.value && recordDate <= endDate.value;
+        // Create a map of all dates in the selected range
+        const dateMap = new Map();
+        const currentDate = new Date(startDate.value);
+        while (currentDate <= endDate.value) {
+            const dateString = currentDate.toISOString().split('T')[0];
+            dateMap.set(dateString, true);
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
 
-            if (studentExists && isInDateRange) {
-                attendanceRecords.value[key] = record;
+        // Process seat plan data if available
+        let seatPlanAttendance = {};
+        if (seatPlanData) {
+            try {
+                const parsedData = JSON.parse(seatPlanData);
+                if (parsedData && parsedData.seatPlan) {
+                    // Extract attendance data from seat plan
+                    const seatPlan = parsedData.seatPlan;
+
+                    // Process each seat in the seat plan
+                    seatPlan.forEach((row) => {
+                        row.forEach((seat) => {
+                            if (seat.isOccupied && seat.studentId) {
+                                seatPlanAttendance[seat.studentId] = seat.status || '';
+                            }
+                        });
+                    });
+                }
+            } catch (parseError) {
+                console.error('Error parsing seat plan data:', parseError);
             }
+        }
+
+        // For each student and each date in the range, create attendance records
+        students.value.forEach((student) => {
+            // For each date in the range
+            dateMap.forEach((_, dateString) => {
+                const recordKey = `${student.id}-${dateString}`;
+
+                // Check if we have a record in localStorage
+                const existingRecord = allRecords[recordKey];
+
+                if (existingRecord) {
+                    // Use existing record from localStorage
+                    attendanceRecords.value[recordKey] = existingRecord;
+                } else {
+                    // Create a new record with status from seat plan or default to empty string
+                    const status = seatPlanAttendance[student.id] || '';
+
+                    attendanceRecords.value[recordKey] = {
+                        date: dateString,
+                        studentId: student.id,
+                        studentName: student.name,
+                        status: status,
+                        time: new Date().toLocaleTimeString(),
+                        remarks: ''
+                    };
+                }
+            });
         });
 
         toast.add({
@@ -227,7 +284,7 @@ watch([selectedSubject, startDate, endDate], () => {
 
 // Function to get status class
 const getStatusClass = (status) => {
-    if (!status) return 'status-none';
+    if (!status || status === '') return 'status-none';
 
     switch (status) {
         case 'Present':
@@ -300,7 +357,8 @@ const formatDate = (dateString) => {
             <Column v-for="date in dateColumns" :key="date" :field="date" :header="formatDate(date)" style="min-width: 100px">
                 <template #body="{ data, field }">
                     <div :class="['status-cell', getStatusClass(data[field])]">
-                        {{ data[field] || '-' }}
+                        <i v-if="data[field] === 'Present'" class="pi pi-check-circle text-green-500"></i>
+                        <span v-else>{{ data[field] || '' }}</span>
                     </div>
                 </template>
             </Column>
