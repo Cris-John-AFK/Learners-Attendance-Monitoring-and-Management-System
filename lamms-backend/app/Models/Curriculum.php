@@ -5,6 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\DB;
 
 class Curriculum extends Model
 {
@@ -17,16 +20,16 @@ class Curriculum extends Model
      */
     protected $table = 'curricula';
 
-    // Enable timestamps to match database schema
-    public $timestamps = true;
+    // Disable timestamps
+    public $timestamps = false;
 
     protected $fillable = [
         'name',
         'start_year',
         'end_year',
-        'description',
+        'is_active',
         'status',
-        'is_active'
+        'description'
     ];
 
     protected $casts = [
@@ -55,19 +58,69 @@ class Curriculum extends Model
         }
     }
 
-    // Relationships
-    public function grades()
+    /**
+     * Get all sections in this curriculum
+     */
+    public function sections(): HasMany
     {
-        return $this->belongsToMany(Grade::class, 'curriculum_grade');
+        return $this->hasMany(Section::class);
     }
 
-    public function sections()
+    /**
+     * Get all subjects in this curriculum through curriculum_subject_section
+     */
+    public function subjects(): BelongsToMany
     {
-        return $this->hasManyThrough(
-            Section::class,
-            CurriculumGrade::class,
-            'curriculum_id',
-            'curriculum_grade_id'
-        );
+        return $this->belongsToMany(Subject::class, 'curriculum_grade_subject')
+            ->withPivot(['grade_id', 'units', 'hours_per_week', 'description'])
+            ->withTimestamps();
+    }
+
+    /**
+     * Get all grades that have sections in this curriculum
+     */
+    public function grades(): BelongsToMany
+    {
+        return $this->belongsToMany(Grade::class, 'curriculum_grade')
+            ->withTimestamps();
+    }
+
+    /**
+     * Scope a query to only include active curriculums.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true)
+            ->where('status', 'Active');
+    }
+
+    /**
+     * Activate this curriculum and deactivate all others
+     */
+    public function activate()
+    {
+        // Deactivate all other curriculums
+        self::where('id', '!=', $this->id)->update(['is_active' => false]);
+
+        // Activate this curriculum
+        $this->update([
+            'is_active' => true,
+            'status' => 'Active'
+        ]);
+    }
+
+    public function deactivate()
+    {
+        $this->update([
+            'is_active' => false,
+            'status' => 'Archived'
+        ]);
+    }
+
+    public function getSubjectsByGrade($gradeId)
+    {
+        return $this->subjects()
+            ->wherePivot('grade_id', $gradeId)
+            ->get();
     }
 }

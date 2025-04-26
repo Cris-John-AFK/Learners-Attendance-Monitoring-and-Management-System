@@ -5,332 +5,367 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Curriculum;
 use App\Models\Grade;
-use App\Models\Section;
+use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 
 class CurriculumController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            // Log database connection details
-            Log::info('Attempting to fetch curricula');
-            Log::info('DB Connection: ' . config('database.default'));
-            Log::info('DB Name: ' . config('database.connections.' . config('database.default') . '.database'));
+            $query = Curriculum::query();
 
-            // Check if table exists
-            $tableExists = Schema::hasTable('curricula');
-            Log::info('Curricula table exists: ' . ($tableExists ? 'Yes' : 'No'));
+            // Check if specific fields are requested
+            if ($request->has('fields')) {
+                $fields = explode(',', $request->fields);
+                $validFields = array_intersect($fields, ['id', 'name', 'status', 'is_active', 'start_year', 'end_year', 'description']);
 
-            if (!$tableExists) {
-                return response()->json([
-                    'message' => 'Table curricula does not exist',
-                    'error' => 'Database schema not properly set up'
-                ], 500);
+                // If there are valid fields, select only those fields
+                if (!empty($validFields)) {
+                    $query->select($validFields);
+                }
+
+                // Only load relationships if not requesting specific fields or if relationships are in the fields
+                if (in_array('grades', $fields) || !$request->has('fields')) {
+                    $query->with('grades');
+                }
+
+                if (in_array('subjects', $fields) || !$request->has('fields')) {
+                    $query->with('subjects');
+                }
+            } else {
+                // If no fields specified, load all relationships
+                $query->with(['grades', 'subjects']);
             }
 
-            // Try to fetch data with yearRange accessor
-            $curricula = Curriculum::query();
-
-            // Add order by if timestamps are enabled
-            if (Schema::hasColumn('curricula', 'created_at')) {
-                $curricula->orderBy('created_at', 'desc');
-            }
-
-            $curricula = $curricula->get();
-
-            // Transform the data to include yearRange
-            $curricula = $curricula->map(function ($curriculum) {
-                $data = [
-                    'id' => $curriculum->id,
-                    'name' => $curriculum->name,
-                    'yearRange' => $curriculum->yearRange,
-                    'is_active' => $curriculum->is_active
-                ];
-
-                // Add optional fields if they exist
-                if (isset($curriculum->description)) {
-                    $data['description'] = $curriculum->description;
-                }
-
-                if (isset($curriculum->status)) {
-                    $data['status'] = $curriculum->status;
-                }
-
-                if (isset($curriculum->created_at)) {
-                    $data['created_at'] = $curriculum->created_at;
-                    $data['updated_at'] = $curriculum->updated_at;
-                }
-
-                return $data;
-            });
-
-            Log::info('Query successful, found: ' . $curricula->count() . ' records');
-
-            return response()->json($curricula);
+            $curriculums = $query->get();
+            return response()->json($curriculums);
         } catch (\Exception $e) {
-            Log::error('Error in CurriculumController@index: ' . $e->getMessage());
-            Log::error($e->getTraceAsString());
-
-            return response()->json([
-                'message' => 'Failed to fetch curricula',
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ], 500);
+            Log::error('Error in curriculum index: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to retrieve curriculums: ' . $e->getMessage()], 500);
         }
     }
 
     public function store(Request $request)
     {
-        try {
-            Log::info('Attempting to create curriculum with data:', $request->all());
-
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'yearRange.start' => 'required|string|size:4',
-                'yearRange.end' => 'required|string|size:4',
-                'description' => 'nullable|string',
-                'is_active' => 'sometimes|boolean'
-            ]);
-
-            $curriculum = new Curriculum();
-            $curriculum->name = $validated['name'];
-            $curriculum->start_year = $validated['yearRange']['start'];
-            $curriculum->end_year = $validated['yearRange']['end'];
-            $curriculum->description = $validated['description'] ?? null;
-            $curriculum->is_active = $validated['is_active'] ?? true;
-
-            Log::info('Saving curriculum with data:', [
-                'name' => $curriculum->name,
-                'start_year' => $curriculum->start_year,
-                'end_year' => $curriculum->end_year,
-                'description' => $curriculum->description,
-                'is_active' => $curriculum->is_active
-            ]);
-
-                $curriculum->save();
-
-            Log::info('Curriculum created successfully with ID: ' . $curriculum->id);
-            return response()->json($curriculum, 201);
-
-        } catch (\Exception $e) {
-            Log::error('Error creating curriculum: ' . $e->getMessage());
-            Log::error($e->getTraceAsString());
-
-            return response()->json([
-                'message' => 'Failed to create curriculum',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ], 500);
-        }
-    }
-
-    public function show($id)
-    {
-        $curriculum = Curriculum::findOrFail($id);
-        return response()->json($curriculum);
-    }
-
-    public function update(Request $request, $id)
-    {
-        $curriculum = Curriculum::findOrFail($id);
-
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'yearRange.start' => 'sometimes|string|size:4',
-            'yearRange.end' => 'sometimes|string|size:4',
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'start_year' => 'nullable|integer|min:2000',
+            'end_year' => 'nullable|integer|min:2000',
             'description' => 'nullable|string',
-            'status' => 'sometimes|string|in:Active,Archived,Planned',
-            'is_active' => 'sometimes|boolean'
+            'grades' => 'nullable|array',
+            'grades.*' => 'exists:grades,id'
         ]);
 
-        if (isset($validated['name'])) {
-            $curriculum->name = $validated['name'];
+        // Custom validation for end_year > start_year
+        if ($request->has('start_year') && $request->has('end_year') &&
+            $request->start_year !== null && $request->end_year !== null) {
+            if ((int)$request->end_year <= (int)$request->start_year) {
+                return response()->json([
+                    'errors' => [
+                        'end_year' => ['End year must be greater than start year']
+                    ]
+                ], 422);
+            }
         }
 
-        if (isset($validated['yearRange']['start'])) {
-            $curriculum->start_year = $validated['yearRange']['start'];
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if (isset($validated['yearRange']['end'])) {
-            $curriculum->end_year = $validated['yearRange']['end'];
-        }
-
-        if (array_key_exists('description', $validated)) {
-            $curriculum->description = $validated['description'];
-        }
-
-        if (isset($validated['status'])) {
-            $curriculum->status = $validated['status'];
-        }
-
-        if (isset($validated['is_active'])) {
-            $curriculum->is_active = $validated['is_active'];
-        }
-
-        $curriculum->save();
-
-        return response()->json($curriculum);
-    }
-
-    public function destroy($id)
-    {
-        $curriculum = Curriculum::findOrFail($id);
-            $curriculum->delete();
-
-            return response()->json(null, 204);
-    }
-
-    public function archive($id)
-    {
-        $curriculum = Curriculum::findOrFail($id);
-        $curriculum->status = 'Archived';
-        $curriculum->save();
-
-            return response()->json($curriculum);
-    }
-
-    public function activate($id)
-    {
-        DB::transaction(function () use ($id) {
-            // Set all curriculums to inactive
-            Curriculum::where('is_active', true)->update(['is_active' => false]);
-
-            // Set this curriculum to active
-            $curriculum = Curriculum::findOrFail($id);
-            $curriculum->is_active = true;
-            $curriculum->save();
-        });
-
-        return response()->json(Curriculum::findOrFail($id));
-    }
-
-    public function getGrades($id)
-    {
         try {
-            // Log attempt to fetch grades
-            Log::info('Attempting to fetch grades for curriculum ID: ' . $id);
+            DB::beginTransaction();
 
-            $curriculum = Curriculum::findOrFail($id);
+            // Log the request data for debugging
+            Log::info('Creating curriculum with data:', [
+                'name' => $request->name,
+                'start_year' => $request->start_year,
+                'end_year' => $request->end_year,
+                'description' => $request->description
+            ]);
 
-            // Check if curriculum exists
-            if (!$curriculum) {
-                Log::warning('Curriculum not found with ID: ' . $id);
-                return response()->json(['error' => 'Curriculum not found'], 404);
+            // Create curriculum with only the columns that definitely exist in the table
+            $curriculum = new Curriculum();
+            $curriculum->name = $request->name;
+            $curriculum->start_year = $request->start_year !== null ? $request->start_year : null;
+            $curriculum->end_year = $request->end_year !== null ? $request->end_year : null;
+            $curriculum->description = $request->description;
+            $curriculum->is_active = false;
+
+            // Check which table exists and set appropriate columns
+            $tableName = Schema::hasTable('curricula') ? 'curricula' : 'curriculums';
+            Log::info('Using table: ' . $tableName);
+
+            // Set status to Draft by default if the column exists
+            if (Schema::hasColumn($tableName, 'status')) {
+                $curriculum->status = 'Draft';
             }
 
-            // Get grades with additional logging
-            Log::info('Found curriculum, retrieving grades');
-            $grades = $curriculum->grades;
+            $curriculum->save();
 
-            // Log success
-            Log::info('Successfully retrieved ' . count($grades) . ' grades for curriculum ID: ' . $id);
+            // Attach grades to curriculum if provided
+            if ($request->has('grades') && is_array($request->grades)) {
+                try {
+                    $curriculum->grades()->attach($request->grades);
+                } catch (\Exception $attachException) {
+                    // If attaching with timestamps fails, try without timestamps
+                    if (strpos($attachException->getMessage(), 'curriculum_grade.created_at') !== false) {
+                        Log::info('Attaching grades without timestamps due to missing timestamp columns');
+                        // Manually attach without timestamps
+                        foreach ($request->grades as $gradeId) {
+                            DB::table('curriculum_grade')->insert([
+                                'curriculum_id' => $curriculum->id,
+                                'grade_id' => $gradeId
+                            ]);
+                        }
+                    } else {
+                        // If it's a different error, rethrow it
+                        throw $attachException;
+                    }
+                }
+            }
 
-            return response()->json($grades);
+            DB::commit();
+            return response()->json($curriculum->load(['grades', 'subjects']), 201);
         } catch (\Exception $e) {
-            // Log the detailed error
-            Log::error('Error fetching grades for curriculum: ' . $e->getMessage());
-            Log::error('Error trace: ' . $e->getTraceAsString());
+            DB::rollBack();
+            Log::error('Failed to create curriculum: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create curriculum: ' . $e->getMessage()], 500);
+        }
+    }
 
-            // Return a more informative error response
+    public function show(Curriculum $curriculum)
+    {
+        return response()->json($curriculum->load(['grades', 'subjects']));
+    }
+
+    public function update(Request $request, Curriculum $curriculum)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'start_year' => 'nullable|integer|min:2000',
+            'end_year' => 'nullable|integer|min:2000',
+            'description' => 'nullable|string',
+            'grades' => 'nullable|array',
+            'grades.*' => 'exists:grades,id'
+        ]);
+
+        // Custom validation for end_year > start_year
+        if ($request->has('start_year') && $request->has('end_year') &&
+            $request->start_year !== null && $request->end_year !== null) {
+            if ((int)$request->end_year <= (int)$request->start_year) {
+                return response()->json([
+                    'errors' => [
+                        'end_year' => ['End year must be greater than start year']
+                    ]
+                ], 422);
+            }
+        }
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $curriculum->update([
+                'name' => $request->name,
+                'start_year' => $request->start_year,
+                'end_year' => $request->end_year,
+                'description' => $request->description
+            ]);
+
+            // Sync grades if provided
+            if ($request->has('grades') && is_array($request->grades)) {
+                try {
+                    $curriculum->grades()->sync($request->grades);
+                } catch (\Exception $syncException) {
+                    // If syncing with timestamps fails, try without timestamps
+                    if (strpos($syncException->getMessage(), 'curriculum_grade.created_at') !== false) {
+                        Log::info('Syncing grades without timestamps due to missing timestamp columns');
+                        // Manually sync without timestamps
+                        DB::table('curriculum_grade')->where('curriculum_id', $curriculum->id)->delete();
+                        foreach ($request->grades as $gradeId) {
+                            DB::table('curriculum_grade')->insert([
+                                'curriculum_id' => $curriculum->id,
+                                'grade_id' => $gradeId
+                            ]);
+                        }
+                    } else {
+                        // If it's a different error, rethrow it
+                        throw $syncException;
+                    }
+                }
+            }
+
+            DB::commit();
+            return response()->json($curriculum->load(['grades', 'subjects']));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to update curriculum: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to update curriculum: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy(Curriculum $curriculum)
+    {
+        try {
+            $curriculum->delete();
+            return response()->json(null, 204);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to delete curriculum'], 500);
+        }
+    }
+
+    public function activate(Curriculum $curriculum)
+    {
+        try {
+            $curriculum->activate();
+            return response()->json($curriculum);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to activate curriculum'], 500);
+        }
+    }
+
+    public function deactivate(Curriculum $curriculum)
+    {
+        try {
+            $curriculum->deactivate();
+            return response()->json($curriculum);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to deactivate curriculum'], 500);
+        }
+    }
+
+    public function getActive()
+    {
+        $curriculum = Curriculum::active()->first();
+        return response()->json($curriculum);
+    }
+
+    public function addSubject(Request $request, Curriculum $curriculum)
+    {
+        $validator = Validator::make($request->all(), [
+            'grade_id' => 'required|exists:grades,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'units' => 'required|integer|min:1',
+            'hours_per_week' => 'required|integer|min:1',
+            'description' => 'nullable|string'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Check if grade belongs to curriculum
+            if (!$curriculum->grades()->where('grades.id', $request->grade_id)->exists()) {
+                return response()->json(['message' => 'Grade does not belong to this curriculum'], 422);
+            }
+
+            // Attach subject with pivot data
+            $curriculum->subjects()->attach($request->subject_id, [
+                'grade_id' => $request->grade_id,
+                'units' => $request->units,
+                'hours_per_week' => $request->hours_per_week,
+                'description' => $request->description
+            ]);
+
+            DB::commit();
+            return response()->json($curriculum->load(['grades', 'subjects']));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to add subject to curriculum'], 500);
+        }
+    }
+
+    public function removeSubject(Request $request, Curriculum $curriculum)
+    {
+        $validator = Validator::make($request->all(), [
+            'grade_id' => 'required|exists:grades,id',
+            'subject_id' => 'required|exists:subjects,id'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Detach subject
+            $curriculum->subjects()->detach($request->subject_id);
+
+            DB::commit();
+            return response()->json($curriculum->load(['grades', 'subjects']));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to remove subject from curriculum'], 500);
+        }
+    }
+
+    public function getSubjectsByGrade(Curriculum $curriculum, Grade $grade)
+    {
+        $subjects = $curriculum->getSubjectsByGrade($grade->id);
+        return response()->json($subjects);
+    }
+
+    public function addSubjectToGrade(Request $request)
+    {
+        try {
+        $validated = $request->validate([
+                'curriculum_id' => 'required|exists:curricula,id',
+                'grade_id' => 'required|exists:grades,id',
+                'subject_id' => 'required|exists:subjects,id',
+                'units' => 'nullable|integer|min:1',
+                'hours_per_week' => 'nullable|integer|min:1',
+                'description' => 'nullable|string'
+            ]);
+
+            // Check if the curriculum-grade relationship exists
+            $curriculumGrade = DB::table('curriculum_grade')
+                ->where('curriculum_id', $validated['curriculum_id'])
+                ->where('grade_id', $validated['grade_id'])
+                ->first();
+
+            if (!$curriculumGrade) {
+                return response()->json([
+                    'message' => 'Grade is not associated with this curriculum'
+                ], 400);
+            }
+
+            // Create or update the curriculum-grade-subject relationship
+            DB::table('curriculum_grade_subject')->updateOrInsert(
+                [
+                    'curriculum_id' => $validated['curriculum_id'],
+                    'grade_id' => $validated['grade_id'],
+                    'subject_id' => $validated['subject_id']
+                ],
+                [
+                    'units' => $validated['units'] ?? 1,
+                    'hours_per_week' => $validated['hours_per_week'] ?? 1,
+                    'description' => $validated['description'] ?? null,
+                    'updated_at' => now(),
+                    'created_at' => now()
+                ]
+            );
+
             return response()->json([
-                'error' => 'Failed to fetch grades for curriculum',
-                'message' => $e->getMessage()
+                'message' => 'Subject successfully added to curriculum grade'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to add subject to curriculum grade',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
-
-    public function addGrade(Request $request, $id)
-    {
-        $curriculum = Curriculum::findOrFail($id);
-
-        $validated = $request->validate([
-            'grade_id' => 'required|exists:grades,id'
-        ]);
-
-        $curriculum->grades()->syncWithoutDetaching([$validated['grade_id']]);
-
-        return response()->json(['success' => true]);
-    }
-
-    public function removeGrade($curriculumId, $gradeId)
-    {
-        $curriculum = Curriculum::findOrFail($curriculumId);
-        $curriculum->grades()->detach($gradeId);
-
-        return response()->json(['success' => true]);
-    }
-
-    /**
-     * Get sections for a specific grade in a curriculum
-     */
-    public function getSections($curriculumId, $gradeId)
-    {
-        $curriculum = Curriculum::findOrFail($curriculumId);
-        $grade = $curriculum->grades()->findOrFail($gradeId);
-
-        $sections = Section::where('grade_id', $gradeId)
-            ->where('curriculum_id', $curriculumId)
-            ->get();
-
-        return response()->json($sections);
-    }
-
-    /**
-     * Add a section to a grade in a curriculum
-     */
-    public function addSection(Request $request, $curriculumId, $gradeId)
-    {
-        $curriculum = Curriculum::findOrFail($curriculumId);
-        $grade = $curriculum->grades()->findOrFail($gradeId);
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'capacity' => 'nullable|integer|min:1',
-            'description' => 'nullable|string',
-            'is_active' => 'nullable|boolean'
-        ]);
-
-        // Check if section name is unique for this grade and curriculum
-        if (!Section::isNameUniqueInGrade($validated['name'], $gradeId)) {
-            return response()->json([
-                'message' => 'Section name already exists in this grade'
-            ], 422);
-        }
-
-        $section = new Section([
-            'name' => $validated['name'],
-            'grade_id' => $gradeId,
-            'curriculum_id' => $curriculumId,
-            'capacity' => $validated['capacity'] ?? 40,
-            'description' => $validated['description'] ?? null,
-            'is_active' => $validated['is_active'] ?? true
-        ]);
-
-        $section->save();
-
-        return response()->json($section, 201);
-    }
-
-    /**
-     * Remove a section from a grade in a curriculum
-     */
-    public function removeSection($curriculumId, $gradeId, $sectionId)
-    {
-        $curriculum = Curriculum::findOrFail($curriculumId);
-        $grade = $curriculum->grades()->findOrFail($gradeId);
-
-        $section = Section::where('id', $sectionId)
-            ->where('grade_id', $gradeId)
-            ->where('curriculum_id', $curriculumId)
-            ->firstOrFail();
-
-        $section->delete();
-
-        return response()->json(null, 204);
-    }
 }
+

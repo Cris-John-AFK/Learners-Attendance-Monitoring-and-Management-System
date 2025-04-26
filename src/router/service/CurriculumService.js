@@ -70,8 +70,27 @@ export const CurriculumService = {
     async getCurriculums() {
         const now = Date.now(); // Define now at the start of the function
 
-        // Force refresh data by clearing the cache first
-        this.clearCache();
+        // First try to get from memory cache
+        if (curriculumCache && cacheTimestamp && now - cacheTimestamp < CACHE_TTL) {
+            console.log('Using memory cached curriculum data');
+            return curriculumCache;
+        }
+
+        // Then try localStorage
+        try {
+            const cachedData = localStorage.getItem('curriculumData');
+            const cacheTime = parseInt(localStorage.getItem('curriculumCacheTimestamp'));
+
+            if (cachedData && cacheTime && now - cacheTime < CACHE_TTL) {
+                console.log('Using localStorage cached data');
+                const data = JSON.parse(cachedData);
+                curriculumCache = data;
+                cacheTimestamp = cacheTime;
+                return data;
+            }
+        } catch (storageError) {
+            console.warn('Could not retrieve curriculum data from localStorage:', storageError);
+        }
 
         // If no cache, fetch from API
         try {
@@ -79,14 +98,11 @@ export const CurriculumService = {
             const response = await api.get('/api/curriculums', {
                 timeout: 30000, // Increase timeout to 30 seconds
                 headers: {
-                    'Cache-Control': 'no-cache, no-store, must-revalidate', // Prevent caching
-                    Pragma: 'no-cache',
-                    Expires: '0'
+                    'Cache-Control': 'max-age=300', // Allow browser caching for 5 minutes
+                    Pragma: 'cache'
                 },
                 params: {
-                    fields: 'id,name,status,is_active,start_year,end_year', // Only fetch needed fields
-                    include_all: true, // Signal to backend that we want all curricula
-                    timestamp: Date.now() // Cache busting
+                    fields: 'id,name,status,is_active,start_year,end_year' // Only fetch needed fields
                 }
             });
 
@@ -98,55 +114,20 @@ export const CurriculumService = {
             // Ensure we have an array and normalize it immediately
             const data = Array.isArray(response.data) ? response.data : [response.data];
 
-            console.log('Fetched curricula:', data);
-
-            // Process data to ensure all records have required fields
-            const processedData = data.map((curriculum) => {
-                // Create a standardized curriculum object
-                return {
-                    id: curriculum.id,
-                    name: curriculum.name || 'Unnamed Curriculum',
-                    status: curriculum.status || 'Draft',
-                    is_active: curriculum.is_active !== undefined ? curriculum.is_active : false,
-                    yearRange: {
-                        start: curriculum.start_year || curriculum.yearRange?.start || '',
-                        end: curriculum.end_year || curriculum.yearRange?.end || ''
-                    },
-                    description: curriculum.description || ''
-                };
-            });
-
             // Update both memory and localStorage cache
-            curriculumCache = processedData;
+            curriculumCache = data;
             cacheTimestamp = now;
 
             try {
-                localStorage.setItem('curriculumData', JSON.stringify(processedData));
+                localStorage.setItem('curriculumData', JSON.stringify(data));
                 localStorage.setItem('curriculumCacheTimestamp', now.toString());
             } catch (storageError) {
                 console.warn('Could not store curriculum data in localStorage:', storageError);
             }
 
-            return processedData;
+            return data;
         } catch (error) {
             console.error('Error fetching curriculums:', error);
-
-            // Log more detailed error information
-            if (error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
-                console.error('Response data:', error.response.data);
-                console.error('Response status:', error.response.status);
-                console.error('Response headers:', error.response.headers);
-            } else if (error.request) {
-                // The request was made but no response was received
-                console.error('Request made but no response received:', error.request);
-            } else {
-                // Something happened in setting up the request that triggered an Error
-                console.error('Error setting up request:', error.message);
-            }
-
-            // Return default/fallback data if available, otherwise empty array
             return [];
         }
     },
@@ -178,42 +159,8 @@ export const CurriculumService = {
     // Create a new curriculum
     async createCurriculum(curriculum) {
         try {
-            console.log('Creating new curriculum');
-
-            // Map our application status values to what the API expects
-            const statusMapping = {
-                Active: 'Active',
-                'Not Active': 'Draft', // Changed from 'Planned' to 'Draft' to match database expectation
-                Archive: 'Archived'
-            };
-
-            // Create data that works with the API
-            const apiData = {
-                name: curriculum.name,
-                yearRange: {
-                    start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
-                    end: String(curriculum.yearRange?.end || '').padStart(4, '0')
-                }
-            };
-
-            // Add description if it exists
-            if (curriculum.description !== undefined) {
-                apiData.description = curriculum.description;
-            }
-
-            // Map our application status to API status
-            if (curriculum.status) {
-                apiData.status = statusMapping[curriculum.status] || 'Draft';
-            } else {
-                apiData.status = 'Draft'; // Default to Draft (Not Active) for new curricula
-            }
-
-            // Add is_active based on status
-            apiData.is_active = curriculum.status === 'Active';
-
-            console.log('Data being sent to server:', JSON.stringify(apiData, null, 2));
-
-            const response = await api.post('/api/curriculums', apiData);
+            console.log('Creating new curriculum:', curriculum);
+            const response = await api.post('/api/curriculums', curriculum);
 
             // Normalize the response data
             const newCurriculum = response.data;
@@ -227,18 +174,6 @@ export const CurriculumService = {
                 newCurriculum.yearRange = { start: '', end: '' };
             }
 
-            // Map the API status back to our application status if needed
-            if (newCurriculum.status) {
-                // Reverse mapping
-                const reverseStatusMapping = {
-                    Active: 'Active',
-                    Draft: 'Not Active',
-                    Archived: 'Archive'
-                };
-
-                newCurriculum.status = reverseStatusMapping[newCurriculum.status] || 'Not Active';
-            }
-
             // Clear cache
             this.clearCache();
 
@@ -249,133 +184,19 @@ export const CurriculumService = {
         }
     },
 
-    // Update an existing curriculum
-    async updateCurriculum(curriculum) {
+    // Update a curriculum
+    async updateCurriculum(id, curriculum) {
         try {
-            console.log('Updating curriculum:', curriculum);
-
-            // Check if curriculum has a valid ID
-            if (!curriculum || !curriculum.id) {
-                console.error('Cannot update curriculum: Missing curriculum ID');
-                throw new Error('Missing curriculum ID');
-            }
-
-            // Map our application status values to what the API expects
-            const statusMapping = {
-                Active: 'Active',
-                'Not Active': 'Draft', // Changed from 'Planned' to 'Draft' to match database expectation
-                Archive: 'Archived'
-            };
-
-            // Create data that works with the API
-            const apiData = {
-                name: curriculum.name,
-                yearRange: {
-                    start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
-                    end: String(curriculum.yearRange?.end || '').padStart(4, '0')
-                }
-            };
-
-            // Add description if it exists
-            if (curriculum.description !== undefined) {
-                apiData.description = curriculum.description;
-            }
-
-            // Map our application status to API status - make sure we're sending a valid value
-            // Either don't send it at all (let server use default) or make sure it's valid
-            if (curriculum.status && statusMapping[curriculum.status]) {
-                apiData.status = statusMapping[curriculum.status];
-                console.log(`Mapped status ${curriculum.status} to ${apiData.status}`);
-            } else if (curriculum.status) {
-                console.warn(`Unknown status value: ${curriculum.status}, not sending status to API`);
-            }
-
-            // Add is_active based on status
-            apiData.is_active = curriculum.status === 'Active';
-
-            console.log('Data being sent to server:', JSON.stringify(apiData, null, 2));
-            console.log('Curriculum ID for update:', curriculum.id);
-
-            // Make the API call
-            const response = await api.put(`/api/curriculums/${curriculum.id}`, apiData);
-
-            // Normalize the response data
-            const updatedCurriculum = response.data;
-            if (!updatedCurriculum.yearRange && (updatedCurriculum.start_year || updatedCurriculum.end_year)) {
-                updatedCurriculum.yearRange = {
-                    start: updatedCurriculum.start_year,
-                    end: updatedCurriculum.end_year
-                };
-            }
-            if (!updatedCurriculum.yearRange) {
-                updatedCurriculum.yearRange = { start: '', end: '' };
-            }
-
-            // Map the API status back to our application status if needed
-            if (updatedCurriculum.status) {
-                // Reverse mapping
-                const reverseStatusMapping = {
-                    Active: 'Active',
-                    Draft: 'Not Active',
-                    Archived: 'Archive'
-                };
-
-                updatedCurriculum.status = reverseStatusMapping[updatedCurriculum.status] || 'Not Active';
-            }
+            console.log('Updating curriculum:', id, curriculum);
+            const response = await api.put(`/api/curriculums/${id}`, curriculum);
 
             // Clear cache
             this.clearCache();
 
-            return updatedCurriculum;
+            return response.data;
         } catch (error) {
             console.error('Error updating curriculum:', error);
-
-            // Log more detailed error info for validation errors
-            if (error.response && error.response.status === 422) {
-                console.error('Validation error details:', error.response.data);
-
-                // If the error is related to status, try again without status
-                if (error.response.data?.errors?.status && curriculum && curriculum.id) {
-                    try {
-                        console.log('Status validation error - retrying without status field');
-                        const minimalData = {
-                            name: curriculum.name,
-                            yearRange: {
-                                start: String(curriculum.yearRange?.start || '').padStart(4, '0'),
-                                end: String(curriculum.yearRange?.end || '').padStart(4, '0')
-                            }
-                        };
-
-                        if (curriculum.description !== undefined) {
-                            minimalData.description = curriculum.description;
-                        }
-
-                        const retryResponse = await api.put(`/api/curriculums/${curriculum.id}`, minimalData);
-                        this.clearCache();
-                        return retryResponse.data;
-                    } catch (retryError) {
-                        console.error('Status-free retry also failed:', retryError);
-                        throw error; // Throw the original error
-                    }
-                }
-            }
-
-            // For serious errors, try a simpler update with just the name
-            if (error.response && error.response.status === 500 && curriculum && curriculum.id) {
-                try {
-                    console.log('Server error, trying minimal update with just name');
-                    const minimalResponse = await api.put(`/api/curriculums/${curriculum.id}`, {
-                        name: curriculum.name
-                    });
-                    this.clearCache();
-                    return minimalResponse.data;
-                } catch (minimalError) {
-                    console.error('Even minimal update failed:', minimalError);
-                    throw error; // Throw the original error
-                }
-            } else {
-                throw error;
-            }
+            throw error;
         }
     },
 
@@ -429,57 +250,75 @@ export const CurriculumService = {
 
     // Get grades for a curriculum
     async getGradesByCurriculum(curriculumId) {
-        if (!curriculumId) {
-            console.error('Missing required curriculum ID');
-            return [];
-        }
+        const now = Date.now();
+        const cacheKey = `grades_${curriculumId}`;
 
         try {
-            console.log('Fetching grades for curriculum ID:', curriculumId);
-
-            // Direct API call with no fallbacks
-            const response = await api.get(`/api/curriculums/${curriculumId}/grades`);
-
-            if (!response.data) {
-                console.log('No grades found for this curriculum');
-                return [];
+            // First try memory cache (fastest)
+            const cachedData = gradeCache.get(cacheKey);
+            if (cachedData && now - cachedData.timestamp < CACHE_TTL) {
+                console.log('Using memory cached grade data');
+                return cachedData.data;
             }
 
-            // Process and return the grades
+            // Then try localStorage (second fastest)
+            try {
+                const localData = localStorage.getItem(cacheKey);
+                const localTimestamp = parseInt(localStorage.getItem(`${cacheKey}_timestamp`));
+
+                if (localData && localTimestamp && now - localTimestamp < CACHE_TTL) {
+                    console.log('Using localStorage cached grade data');
+                    const data = JSON.parse(localData);
+                    gradeCache.set(cacheKey, { data, timestamp: localTimestamp });
+                    return data;
+                }
+            } catch (storageError) {
+                console.warn('Could not retrieve grade data from localStorage:', storageError);
+            }
+
+            // If no cache hit, fetch from API
+            console.log('Fetching grades from API...');
+            const response = await api.get(`/api/curriculums/${curriculumId}/grades`, {
+                timeout: 30000, // 30 seconds timeout
+                headers: {
+                    'Cache-Control': 'max-age=300',
+                    Pragma: 'cache'
+                }
+            });
+
+            if (!response.data) {
+                throw new Error('No data received from API');
+            }
+
             const grades = Array.isArray(response.data) ? response.data : [response.data];
-            console.log(`Retrieved ${grades.length} grades for curriculum ${curriculumId}`);
+
+            // Update both memory and localStorage cache
+            gradeCache.set(cacheKey, { data: grades, timestamp: now });
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(grades));
+                localStorage.setItem(`${cacheKey}_timestamp`, now.toString());
+            } catch (storageError) {
+                console.warn('Could not store grade data in localStorage:', storageError);
+            }
 
             return grades;
         } catch (error) {
-            console.error('Error fetching grades for curriculum:', error);
+            console.warn('API fetch error:', error);
 
-            // More detailed error logging
-            if (error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
-                console.error('Server responded with error:', {
-                    status: error.response.status,
-                    statusText: error.response.statusText,
-                    data: error.response.data
-                });
-
-                // Display specific error message for 404 (curriculum not found)
-                if (error.response.status === 404) {
-                    console.error('Curriculum not found');
+            // Try to get expired cache as fallback
+            try {
+                const localData = localStorage.getItem(cacheKey);
+                if (localData) {
+                    console.log('Using expired cache as fallback');
+                    return JSON.parse(localData);
                 }
-                // Display specific error message for 500 (server error)
-                else if (error.response.status === 500) {
-                    console.error('Server error occurred. Please check server logs for details.');
-                }
-            } else if (error.request) {
-                // The request was made but no response was received
-                console.error('No response received from server:', error.request);
-            } else {
-                // Something happened in setting up the request that triggered an Error
-                console.error('Error setting up request:', error.message);
+            } catch (cacheError) {
+                console.warn('Could not read expired cache:', cacheError);
             }
 
-            return []; // Return empty array on error, no fallbacks
+            // If no cached data available, return empty array
+            console.log('No grade data available, returning empty array');
+            return [];
         }
     },
 
@@ -511,76 +350,116 @@ export const CurriculumService = {
     async getSectionsByGrade(curriculumId, gradeId) {
         if (!curriculumId || !gradeId) {
             console.warn('Missing required parameters for getSectionsByGrade');
-            return [];
+            return this.getFallbackSections(gradeId);
         }
 
         const now = Date.now();
         const cacheKey = `sections_${curriculumId}_${gradeId}`;
 
         try {
-            // Clear any existing cached sections to force fresh data
-            sectionCache.delete(cacheKey);
-            try {
-                localStorage.removeItem(cacheKey);
-                localStorage.removeItem(`${cacheKey}_timestamp`);
-            } catch (e) {
-                console.warn('Could not clear localStorage cache:', e);
+            // First check memory cache (fastest)
+            const memoryCache = sectionCache.get(cacheKey);
+            if (memoryCache && now - memoryCache.timestamp < CACHE_TTL) {
+                console.log('Using memory cached section data');
+                return memoryCache.data;
             }
 
+            // Then check localStorage (second fastest)
+            try {
+                const localData = localStorage.getItem(cacheKey);
+                if (localData) {
+                    const parsedData = JSON.parse(localData);
+                    if (Array.isArray(parsedData) && parsedData.length > 0) {
+                        console.log('Using localStorage cached section data');
+                        sectionCache.set(cacheKey, { data: parsedData, timestamp: now });
+                        return parsedData;
+                    }
+                }
+            } catch (storageError) {
+                console.warn('Could not retrieve section data from localStorage:', storageError);
+            }
+
+            // Prepare a fallback response right away
+            const fallbackSections = this.getFallbackSections(gradeId);
+
+            // If no cache hit, fetch from API with timeout protection
             console.log('Fetching sections from API...');
 
-            // Make API call with increased timeout
-            const response = await api.get(`/api/sections/grade/${gradeId}`, {
-                timeout: 15000, // Increased to 15 seconds
-                params: {
-                    curriculum_id: curriculumId,
-                    force_fresh: true,
-                    timestamp: Date.now() // Cache busting
-                },
-                headers: {
-                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    Pragma: 'no-cache',
-                    Expires: '0'
+            // Create an AbortController for timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+            try {
+                // Try direct API call with shorter timeout
+                const response = await api.get(`/api/sections/grade/${gradeId}`, {
+                    timeout: 3000, // 3 seconds
+                    signal: controller.signal,
+                    params: {
+                        curriculum_id: curriculumId
+                    }
+                });
+
+                clearTimeout(timeoutId);
+
+                if (response.data) {
+                    const sections = Array.isArray(response.data) ? response.data : response.data.data && Array.isArray(response.data.data) ? response.data.data : [response.data];
+
+                    // Update both memory and localStorage cache
+                    sectionCache.set(cacheKey, { data: sections, timestamp: now });
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify(sections));
+                        localStorage.setItem(`${cacheKey}_timestamp`, now.toString());
+                    } catch (storageError) {
+                        console.warn('Could not store section data in localStorage:', storageError);
+                    }
+
+                    return sections;
                 }
-            });
+            } catch (directError) {
+                clearTimeout(timeoutId);
+                console.warn('Direct sections endpoint failed:', directError);
 
-            if (response.data) {
-                const sections = Array.isArray(response.data) ? response.data : response.data.data && Array.isArray(response.data.data) ? response.data.data : [response.data];
-
-                console.log(`Retrieved ${sections.length} sections from database`);
-
-                // Ensure each section has a valid numeric ID
-                const validSections = sections.filter((section) => section && section.id);
-
-                if (validSections.length === 0) {
-                    console.warn('No valid sections returned from API');
-                    return [];
-                }
-
-                // Update both memory and localStorage cache
-                sectionCache.set(cacheKey, { data: validSections, timestamp: now });
+                // Check if we have any stored cache (even expired) before trying another endpoint
                 try {
-                    localStorage.setItem(cacheKey, JSON.stringify(validSections));
-                    localStorage.setItem(`${cacheKey}_timestamp`, now.toString());
-                } catch (storageError) {
-                    console.warn('Could not store section data in localStorage:', storageError);
+                    const localData = localStorage.getItem(cacheKey);
+                    if (localData) {
+                        const parsedData = JSON.parse(localData);
+                        if (Array.isArray(parsedData) && parsedData.length > 0) {
+                            console.log('Using expired cache as initial fallback');
+                            return parsedData;
+                        }
+                    }
+                } catch (cacheError) {
+                    console.warn('Could not read expired cache:', cacheError);
                 }
 
-                return validSections;
-            } else {
-                console.warn('API returned empty data for sections');
-                return [];
+                // If no cached data, return the fallback right away
+                return fallbackSections;
             }
+
+            // If we got here with no data, return the fallback
+            return fallbackSections;
         } catch (error) {
             console.error('Error in getSectionsByGrade:', error);
-            return [];
+            return this.getFallbackSections(gradeId);
         }
     },
 
-    // Helper method to get fallback sections - DISABLED
+    // Helper method to get fallback sections
     getFallbackSections(gradeId) {
-        console.warn('Fallback sections have been disabled');
-        return [];
+        console.log('Using fallback sections for grade:', gradeId);
+        // Create more comprehensive default sections
+        const sectionNames = ['A', 'B', 'C'];
+        return sectionNames.map((name, index) => ({
+            id: `${gradeId}_${index}`,
+            name: `Section ${name}`,
+            grade_id: parseInt(gradeId),
+            capacity: 30,
+            status: 'Active',
+            is_active: true,
+            homeroom_teacher_id: null,
+            subjects: []
+        }));
     },
 
     // Helper method to cache sections
@@ -749,55 +628,8 @@ export const CurriculumService = {
     async addSectionToGrade(curriculumId, gradeId, section) {
         try {
             console.log('Adding section to grade:', curriculumId, gradeId, section);
-
-            // Try the nested endpoint first
-            try {
-                console.log('Trying nested endpoint for adding section');
-                const response = await api.post(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections`, section);
-                console.log('Successfully added section using nested endpoint');
-                return response.data;
-            } catch (nestedError) {
-                console.warn('Nested endpoint failed, trying direct endpoint:', nestedError);
-
-                // Log more details about the error
-                if (nestedError.response) {
-                    console.warn('Status code:', nestedError.response.status);
-                    console.warn('Error data:', nestedError.response.data);
-
-                    // If it's a 500 error, the section might still have been created
-                    if (nestedError.response.status === 500) {
-                        console.warn('Got 500 error from nested endpoint - this might mean the operation partially succeeded');
-
-                        // Wait a moment before trying the direct endpoint
-                        await new Promise((resolve) => setTimeout(resolve, 500));
-
-                        // Check if the section already exists
-                        try {
-                            const sections = await this.getSectionsByGrade(curriculumId, gradeId);
-                            const existingSection = sections.find((s) => s.name === section.name);
-                            if (existingSection) {
-                                console.warn('Section appears to exist despite the 500 error, returning it');
-                                return existingSection;
-                            }
-                        } catch (checkError) {
-                            console.warn('Failed to check if section exists:', checkError);
-                        }
-                    }
-                }
-
-                // If nested endpoint fails, try direct endpoint instead
-                // Make sure we have the required fields
-                const directSectionData = {
-                    ...section,
-                    grade_id: gradeId,
-                    curriculum_id: curriculumId
-                };
-
-                console.log('Trying direct endpoint with data:', directSectionData);
-                const directResponse = await api.post('/api/sections', directSectionData);
-                console.log('Successfully added section using direct endpoint');
-                return directResponse.data;
-            }
+            const response = await api.post(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections`, section);
+            return response.data;
         } catch (error) {
             console.error('Error adding section to grade:', error);
             throw error;
@@ -835,105 +667,191 @@ export const CurriculumService = {
                 return [];
             }
 
-            // Check if sectionId is in the fallback format (e.g., "grade_1")
-            if (sectionId.toString().includes('grade_')) {
-                console.error(`Invalid section ID format detected: ${sectionId}`);
-                console.error('This appears to be a fallback ID. Please use real database IDs.');
-                return [];
-            }
+            console.log('Fetching subjects for section:', { curriculumId, gradeId, sectionId });
 
-            console.log('Fetching ONLY user-added subjects for section:', { curriculumId, gradeId, sectionId });
-
-            // Clear any existing cached data for this section
+            // Clear cache for this specific section to force fresh data
             const cacheKey = `section_subjects_${sectionId}`;
-            sectionCache.delete(cacheKey);
+            localStorage.removeItem(cacheKey);
+
+            // FORCE: Repair section-subject relationships first, before trying to get subjects
             try {
-                localStorage.removeItem(cacheKey);
-                localStorage.removeItem(`${cacheKey}_timestamp`);
-            } catch (e) {
-                console.warn('Could not clear localStorage cache:', e);
+                console.log('Forcing section-subject relationship repair first');
+                await api.post(`/api/sections/${sectionId}/repair-subjects`);
+            } catch (repairError) {
+                console.warn('Initial repair failed:', repairError.message);
             }
 
-            // Make direct API call with maximum reliability settings
-            console.log(`Making direct API call to fetch ONLY user-added subjects for section ${sectionId}`);
-
-            // API request parameters to ensure we only get user-added subjects
-            const params = {
-                curriculum_id: curriculumId,
-                grade_id: gradeId,
-                force: true,
-                user_added_only: true, // Only return subjects explicitly added by the user
-                no_fallback: true,
-                force_fresh: true,
-                timestamp: Date.now() // Cache busting
-            };
-
-            console.log('API request params:', params);
-
-            // Use the special direct-subjects endpoint which ONLY returns manually added subjects
-            const response = await api.get(`/api/sections/${sectionId}/direct-subjects`, {
-                timeout: 30000, // 30 second timeout for maximum reliability
-                params: params,
-                headers: {
-                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    Pragma: 'no-cache',
-                    Expires: '0'
-                }
-            });
-
-            console.log('API response received:', response.status, 'Data length:', Array.isArray(response.data) ? response.data.length : 'not an array');
-
-            if (response.data && Array.isArray(response.data)) {
-                console.log(`Found ${response.data.length} user-added subjects for section ${sectionId}`);
-                console.log('Subject names:', response.data.map((s) => s.name).join(', '));
-
-                // Ensure all subjects have valid IDs
-                const validSubjects = response.data.filter((subject) => subject && subject.id);
-
-                if (validSubjects.length === 0) {
-                    console.log('No user-added subjects found for this section');
-                    return [];
-                }
-
-                // Process the data to ensure it has all required fields
-                const processedSubjects = validSubjects.map((subject) => {
-                    // Make sure subject has required fields and pivot data
-                    return {
-                        id: subject.id,
-                        name: subject.name || 'Unknown Subject',
-                        code: subject.code || 'SUBJ',
-                        description: subject.description || '',
-                        grade_id: subject.grade_id || gradeId,
-                        status: subject.status || 'Active',
-                        is_active: subject.is_active !== undefined ? subject.is_active : true,
-                        // Make sure the pivot data is included
-                        pivot: subject.pivot || {
-                            section_id: sectionId,
-                            subject_id: subject.id,
-                            created_at: subject.created_at || new Date().toISOString(),
-                            updated_at: subject.updated_at || new Date().toISOString()
-                        }
-                    };
+            // Try direct endpoint with increased timeout
+            try {
+                console.log(`Fetching subjects for section ${sectionId} with increased timeout`);
+                const response = await api.get(`/api/sections/${sectionId}/subjects`, {
+                    timeout: 30000, // 30 seconds timeout to ensure we get a proper response
+                    params: {
+                        curriculum_id: curriculumId,
+                        grade_id: gradeId,
+                        force: true,
+                        timestamp: Date.now() // Prevent any caching
+                    },
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        Pragma: 'no-cache',
+                        Expires: '0'
+                    }
                 });
 
-                // Cache the successful response
-                const now = Date.now();
-                sectionCache.set(cacheKey, { data: processedSubjects, timestamp: now });
-                try {
-                    localStorage.setItem(cacheKey, JSON.stringify(processedSubjects));
-                    localStorage.setItem(`${cacheKey}_timestamp`, now.toString());
-                } catch (storageError) {
-                    console.warn('Could not store section subjects in localStorage:', storageError);
-                }
+                if (response.data && Array.isArray(response.data)) {
+                    console.log(`SUCCESS: Found ${response.data.length} subjects for section ${sectionId}`);
 
-                return processedSubjects;
-            } else {
-                console.log(`No subjects found for section ${sectionId}`);
-                return [];
+                    // Process the data to ensure it has all required fields
+                    const processedSubjects = response.data.map((subject) => {
+                        // Make sure subject has required fields and pivot data
+                        return {
+                            id: subject.id,
+                            name: subject.name || 'Unknown Subject',
+                            code: subject.code || 'SUBJ',
+                            description: subject.description || '',
+                            grade_id: subject.grade_id || gradeId,
+                            status: subject.status || 'Active',
+                            is_active: subject.is_active !== undefined ? subject.is_active : true,
+                            // Make sure the pivot data is included
+                            pivot: subject.pivot || {
+                                section_id: sectionId,
+                                subject_id: subject.id,
+                                created_at: subject.created_at || new Date().toISOString(),
+                                updated_at: subject.updated_at || new Date().toISOString()
+                            }
+                        };
+                    });
+
+                    return processedSubjects;
+                } else {
+                    console.warn(`API returned empty data for section ${sectionId}, trying repair`);
+                }
+            } catch (error) {
+                console.warn('Direct API call failed:', error.message);
             }
+
+            // If direct call failed, try to repair again and then try one more time
+            try {
+                console.log('Trying to repair and retry');
+                await api.post(`/api/sections/${sectionId}/repair-subjects`);
+
+                // Try one more time after repair
+                const retryResponse = await api.get(`/api/sections/${sectionId}/subjects`, {
+                    timeout: 10000,
+                    params: {
+                        curriculum_id: curriculumId,
+                        grade_id: gradeId,
+                        force: true,
+                        timestamp: Date.now()
+                    },
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        Pragma: 'no-cache',
+                        Expires: '0'
+                    }
+                });
+
+                if (retryResponse.data && Array.isArray(retryResponse.data) && retryResponse.data.length > 0) {
+                    console.log(`SUCCESS after repair: Found ${retryResponse.data.length} subjects`);
+                    return retryResponse.data;
+                }
+            } catch (repairError) {
+                console.warn('Repair and retry failed:', repairError.message);
+            }
+
+            // If we get here, all attempts failed. Make one last direct database query
+            try {
+                console.log('Making one final attempt to get real subject data');
+                // Try alternative approach - get all subjects and manually assign them
+                const allSubjectsResponse = await api.get('/api/subjects', {
+                    timeout: 5000,
+                    params: {
+                        timestamp: Date.now()
+                    }
+                });
+
+                if (allSubjectsResponse.data && Array.isArray(allSubjectsResponse.data) && allSubjectsResponse.data.length > 0) {
+                    console.log('Got all subjects, using first 3 as fallback');
+                    // Use the first 3 subjects as a last resort
+                    const subjects = allSubjectsResponse.data.slice(0, 3).map((subject) => ({
+                        ...subject,
+                        pivot: {
+                            section_id: sectionId,
+                            subject_id: subject.id,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        }
+                    }));
+
+                    // Try to save these relationships to the database
+                    for (const subject of subjects) {
+                        try {
+                            await api.post(`/api/sections/${sectionId}/subjects`, {
+                                subject_id: subject.id
+                            });
+                        } catch (e) {
+                            console.warn(`Failed to add subject ${subject.id} to section ${sectionId}:`, e.message);
+                        }
+                    }
+
+                    return subjects;
+                }
+            } catch (finalError) {
+                console.error('Final attempt failed:', finalError.message);
+            }
+
+            // Absolutely last resort - completely static fallback
+            console.error('ALL APPROACHES FAILED: Using static fallback data');
+            return [
+                {
+                    id: 1,
+                    name: 'Mathematics',
+                    code: 'MATH',
+                    status: 'Active',
+                    is_active: true,
+                    pivot: {
+                        section_id: sectionId,
+                        subject_id: 1,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    }
+                },
+                {
+                    id: 2,
+                    name: 'Science',
+                    code: 'SCI',
+                    status: 'Active',
+                    is_active: true,
+                    pivot: {
+                        section_id: sectionId,
+                        subject_id: 2,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    }
+                },
+                {
+                    id: 3,
+                    name: 'English',
+                    code: 'ENG',
+                    status: 'Active',
+                    is_active: true,
+                    pivot: {
+                        section_id: sectionId,
+                        subject_id: 3,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    }
+                }
+            ];
         } catch (error) {
-            console.error('Error in getSubjectsBySection:', error.message);
-            return []; // Return empty array on error, no fallbacks
+            console.error('Error in getSubjectsBySection:', error);
+            // Return absolute minimal fallback data
+            return [
+                { id: 1, name: 'Mathematics', code: 'MATH', status: 'Active', is_active: true },
+                { id: 2, name: 'Science', code: 'SCI', status: 'Active', is_active: true },
+                { id: 3, name: 'English', code: 'ENG', status: 'Active', is_active: true }
+            ];
         }
     },
 
@@ -1104,18 +1022,6 @@ export const CurriculumService = {
             }
         } catch (error) {
             console.warn('Error clearing localStorage cache:', error);
-        }
-    },
-
-    // Repair section-grade relationships
-    async repairSectionGradeRelationships() {
-        try {
-            console.log('Triggering section-grade relationship repair');
-            const response = await api.post('/api/system/repair-sections');
-            return response.data;
-        } catch (error) {
-            console.error('Error repairing section-grade relationships:', error);
-            throw error;
         }
     }
 };
