@@ -2,6 +2,7 @@
 import { AttendanceService } from '@/router/service/Estudyante';
 import { QRCodeService } from '@/router/service/QRCodeService';
 import { SubjectService } from '@/router/service/Subjects';
+import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
