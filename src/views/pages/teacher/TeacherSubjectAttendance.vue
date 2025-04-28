@@ -20,6 +20,12 @@ const subjectId = ref('');
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
 
+// Watch for date changes and update attendance display
+watch(currentDate, (newDate) => {
+    console.log('Date changed to:', newDate);
+    loadCachedAttendanceData();
+});
+
 // Timer reference for cleanup
 const timeInterval = ref(null);
 
@@ -1015,16 +1021,25 @@ onMounted(async () => {
     }
 });
 
-// Add this function to check for and load the latest cached status data
+// Function to check for and load cached attendance data for a specific date
 const loadCachedAttendanceData = () => {
-    const today = currentDate.value;
-    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+    // Reset all statuses first
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
+            if (seat.isOccupied) {
+                seat.status = null;
+            }
+        });
+    });
+    const selectedDate = currentDate.value;
+    const cacheKey = `attendanceCache_${subjectId.value}_${selectedDate}`;
 
     try {
+        // First try to load from cache
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
             const { timestamp, seatPlan: cachedSeatPlan } = JSON.parse(cachedData);
-            console.log(`Found cached attendance data from ${new Date(timestamp).toLocaleTimeString()}`);
+            console.log(`Found cached attendance data from ${new Date(timestamp).toLocaleTimeString()} for ${selectedDate}`);
 
             // Apply the cached seat plan to the current one
             if (cachedSeatPlan && Array.isArray(cachedSeatPlan)) {
@@ -1044,8 +1059,54 @@ const loadCachedAttendanceData = () => {
                 return true;
             }
         }
+
+        // If no cache found, try to reconstruct from attendance records
+        const dateRecords = {};
+        Object.keys(attendanceRecords.value).forEach((key) => {
+            // Check if the record is for the selected date
+            const record = attendanceRecords.value[key];
+            if (record.date === selectedDate) {
+                dateRecords[key] = record;
+            }
+        });
+
+        // If we found records for this date, apply them to the seat plan
+        if (Object.keys(dateRecords).length > 0) {
+            console.log(`Found ${Object.keys(dateRecords).length} attendance records for ${selectedDate}`);
+
+            // Reset all statuses first
+            seatPlan.value.forEach((row) => {
+                row.forEach((seat) => {
+                    if (seat.isOccupied) {
+                        seat.status = null;
+                    }
+                });
+            });
+
+            // Apply the statuses from records
+            let appliedCount = 0;
+            seatPlan.value.forEach((row) => {
+                row.forEach((seat) => {
+                    if (seat.isOccupied && seat.studentId) {
+                        // Check both formats of record keys for compatibility
+                        const recordKey1 = `${seat.studentId}-${selectedDate}`;
+                        const recordKey2 = `${seat.studentId}_${selectedDate}`;
+
+                        const record = attendanceRecords.value[recordKey1] || attendanceRecords.value[recordKey2];
+
+                        if (record) {
+                            seat.status = record.status;
+                            appliedCount++;
+                        }
+                    }
+                });
+            });
+
+            console.log(`Applied ${appliedCount} attendance statuses from records for ${selectedDate}`);
+            return appliedCount > 0;
+        }
     } catch (error) {
-        console.error('Error loading cached attendance data:', error);
+        console.error('Error loading attendance data for date:', selectedDate, error);
     }
     return false;
 };
@@ -1783,8 +1844,22 @@ onMounted(async () => {
 
 // Update watch for currentDate to reapply statuses when date changes
 watch(currentDate, (newDate) => {
-    // Reapply attendance statuses when the date changes
-    applyAttendanceStatusesToSeatPlan();
+    // Check if there's cached data for the selected date
+    const cachedDataLoaded = loadCachedAttendanceData();
+    if (!cachedDataLoaded) {
+        // If no cached data, apply attendance statuses from records
+        applyAttendanceStatusesToSeatPlan();
+    }
+
+    // Show a notification that we're viewing a past date's attendance
+    if (newDate !== new Date().toISOString().split('T')[0]) {
+        toast.add({
+            severity: 'info',
+            summary: 'Historical View',
+            detail: `Viewing attendance records for ${new Date(newDate).toLocaleDateString()}`,
+            life: 3000
+        });
+    }
 });
 
 // Add watchers for the checkbox options
