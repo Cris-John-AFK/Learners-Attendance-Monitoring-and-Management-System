@@ -2,6 +2,11 @@
 import { useLayout } from '@/layout/composables/layout';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputMask from 'primevue/inputmask';
+import InputText from 'primevue/inputtext';
+import SelectButton from 'primevue/selectbutton';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -11,9 +16,39 @@ const { layoutState, isSidebarActive } = useLayout();
 const outsideClickListener = ref(null);
 const scanning = ref(true); // Auto-start scanning
 const attendanceRecords = ref([]);
+const guestAttendanceRecords = ref([]);
 const searchQuery = ref('');
 const selectedStudent = ref(null);
+const selectedGuest = ref(null);
 const toast = useToast();
+
+// Toggle between learners and guests
+const visitorOptions = [
+    { label: 'Learners', value: 'learners' },
+    { label: 'Guests', value: 'guests' }
+];
+const visitorType = ref('learners');
+
+// Guest form modal
+const guestDialog = ref(false);
+const guest = ref({
+    id: null,
+    name: '',
+    purpose: '',
+    contactNumber: '',
+    personToVisit: '',
+    department: ''
+});
+const guestFormSubmitted = ref(false);
+
+// Department options for dropdown
+const departments = [
+    { name: 'Administration', code: 'admin' },
+    { name: 'Faculty', code: 'faculty' },
+    { name: 'Guidance', code: 'guidance' },
+    { name: 'Registrar', code: 'registrar' },
+    { name: 'Accounting', code: 'accounting' }
+];
 
 // Mock student data instead of using AttendanceService.getData()
 const allStudents = ref([
@@ -59,6 +94,7 @@ const cameraError = ref(null);
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
+const totalGuests = computed(() => guestAttendanceRecords.value.length);
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
@@ -410,6 +446,78 @@ const filteredRecords = computed(() => {
 
     return records;
 });
+
+const filteredGuestRecords = computed(() => {
+    let records = guestAttendanceRecords.value;
+
+    // Apply search filter
+    if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        records = records.filter((record) => record.name.toLowerCase().includes(query) || record.purpose.toLowerCase().includes(query) || record.personToVisit.toLowerCase().includes(query) || record.department.name.toLowerCase().includes(query));
+    }
+
+    return records;
+});
+
+// Open guest form dialog
+const openGuestForm = () => {
+    resetGuestForm();
+    guestDialog.value = true;
+};
+
+// Reset guest form
+const resetGuestForm = () => {
+    guest.value = {
+        id: null,
+        name: '',
+        purpose: '',
+        contactNumber: '',
+        personToVisit: '',
+        department: ''
+    };
+    guestFormSubmitted.value = false;
+};
+
+// Submit guest form
+const submitGuestForm = () => {
+    guestFormSubmitted.value = true;
+
+    // Validate form
+    if (!guest.value.name || !guest.value.purpose || !guest.value.personToVisit || !guest.value.department) {
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: 'Please fill in all required fields',
+            life: 3000
+        });
+        return;
+    }
+
+    // Create guest record
+    const guestRecord = {
+        ...guest.value,
+        id: `G-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        date: new Date().toLocaleDateString(),
+        recordId: `guest-${Date.now()}` // Unique ID for each record
+    };
+
+    // Add to records and show details
+    guestAttendanceRecords.value.unshift(guestRecord); // Add to beginning
+    selectedGuest.value = guestRecord;
+
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Guest Registered',
+        detail: `${guest.value.name} has been registered successfully`,
+        life: 3000
+    });
+
+    // Close dialog and switch back to learners mode
+    guestDialog.value = false;
+    visitorType.value = 'learners';
+};
 </script>
 
 <template>
@@ -439,170 +547,263 @@ const filteredRecords = computed(() => {
         </header>
 
         <!-- Main Dashboard -->
-        <div class="dashboard-container">
+        <header class="dashboard-container">
             <div class="dashboard-content">
-                <!-- Left Panel: QR Scanner -->
-                <div class="scanner-section">
-                    <div class="section-header">
-                        <h2><i class="pi pi-camera"></i> QR Scanner</h2>
-                        <div class="scanner-actions">
-                            <button @click="scanning = !scanning" class="action-button">
-                                <i :class="scanning ? 'pi pi-pause' : 'pi pi-play'"></i>
-                                {{ scanning ? 'Pause' : 'Resume' }}
+                <!-- Two-column layout for main content -->
+                <div class="main-content-columns">
+                    <!-- Left Column: QR Scanner -->
+                    <div class="left-column">
+                        <!-- QR Scanner Section -->
+                        <div class="scanner-section">
+                            <div class="section-header">
+                                <h2><i class="pi pi-camera"></i> QR Scanner</h2>
+                                <div class="scanner-actions">
+                                    <button @click="scanning = !scanning" class="action-button">
+                                        <i :class="scanning ? 'pi pi-pause' : 'pi pi-play'"></i>
+                                        {{ scanning ? 'Pause' : 'Resume' }}
+                                    </button>
+                                    <button @click="manualCheckIn" class="action-button">
+                                        <i class="pi pi-pencil"></i>
+                                        Manual
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="scanner-container" :class="{ 'scanning-active': scanning }">
+                                <!-- Show camera feed when scanning -->
+                                <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'"></qrcode-stream>
+
+                                <!-- Show paused message when not scanning -->
+                                <div v-else-if="!scanning && !cameraError" class="scanner-paused">
+                                    <i class="pi pi-camera-off"></i>
+                                    <p>Scanner paused</p>
+                                </div>
+
+                                <!-- Show error message when camera fails -->
+                                <div v-else class="scanner-error">
+                                    <i class="pi pi-exclamation-triangle"></i>
+                                    <p>{{ cameraError || 'Camera error occurred' }}</p>
+                                    <button @click="restartCamera" class="restart-button">
+                                        <i class="pi pi-refresh"></i>
+                                        Retry Camera
+                                    </button>
+                                </div>
+
+                                <!-- Scanner overlay with corners -->
+                                <div class="scanner-overlay">
+                                    <div class="scanner-corners">
+                                        <span></span>
+                                    </div>
+                                </div>
+
+                                <!-- Scan feedback notification -->
+                                <div v-if="scanFeedback.show" :class="['scan-feedback', 'feedback-' + scanFeedback.type]">
+                                    <i :class="scanFeedback.type === 'success' ? 'pi pi-check-circle' : scanFeedback.type === 'checkout' ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
+                                    {{ scanFeedback.message }}
+                                </div>
+                            </div>
+
+                            <!-- Student Preview Section -->
+                            <div class="student-preview" v-if="selectedStudent">
+                                <div class="preview-header" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                                    <div class="record-badge" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
+                                        <i :class="selectedStudent.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
+                                        {{ selectedStudent.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
+                                    </div>
+                                    <div class="timestamp">{{ selectedStudent.timestamp }}</div>
+                                </div>
+
+                                <div class="preview-content">
+                                    <div class="student-photo-container">
+                                        <img :src="selectedStudent.photo" alt="Student Photo" class="student-photo" />
+                                    </div>
+                                    <div class="student-info">
+                                        <h3>{{ selectedStudent.name }}</h3>
+                                        <div class="info-row">
+                                            <span class="info-label">ID:</span>
+                                            <span class="info-value">{{ selectedStudent.id }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Grade:</span>
+                                            <span class="info-value">{{ selectedStudent.gradeLevel }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Section:</span>
+                                            <span class="info-value">{{ selectedStudent.section }}</span>
+                                        </div>
+                                        <div class="info-row" v-if="selectedStudent.contact">
+                                            <span class="info-label">Contact:</span>
+                                            <span class="info-value">{{ selectedStudent.contact }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Empty state when no student is selected -->
+                            <div class="student-preview empty-state" v-else>
+                                <div class="empty-content">
+                                    <i class="pi pi-user-plus"></i>
+                                    <p>Scan a student ID or enter manually to see details</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Attendance Feed -->
+                    <div class="right-column">
+                        <!-- Toggle Button for Learners/Guests -->
+                        <div class="visitor-toggle-container">
+                            <SelectButton v-model="visitorType" :options="visitorOptions" optionLabel="label" optionValue="value" class="visitor-toggle" />
+                            <button v-if="visitorType === 'guests'" @click="openGuestForm" class="guest-register-button">
+                                <i class="pi pi-user-plus"></i>
+                                Register Guest
                             </button>
-                            <button @click="manualCheckIn" class="action-button">
-                                <i class="pi pi-pencil"></i>
-                                Manual
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="scanner-container" :class="{ 'scanning-active': scanning }">
-                        <!-- Show camera feed when scanning -->
-                        <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'"></qrcode-stream>
-
-                        <!-- Show paused message when not scanning -->
-                        <div v-else-if="!scanning && !cameraError" class="scanner-paused">
-                            <i class="pi pi-camera-off"></i>
-                            <p>Scanner paused</p>
                         </div>
 
-                        <!-- Show error message when camera fails -->
-                        <div v-else class="scanner-error">
-                            <i class="pi pi-exclamation-triangle"></i>
-                            <p>{{ cameraError || 'Camera error occurred' }}</p>
-                            <button @click="restartCamera" class="restart-button">
-                                <i class="pi pi-refresh"></i>
-                                Retry Camera
-                            </button>
-                        </div>
+                        <!-- Attendance Feed -->
+                        <div class="attendance-feed">
+                            <div class="section-header">
+                                <h2><i class="pi pi-list"></i> Attendance Feed</h2>
+                                <div class="feed-actions">
+                                    <div class="search-container">
+                                        <span class="p-input-icon-left">
+                                            <i class="pi pi-search"></i>
+                                            <input v-model="searchQuery" type="text" placeholder="Search..." class="search-input" />
+                                        </span>
+                                    </div>
 
-                        <!-- Scanner overlay with corners -->
-                        <div class="scanner-overlay">
-                            <div class="scanner-corners">
-                                <span></span>
-                            </div>
-                        </div>
-
-                        <!-- Scan feedback notification -->
-                        <div v-if="scanFeedback.show" :class="['scan-feedback', 'feedback-' + scanFeedback.type]">
-                            <i :class="scanFeedback.type === 'success' ? 'pi pi-check-circle' : scanFeedback.type === 'checkout' ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
-                            {{ scanFeedback.message }}
-                        </div>
-                    </div>
-
-                    <!-- Student Preview Section -->
-                    <div class="student-preview" v-if="selectedStudent">
-                        <div class="preview-header" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
-                            <div class="record-badge" :class="selectedStudent.recordType === 'check-in' ? 'record-checkin' : 'record-checkout'">
-                                <i :class="selectedStudent.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
-                                {{ selectedStudent.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
-                            </div>
-                            <div class="timestamp">{{ selectedStudent.timestamp }}</div>
-                        </div>
-
-                        <div class="preview-content">
-                            <div class="student-photo-container">
-                                <img :src="selectedStudent.photo" alt="Student Photo" class="student-photo" />
-                            </div>
-                            <div class="student-info">
-                                <h3>{{ selectedStudent.name }}</h3>
-                                <div class="info-row">
-                                    <span class="info-label">ID:</span>
-                                    <span class="info-value">{{ selectedStudent.id }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Grade:</span>
-                                    <span class="info-value">{{ selectedStudent.gradeLevel }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Section:</span>
-                                    <span class="info-value">{{ selectedStudent.section }}</span>
-                                </div>
-                                <div class="info-row" v-if="selectedStudent.contact">
-                                    <span class="info-label">Contact:</span>
-                                    <span class="info-value">{{ selectedStudent.contact }}</span>
+                                    <div v-if="visitorType === 'learners'" class="filter-buttons">
+                                        <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
+                                        <button @click="statusFilter = 'check-in'" :class="['filter-button', statusFilter === 'check-in' ? 'active' : '']"><i class="pi pi-sign-in"></i> Check-ins</button>
+                                        <button @click="statusFilter = 'check-out'" :class="['filter-button', statusFilter === 'check-out' ? 'active' : '']"><i class="pi pi-sign-out"></i> Check-outs</button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- Empty state when no student is selected -->
-                    <div class="student-preview empty-state" v-else>
-                        <div class="empty-content">
-                            <i class="pi pi-user-plus"></i>
-                            <p>Scan a student ID or enter manually to see details</p>
+                            <!-- Two-column layout for attendance feeds -->
+                            <div class="attendance-columns">
+                                <!-- Learners Attendance -->
+                                <div v-if="visitorType === 'learners'" class="attendance-column">
+                                    <!-- Empty state for learner attendance feed -->
+                                    <div v-if="filteredRecords.length === 0" class="empty-feed">
+                                        <i class="pi pi-calendar-times"></i>
+                                        <p>No learner attendance records found</p>
+                                        <span>Records will appear here as learners check in</span>
+                                    </div>
+
+                                    <!-- Learner attendance records table -->
+                                    <DataTable v-else :value="filteredRecords" paginator :rows="10" class="attendance-table" responsiveLayout="scroll" :rowHover="true" v-model:selection="selectedStudent" selectionMode="single" dataKey="id">
+                                        <Column field="id" header="ID" :sortable="true"></Column>
+                                        <Column field="name" header="Name" :sortable="true"></Column>
+                                        <Column field="recordType" header="Type" :sortable="true">
+                                            <template #body="slotProps">
+                                                <span :class="['record-type', slotProps.data.recordType === 'check-in' ? 'type-in' : 'type-out']">
+                                                    <i :class="slotProps.data.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
+                                                    {{ slotProps.data.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
+                                                </span>
+                                            </template>
+                                        </Column>
+                                        <Column field="gradeLevel" header="Grade" :sortable="true"></Column>
+                                        <Column field="section" header="Section"></Column>
+                                        <Column field="timestamp" header="Time" :sortable="true"></Column>
+                                    </DataTable>
+                                </div>
+
+                                <!-- Guest Attendance -->
+                                <div v-if="visitorType === 'guests'" class="attendance-column">
+                                    <!-- Empty state for guest attendance feed -->
+                                    <div v-if="filteredGuestRecords.length === 0" class="empty-feed">
+                                        <i class="pi pi-calendar-times"></i>
+                                        <p>No guest attendance records found</p>
+                                        <span>Register a guest to see records here</span>
+                                    </div>
+
+                                    <!-- Guest attendance records table -->
+                                    <DataTable v-else :value="filteredGuestRecords" paginator :rows="10" class="attendance-table" responsiveLayout="scroll" :rowHover="true" v-model:selection="selectedGuest" selectionMode="single" dataKey="id">
+                                        <Column field="id" header="ID" :sortable="true"></Column>
+                                        <Column field="name" header="Name" :sortable="true"></Column>
+                                        <Column field="purpose" header="Purpose" :sortable="true"></Column>
+                                        <Column field="personToVisit" header="Person to Visit" :sortable="true"></Column>
+                                        <Column field="department.name" header="Department" :sortable="true"></Column>
+                                        <Column field="timestamp" header="Time" :sortable="true"></Column>
+                                    </DataTable>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right Panel: Attendance Feed -->
-                <div class="attendance-feed">
-                    <div class="section-header">
-                        <h2><i class="pi pi-list"></i> Attendance Feed</h2>
-                        <div class="feed-actions">
-                            <div class="search-container">
-                                <span class="p-input-icon-left">
-                                    <i class="pi pi-search"></i>
-                                    <input v-model="searchQuery" type="text" placeholder="Search..." class="search-input" />
-                                </span>
-                            </div>
-
-                            <div class="filter-buttons">
-                                <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
-                                <button @click="statusFilter = 'check-in'" :class="['filter-button', statusFilter === 'check-in' ? 'active' : '']"><i class="pi pi-sign-in"></i> Check-ins</button>
-                                <button @click="statusFilter = 'check-out'" :class="['filter-button', statusFilter === 'check-out' ? 'active' : '']"><i class="pi pi-sign-out"></i> Check-outs</button>
-                            </div>
+                <!-- Fixed Footer -->
+                <div class="dashboard-footer">
+                    <div class="footer-stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Check-ins</div>
+                            <div class="stat-value">{{ totalCheckins }}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Check-outs</div>
+                            <div class="stat-value">{{ totalCheckouts }}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Guests</div>
+                            <div class="stat-value">{{ totalGuests }}</div>
                         </div>
                     </div>
 
-                    <!-- Empty state for attendance feed -->
-                    <div v-if="filteredRecords.length === 0" class="empty-feed">
-                        <i class="pi pi-calendar-times"></i>
-                        <p>No attendance records found</p>
-                        <span>Records will appear here as students check in</span>
+                    <div class="footer-actions">
+                        <button @click="exportReport" class="export-button">
+                            <i class="pi pi-download"></i>
+                            Export Report
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Guest Registration Dialog -->
+                <Dialog v-model:visible="guestDialog" header="Guest Registration" :modal="true" class="guest-dialog" :style="{ width: '450px' }">
+                    <div class="guest-form">
+                        <div class="form-field">
+                            <label for="name">Name*</label>
+                            <InputText id="name" v-model="guest.name" :class="{ 'p-invalid': guestFormSubmitted && !guest.name }" />
+                            <small v-if="guestFormSubmitted && !guest.name" class="p-error">Name is required.</small>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="purpose">Purpose of Visit*</label>
+                            <InputText id="purpose" v-model="guest.purpose" :class="{ 'p-invalid': guestFormSubmitted && !guest.purpose }" />
+                            <small v-if="guestFormSubmitted && !guest.purpose" class="p-error">Purpose is required.</small>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="contactNumber">Contact Number</label>
+                            <InputMask id="contactNumber" v-model="guest.contactNumber" mask="(999) 999-9999" />
+                        </div>
+
+                        <div class="form-field">
+                            <label for="personToVisit">Person to Visit*</label>
+                            <InputText id="personToVisit" v-model="guest.personToVisit" :class="{ 'p-invalid': guestFormSubmitted && !guest.personToVisit }" />
+                            <small v-if="guestFormSubmitted && !guest.personToVisit" class="p-error">Person to visit is required.</small>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="department">Department*</label>
+                            <Dropdown id="department" v-model="guest.department" :options="departments" optionLabel="name" placeholder="Select Department" :class="{ 'p-invalid': guestFormSubmitted && !guest.department }" />
+                            <small v-if="guestFormSubmitted && !guest.department" class="p-error">Department is required.</small>
+                        </div>
                     </div>
 
-                    <!-- Attendance records table -->
-                    <DataTable v-else :value="filteredRecords" paginator :rows="10" class="attendance-table" responsiveLayout="scroll" :rowHover="true" v-model:selection="selectedStudent" selectionMode="single" dataKey="id">
-                        <Column field="id" header="ID" :sortable="true"></Column>
-                        <Column field="name" header="Name" :sortable="true"></Column>
-                        <Column field="recordType" header="Type" :sortable="true">
-                            <template #body="slotProps">
-                                <span :class="['record-type', slotProps.data.recordType === 'check-in' ? 'type-in' : 'type-out']">
-                                    <i :class="slotProps.data.recordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
-                                    {{ slotProps.data.recordType === 'check-in' ? 'Check In' : 'Check Out' }}
-                                </span>
-                            </template>
-                        </Column>
-                        <Column field="gradeLevel" header="Grade" :sortable="true"></Column>
-                        <Column field="section" header="Section"></Column>
-                        <Column field="timestamp" header="Time" :sortable="true"></Column>
-                    </DataTable>
-                </div>
+                    <template #footer>
+                        <button @click="guestDialog = false" class="cancel-button">
+                            <i class="pi pi-times"></i>
+                            Cancel
+                        </button>
+                        <button @click="submitGuestForm" class="submit-button">
+                            <i class="pi pi-check"></i>
+                            Register
+                        </button>
+                    </template>
+                </Dialog>
             </div>
-        </div>
-
-        <!-- Fixed Footer -->
-        <div class="dashboard-footer">
-            <div class="footer-stats">
-                <div class="stat-item">
-                    <div class="stat-label">Check-ins</div>
-                    <div class="stat-value">{{ totalCheckins }}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Check-outs</div>
-                    <div class="stat-value">{{ totalCheckouts }}</div>
-                </div>
-            </div>
-
-            <div class="footer-actions">
-                <button @click="exportReport" class="export-button">
-                    <i class="pi pi-download"></i>
-                    Export Report
-                </button>
-            </div>
-        </div>
+        </header>
     </div>
 </template>
 
@@ -742,13 +943,141 @@ const filteredRecords = computed(() => {
 .dashboard-container {
     flex: 1;
     padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .dashboard-content {
+    height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.main-content-columns {
     display: grid;
     grid-template-columns: 1fr 1.5fr;
     gap: 1.5rem;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.left-column,
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Visitor Toggle Styles */
+.visitor-toggle-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    grid-column: 1 / -1;
+}
+
+.visitor-toggle {
+    font-weight: 600;
+}
+
+.guest-register-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.guest-register-button:hover {
+    background-color: #2563eb;
+}
+
+/* Attendance Columns */
+.attendance-columns {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.attendance-column {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+}
+
+/* Guest Dialog Styles */
+.guest-dialog .guest-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.guest-form .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.guest-form label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.guest-dialog .p-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.cancel-button {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.cancel-button:hover {
+    background-color: #e5e7eb;
+}
+
+.submit-button {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.submit-button:hover {
+    background-color: #2563eb;
 }
 
 /* Section Header Styles */
@@ -1175,6 +1504,8 @@ const filteredRecords = computed(() => {
     border-radius: 0.75rem;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 .feed-actions {
@@ -1357,9 +1688,16 @@ const filteredRecords = computed(() => {
     }
 }
 
+/* Main Content Layout */
+.main-content-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Two equal columns */
+    gap: 1.5rem;
+}
+
 /* Responsive Adjustments */
 @media (max-width: 1024px) {
-    .dashboard-content {
+    .main-content-columns {
         grid-template-columns: 1fr;
         gap: 1.5rem;
     }
