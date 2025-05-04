@@ -8,6 +8,7 @@ import { SubjectService } from '@/router/service/Subjects';
 import { TeacherService } from '@/router/service/TeacherService';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import InputSwitch from 'primevue/inputswitch';
 import InputText from 'primevue/inputtext';
@@ -17,7 +18,6 @@ import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import Dropdown from 'primevue/dropdown';
 
 const toast = useToast();
 const confirmDialog = useConfirm();
@@ -855,9 +855,15 @@ const toggleActiveCurriculum = async (curr) => {
             loading.value = true;
 
             // Call the API to activate
-            await CurriculumService.activateCurriculum(curr.id);
+            const updatedCurriculum = await CurriculumService.activateCurriculum(curr.id);
+            Object.assign(curr, updatedCurriculum);
 
             // Update local state to show active status without full reload
+            curriculums.value = curriculums.value.map(c => ({
+                ...c,
+                is_active: c.id === curr.id
+            }));
+            loading.value = false;
             curriculums.value.forEach((c) => {
                 // Deactivate all other curriculums
                 if (c.id !== curr.id) {
@@ -879,10 +885,8 @@ const toggleActiveCurriculum = async (curr) => {
             });
 
             // Delay the reload to allow animation to complete
-            setTimeout(async () => {
-                await loadCurriculums();
-                loading.value = false;
-            }, 2500); // Wait for 2.5 seconds for the animation to play
+            await loadCurriculums();
+            loading.value = false;
 
             return; // Exit early to prevent the finally block from running too soon
         }
@@ -911,10 +915,8 @@ const toggleActiveCurriculum = async (curr) => {
                 });
 
                 // Delay the reload for consistency
-                setTimeout(async () => {
-                    await loadCurriculums();
-                    loading.value = false;
-                }, 500);
+                await loadCurriculums();
+                loading.value = false;
 
                 return; // Exit early
             } else {
@@ -2276,7 +2278,7 @@ const openTeacherDialog = async (subject) => {
                 life: 3000
             });
         } finally {
-            loading.value = false;
+            // Intentional empty finally block to prevent automatic loading reset
         }
     }
 

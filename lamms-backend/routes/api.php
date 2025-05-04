@@ -83,7 +83,7 @@ Route::get('/curriculums/{id}', [CurriculumController::class, 'show']);
 Route::put('/curriculums/{id}', [CurriculumController::class, 'update']);
 Route::delete('/curriculums/{id}', [CurriculumController::class, 'destroy']);
 Route::put('/curriculums/{id}/archive', [CurriculumController::class, 'archive']);
-Route::put('/curriculums/{id}/activate', [CurriculumController::class, 'activate']);
+Route::put('/curriculums/{id}/activate', [\App\Http\Controllers\API\CurriculumController::class, 'activate']);
 
 // Curriculum-Grade Routes
 Route::get('/curriculums/{id}/grades', [CurriculumController::class, 'getGrades']);

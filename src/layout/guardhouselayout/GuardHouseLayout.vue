@@ -50,7 +50,7 @@ const allStudents = ref([
 ]);
 
 const currentDateTime = ref(new Date());
-const guardName = ref('John Doe');
+const guardName = ref('Bread Doe');
 const guardId = ref('G-12345');
 const statusFilter = ref('all');
 const scanFeedback = ref({ show: false, type: '', message: '' });

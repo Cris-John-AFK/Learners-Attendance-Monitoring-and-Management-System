@@ -44,6 +44,31 @@ export const AttendanceService = {
         }
     },
 
+    // Get students by subject code
+    async getStudentsBySubject(subjectCode) {
+        try {
+            // Try to get from API first
+            try {
+                const response = await axios.get(`${API_URL}/subjects/${subjectCode}/students`);
+                return response.data;
+            } catch (apiError) {
+                console.warn(`API not available for subject ${subjectCode} students:`, apiError);
+                // Fall back to mock data
+            }
+
+            // If API fails or we're in development, use mock data
+            console.log('Using mock student data for subject:', subjectCode);
+            const allStudents = await this.getData();
+
+            // Filter students randomly for this subject (mock implementation)
+            // In a real implementation, this would filter based on enrollment data
+            return allStudents.filter(() => Math.random() > 0.3); // Randomly select ~70% of students
+        } catch (error) {
+            console.error(`Error loading students for subject ${subjectCode}:`, error);
+            return [];
+        }
+    },
+
     // Get students by grade level
     async getStudentsByGrade(gradeLevel) {
         try {

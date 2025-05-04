@@ -56,6 +56,11 @@ const router = createRouter({
                     component: () => import('@/views/pages/Report.vue')
                 },
                 {
+                    path: '/teacher/attendance-records',
+                    name: 'teacher-attendance-records',
+                    component: () => import('@/views/pages/teacher/TeacherAttendanceRecords.vue')
+                },
+                {
                     path: '/pages/settings',
                     name: 'settings',
                     component: TeacherSettings

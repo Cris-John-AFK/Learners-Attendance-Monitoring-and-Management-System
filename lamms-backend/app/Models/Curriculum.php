@@ -29,7 +29,6 @@ class Curriculum extends Model
         'end_year',
         'is_active',
         'status',
-        'description'
     ];
 
     protected $casts = [
@@ -81,8 +80,9 @@ class Curriculum extends Model
      */
     public function grades(): BelongsToMany
     {
-        return $this->belongsToMany(Grade::class, 'curriculum_grade')
-            ->withTimestamps();
+        // Assuming curriculum_grade pivot table does not have timestamps based on controller logic
+        return $this->belongsToMany(Grade::class, 'curriculum_grade');
+            // ->withTimestamps(); // Removed based on controller fallback logic
     }
 
     /**

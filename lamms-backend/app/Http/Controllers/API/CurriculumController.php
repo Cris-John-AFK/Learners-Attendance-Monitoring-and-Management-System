@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\Curriculum;
+
+use App\Models\Curriculum; // Added this line
 use App\Models\Grade;
 use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+
 use Illuminate\Support\Facades\Validator;
 
 class CurriculumController extends Controller
@@ -29,15 +31,15 @@ class CurriculumController extends Controller
                     $query->select($validFields);
                 }
 
-                // Only load relationships if not requesting specific fields or if relationships are in the fields
-                if (in_array('grades', $fields) || !$request->has('fields')) {
-                    $query->with('grades');
-                }
+                 // Load relationships if they are explicitly requested
+                 if (in_array('grades', $fields)) {
+                      $query->with('grades');
+                  }
 
-                if (in_array('subjects', $fields) || !$request->has('fields')) {
-                    $query->with('subjects');
-                }
-            } else {
+                 if (in_array('subjects', $fields)) {
+                      $query->with('subjects');
+                  }
+              } else {
                 // If no fields specified, load all relationships
                 $query->with(['grades', 'subjects']);
             }
@@ -53,7 +55,7 @@ class CurriculumController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'sometimes|required|string|max:255', // Changed 'required' to 'sometimes|required'
             'start_year' => 'nullable|integer|min:2000',
             'end_year' => 'nullable|integer|min:2000',
             'description' => 'nullable|string',
@@ -85,7 +87,9 @@ class CurriculumController extends Controller
                 'name' => $request->name,
                 'start_year' => $request->start_year,
                 'end_year' => $request->end_year,
-                'description' => $request->description
+                'description' => $request->description,
+                'status' => $request->status,
+                'is_active' => $request->is_active
             ]);
 
             // Create curriculum with only the columns that definitely exist in the table
@@ -109,24 +113,8 @@ class CurriculumController extends Controller
 
             // Attach grades to curriculum if provided
             if ($request->has('grades') && is_array($request->grades)) {
-                try {
-                    $curriculum->grades()->attach($request->grades);
-                } catch (\Exception $attachException) {
-                    // If attaching with timestamps fails, try without timestamps
-                    if (strpos($attachException->getMessage(), 'curriculum_grade.created_at') !== false) {
-                        Log::info('Attaching grades without timestamps due to missing timestamp columns');
-                        // Manually attach without timestamps
-                        foreach ($request->grades as $gradeId) {
-                            DB::table('curriculum_grade')->insert([
-                                'curriculum_id' => $curriculum->id,
-                                'grade_id' => $gradeId
-                            ]);
-                        }
-                    } else {
-                        // If it's a different error, rethrow it
-                        throw $attachException;
-                    }
-                }
+                // Attach grades using the standard method (timestamps handled by model/DB)
+                $curriculum->grades()->attach($request->grades);
             }
 
             DB::commit();
@@ -146,10 +134,12 @@ class CurriculumController extends Controller
     public function update(Request $request, Curriculum $curriculum)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'sometimes|required|string|max:255', // Changed 'required' to 'sometimes|required'
             'start_year' => 'nullable|integer|min:2000',
             'end_year' => 'nullable|integer|min:2000',
             'description' => 'nullable|string',
+            'status' => 'nullable|string|in:Draft,Published,Archived',
+            'is_active' => 'nullable|boolean',
             'grades' => 'nullable|array',
             'grades.*' => 'exists:grades,id'
         ]);
@@ -173,34 +163,25 @@ class CurriculumController extends Controller
         try {
             DB::beginTransaction();
 
+            // Deactivate other curricula if activating this one
+            if ($request->is_active) {
+                Curriculum::where('id', '!=', $curriculum->id)
+                    ->update(['is_active' => false]);
+            }
+
             $curriculum->update([
                 'name' => $request->name,
                 'start_year' => $request->start_year,
                 'end_year' => $request->end_year,
-                'description' => $request->description
+                'description' => $request->description,
+                'status' => $request->status ?? $curriculum->status,
+                'is_active' => $request->has('is_active') ? $request->is_active : $curriculum->is_active
             ]);
 
             // Sync grades if provided
             if ($request->has('grades') && is_array($request->grades)) {
-                try {
-                    $curriculum->grades()->sync($request->grades);
-                } catch (\Exception $syncException) {
-                    // If syncing with timestamps fails, try without timestamps
-                    if (strpos($syncException->getMessage(), 'curriculum_grade.created_at') !== false) {
-                        Log::info('Syncing grades without timestamps due to missing timestamp columns');
-                        // Manually sync without timestamps
-                        DB::table('curriculum_grade')->where('curriculum_id', $curriculum->id)->delete();
-                        foreach ($request->grades as $gradeId) {
-                            DB::table('curriculum_grade')->insert([
-                                'curriculum_id' => $curriculum->id,
-                                'grade_id' => $gradeId
-                            ]);
-                        }
-                    } else {
-                        // If it's a different error, rethrow it
-                        throw $syncException;
-                    }
-                }
+                // Sync grades using the standard method (timestamps handled by model/DB)
+                $curriculum->grades()->sync($request->grades);
             }
 
             DB::commit();
@@ -225,20 +206,31 @@ class CurriculumController extends Controller
     public function activate(Curriculum $curriculum)
     {
         try {
+            DB::beginTransaction();
+
+            // Use the model's activate method
             $curriculum->activate();
-            return response()->json($curriculum);
+
+            DB::commit();
+            // Eager load relationships for the response
+            return response()->json($curriculum->load(['grades', 'subjects']));
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to activate curriculum'], 500);
+            DB::rollBack();
+            Log::error('Failed to activate curriculum: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to activate curriculum: ' . $e->getMessage()], 500);
         }
     }
 
     public function deactivate(Curriculum $curriculum)
     {
         try {
+            // Use the model's deactivate method
             $curriculum->deactivate();
-            return response()->json($curriculum);
+            // Eager load relationships for the response
+            return response()->json($curriculum->load(['grades', 'subjects']));
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to deactivate curriculum'], 500);
+            Log::error('Failed to deactivate curriculum: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to deactivate curriculum: ' . $e->getMessage()], 500);
         }
     }
 
@@ -300,8 +292,10 @@ class CurriculumController extends Controller
         try {
             DB::beginTransaction();
 
-            // Detach subject
-            $curriculum->subjects()->detach($request->subject_id);
+            // Detach subject for the specific grade
+            $curriculum->subjects()
+                       ->wherePivot('grade_id', $request->grade_id) // Add condition for grade_id
+                       ->detach($request->subject_id);
 
             DB::commit();
             return response()->json($curriculum->load(['grades', 'subjects']));
@@ -321,12 +315,12 @@ class CurriculumController extends Controller
     {
         try {
         $validated = $request->validate([
-                'curriculum_id' => 'required|exists:curricula,id',
-                'grade_id' => 'required|exists:grades,id',
-                'subject_id' => 'required|exists:subjects,id',
-                'units' => 'nullable|integer|min:1',
-                'hours_per_week' => 'nullable|integer|min:1',
-                'description' => 'nullable|string'
+                 'curriculum_id' => 'required|exists:curricula,id', // Reverted back to curricula based on store method check
+                  'grade_id' => 'required|exists:grades,id',
+                  'subject_id' => 'required|exists:subjects,id',
+                  'units' => 'nullable|integer|min:1',
+                  'hours_per_week' => 'nullable|integer|min:1',
+                  'description' => 'nullable|string'
             ]);
 
             // Check if the curriculum-grade relationship exists

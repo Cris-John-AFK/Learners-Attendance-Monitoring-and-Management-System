@@ -236,7 +236,8 @@ export const CurriculumService = {
     async activateCurriculum(id) {
         try {
             console.log('Activating curriculum:', id);
-            const response = await api.put(`/api/curriculums/${id}/activate`);
+            // Call the standard update endpoint with is_active: true
+            const response = await api.put(`/api/curriculums/${id}`, { is_active: true });
 
             // Clear cache
             this.clearCache();
