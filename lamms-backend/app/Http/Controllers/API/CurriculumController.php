@@ -16,114 +16,32 @@ use Illuminate\Support\Facades\Validator;
 
 class CurriculumController extends Controller
 {
+    // Only one curriculum exists. Always return the first (or create if not exists)
     public function index(Request $request)
     {
         try {
-            $query = Curriculum::query();
-
-            // Check if specific fields are requested
-            if ($request->has('fields')) {
-                $fields = explode(',', $request->fields);
-                $validFields = array_intersect($fields, ['id', 'name', 'status', 'is_active', 'start_year', 'end_year', 'description']);
-
-                // If there are valid fields, select only those fields
-                if (!empty($validFields)) {
-                    $query->select($validFields);
-                }
-
-                 // Load relationships if they are explicitly requested
-                 if (in_array('grades', $fields)) {
-                      $query->with('grades');
-                  }
-
-                 if (in_array('subjects', $fields)) {
-                      $query->with('subjects');
-                  }
-              } else {
-                // If no fields specified, load all relationships
-                $query->with(['grades', 'subjects']);
+            $curriculum = Curriculum::with(['grades', 'subjects'])->first();
+            if (!$curriculum) {
+                // Optionally, auto-create the single curriculum if not present
+                $curriculum = Curriculum::create([
+                    'name' => 'Default Curriculum',
+                    'start_year' => now()->year,
+                    'end_year' => now()->year + 1,
+                    'is_active' => true,
+                    'status' => 'Active',
+                ]);
             }
-
-            $curriculums = $query->get();
-            return response()->json($curriculums);
+            return response()->json($curriculum);
         } catch (\Exception $e) {
             Log::error('Error in curriculum index: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to retrieve curriculums: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Failed to retrieve curriculum: ' . $e->getMessage()], 500);
         }
     }
 
+    // Disallow creating new curricula. Only one curriculum is allowed.
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255', // Changed 'required' to 'sometimes|required'
-            'start_year' => 'nullable|integer|min:2000',
-            'end_year' => 'nullable|integer|min:2000',
-            'description' => 'nullable|string',
-            'grades' => 'nullable|array',
-            'grades.*' => 'exists:grades,id'
-        ]);
-
-        // Custom validation for end_year > start_year
-        if ($request->has('start_year') && $request->has('end_year') &&
-            $request->start_year !== null && $request->end_year !== null) {
-            if ((int)$request->end_year <= (int)$request->start_year) {
-                return response()->json([
-                    'errors' => [
-                        'end_year' => ['End year must be greater than start year']
-                    ]
-                ], 422);
-            }
-        }
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            // Log the request data for debugging
-            Log::info('Creating curriculum with data:', [
-                'name' => $request->name,
-                'start_year' => $request->start_year,
-                'end_year' => $request->end_year,
-                'description' => $request->description,
-                'status' => $request->status,
-                'is_active' => $request->is_active
-            ]);
-
-            // Create curriculum with only the columns that definitely exist in the table
-            $curriculum = new Curriculum();
-            $curriculum->name = $request->name;
-            $curriculum->start_year = $request->start_year !== null ? $request->start_year : null;
-            $curriculum->end_year = $request->end_year !== null ? $request->end_year : null;
-            $curriculum->description = $request->description;
-            $curriculum->is_active = false;
-
-            // Check which table exists and set appropriate columns
-            $tableName = Schema::hasTable('curricula') ? 'curricula' : 'curriculums';
-            Log::info('Using table: ' . $tableName);
-
-            // Set status to Draft by default if the column exists
-            if (Schema::hasColumn($tableName, 'status')) {
-                $curriculum->status = 'Draft';
-            }
-
-            $curriculum->save();
-
-            // Attach grades to curriculum if provided
-            if ($request->has('grades') && is_array($request->grades)) {
-                // Attach grades using the standard method (timestamps handled by model/DB)
-                $curriculum->grades()->attach($request->grades);
-            }
-
-            DB::commit();
-            return response()->json($curriculum->load(['grades', 'subjects']), 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Failed to create curriculum: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to create curriculum: ' . $e->getMessage()], 500);
-        }
+        return response()->json(['message' => 'Only one curriculum is allowed.'], 403);
     }
 
     public function show(Curriculum $curriculum)
@@ -193,50 +111,22 @@ class CurriculumController extends Controller
         }
     }
 
-    public function destroy(Curriculum $curriculum)
-    {
-        try {
-            $curriculum->delete();
-            return response()->json(null, 204);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to delete curriculum'], 500);
-        }
-    }
-
+    // No activation needed; only one curriculum is always active.
     public function activate(Curriculum $curriculum)
     {
-        try {
-            DB::beginTransaction();
-
-            // Use the model's activate method
-            $curriculum->activate();
-
-            DB::commit();
-            // Eager load relationships for the response
-            return response()->json($curriculum->load(['grades', 'subjects']));
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Failed to activate curriculum: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to activate curriculum: ' . $e->getMessage()], 500);
-        }
+        return response()->json(['message' => 'Activation is not needed. The single curriculum is always active.'], 200);
     }
 
+    // No deactivation needed; only one curriculum is always active.
     public function deactivate(Curriculum $curriculum)
     {
-        try {
-            // Use the model's deactivate method
-            $curriculum->deactivate();
-            // Eager load relationships for the response
-            return response()->json($curriculum->load(['grades', 'subjects']));
-        } catch (\Exception $e) {
-            Log::error('Failed to deactivate curriculum: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to deactivate curriculum: ' . $e->getMessage()], 500);
-        }
+        return response()->json(['message' => 'Deactivation is not needed. The single curriculum is always active.'], 200);
     }
 
+    // Always return the single curriculum
     public function getActive()
     {
-        $curriculum = Curriculum::active()->first();
+        $curriculum = Curriculum::with(['grades', 'subjects'])->first();
         return response()->json($curriculum);
     }
 

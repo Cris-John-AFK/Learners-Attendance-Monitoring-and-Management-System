@@ -10,41 +10,37 @@ import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
-import InputSwitch from 'primevue/inputswitch';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 const toast = useToast();
 const confirmDialog = useConfirm();
-const curriculums = ref([]);
+const route = useRoute();
+
+
+// Only one curriculum is supported
+const curriculum = ref({
+        id: null,
+        name: 'Curriculum',
+        yearRange: { start: null, end: null },
+        description: '',
+        status: 'Active',
+        is_active: true,
+        grade_levels: []
+    });
 const loading = ref(true);
 const curriculumDialog = ref(false);
-const deleteCurriculumDialog = ref(false);
-const selectedCurriculum = ref(null);
-const archiveDialog = ref(false);
-const archiveConfirmDialog = ref(false);
-const selectedCurriculumToArchive = ref(null);
-const searchYear = ref('');
 const submitted = ref(false); // Form validation flag
 
 // Define API_URL directly in the component
 // const API_URL = 'http://localhost:8000/api';
 
-// New curriculum form data
-const curriculum = ref({
-    id: null,
-    name: 'Curriculum',
-    yearRange: { start: null, end: null },
-    description: '',
-    status: 'Draft', // Changed from 'Not Active' to 'Draft'
-    is_active: false, // Set to false since this is a new curriculum
-    grade_levels: []
-});
+// New curriculum form data removed; only one curriculum ref is used above
 const years = ref(['2023', '2024', '2025', '2026', '2027', '2028', '2029', '2030']);
 const availableStartYears = computed(() => {
     // Generate year options from current year - 5 to current year + 5
@@ -195,49 +191,55 @@ const normalizeYearRange = (curriculum) => {
 // Filter available years for search dropdown
 const availableYears = computed(() => {
     const years = new Set();
-    curriculums.value.forEach((curr) => {
-        if (curr && curr.yearRange) {
-            if (curr.yearRange.start) years.add(curr.yearRange.start);
-            if (curr.yearRange.end) years.add(curr.yearRange.end);
-        }
-    });
+    // Only one curriculum is supported
+    const curr = curriculum.value;
+    if (curr && curr.yearRange) {
+        if (curr.yearRange.start) years.add(curr.yearRange.start);
+        if (curr.yearRange.end) years.add(curr.yearRange.end);
+    }
     return Array.from(years).sort();
 });
 
 // Add right after the availableYears computed property
 
-// Computed property to determine if the warning message should be hidden
-const hideWarning = computed(() => {
-    return !!selectedGradeToAdd.value;
-});
+// Remove computed properties for curriculum filtering, searching, activating, archiving, etc.
 
-// Filter all curriculums
-const filteredCurriculums = computed(() => {
-    let filtered = curriculums.value.filter((c) => c); // Ensure curriculum exists
+// Single curriculum implementation - curriculums array only has the one curriculum
+const curriculums = ref([curriculum.value]);
 
-    // Filter by year if searchYear is set
-    if (searchYear.value) {
-        filtered = filtered.filter((c) => c.yearRange && (c.yearRange.start === searchYear.value || c.yearRange.end === searchYear.value || `${c.yearRange.start}-${c.yearRange.end}` === searchYear.value));
+// Load the curriculum function that gets the single curriculum
+const loadCurriculums = async () => {
+    loading.value = true;
+    try {
+        console.log('Loading the single curriculum...');
+        const response = await api.get('/api/curriculums');
+        if (response.data) {
+            // Update our single curriculum with data from backend
+            curriculum.value = normalizeYearRange(response.data);
+            // Also update the curriculums array to maintain compatibility
+            curriculums.value = [curriculum.value];
+            console.log('Loaded curriculum:', curriculum.value);
+        }
+    } catch (error) {
+        console.error('Error loading curriculum:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load curriculum data: ' + (error.message || 'Unknown error'),
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
     }
+};
 
-    // Log all curricula for debugging
-    filtered.forEach((c) => {
-        console.log(`Curriculum ${c.id} (${c.name}): status=${c.status}, is_active=${c.is_active}, years=${c.yearRange?.start}-${c.yearRange?.end}`);
-    });
-
-    return filtered;
+// Simple pass-through for filtered curriculum - always returns the single curriculum
+const filteredCurriculums = computed(() => {
+    return curriculums.value;
 });
 
 // Additional computed property for active curriculums only (if needed later)
-const activeCurriculums = computed(() => {
-    return filteredCurriculums.value.filter((c) => {
-        // Check if the status field is explicitly set to 'Active'
-        const activeByStatus = c.status === 'Active';
-        // Check if the is_active field is true (as a fallback)
-        const activeByFlag = c.is_active === true || c.is_active === 1;
-        return activeByStatus || activeByFlag;
-    });
-});
+// Remove activeCurriculums computed property; only one curriculum is always active.
 
 // Add the getRandomGradient function from Admin-Subject.vue to generate gradients
 const getRandomGradient = () => {
@@ -266,11 +268,7 @@ const clearSearch = () => {
     searchYear.value = '';
 };
 
-// Function to filter curriculums when year filter changes
-const filterCurriculums = () => {
-    console.log('Filtering by year:', searchYear.value);
-    // The actual filtering is done by the filteredCurriculums computed property
-};
+// Remove filterCurriculums; not needed for single curriculum.
 
 // Handle year range selection in curriculum form
 const handleStartYearChange = () => {
@@ -315,32 +313,10 @@ const clearLocalData = (sectionId = null) => {
     }
 };
 
-// Add this function to clear any incorrect notifications
-onMounted(async () => {
-    try {
-        console.log('Mounting Curriculum component');
-        // Clear any existing toasts that might be showing the wrong message
-        if (toast && toast.removeAllGroups) {
-            toast.removeAllGroups();
-        }
-
-        // Load initial data
-        await loadCurriculums();
-    } catch (error) {
-        console.error('Error in component mount:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load curriculum data: ' + (error.message || 'Unknown error'),
-            life: 3000
-        });
-    } finally {
-        loading.value = false;
-    }
-});
-
-// Consolidate the two onMounted functions
-onMounted(async () => {
+// Move initialization to nextTick to prevent async setup issues
+onMounted(() => {
+    // Use nextTick to defer async work until after component setup
+    nextTick(async () => {
     try {
         console.log('Component mounted, loading data...');
         loading.value = true;
@@ -350,45 +326,32 @@ onMounted(async () => {
             toast.removeAllGroups();
         }
 
-        // First load curriculums
+        // Load initial data - single curriculum
         await loadCurriculums();
-        console.log('Curriculums loaded:', curriculums.value);
-
-        // Then load grades
+        console.log('Curriculum loaded:', curriculum.value);
         await loadGrades();
         console.log('Grades loaded:', grades.value);
-
-        // Load subjects
         await loadSubjects();
         console.log('Subjects loaded:', subjects.value);
-
-        // Load teachers
         await loadTeachers();
         console.log('Teachers loaded:', teachers.value);
 
-        // If we have a selected curriculum and grade, load their sections
-        if (selectedCurriculum.value?.id && selectedGrade.value?.id) {
-            console.log('Loading sections for curriculum:', selectedCurriculum.value.id, 'grade:', selectedGrade.value.id);
-
+        // If we have curriculum data and a selected grade, load their sections
+        if (curriculum.value?.id && selectedGrade.value?.id) {
+            console.log('Loading sections for curriculum:', curriculum.value.id, 'grade:', selectedGrade.value.id);
             try {
-                const loadedSections = await CurriculumService.getSectionsByGrade(selectedCurriculum.value.id, selectedGrade.value.id);
-
+                const loadedSections = await CurriculumService.getSectionsByGrade(curriculum.value.id, selectedGrade.value.id);
                 if (Array.isArray(loadedSections)) {
                     sections.value = loadedSections;
                     console.log('Sections loaded:', sections.value);
-
                     // For each section, load its subjects and homeroom teacher
                     await Promise.all(
                         sections.value.map(async (section) => {
                             try {
-                                // Load subjects for this section
-                                const sectionSubjects = await CurriculumService.getSubjectsBySection(selectedCurriculum.value.id, selectedGrade.value.id, section.id);
-
+                                const sectionSubjects = await CurriculumService.getSubjectsBySection(curriculum.value.id, selectedGrade.value.id, section.id);
                                 if (Array.isArray(sectionSubjects)) {
                                     section.subjects = sectionSubjects;
                                 }
-
-                                // If there's a homeroom teacher, ensure it's loaded
                                 if (section.homeroom_teacher_id) {
                                     const teacher = teachers.value.find((t) => t.id === section.homeroom_teacher_id);
                                     if (teacher) {
@@ -421,88 +384,126 @@ onMounted(async () => {
     }
 });
 
-// Add watch for curriculum and grade changes to reload sections
-watch([() => selectedCurriculum.value, () => selectedGrade.value], async ([newCurriculum, newGrade], [oldCurriculum, oldGrade]) => {
-    if (!newCurriculum?.id || !newGrade?.id) {
-        sections.value = [];
-        return;
-    }
-
-    if (newCurriculum?.id === oldCurriculum?.id && newGrade?.id === oldGrade?.id) {
-        return; // No change in selection
-    }
-
-    try {
-        loading.value = true;
-        console.log('Selection changed, reloading sections...');
-
-        const loadedSections = await CurriculumService.getSectionsByGrade(newCurriculum.id, newGrade.id);
-
-        if (Array.isArray(loadedSections)) {
-            sections.value = loadedSections;
-            console.log('Sections reloaded:', sections.value);
-
-            // Load subjects and homeroom teachers for each section
-            await Promise.all(
-                sections.value.map(async (section) => {
-                    try {
-                        // Load subjects
-                        const sectionSubjects = await CurriculumService.getSubjectsBySection(newCurriculum.id, newGrade.id, section.id);
-
-                        if (Array.isArray(sectionSubjects)) {
-                            section.subjects = sectionSubjects;
-                        }
-
-                        // Load homeroom teacher if assigned
-                        if (section.homeroom_teacher_id) {
-                            const teacher = teachers.value.find((t) => t.id === section.homeroom_teacher_id);
-                            if (teacher) {
-                                section.teacher = teacher;
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error loading section data:', error);
-                    }
-                })
-            );
-        }
-    } catch (error) {
-        console.error('Error reloading sections:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load sections',
-            life: 3000
-        });
-        sections.value = [];
-    } finally {
-        loading.value = false;
-    }
+// Create safe computed properties for the watched values to prevent unhandled errors
+// Use the single curriculum and selected grade for watching changes
+const watchedValues = computed(() => {
+    return {
+        curriculum: curriculum.value || {},
+        grade: selectedGrade.value || {}
+    };
 });
 
-// Main data loading functions
-const loadCurriculums = async () => {
+// Add watch for curriculum and grade changes to reload sections - use the safe computed
+watch(
+    watchedValues,
+    async (newVal, oldVal) => {
+        // Destructure with defaults to avoid null/undefined errors
+        const { curriculum: newCurriculum = {}, grade: newGrade = {} } = newVal || {};
+        const { curriculum: oldCurriculum = {}, grade: oldGrade = {} } = oldVal || {};
+
+        // Safely check IDs using optional chaining
+        if (!newCurriculum?.id || !newGrade?.id) {
+            sections.value = [];
+            return;
+        }
+
+        // Check if selection hasn't changed
+        if (newCurriculum?.id === oldCurriculum?.id && newGrade?.id === oldGrade?.id) {
+            return; // No change in selection
+        }
+
+        try {
+            loading.value = true;
+            console.log('Selection changed, reloading sections...');
+
+            const loadedSections = await CurriculumService.getSectionsByGrade(newCurriculum.id, newGrade.id);
+
+            if (Array.isArray(loadedSections)) {
+                sections.value = loadedSections;
+                console.log('Sections reloaded:', sections.value);
+
+                if (sections.value.length > 0) {
+                    // Load subjects and homeroom teachers for each section
+                    await Promise.all(
+                        sections.value.map(async (section) => {
+                            if (!section || !section.id) return; // Skip invalid sections
+
+                            try {
+                                // Load subjects
+                                const sectionSubjects = await CurriculumService.getSubjectsBySection(newCurriculum.id, newGrade.id, section.id);
+
+                                if (Array.isArray(sectionSubjects)) {
+                                    section.subjects = sectionSubjects;
+                                }
+
+                                // Load homeroom teacher if assigned
+                                if (section.homeroom_teacher_id && teachers.value) {
+                                    const teacher = teachers.value.find((t) => t && t.id === section.homeroom_teacher_id);
+                                    if (teacher) {
+                                        section.teacher = teacher;
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error loading section data:', error);
+                            }
+                        })
+                    );
+                }
+            }
+        } catch (error) {
+            console.error('Error reloading sections:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load sections',
+                life: 3000
+            });
+            sections.value = [];
+        } finally {
+            loading.value = false;
+        }
+    },
+    { deep: true } // Add deep watching to detect nested property changes
+);
+
+    // Main data loading function for the single curriculum
+    const loadCurriculum = async () => {
     loading.value = true;
     try {
-        console.log('Loading curriculums...');
-        const response = await CurriculumService.getCurriculums();
-
-        if (Array.isArray(response)) {
-            curriculums.value = response.map((curriculum) => normalizeYearRange(curriculum));
-            console.log(`Loaded ${curriculums.value.length} curriculums`);
+        console.log('Loading curriculum...');
+        const response = await CurriculumService.getCurriculum();
+        if (response && typeof response === 'object') {
+            curriculum.value = normalizeYearRange(response);
+            console.log('Loaded curriculum', curriculum.value);
         } else {
             console.warn('Invalid curriculum data format:', response);
-            curriculums.value = [];
+            curriculum.value = {
+                id: null,
+                name: 'Curriculum',
+                yearRange: { start: null, end: null },
+                description: '',
+                status: 'Active',
+                is_active: true,
+                grade_levels: []
+            };
         }
     } catch (error) {
-        console.error('Error loading curriculums:', error);
+        console.error('Error loading curriculum:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load curricula from database',
+            detail: 'Failed to load curriculum from database',
             life: 3000
         });
-        curriculums.value = [];
+        curriculum.value = {
+            id: null,
+            name: 'Curriculum',
+            yearRange: { start: null, end: null },
+            description: '',
+            status: 'Active',
+            is_active: true,
+            grade_levels: []
+        };
     } finally {
         loading.value = false;
     }
@@ -821,6 +822,7 @@ const handleArchiveConfirm = async () => {
     selectedCurriculumToArchive.value = null;
 };
 
+// Function to restore curriculum if needed in the future
 const restoreCurriculum = async (curr) => {
     try {
         await CurriculumService.restoreCurriculum(curr.id);
@@ -843,109 +845,109 @@ const restoreCurriculum = async (curr) => {
     }
 };
 
-// Toggle the active status directly from the card
-const toggleActiveCurriculum = async (curr) => {
+// Remove toggleActiveCurriculum; not needed for single curriculum.
+const toggleCurriculumStatus = async (curr) => {
     try {
         // Store the previous state
         const wasActive = curr.is_active;
 
         // If we're trying to activate the curriculum
         if (!wasActive) {
-            // Immediately update UI for better responsiveness
-            loading.value = true;
+        // Immediately update UI for better responsiveness
+        loading.value = true;
 
-            // Call the API to activate
-            const updatedCurriculum = await CurriculumService.activateCurriculum(curr.id);
-            Object.assign(curr, updatedCurriculum);
+        // Call the API to activate
+        const updatedCurriculum = await CurriculumService.activateCurriculum(curr.id);
+        Object.assign(curr, updatedCurriculum);
 
-            // Update local state to show active status without full reload
-            curriculums.value = curriculums.value.map(c => ({
-                ...c,
-                is_active: c.id === curr.id
-            }));
-            loading.value = false;
-            curriculums.value.forEach((c) => {
-                // Deactivate all other curriculums
-                if (c.id !== curr.id) {
-                    c.is_active = false;
-                    c.status = 'Draft';
-                }
-            });
-
-            // Set this curriculum as active
-            curr.is_active = true;
-            curr.status = 'Active';
-
-            // Only show success message after API succeeds
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
-                detail: 'Curriculum activated successfully',
-                life: 3000
-            });
-
-            // Delay the reload to allow animation to complete
-            await loadCurriculums();
-            loading.value = false;
-
-            return; // Exit early to prevent the finally block from running too soon
-        }
-        // Else if we're deactivating
-        else {
-            // Check if this is the only active curriculum
-            const isOnlyActiveCurriculum = !curriculums.value.some((c) => c.id !== curr.id && (c.is_active === true || c.status === 'Active'));
-
-            if (!isOnlyActiveCurriculum) {
-                // If there's another active curriculum, allow deactivation
-                await CurriculumService.updateCurriculum({
-                    ...curr,
-                    is_active: false,
-                    status: 'Draft'
-                });
-
-                // Update local state without full reload
-                curr.is_active = false;
-                curr.status = 'Draft';
-
-                toast.add({
-                    severity: 'success',
-                    summary: 'Success',
-                    detail: 'Curriculum deactivated successfully',
-                    life: 3000
-                });
-
-                // Delay the reload for consistency
-                await loadCurriculums();
-                loading.value = false;
-
-                return; // Exit early
-            } else {
-                // Cannot have no active curriculum
-                toast.add({
-                    severity: 'warn',
-                    summary: 'Warning',
-                    detail: 'There must be an active curriculum. Please activate another curriculum first.',
-                    life: 5000
-                });
-                loading.value = false;
+        // Update local state to show active status without full reload
+        curriculums.value = curriculums.value.map((c) => ({
+            ...c,
+            is_active: c.id === curr.id
+        }));
+        loading.value = false;
+        curriculums.value.forEach((c) => {
+            // Deactivate all other curriculums
+            if (c.id !== curr.id) {
+                c.is_active = false;
+                c.status = 'Draft';
             }
-        }
-    } catch (error) {
-        console.error('Error toggling curriculum status:', error);
+        });
 
-        // Show error message
+        // Set this curriculum as active
+        curr.is_active = true;
+        curr.status = 'Active';
+
+        // Only show success message after API succeeds
         toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to update curriculum status: ' + (error.message || 'Unknown error'),
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Curriculum activated successfully',
             life: 3000
         });
 
-        // Reload to reset UI state
+        // Delay the reload to allow animation to complete
         await loadCurriculums();
         loading.value = false;
+
+        return;
     }
-};
+    // Else if we're deactivating
+    else {
+        // Check if this is the only active curriculum
+        const isOnlyActiveCurriculum = !curriculums.value.some((c) => c.id !== curr.id && (c.is_active === true || c.status === 'Active'));
+
+        if (!isOnlyActiveCurriculum) {
+            // If there's another active curriculum, allow deactivation
+            await CurriculumService.updateCurriculum({
+                ...curr,
+                is_active: false,
+                status: 'Draft'
+            });
+
+            // Update local state without full reload
+            curr.is_active = false;
+            curr.status = 'Draft';
+
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Curriculum deactivated successfully',
+                life: 3000
+            });
+
+            // Delay the reload for consistency
+            await loadCurriculums();
+            loading.value = false;
+
+            return; // Exit early
+        } else {
+            // Cannot have no active curriculum
+            toast.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: 'There must be an active curriculum. Please activate another curriculum first.',
+                life: 5000
+            });
+            loading.value = false;
+        }
+    }
+} catch (error) {
+    console.error('Error toggling curriculum status:', error);
+
+    // Show error message
+    toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to update curriculum status: ' + (error.message || 'Unknown error'),
+        life: 3000
+    });
+
+    // Reload to reset UI state
+    await loadCurriculums();
+    loading.value = false;
+}
+}; // <-- End of toggleCurriculumStatus function
 
 // Grade level operations
 const openGradeLevelManagement = async (curr) => {
@@ -2875,8 +2877,6 @@ const openAssignTeacherDialog = () => {
     }
 };
 
-const route = useRoute();
-
 // Add a watch to update the curriculum name when year range changes
 watch(
     () => [curriculum.value.yearRange.start, curriculum.value.yearRange.end],
@@ -2921,7 +2921,426 @@ const onDialogHide = () => {
         }, 300);
     }
 };
+
+// Rest of the code remains the same
+
+}); // Close onMounted function
 </script>
+
+<style scoped>
+.curriculum-wrapper {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 2rem;
+    overflow-x: hidden;
+}
+
+.background-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.geometric-shape {
+    position: absolute;
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+.geometric-shape.circle {
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4a87d5, #6b9de8);
+    top: -100px;
+    right: -100px;
+    animation: float 15s infinite ease-in-out;
+}
+
+.geometric-shape.square {
+    width: 300px;
+    height: 300px;
+    background: linear-gradient(135deg, #ff7eb3, #ff758c);
+    bottom: -150px;
+    left: -150px;
+    transform: rotate(45deg);
+    animation: float 20s infinite ease-in-out reverse;
+}
+
+.geometric-shape.triangle {
+    width: 0;
+    height: 0;
+    border-left: 200px solid transparent;
+    border-right: 200px solid transparent;
+    border-bottom: 346px solid rgba(150, 230, 161, 0.15);
+    top: 400px;
+    right: 100px;
+    animation: float 18s infinite ease-in-out 2s;
+}
+
+.geometric-shape.rectangle {
+    width: 200px;
+    height: 100px;
+    background: linear-gradient(135deg, #fbc2eb, #a6c1ee);
+    bottom: 200px;
+    left: 300px;
+    transform: rotate(-15deg);
+    animation: float 12s infinite ease-in-out 1s;
+}
+
+.geometric-shape.diamond {
+    width: 150px;
+    height: 150px;
+    background: linear-gradient(135deg, #a18cd1, #fbc2eb);
+    top: 300px;
+    left: 80px;
+    transform: rotate(45deg);
+    animation: float 25s infinite ease-in-out 3s;
+}
+
+@keyframes float {
+    0% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    50% {
+        transform: translate(20px, 20px) rotate(5deg);
+    }
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+}
+
+.curriculum-container {
+    width: 100%;
+    position: relative;
+    z-index: 2;
+}
+
+.top-nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.search-container {
+    flex: 1;
+    max-width: 400px;
+    margin: 0 2rem;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.search-box:focus-within {
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.2);
+}
+
+.search-input {
+    border: none;
+    background: transparent;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    width: 100%;
+}
+
+.search-input::placeholder {
+    color: rgba(26, 54, 93, 0.6);
+}
+
+.search-input:focus {
+    outline: none;
+}
+
+.search-icon {
+    color: rgba(26, 54, 93, 0.6);
+    margin-left: 0.5rem;
+}
+
+.clear-search-btn {
+    background: transparent;
+    border: none;
+    color: rgba(26, 54, 93, 0.6);
+    cursor: pointer;
+    margin-right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+    color: #1a365d;
+    background: rgba(74, 135, 213, 0.1);
+}
+
+/* Style the add button to match theme */
+:deep(.add-button) {
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
+    transition: all 0.3s ease !important;
+}
+
+:deep(.add-button:hover) {
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
+    transform: translateY(-2px) !important;
+}
+
+.nav-right {
+    display: flex;
+    gap: 1rem;
+}
+
+/* Loading container */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: #4a87d5;
+}
+
+/* Main curriculum card */
+.curriculum-main-card {
+    position: relative;
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+    overflow: hidden;
+    color: white;
+}
+
+.floating-shape {
+    position: absolute;
+    opacity: 0.1;
+    background: white;
+    pointer-events: none;
+}
+
+.floating-shape.circle {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    top: -50px;
+    right: -50px;
+}
+
+.floating-shape.square {
+    width: 100px;
+    height: 100px;
+    bottom: -20px;
+    left: 30%;
+    transform: rotate(45deg);
+}
+
+.floating-shape.triangle {
+    width: 0;
+    height: 0;
+    border-left: 50px solid transparent;
+    border-right: 50px solid transparent;
+    border-bottom: 86px solid white;
+    bottom: 10%;
+    right: 10%;
+}
+
+/* Stats container */
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+}
+
+.stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+    font-size: 1rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* Grade level section */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h3 {
+    font-size: 1.5rem;
+    color: #1e293b;
+    margin: 0;
+}
+
+/* Grade cards grid */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.grade-card {
+    position: relative;
+    overflow: hidden;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    min-height: 200px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+}
+
+.grade-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.floating-symbol {
+    position: absolute;
+    font-size: 3rem;
+    opacity: 0.2;
+    color: white;
+    pointer-events: none;
+}
+
+.math-symbol {
+    top: 10px;
+    right: 15px;
+}
+
+.science-symbol {
+    bottom: 10px;
+    left: 15px;
+}
+
+.card-title {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.card-code {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    opacity: 0.9;
+}
+
+.card-actions {
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    color: #64748b;
+    text-align: center;
+    padding: 2rem;
+}
+
+/* Status badge */
+.status-badge {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-badge.active {
+    background: #22c55e;
+    color: white;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .curriculum-wrapper {
+        padding: 1rem;
+    }
+
+    .top-nav-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .search-container {
+        width: 100%;
+        max-width: none;
+        margin: 1rem 0;
+    }
+
+    .nav-right {
+        width: 100%;
+    }
+
+    .stats-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .cards-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
 <template>
     <div class="curriculum-wrapper">
         <!-- Light geometric background shapes -->
@@ -2940,65 +3359,109 @@ const onDialogHide = () => {
                     <h2 class="text-2xl font-semibold">Curriculum Management</h2>
                 </div>
                 <div class="search-container">
-                    <Select v-model="searchYear" :options="availableYears || []" placeholder="Filter by Year" class="year-filter" @change="filterCurriculums">
-                        <template #value="slotProps">
-                            <div v-if="slotProps.value" class="year-badge">
-                                <span>{{ slotProps.value }}</span>
-                                <i class="pi pi-times clear-year" @click.stop="clearSearch"></i>
-                            </div>
-                            <span v-else>Filter by Year</span>
-                        </template>
-                    </Select>
+                    <div class="search-box">
+                        <i class="pi pi-search search-icon"></i>
+                        <input v-model="searchQuery" type="text" class="search-input" placeholder="Search grades, sections, or subjects..." />
+                        <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''">
+                            <i class="pi pi-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="nav-right">
-                    <Button label="Add Curriculum" icon="pi pi-plus" class="add-button p-button-success" @click="openNew" />
-                    <Button label="Archive" icon="pi pi-archive" class="p-button-secondary" @click="openArchiveDialog" />
+                    <Button label="Edit Curriculum" icon="pi pi-pencil" class="p-button-info" @click="editCurriculum(curriculum)" />
+                    <Button label="Manage Grades" icon="pi pi-th-large" class="add-button p-button-success" @click="openGradeLevelManagement(curriculum)" />
                 </div>
             </div>
 
-            <!-- Content Grid -->
-            <div v-if="!loading" class="cards-grid">
-                <!-- Active Curriculums -->
-                <div v-for="curr in filteredCurriculums" :key="curr.id" class="curriculum-card" :class="{ 'is-active': curr.is_active, 'active-animation': curr.is_active }" @click="openGradeLevelManagement(curr)">
-                    <div class="card-header">
-                        <h3 class="curriculum-name">{{ curr.name }}</h3>
-                        <div class="status-badge" :class="{ active: curr.status === 'Active', archived: curr.status === 'Archived' }">
-                            {{ curr.status }}
-                        </div>
-                    </div>
-                    <div class="year-range">
-                        <i class="pi pi-calendar"></i>
-                        <span class="year-badge">{{ curr.yearRange?.start }} - {{ curr.yearRange?.end }}</span>
-                    </div>
-                    <p v-if="curr.description" class="description">{{ curr.description }}</p>
-
-                    <!-- Active Status Toggle on the Card -->
-                    <div class="active-status-toggle" @click.stop>
-                        <div class="flex align-items-center justify-content-between">
-                            <div class="toggle-label">
-                                <span class="font-medium">{{ curr.is_active ? 'Active Curriculum' : 'Make Active' }}</span>
-                                <small v-if="curr.is_active" class="active-hint">This is the currently active curriculum</small>
-                                <small v-else class="inactive-hint">Click to make this the active curriculum</small>
-                            </div>
-                            <InputSwitch :modelValue="curr.is_active" @click="!curr.is_active && toggleActiveCurriculum(curr)" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Empty State -->
-                <div v-if="filteredCurriculums.length === 0" class="empty-state">
-                    <div class="empty-icon">
-                        <i class="pi pi-book"></i>
-                    </div>
-                    <h3>No Curriculums Found</h3>
-                    <p>Add a new curriculum to get started</p>
-                    <Button label="Add Curriculum" icon="pi pi-plus" @click="openNew" />
-                </div>
-            </div>
-
-            <!-- Loading Spinner -->
-            <div v-else class="loading-container">
+            <!-- Content section -->
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
                 <ProgressSpinner />
+                <p>Loading curriculum data...</p>
+            </div>
+
+            <!-- Curriculum Display when loaded -->
+            <div v-else class="curriculum-content">
+                <!-- Main Curriculum Card -->
+                <div class="curriculum-main-card" :style="{ background: 'linear-gradient(135deg, #4a87d5, #6b9de8)' }">
+                    <div class="floating-shape circle"></div>
+                    <div class="floating-shape square"></div>
+                    <div class="floating-shape triangle"></div>
+
+                    <div class="card-content">
+                        <div class="flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <h2 class="curriculum-name text-white text-3xl mb-2">{{ curriculum.name }}</h2>
+                                <div class="year-range">
+                                    <i class="pi pi-calendar text-white mr-2"></i>
+                                    <span class="year-badge text-lg">{{ curriculum.yearRange?.start }} - {{ curriculum.yearRange?.end }}</span>
+                                </div>
+                            </div>
+                            <div class="status-badge active">
+                                Active Curriculum
+                            </div>
+                        </div>
+
+                        <p v-if="curriculum.description" class="description text-white mb-4 text-lg">{{ curriculum.description }}</p>
+                    </div>
+                </div>
+
+                <!-- Curriculum Stats -->
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <i class="pi pi-book text-2xl mb-2"></i>
+                        <span class="stat-label">Grade Levels</span>
+                        <span class="stat-value">{{ curriculum.grade_levels?.length || 0 }}</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="pi pi-users text-2xl mb-2"></i>
+                        <span class="stat-label">Sections</span>
+                        <span class="stat-value">{{ sections?.length || 0 }}</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="pi pi-list text-2xl mb-2"></i>
+                        <span class="stat-label">Subjects</span>
+                        <span class="stat-value">{{ subjects?.length || 0 }}</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="pi pi-calendar text-2xl mb-2"></i>
+                        <span class="stat-label">Academic Year</span>
+                        <span class="stat-value">{{ curriculum.yearRange?.start }}-{{ curriculum.yearRange?.end }}</span>
+                    </div>
+                </div>
+
+                <!-- Grade Levels Section -->
+                <div class="section-header">
+                    <h3>Grade Levels</h3>
+                    <Button label="Add Grade Level" icon="pi pi-plus" class="add-button p-button-success" @click="openGradeDialog" />
+                </div>
+
+                <!-- Grade Level Cards -->
+                <div v-if="curriculum.grade_levels?.length" class="cards-grid">
+                    <div
+                        v-for="grade in curriculum.grade_levels"
+                        :key="grade.id"
+                        class="grade-card"
+                        :style="{ background: getRandomGradient() }"
+                    >
+                        <!-- Floating symbols -->
+                        <div class="floating-symbol math-symbol">+</div>
+                        <div class="floating-symbol science-symbol">⚛</div>
+
+                        <h3 class="card-title">{{ grade.name }}</h3>
+                        <p class="card-code">{{ grade.code }}</p>
+
+                        <div class="card-actions">
+                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" severity="secondary" tooltip="Edit Grade" @click.stop="editGrade(grade)" />
+                            <Button icon="pi pi-users" class="p-button-rounded p-button-text" severity="info" tooltip="Manage Sections" @click.stop="openSectionListDialog = true; selectedGrade = grade" />
+                            <Button icon="pi pi-list" class="p-button-rounded p-button-text" severity="secondary" tooltip="Manage Subjects" @click.stop="openSubjectListDialog = true; selectedGrade = grade" />
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="empty-state">
+                    <i class="pi pi-book text-4xl mb-3"></i>
+                    <p>No grade levels added yet. Click "Add Grade Level" to create one.</p>
+                </div>
             </div>
         </div>
 
@@ -4575,3 +5038,5 @@ body > .p-dialog-mask {
     transform: translateZ(0);
 }
 </style>
+
+
