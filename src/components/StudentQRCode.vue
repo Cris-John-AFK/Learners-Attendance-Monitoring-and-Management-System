@@ -23,7 +23,7 @@ import { ref } from 'vue';
 
 const props = defineProps({
     studentId: {
-        type: String,
+        type: [String, Number],
         required: true
     },
     studentName: {
