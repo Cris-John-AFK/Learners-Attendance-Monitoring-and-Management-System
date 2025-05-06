@@ -11,7 +11,8 @@ import TabView from 'primevue/tabview';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import Dropdown from 'primevue/dropdown';
 
 const toast = useToast();
 const search = ref('');
@@ -19,6 +20,48 @@ const loading = ref(true);
 const activeTab = ref(0); // 0 = Pending, 1 = Admitted
 const showStudentDetails = ref(false);
 const activeStudentTab = ref(0);
+
+// Grade and section selection
+const selectedGradeLevel = ref(null);
+const selectedSection = ref(null);
+const showPendingOnly = ref(false);
+
+// Grade level options
+const gradeLevelOptions = [
+    { name: 'View All', code: 'all' },
+    { name: 'Kindergarten', code: 'K' },
+    { name: 'Grade 1', code: '1' },
+    { name: 'Grade 2', code: '2' },
+    { name: 'Grade 3', code: '3' },
+    { name: 'Grade 4', code: '4' },
+    { name: 'Grade 5', code: '5' },
+    { name: 'Grade 6', code: '6' }
+];
+
+// Section options based on selected grade
+const sectionOptions = computed(() => {
+    if (!selectedGradeLevel.value) return [];
+
+    // Different sections based on grade level
+    if (selectedGradeLevel.value.code === 'K') {
+        return [
+            { name: 'Kinder A', code: 'KA' },
+            { name: 'Kinder B', code: 'KB' },
+            { name: 'Kinder C', code: 'KC' }
+        ];
+    } else {
+        return [
+            { name: `${selectedGradeLevel.value.name} - Section A`, code: `${selectedGradeLevel.value.code}A` },
+            { name: `${selectedGradeLevel.value.name} - Section B`, code: `${selectedGradeLevel.value.code}B` },
+            { name: `${selectedGradeLevel.value.name} - Section C`, code: `${selectedGradeLevel.value.code}C` }
+        ];
+    }
+});
+
+// Reset section when grade level changes
+watch(selectedGradeLevel, () => {
+    selectedSection.value = null;
+});
 
 const requirements = [
     { key: 'form138', label: 'Form 138' },
@@ -43,9 +86,36 @@ const selectedApplicant = ref(null);
 
 // Filter applicants by status based on active tab
 const filteredApplicants = computed(() => {
+    // First filter by status (Pending/Admitted)
     const statusFilter = activeTab.value === 0 ? 'Pending' : 'Admitted';
     let filtered = applicants.value.filter((a) => a.status === statusFilter);
 
+    // Filter by grade level if selected
+    if (selectedGradeLevel.value && selectedGradeLevel.value.code !== 'all') {
+        filtered = filtered.filter((a) => {
+            // Convert both to strings for comparison to avoid type issues
+            const studentGrade = String(a.gradeLevel);
+            const selectedGrade = String(selectedGradeLevel.value.code);
+            
+            // Compare as strings to ensure proper matching
+            return studentGrade === selectedGrade;
+        });
+    }
+
+    // Filter by section if selected
+    if (selectedSection.value) {
+        filtered = filtered.filter((a) => {
+            // Match by section code
+            return a.section === selectedSection.value.code;
+        });
+    }
+
+    // Filter by pending status if requested
+    if (showPendingOnly.value) {
+        filtered = filtered.filter((a) => a.status === 'Pending');
+    }
+
+    // Text search filter
     if (search.value) {
         const searchTerm = search.value.toLowerCase();
         filtered = filtered.filter((a) => {
@@ -66,12 +136,87 @@ onMounted(() => {
     loadApplicants();
 });
 
+// Clear localStorage and reload test data (for debugging)
+function clearAndReloadData() {
+    // Clear localStorage
+    localStorage.removeItem('pendingApplicants');
+    localStorage.removeItem('admittedApplicants');
+    localStorage.removeItem('enrolledStudents');
+    
+    // Reload the page to start fresh
+    window.location.reload();
+}
+
 // Load pending applications from localStorage
 function loadApplicants() {
     loading.value = true;
     try {
-        // Get pending applicants from localStorage
-        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+        // Get pending applicants from localStorage or use test data if empty
+        let pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+        console.log('Loaded pendingApplicants:', pendingApplicants);
+
+        // Get enrollment registrations from localStorage
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        console.log('Loaded enrollmentRegistrations:', enrollmentRegistrations);
+
+        // Convert enrollment registrations to applicants format
+        if (enrollmentRegistrations.length > 0) {
+            const registrationApplicants = enrollmentRegistrations.map(registration => {
+                return {
+                    firstName: registration.firstName,
+                    lastName: registration.lastName,
+                    email: registration.email || registration.firstName.toLowerCase() + '@example.com',
+                    birthdate: registration.birthdate,
+                    contact: registration.father?.contactNumber || registration.mother?.contactNumber || 'N/A',
+                    address: formatAddress(registration.currentAddress),
+                    gradeLevel: registration.gradeLevel, // This will now match our system
+                    section: '',
+                    status: 'Pending',
+                    requirements: { 
+                        form138: false, 
+                        psa: registration.psaBirthCertNo ? true : false, 
+                        goodMoral: false, 
+                        others: false 
+                    },
+                    // Store the original data for reference
+                    originalData: registration
+                };
+            });
+            
+            // Add registration applicants to pending applicants
+            pendingApplicants = [...pendingApplicants, ...registrationApplicants];
+        }
+
+        // Add test data if no applicants exist
+        if (pendingApplicants.length === 0) {
+            // Add test students for different grade levels
+            pendingApplicants = [
+                {
+                    firstName: 'Beng',
+                    lastName: 'Beng',
+                    email: 'bengbeng@example.com',
+                    birthdate: '2014-05-15',
+                    contact: '09123456789',
+                    gradeLevel: '5', // Grade 5
+                    section: '5A', // Section A
+                    status: 'Pending',
+                    requirements: { form138: true, psa: true, goodMoral: false, others: false }
+                },
+                {
+                    firstName: 'New',
+                    lastName: 'Student',
+                    email: 'newstudent@example.com',
+                    birthdate: '2018-04-01',
+                    contact: '09123456788',
+                    gradeLevel: '1', // Grade 1
+                    section: '1A', // Section A
+                    status: 'Pending',
+                    requirements: { form138: true, psa: true, goodMoral: true, others: true }
+                }
+            ];
+            // Save to localStorage
+            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        }
 
         // Get admitted applicants from localStorage
         const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
@@ -104,6 +249,8 @@ function loadApplicants() {
                 requirements: applicant.requirements || { form138: false, psa: false, goodMoral: false, others: false },
                 status: applicant.status || 'Pending',
                 studentId: applicant.studentId || '',
+                gradeLevel: applicant.gradeLevel || 'K', // Default to Kindergarten if not specified
+                section: applicant.section || null,
                 // Store the original data for reference
                 originalData: applicant
             };
@@ -124,13 +271,30 @@ function loadApplicants() {
 }
 
 // Format address for display
-function formatAddress(applicant) {
-    if (applicant.currentAddress) {
-        const addr = applicant.currentAddress;
-        const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter((part) => part);
+function formatAddress(input) {
+    // Handle address object from enrollment registration
+    if (input && typeof input === 'object' && (input.street || input.city || input.barangay)) {
+        const parts = [];
+        if (input.houseNo) parts.push(input.houseNo);
+        if (input.street) parts.push(input.street);
+        if (input.barangay) parts.push(input.barangay);
+        if (input.city) parts.push(input.city);
+        if (input.province) parts.push(input.province);
+        if (input.zipCode) parts.push(input.zipCode);
+        
         return parts.join(', ') || 'N/A';
     }
-    return applicant.address || 'N/A';
+    
+    // Handle applicant object
+    if (!input || !input.address) return 'N/A';
+    return input.address;
+}
+
+// Format grade level for display
+function formatGradeLevel(gradeLevel) {
+    if (!gradeLevel) return 'N/A';
+    if (gradeLevel === 'K') return 'Kindergarten';
+    return 'Grade ' + gradeLevel;
 }
 
 function selectApplicant(applicant) {
@@ -263,18 +427,43 @@ function markIncomplete() {
 function rejectApplicant() {
     if (!selectedApplicant.value) return;
 
+    // Update student status to rejected
     selectedApplicant.value.status = 'Rejected';
 
-    // Update in local storage
+    // Update the data in localStorage
     updateApplicantInStorage(selectedApplicant.value);
 
+    // Show success message
     toast.add({
-        severity: 'error',
-        summary: 'Rejected',
-        detail: `Student ${selectedApplicant.value.name}'s application has been rejected.`,
+        severity: 'info',
+        summary: 'Application Rejected',
+        detail: `${selectedApplicant.value.name}'s application has been rejected.`,
+        life: 3000
+    });
+
+    // Reload the applicant list
+    loadApplicants();
+}
+
+// Navigate to enrollment page with the selected student
+function navigateToEnrollment() {
+    if (!selectedApplicant.value) return;
+    
+    // Store the selected student ID in localStorage to pass it to the enrollment page
+    localStorage.setItem('selectedStudentForEnrollment', selectedApplicant.value.studentId);
+    
+    // Navigate to enrollment page
+    window.location.href = '/admin/enrollment';
+    
+    // Show toast message
+    toast.add({
+        severity: 'success',
+        summary: 'Redirecting to Enrollment',
+        detail: `Preparing to enroll ${selectedApplicant.value.name}`,
         life: 3000
     });
 }
+
 </script>
 
 <template>
@@ -284,11 +473,29 @@ function rejectApplicant() {
                 <h2 class="text-2xl font-bold m-0"><i class="pi pi-user-plus mr-2"></i>Admission Center</h2>
                 <p class="text-color-secondary mt-1 mb-0">Review and process student admission applications</p>
             </div>
-            <div>
+            <div class="flex flex-column gap-2">
+                <!-- Debug button to reset data -->
+                <Button label="Reset Test Data" icon="pi pi-refresh" class="p-button-sm p-button-secondary mb-2" @click="clearAndReloadData" />
+                
+                <!-- Search bar -->
                 <span class="p-input-icon-left">
                     <i class="pi pi-search" />
                     <InputText v-model="search" placeholder="Search applicants..." class="p-inputtext-sm" />
                 </span>
+
+                <!-- Grade Level and Section Filters -->
+                <div class="flex gap-2 align-items-center">
+                    <div class="flex-1">
+                        <Dropdown v-model="selectedGradeLevel" :options="gradeLevelOptions" optionLabel="name" placeholder="Select Grade Level" class="w-full" />
+                    </div>
+                    <div class="flex-1" v-if="selectedGradeLevel">
+                        <Dropdown v-model="selectedSection" :options="sectionOptions" optionLabel="name" placeholder="Select Section" class="w-full" />
+                    </div>
+                    <div class="flex align-items-center">
+                        <Checkbox v-model="showPendingOnly" :binary="true" inputId="pending-only" />
+                        <label for="pending-only" class="ml-2">Pending Only</label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -339,109 +546,14 @@ function rejectApplicant() {
                             {{ activeTab === 0 ? 'No pending applications found' : 'No admitted students found' }}
                         </div>
                     </div>
+                    <!-- Total count line -->
+                    <div class="p-3 border-top-1 border-300 text-center text-color-secondary">
+                        <strong>Total: {{ filteredApplicants.length }} {{ activeTab === 0 ? 'pending' : 'admitted' }} {{ filteredApplicants.length === 1 ? 'student' : 'students' }}</strong>
+                    </div>
                 </div>
             </div>
 
             <!-- Applicant Details Panel -->
-            <div class="col-12 md:col-7 lg:col-8">
-                <div v-if="selectedApplicant" class="card mb-0">
-                    <div class="flex align-items-center mb-4">
-                        <Avatar :image="selectedApplicant.photo" shape="circle" size="xlarge" class="mr-3" />
-                        <div>
-                            <h4 class="m-0">{{ selectedApplicant.name }}</h4>
-                            <p class="text-color-secondary m-0"><i class="pi pi-envelope mr-1"></i>{{ selectedApplicant.email }}</p>
-                        </div>
-                    </div>
-
-                    <TabView>
-                        <!-- Personal Information Tab -->
-                        <TabPanel header="Personal Information">
-                            <div class="grid">
-                                <div class="col-12 md:col-6">
-                                    <div class="field">
-                                        <label class="font-bold">Birthdate</label>
-                                        <div>{{ selectedApplicant.birthdate }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12 md:col-6">
-                                    <div class="field">
-                                        <label class="font-bold">Contact Number</label>
-                                        <div>{{ selectedApplicant.contact }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12">
-                                    <div class="field">
-                                        <label class="font-bold">Address</label>
-                                        <div>{{ selectedApplicant.address }}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </TabPanel>
-
-                        <!-- Requirements Tab -->
-                        <TabPanel header="Requirements" class="p-0">
-                            <DataTable :value="requirementsList" responsiveLayout="scroll" class="p-datatable-sm">
-                                <Column field="label" header="Document"></Column>
-                                <Column field="status" header="Status">
-                                    <template #body="slotProps">
-                                        <div class="flex align-items-center">
-                                            <Checkbox v-model="selectedApplicant.requirements[slotProps.data.key]" :binary="true" :disabled="selectedApplicant.status !== 'Pending'" class="mr-2" />
-                                            <Tag :severity="selectedApplicant.requirements[slotProps.data.key] ? 'success' : 'warning'" :value="selectedApplicant.requirements[slotProps.data.key] ? 'Complete' : 'Pending'" />
-                                        </div>
-                                    </template>
-                                </Column>
-                            </DataTable>
-                        </TabPanel>
-
-                        <!-- Actions Tab -->
-                        <TabPanel header="Actions">
-                            <div v-if="selectedApplicant.status === 'Pending'" class="card">
-                                <h5>Admission Decision</h5>
-                                <div class="flex flex-column md:flex-row gap-3">
-                                    <Button label="Admit Student" icon="pi pi-check" class="p-button-success" :disabled="!allRequirementsComplete" @click="admitApplicant" />
-                                    <Button label="Mark as Incomplete" icon="pi pi-exclamation-triangle" class="p-button-warning" @click="markIncomplete" />
-                                    <Button label="Reject Application" icon="pi pi-times" class="p-button-danger" @click="rejectApplicant" />
-                                </div>
-                                <div v-if="!allRequirementsComplete" class="mt-3 p-message p-message-warning">
-                                    <i class="pi pi-exclamation-triangle"></i>
-                                    <span class="ml-2">All requirements must be complete before admission</span>
-                                </div>
-                            </div>
-
-                            <div v-if="selectedApplicant.status === 'Admitted'" class="card bg-green-50">
-                                <div class="flex align-items-center">
-                                    <i class="pi pi-check-circle text-green-500 text-2xl mr-3"></i>
-                                    <div>
-                                        <h5 class="m-0 text-green-700">Student Admitted</h5>
-                                        <p class="m-0">
-                                            Student ID: <strong>{{ selectedApplicant.studentId }}</strong>
-                                        </p>
-                                        <p class="m-0 mt-2">This student can now proceed to the enrollment process.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="selectedApplicant.status === 'Rejected'" class="card bg-red-50">
-                                <div class="flex align-items-center">
-                                    <i class="pi pi-times-circle text-red-500 text-2xl mr-3"></i>
-                                    <div>
-                                        <h5 class="m-0 text-red-700">Application Rejected</h5>
-                                        <p class="m-0">This application has been rejected and cannot proceed to enrollment.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </TabPanel>
-                    </TabView>
-                </div>
-
-                <div v-else class="card flex align-items-center justify-content-center" style="min-height: 400px">
-                    <div class="text-center">
-                        <i class="pi pi-user text-4xl text-color-secondary mb-3"></i>
-                        <h5 class="mt-0">No Applicant Selected</h5>
-                        <p class="text-color-secondary">Select an applicant from the list to view details</p>
-                    </div>
-                </div>
-            </div>
         </div>
         <Toast />
 
@@ -480,6 +592,23 @@ function rejectApplicant() {
                     <!-- Personal Information Tab -->
                     <div v-if="activeStudentTab === 0">
                         <div class="info-list">
+                            <div class="info-item">
+                                <div class="info-label">Grade Level</div>
+                                <div class="info-value">
+                                    <span class="p-tag p-tag-info">
+                                        {{ formatGradeLevel(selectedApplicant?.gradeLevel) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Section</div>
+                                <div class="info-value">
+                                    <span class="p-tag p-tag-success" v-if="selectedApplicant?.section">
+                                        {{ selectedApplicant?.section }}
+                                    </span>
+                                    <span class="text-color-secondary" v-else>Not Assigned</span>
+                                </div>
+                            </div>
                             <div class="info-item">
                                 <div class="info-label">Birthdate</div>
                                 <div class="info-value">{{ selectedApplicant?.birthdate }}</div>
@@ -534,6 +663,10 @@ function rejectApplicant() {
                                         Student ID: <strong>{{ selectedApplicant?.studentId }}</strong>
                                     </p>
                                     <p class="m-0 mt-2">This student can now proceed to the enrollment process.</p>
+                                    
+                                    <div class="mt-3">
+                                        <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="navigateToEnrollment" />
+                                    </div>
                                 </div>
                             </div>
                         </div>

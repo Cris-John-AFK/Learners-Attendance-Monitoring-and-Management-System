@@ -11,13 +11,13 @@ const submitted = ref(false);
 
 // Grade levels for dropdown
 const gradeLevels = [
-    { name: 'Kindergarten', code: 'KG' },
-    { name: 'Grade 1', code: 'G1' },
-    { name: 'Grade 2', code: 'G2' },
-    { name: 'Grade 3', code: 'G3' },
-    { name: 'Grade 4', code: 'G4' },
-    { name: 'Grade 5', code: 'G5' },
-    { name: 'Grade 6', code: 'G6' }
+    { name: 'Kindergarten', code: 'K' },
+    { name: 'Grade 1', code: '1' },
+    { name: 'Grade 2', code: '2' },
+    { name: 'Grade 3', code: '3' },
+    { name: 'Grade 4', code: '4' },
+    { name: 'Grade 5', code: '5' },
+    { name: 'Grade 6', code: '6' }
 ];
 
 // Define student data structure
@@ -244,13 +244,14 @@ const submitForm = async () => {
             }
         };
         
-        // Get existing pending applications from localStorage
+        // Save to enrollmentRegistrations for the admission system to read
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        enrollmentRegistrations.push(student);
+        localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
+        
+        // Also save to pendingApplicants for backward compatibility
         const existingApplications = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
-        
-        // Add the new application
         existingApplications.push(applicationData);
-        
-        // Save back to localStorage
         localStorage.setItem('pendingApplicants', JSON.stringify(existingApplications));
 
         // Show success message
