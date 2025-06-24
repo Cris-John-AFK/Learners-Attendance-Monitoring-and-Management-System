@@ -107,6 +107,11 @@ const router = createRouter({
                     name: 'admin-admission',
                     component: () => import('@/views/pages/Admin/Admin-Admission.vue')
                 },
+                {
+                    path: '/admin-student-statistics',
+                    name: 'admin-student-statistics',
+                    component: () => import('@/views/pages/Admin/Admin-StudentStatistics.vue')
+                },
 
                 {
                     path: '/admin-section',

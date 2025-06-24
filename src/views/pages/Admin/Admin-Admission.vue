@@ -79,6 +79,16 @@ const requirementsList = computed(() => {
     }));
 });
 
+// Helper to format registration date
+const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+        return new Date(dateStr).toLocaleString();
+    } catch {
+        return dateStr;
+    }
+};
+
 // Initialize with empty array, will be loaded from localStorage
 const applicants = ref([]);
 
@@ -516,14 +526,67 @@ function navigateToEnrollment() {
         </TabView>
 
         <div class="grid">
-            <!-- Applicant List Panel -->
-            <div class="col-12 md:col-5 lg:col-4">
+            <!-- Applicant Table Panel -->
+            <div class="col-12">
                 <div class="card mb-0">
                     <h5>
                         {{ activeTab === 0 ? 'Pending Applicants' : 'Admitted Students' }}
                         ({{ filteredApplicants.length }})
                     </h5>
-                    <div class="applicant-list p-2">
+                    <!-- Modern DataTable list -->
+<div class="applicant-table p-2 mb-3">
+    <DataTable
+        :value="filteredApplicants"
+        dataKey="id"
+        class="p-datatable-sm"
+        :loading="loading"
+        stripedRows
+        responsiveLayout="scroll"
+        selectionMode="single"
+        :selection="selectedApplicant"
+        @rowSelect="selectApplicant($event.data)"
+        @rowClick="selectApplicant($event.data)"
+    >
+        <Column field="studentId" header="LRN" style="min-width: 140px" />
+
+        <Column header="Name" style="min-width: 200px">
+            <template #body="slotProps">
+                <div class="flex align-items-center">
+                    <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
+                    <span>{{ slotProps.data.name }}</span>
+                </div>
+            </template>
+        </Column>
+
+        <Column field="gradeLevel" header="Grade" style="width: 100px" />
+
+        <Column header="Validity" style="min-width: 140px">
+            <template #body="slotProps">
+                <span>{{ slotProps.data.validity || 'N/A' }}</span>
+            </template>
+        </Column>
+
+        <Column header="Status" style="width: 100px">
+            <template #body="slotProps">
+                <Tag :severity="slotProps.data.status === 'Pending' ? 'info' : slotProps.data.status === 'Admitted' ? 'success' : 'danger'" :value="slotProps.data.status" />
+            </template>
+        </Column>
+
+        <Column header="Registered" style="min-width: 160px">
+            <template #body="slotProps">
+                {{ formatDate(slotProps.data.createdAt) }}
+            </template>
+        </Column>
+
+        <Column header="Actions" style="width: 8rem">
+            <template #body="slotProps">
+                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="selectApplicant(slotProps.data)" />
+            </template>
+        </Column>
+    </DataTable>
+</div>
+<!-- Legacy list hidden for reference -->
+<div class="applicant-list p-2" v-if="false">
                         <div
                             v-for="applicant in filteredApplicants"
                             :key="applicant.id"

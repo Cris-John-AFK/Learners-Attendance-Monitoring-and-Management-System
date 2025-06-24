@@ -2,8 +2,10 @@
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 const toast = useToast();
+const router = useRouter();
 const students = ref([]);
 const grades = ref([]);
 const loading = ref(true);
@@ -21,7 +23,9 @@ const student = ref({
     phone: '',
     address: '',
     lrn: '',
-    photo: null
+    photo: null,
+    birthdate: '',
+    age: ''
 });
 const submitted = ref(false);
 const filters = ref({
@@ -34,6 +38,12 @@ const sections = ref([]);
 const totalStudents = ref(0);
 const qrCodeDialog = ref(false);
 const selectedStudent = ref(null);
+const fileInput = ref(null);
+const viewStudentDialog = ref(false);
+const isEdit = ref(false);
+
+const selectedStudentAge = computed(() => calculateAge(selectedStudent.value?.birthdate));
+const originalStudentClone = ref(null);
 
 // Grade levels for filtering
 const gradeLevels = [
@@ -101,6 +111,19 @@ const generateQRCode = async (lrn) => {
     } catch (error) {
         console.error('Error generating QR code:', error);
         return '';
+    }
+};
+
+// Navigate to enrollment statistics page
+const viewEnrollmentStats = () => {
+    if (selectedStudent.value) {
+        router.push({
+            path: '/admin-student-statistics',
+            query: {
+                name: selectedStudent.value.name,
+                photo: selectedStudent.value.photo || ''
+            }
+        });
     }
 };
 
@@ -364,6 +387,17 @@ const deleteStudent = () => {
     }
 };
 
+// View student details dialog
+function viewStudentDetails(studentData) {
+    selectedStudent.value = studentData;
+    viewStudentDialog.value = true;
+}
+
+// Row click handler to open student info dialog
+function onRowClick(event) {
+    viewStudentDetails(event.data);
+}
+
 // Show QR code in a dialog
 function showQRCode(studentData) {
     selectedStudent.value = studentData;
@@ -434,6 +468,169 @@ function printQRCode() {
     printWindow.document.close();
 }
 
+// Generate Temporary ID card
+function generateTempId() {
+    if (!selectedStudent.value) return;
+
+    const student = selectedStudent.value;
+    const qrSrc = qrCodes.value[student.lrn] || '';
+    const today = new Date().toISOString().slice(0, 10);
+
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html>
+        <head>
+            <title>Temporary ID - ${student.name}</title>
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+                .card-wrapper { display: flex; gap: 20px; }
+                .front, .back {
+                    width: 350px;
+                    height: 550px;
+                    border: 1px solid #000;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    position: relative;
+                }
+                .front {
+                    background: #fff url('https://via.placeholder.com/350x550?text=Background') no-repeat center/cover;
+                }
+                .vertical-ribbon {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    bottom: 0;
+                    width: 40px;
+                    background:#7a0c0c;
+                    color:#fff;
+                    writing-mode: vertical-rl;
+                    text-orientation: mixed;
+                    font-weight: bold;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    letter-spacing:2px;
+                }
+                .front-content { padding: 60px 20px 20px 70px; text-align:center; }
+                .front-content img.photo { width: 120px; height: 150px; object-fit:cover; border:2px solid #000; }
+                .front-content h3 { margin:10px 0 0; font-size:18px; }
+                .front-content h2 { margin:2px 0 10px; font-size:20px; }
+                .front-content p { margin:4px 0; font-size:14px; }
+                .qr-small { width:90px; height:90px; margin:10px auto 0; }
+                /* back */
+                .back-content { padding:20px; font-size:14px; }
+                .field { margin:4px 0; }
+                .label { font-weight:bold; }
+                .ribbon-back { position:absolute; right:0; top:0; bottom:0; width:40px; background:#7a0c0c; color:#fff; writing-mode: vertical-rl; text-orientation: mixed; display:flex;align-items:center;justify-content:center; letter-spacing:2px; font-weight:bold; }
+                @media print { .no-print { display:none; } }
+            </style>
+        </head>
+        <body>
+            <div class="card-wrapper">
+                <!-- FRONT SIDE -->
+                <div class="front">
+                    <div class="vertical-ribbon">TEMPORARY ID</div>
+                    <div class="front-content">
+                        <img src="${student.photo || 'https://via.placeholder.com/120x150?text=Photo'}" class="photo" />
+                        <h3>${student.name.toUpperCase()}</h3>
+                        <h2>${student.studentId || student.lrn}</h2>
+                        <p>${student.gradeLevel} - ${student.section}</p>
+                        <img src="${qrSrc}" class="qr-small" />
+                    </div>
+                </div>
+                <!-- BACK SIDE -->
+                <div class="back">
+                    <div class="ribbon-back">TEMPORARY ID</div>
+                    <div class="back-content">
+                        <div class="field"><span class="label">DATE ISSUED:</span> ${today}</div>
+                        <div class="field"><span class="label">DATE OF BIRTH:</span> ${student.birthdate || 'N/A'}</div>
+                        <div class="field"><span class="label">CONTACT:</span> ${student.contact || 'N/A'}</div>
+                        <div class="field"><span class="label">ADDRESS:</span> ${student.address || 'N/A'}</div>
+                        <div style="margin:20px 0; text-align:center;">
+                            <img src="${student.signature || 'https://via.placeholder.com/120x40?text=Signature'}" style="width:120px; height:40px; object-fit:contain;" />
+                            <div style="font-size:12px; font-weight:bold; margin-top:4px;">${student.name.toUpperCase()}</div>
+                        </div>
+                        <div style="border:2px solid #000; padding:6px; text-align:center; font-weight:bold; margin-top:10px;">VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
+                        <div style="font-size:11px; text-align:center; margin-top:6px;">THIS ID CARD IS NON-TRANSFERABLE</div>
+                    </div>
+                </div>
+            </div>
+            <div class="no-print" style="margin-top:20px; text-align:center;">
+                <button onclick="window.print()">Print</button>
+                <button onclick="window.close()">Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    win.document.close();
+}
+
+// -- ACTION BUTTON HANDLERS --
+function updatePhoto() {
+    if (fileInput.value) {
+        fileInput.value.click();
+    }
+}
+function handlePhotoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        selectedStudent.value.photo = reader.result;
+        // persist immediately
+        try {
+            const enrolled = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const idx = enrolled.findIndex((s) => s.id === selectedStudent.value.id || s.studentId === selectedStudent.value.studentId);
+            if (idx > -1) {
+                enrolled[idx].photo = reader.result;
+                localStorage.setItem('enrolledStudents', JSON.stringify(enrolled));
+                loadStudents();
+                toast.add({ severity: 'success', summary: 'Photo Updated', detail: 'Student photo updated successfully', life: 3000 });
+            }
+        } catch (err) {
+            console.error('Save photo error', err);
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to save photo', life: 3000 });
+        }
+    };
+    reader.readAsDataURL(file);
+}
+function startEditProfile() {
+    originalStudentClone.value = { ...selectedStudent.value };
+    isEdit.value = true;
+}
+function cancelInlineEdit() {
+    // revert changes
+    selectedStudent.value = { ...originalStudentClone.value };
+    isEdit.value = false;
+}
+function saveInlineProfile() {
+    try {
+        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        const idx = enrolledStudents.findIndex((s) => {
+            if (s.studentId && selectedStudent.value.studentId) {
+                return s.studentId === selectedStudent.value.studentId;
+            }
+            return s.id === selectedStudent.value.id;
+        });
+        if (idx > -1) {
+            selectedStudent.value.age = calculateAge(selectedStudent.value.birthdate);
+            enrolledStudents[idx] = { ...selectedStudent.value };
+            localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+            loadStudents();
+            toast.add({ severity: 'success', summary: 'Success', detail: 'Student Updated', life: 3000 });
+        }
+        isEdit.value = false;
+    } catch (error) {
+        console.error('Error updating student:', error);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to update student', life: 3000 });
+    }
+}
+
+function updateSignature(studentData) {
+    toast.add({ severity: 'info', summary: 'Update E-Signature', detail: 'Feature not implemented yet', life: 3000 });
+}
+
 // Initialize component
 onMounted(() => {
     loadGradesAndSections();
@@ -447,10 +644,11 @@ onMounted(() => {
 </script>
 
 <template>
+    <input type="file" accept="image/*" ref="fileInput" class="hidden" @change="handlePhotoUpload" />
     <div class="card p-6 shadow-lg rounded-lg bg-white">
-        <div class="flex justify-between items-center mb-4">
+        <div class="flex justify-between items-center mb-4 student-management-header">
             <div>
-                <h2 class="text-2xl font-semibold mb-1"><i class="pi pi-users mr-2"></i>Student Management</h2>
+                <h1 class="teacher-management-title"><i class="pi pi-users mr-2"></i>Student Management</h1>
                 <p class="text-color-secondary">
                     Total Students: <span class="font-bold">{{ totalStudents }}</span>
                 </p>
@@ -460,7 +658,7 @@ onMounted(() => {
                     <i class="pi pi-search" />
                     <InputText v-model="filters.searchTerm" placeholder="Search students..." class="w-full" />
                 </span>
-                <Button label="Add Student" icon="pi pi-plus" class="p-button-success" @click="studentDialog = true" />
+                <Button label="Add Student" icon="pi pi-plus" class="p-button-primary" @click="studentDialog = true" />
             </div>
         </div>
 
@@ -493,8 +691,12 @@ onMounted(() => {
         <!-- Student List -->
         <div class="grid">
             <div class="col-12">
-                <DataTable v-model:expandedRows="expandedRows" :value="filteredStudents" dataKey="id" class="p-datatable-sm" :loading="loading" stripedRows responsiveLayout="scroll" :paginator="filteredStudents.length > 10" :rows="10">
-                    <Column expander style="width: 3rem" />
+                <DataTable :value="filteredStudents" dataKey="id" class="p-datatable-sm" :loading="loading" stripedRows responsiveLayout="scroll" :paginator="filteredStudents.length > 10" :rows="10" @rowClick="onRowClick">
+                    <Column header="#" style="width: 3rem">
+                        <template #body="slotProps">
+                            <span>{{ slotProps.index + 1 }}</span>
+                        </template>
+                    </Column>
                     <Column header="Student" style="min-width: 200px">
                         <template #body="slotProps">
                             <div class="flex align-items-center">
@@ -531,85 +733,116 @@ onMounted(() => {
                     <Column header="Actions" style="width: 8rem">
                         <template #body="slotProps">
                             <div class="flex gap-1">
+                                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" />
                                 <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editStudent(slotProps.data)" />
                                 <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click="confirmDeleteStudent(slotProps.data)" />
                             </div>
                         </template>
                     </Column>
-                    <template #expansion="slotProps">
-                        <div class="p-4 surface-hover border-round-bottom">
-                            <h5 class="mb-3">Student Details</h5>
-                            <div class="grid">
-                                <div class="col-12 md:col-6 lg:col-4">
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Full Name</div>
-                                        <div>{{ slotProps.data.name }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Student ID</div>
-                                        <div>{{ slotProps.data.studentId }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Birthdate</div>
-                                        <div>{{ slotProps.data.birthdate }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12 md:col-6 lg:col-4">
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Email</div>
-                                        <div>{{ slotProps.data.email }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Contact</div>
-                                        <div>{{ slotProps.data.contact }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Address</div>
-                                        <div>{{ slotProps.data.address }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12 md:col-6 lg:col-4">
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Grade & Section</div>
-                                        <div>{{ slotProps.data.gradeLevel }} - {{ slotProps.data.section }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">Enrollment Date</div>
-                                        <div>{{ slotProps.data.enrollmentDate }}</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <div class="text-sm text-color-secondary mb-1">LRN</div>
-                                        <div>{{ slotProps.data.lrn }}</div>
-                                        <div v-if="qrCodes[slotProps.data.lrn]" class="mt-2">
-                                            <img :src="qrCodes[slotProps.data.lrn]" alt="LRN QR Code" class="w-24 h-24 border border-gray-200 rounded-md" />
-                                        </div>
-                                        <div v-else class="mt-2 flex items-center justify-center w-24 h-24 border border-gray-200 rounded-md">
-                                            <i class="pi pi-spin pi-spinner text-xl text-color-secondary"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-
-                    <!-- Empty state -->
-                    <template #empty>
-                        <div class="p-4 text-center">
-                            <i class="pi pi-search text-4xl text-color-secondary mb-3"></i>
-                            <p>No students found. Try adjusting your filters or add a new student.</p>
-                        </div>
-                    </template>
-
-                    <!-- Loading state -->
-                    <template #loading>
-                        <div class="p-4 text-center">
-                            <i class="pi pi-spin pi-spinner text-4xl text-color-secondary mb-3"></i>
-                            <p>Loading student data...</p>
-                        </div>
-                    </template>
                 </DataTable>
             </div>
         </div>
+
+        <!-- View Student Details Dialog -->
+        <Dialog v-model:visible="viewStudentDialog" modal :style="{ width: '850px' }" :dismissableMask="true">
+            <template #header>
+                <div class="flex justify-between items-center w-full pr-2">
+                    <span class="text-lg font-semibold">Student Information - {{ selectedStudent ? selectedStudent.name : '' }}</span>
+                    <div class="flex gap-2">
+                        <Button label="Enrollment Statistics" icon="pi pi-chart-bar" class="p-button-primary p-button-sm" @click="viewEnrollmentStats" />
+                        <Button label="Generate Temporary ID" icon="pi pi-id-card" class="p-button-danger p-button-sm" @click="generateTempId" />
+                    </div>
+                </div>
+            </template>
+
+            <div v-if="selectedStudent" class="grid md:grid-cols-3 gap-6 p-4">
+                <!-- Left column -->
+                <div class="flex flex-col items-center space-y-4">
+                    <p class="text-gray-600 font-medium">Temporary ID Photo</p>
+                    <img v-if="selectedStudent.photo" :src="selectedStudent.photo" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" />
+                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">No Photo</div>
+                    <p class="text-gray-600 font-medium">QR Code</p>
+                    <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-32 h-32 border rounded-md object-contain" />
+                    <p v-else class="text-xs text-gray-400">No QR</p>
+                </div>
+
+                <!-- Right column -->
+                <div v-if="!isEdit" class="md:col-span-2 space-y-2">
+                    <h2 class="font-bold text-2xl mb-1">{{ selectedStudent.name }}</h2>
+                    <p class="text-gray-600 mb-3">{{ selectedStudent.studentId }}</p>
+                    <hr />
+                    <div class="space-y-2 text-sm mt-2">
+                        <p><span class="font-semibold">Grade & Section:</span> {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
+                        <p><span class="font-semibold">Sex:</span> {{ selectedStudent.gender }}</p>
+                        <p><span class="font-semibold">Date of Birth:</span> {{ selectedStudent.birthdate || 'N/A' }}</p>
+                        <p><span class="font-semibold">Age:</span> {{ selectedStudentAge || 'N/A' }}</p>
+                        <p><span class="font-semibold">Enrollment Date:</span> {{ selectedStudent.enrollmentDate }}</p>
+                        <p><span class="font-semibold">LRN:</span> {{ selectedStudent.lrn }}</p>
+                        <p><span class="font-semibold">Address:</span> {{ selectedStudent.address }}</p>
+                        <p><span class="font-semibold">Email:</span> {{ selectedStudent.email }}</p>
+                        <p><span class="font-semibold">Contact:</span> {{ selectedStudent.contact }}</p>
+                    </div>
+
+                    <div class="col-12 sm:col-6">
+                        <label class="font-semibold">Email</label>
+                        <p>{{ selectedStudent.email }}</p>
+                    </div>
+                    <div class="col-12 sm:col-6">
+                        <label class="font-semibold">Contact</label>
+                        <p>{{ selectedStudent.contact }}</p>
+                    </div>
+                </div>
+                <div v-else class="md:col-span-2 space-y-2">
+                    <div class="space-y-2 text-sm mt-2">
+                        <div>
+                            <label class="font-semibold">Student Name</label>
+                            <InputText v-model="selectedStudent.name" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Grade Level</label>
+                            <Dropdown v-model="selectedStudent.gradeLevel" :options="['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6']" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Section</label>
+                            <Dropdown v-model="selectedStudent.section" :options="sectionsByGrade[selectedStudent.gradeLevel] || []" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Gender</label>
+                            <Dropdown v-model="selectedStudent.gender" :options="['Male', 'Female']" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Date of Birth</label>
+                            <Calendar v-model="selectedStudent.birthdate" showIcon dateFormat="yy-mm-dd" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Address</label>
+                            <InputText v-model="selectedStudent.address" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Email</label>
+                            <InputText v-model="selectedStudent.email" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Contact</label>
+                            <InputText v-model="selectedStudent.contact" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">LRN</label>
+                            <InputText v-model="selectedStudent.lrn" class="w-full" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2 w-full">
+                    <Button label="Update Photo" icon="pi pi-camera" class="p-button-warning p-button-sm" @click="updatePhoto(selectedStudent)" />
+                    <Button label="Update E-Signature" icon="pi pi-pencil" class="p-button-danger p-button-sm" @click="updateSignature(selectedStudent)" />
+                    <Button v-if="!isEdit" label="Update Profile" icon="pi pi-user-edit" class="p-button-info p-button-sm" @click="startEditProfile" />
+                    <Button v-else label="Save Changes" icon="pi pi-check" class="p-button-success p-button-sm" @click="saveInlineProfile" />
+                    <Button v-if="isEdit" label="Cancel" icon="pi pi-times" class="p-button-text p-button-sm" @click="cancelInlineEdit" />
+                </div>
+            </template>
+        </Dialog>
 
         <!-- Student Dialog -->
         <Dialog v-model:visible="studentDialog" modal header="Student Details" :style="{ width: '500px' }">
@@ -711,5 +944,21 @@ onMounted(() => {
 
 :deep(.p-button-success:hover) {
     background-color: #16a34a;
+}
+
+/* --- Consistent styling with Teacher Management --- */
+.teacher-management-title {
+    color: var(--primary-color);
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+:deep(.p-button-primary) {
+    background-color: #4361ee;
+    border: none;
+}
+
+:deep(.p-button-primary:hover) {
+    background-color: #3b5ce6;
 }
 </style>

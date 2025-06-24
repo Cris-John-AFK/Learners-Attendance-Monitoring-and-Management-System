@@ -41,32 +41,32 @@ const sections = {
         { name: 'Hope', code: 'HOPE' },
         { name: 'Love', code: 'LOVE' }
     ],
-    '1': [
+    1: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
     ],
-    '2': [
+    2: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
     ],
-    '3': [
+    3: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
     ],
-    '4': [
+    4: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
     ],
-    '5': [
+    5: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
     ],
-    '6': [
+    6: [
         { name: 'Wisdom', code: 'WIS' },
         { name: 'Faith', code: 'FAI' },
         { name: 'Charity', code: 'CHA' }
@@ -76,12 +76,12 @@ const sections = {
 // Subjects per grade level (adjusted for elementary)
 const subjects = {
     K: ['Alphabet Recognition', 'Number Recognition', 'Basic Reading', 'Writing Readiness', 'Arts', 'Music', 'Physical Movement', 'Values Education'],
-    '1': ['English 1', 'Filipino 1', 'Mathematics 1', 'Science 1', 'Araling Panlipunan 1', 'MAPEH 1', 'Mother Tongue 1', 'Edukasyon sa Pagpapakatao 1'],
-    '2': ['English 2', 'Filipino 2', 'Mathematics 2', 'Science 2', 'Araling Panlipunan 2', 'MAPEH 2', 'Mother Tongue 2', 'Edukasyon sa Pagpapakatao 2'],
-    '3': ['English 3', 'Filipino 3', 'Mathematics 3', 'Science 3', 'Araling Panlipunan 3', 'MAPEH 3', 'Mother Tongue 3', 'Edukasyon sa Pagpapakatao 3'],
-    '4': ['English 4', 'Filipino 4', 'Mathematics 4', 'Science 4', 'Araling Panlipunan 4', 'MAPEH 4', 'Edukasyon sa Pagpapakatao 4'],
-    '5': ['English 5', 'Filipino 5', 'Mathematics 5', 'Science 5', 'Araling Panlipunan 5', 'MAPEH 5', 'Edukasyon sa Pagpapakatao 5', 'EPP/TLE 5'],
-    '6': ['English 6', 'Filipino 6', 'Mathematics 6', 'Science 6', 'Araling Panlipunan 6', 'MAPEH 6', 'Edukasyon sa Pagpapakatao 6', 'EPP/TLE 6']
+    1: ['English 1', 'Filipino 1', 'Mathematics 1', 'Science 1', 'Araling Panlipunan 1', 'MAPEH 1', 'Mother Tongue 1', 'Edukasyon sa Pagpapakatao 1'],
+    2: ['English 2', 'Filipino 2', 'Mathematics 2', 'Science 2', 'Araling Panlipunan 2', 'MAPEH 2', 'Mother Tongue 2', 'Edukasyon sa Pagpapakatao 2'],
+    3: ['English 3', 'Filipino 3', 'Mathematics 3', 'Science 3', 'Araling Panlipunan 3', 'MAPEH 3', 'Mother Tongue 3', 'Edukasyon sa Pagpapakatao 3'],
+    4: ['English 4', 'Filipino 4', 'Mathematics 4', 'Science 4', 'Araling Panlipunan 4', 'MAPEH 4', 'Edukasyon sa Pagpapakatao 4'],
+    5: ['English 5', 'Filipino 5', 'Mathematics 5', 'Science 5', 'Araling Panlipunan 5', 'MAPEH 5', 'Edukasyon sa Pagpapakatao 5', 'EPP/TLE 5'],
+    6: ['English 6', 'Filipino 6', 'Mathematics 6', 'Science 6', 'Araling Panlipunan 6', 'MAPEH 6', 'Edukasyon sa Pagpapakatao 6', 'EPP/TLE 6']
 };
 
 // Load data on component mount
@@ -101,25 +101,22 @@ function loadAdmittedStudents() {
 
         // Create a Map to track unique students by ID or name
         const uniqueStudentsMap = new Map();
-        
+
         // Process admitted students and keep only unique ones
         admittedStudents.forEach((student) => {
             // Create a unique key using studentId or name
             const uniqueKey = student.studentId || `${student.firstName}-${student.lastName}`;
-            
+
             // Only add if not already in the map
             if (!uniqueStudentsMap.has(uniqueKey)) {
                 uniqueStudentsMap.set(uniqueKey, student);
             }
         });
-        
+
         // Convert map values to array and format for display
         const formattedStudents = Array.from(uniqueStudentsMap.values()).map((student, index) => {
             // Check if student is already enrolled
-            const enrolledStudent = enrolledStudents.find((es) => 
-                es.studentId === student.studentId || 
-                (es.firstName === student.firstName && es.lastName === student.lastName)
-            );
+            const enrolledStudent = enrolledStudents.find((es) => es.studentId === student.studentId || (es.firstName === student.firstName && es.lastName === student.lastName));
 
             return {
                 id: index + 1,
@@ -254,7 +251,7 @@ function confirmEnrollment() {
             detail: `${selectedStudent.value.name} has been enrolled in ${selectedGradeLevel.value.name} - ${selectedSection.value.name}.`,
             life: 3000
         });
-        
+
         // Ask if user wants to view the student in Student page
         setTimeout(() => {
             toast.add({
@@ -263,7 +260,7 @@ function confirmEnrollment() {
                 detail: `The student is now available in the Student Management page.`,
                 life: 5000
             });
-            
+
             // Navigate to Student page after a brief delay
             setTimeout(() => {
                 window.location.href = '#/admin/students';
@@ -327,7 +324,7 @@ function updateEnrollmentInStorage(student) {
                             <InputText v-model="search" placeholder="Search students..." class="w-full" />
                         </div>
                     </div>
-                    
+
                     <!-- TabView for Enrolled/Not Enrolled separation -->
                     <TabView v-model:activeIndex="activeTabIndex">
                         <!-- Not Enrolled Students Tab -->
@@ -335,13 +332,7 @@ function updateEnrollmentInStorage(student) {
                             <div class="p-2">
                                 <p v-if="notEnrolledStudents.length === 0" class="text-center text-color-secondary p-3">No students to enroll</p>
                                 <div v-else class="student-list">
-                                    <div
-                                        v-for="student in notEnrolledStudents"
-                                        :key="student.id"
-                                        class="student-item p-3 mb-2"
-                                        :class="{ 'selected': selectedStudent && selectedStudent.id === student.id }"
-                                        @click="selectStudent(student)"
-                                    >
+                                    <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="selectStudent(student)">
                                         <div class="flex align-items-center">
                                             <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
                                             <div class="flex-1">
@@ -353,25 +344,17 @@ function updateEnrollmentInStorage(student) {
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">
-                                        Total: {{ notEnrolledStudents.length }} not enrolled students
-                                    </div>
+                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ notEnrolledStudents.length }} not enrolled students</div>
                                 </div>
                             </div>
                         </TabPanel>
-                        
+
                         <!-- Enrolled Students Tab -->
                         <TabPanel header="Enrolled">
                             <div class="p-2">
                                 <p v-if="enrolledStudents.length === 0" class="text-center text-color-secondary p-3">No enrolled students yet</p>
                                 <div v-else class="student-list">
-                                    <div
-                                        v-for="student in enrolledStudents"
-                                        :key="student.id"
-                                        class="student-item p-3 mb-2"
-                                        :class="{ 'selected': selectedStudent && selectedStudent.id === student.id }"
-                                        @click="selectStudent(student)"
-                                    >
+                                    <div v-for="student in enrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="selectStudent(student)">
                                         <div class="flex align-items-center">
                                             <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
                                             <div class="flex-1">
@@ -384,9 +367,7 @@ function updateEnrollmentInStorage(student) {
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">
-                                        Total: {{ enrolledStudents.length }} enrolled students
-                                    </div>
+                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ enrolledStudents.length }} enrolled students</div>
                                 </div>
                             </div>
                         </TabPanel>
