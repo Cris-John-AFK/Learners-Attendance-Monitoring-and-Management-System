@@ -415,6 +415,72 @@ const clearLocalData = (sectionId = null) => {
     }
 };
 
+// Grade operations - moved outside onMounted to be accessible to template
+const saveGrade = async () => {
+    submitted.value = true;
+
+    // Check if a grade is selected - this is the only required field for this form
+    if (!selectedGradeToAdd.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Please select a grade level',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        loading.value = true;
+
+        // Find the selected grade object
+        const selectedGrade = availableGrades.value.find(g => g.id === selectedGradeToAdd.value);
+        if (!selectedGrade) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Selected grade not found',
+                life: 3000
+            });
+            return;
+        }
+
+        // Prepare data for API
+        const gradeData = {
+            grade_id: selectedGrade.id,
+            curriculum_id: curriculum.value.id
+        };
+
+        console.log('Adding grade to curriculum:', curriculum.value.id, gradeData);
+        await CurriculumService.addGradeToCurriculum(curriculum.value.id, gradeData);
+
+        // Reload curriculum data after successful addition
+        await loadCurriculums();
+        
+        // Clear the selected grade
+        selectedGradeToAdd.value = null;
+
+        gradeDialog.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Grade level added successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error adding grade:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to add grade: ' + (error.message || 'Unknown error'),
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+        submitted.value = false;
+    }
+};
+
 // Move initialization to nextTick to prevent async setup issues
 onMounted(() => {
     // Use nextTick to defer async work until after component setup
@@ -433,6 +499,8 @@ onMounted(() => {
             console.log('Curriculum loaded:', curriculum.value);
             await loadGrades();
             console.log('Grades loaded:', grades.value);
+            await loadAllGrades(); // Load all available grades for dropdown
+            console.log('Available grades loaded:', availableGrades.value);
             await loadSubjects();
             console.log('Subjects loaded:', subjects.value);
             await loadTeachers();
@@ -653,17 +721,17 @@ onMounted(() => {
 
     // Function to load grade levels for the selected curriculum
     const loadGradeLevels = async () => {
-        if (!selectedCurriculum.value?.id) {
-            console.error('Cannot load grades: no curriculum selected');
+        if (!curriculum.value?.id) {
+            console.error('Cannot load grades: no curriculum available');
             return;
         }
 
-        console.log('Loading grade levels for curriculum ID:', selectedCurriculum.value.id);
+        console.log('Loading grade levels for curriculum ID:', curriculum.value.id);
         loading.value = true;
 
         try {
             // Only get curriculum-specific grades - no fallbacks
-            const data = await CurriculumService.getGradesByCurriculum(selectedCurriculum.value.id);
+            const data = await CurriculumService.getGradesByCurriculum(curriculum.value.id);
             console.log('Grade levels loaded from API:', data);
 
             // Ensure we have a valid array
@@ -743,7 +811,7 @@ onMounted(() => {
     // Add this function after loadGrades
     const loadAllGrades = async () => {
         try {
-            loading.value = true;
+            console.log('Loading all available grades...');
             const response = await GradeService.getGrades();
             if (Array.isArray(response)) {
                 availableGrades.value = response;
@@ -761,8 +829,6 @@ onMounted(() => {
                 life: 3000
             });
             availableGrades.value = [];
-        } finally {
-            loading.value = false;
         }
     };
 
@@ -1081,12 +1147,15 @@ onMounted(() => {
             submitted.value = false;
             loading.value = true;
 
-            // Load all available grades
+            // Load all available grades first
             await loadAllGrades();
-
-            // If we have grades in the curriculum, filter out those that are already added
-            if (grades.value && grades.value.length > 0) {
-                const existingGradeIds = grades.value.map((g) => g.id);
+            
+            // Get current curriculum grades directly from API
+            const curriculumGrades = await CurriculumService.getGradesByCurriculum(curriculum.value.id);
+            
+            // Filter out already-added grades
+            if (curriculumGrades && curriculumGrades.length > 0) {
+                const existingGradeIds = curriculumGrades.map((g) => g.id);
                 availableGrades.value = availableGrades.value.filter((g) => !existingGradeIds.includes(g.id));
 
                 if (availableGrades.value.length === 0) {
@@ -1115,62 +1184,12 @@ onMounted(() => {
         }
     };
 
-    const saveGrade = async () => {
-        submitted.value = true;
-
-        // Check if a grade is selected - this is the only required field for this form
-        if (!selectedGradeToAdd.value) {
-            toast.add({
-                severity: 'warn',
-                summary: 'Warning',
-                detail: 'Please select a grade level',
-                life: 3000
-            });
-            return;
-        }
-
-        try {
-            loading.value = true;
-
-            // Prepare data for API
-            const gradeData = {
-                grade_id: selectedGradeToAdd.value.id,
-                curriculum_id: selectedCurriculum.value.id
-            };
-
-            console.log('Adding grade to curriculum:', selectedCurriculum.value.id, gradeData);
-            await CurriculumService.addGradeToCurriculum(selectedCurriculum.value.id, gradeData);
-
-            // Reload grades after successful addition
-            await loadGradeLevels();
-
-            gradeDialog.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
-                detail: 'Grade level added successfully',
-                life: 3000
-            });
-        } catch (error) {
-            console.error('Error adding grade:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to add grade: ' + (error.message || 'Unknown error'),
-                life: 3000
-            });
-        } finally {
-            loading.value = false;
-            submitted.value = false;
-        }
-    };
-
     const removeGrade = async (gradeId) => {
         try {
             loading.value = true;
-            console.log('Removing grade from curriculum:', selectedCurriculum.value.id, gradeId);
+            console.log('Removing grade from curriculum:', curriculum.value.id, gradeId);
 
-            await CurriculumService.removeGradeFromCurriculum(selectedCurriculum.value.id, gradeId);
+            await CurriculumService.removeGradeFromCurriculum(curriculum.value.id, gradeId);
 
             // Reload grades after successful removal
             await loadGradeLevels();
@@ -3022,6 +3041,7 @@ onMounted(() => {
 
     // Rest of the code remains the same
 }); // Close onMounted function
+
 </script>
 
 <style scoped>
@@ -3721,8 +3741,19 @@ onMounted(() => {
             <template v-else>
                 <div class="field">
                     <label for="grade">Select Grade</label>
-                    <Select id="grade" v-model="selectedGradeToAdd" :options="availableGrades || []" optionLabel="name" placeholder="Select a grade level" :class="{ 'p-invalid': submitted && !selectedGradeToAdd }" />
+                    <Select 
+                        id="grade" 
+                        v-model="selectedGradeToAdd" 
+                        :options="availableGrades || []" 
+                        optionLabel="name" 
+                        optionValue="id"
+                        placeholder="Select a grade level" 
+                        :class="{ 'p-invalid': submitted && !selectedGradeToAdd }"
+                        :loading="loading"
+                        showClear
+                    />
                     <small class="p-error" v-if="submitted && !selectedGradeToAdd">Please select a grade level.</small>
+                    <small class="p-info" v-if="availableGrades && availableGrades.length === 0">No grades available. Create grades first in Grade Level management.</small>
                 </div>
             </template>
 

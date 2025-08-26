@@ -201,6 +201,93 @@ class CurriculumController extends Controller
         return response()->json($subjects);
     }
 
+    public function getGrades($id)
+    {
+        try {
+            $curriculum = Curriculum::findOrFail($id);
+            
+            Log::info('Getting grades for curriculum', [
+                'curriculum_id' => $curriculum->id,
+                'curriculum_name' => $curriculum->name
+            ]);
+            
+            // Get grades associated with this curriculum
+            $grades = $curriculum->grades()->get();
+            
+            Log::info('Found grades for curriculum', [
+                'curriculum_id' => $curriculum->id,
+                'grades_count' => $grades->count(),
+                'grades' => $grades->toArray()
+            ]);
+            
+            return response()->json($grades);
+        } catch (\Exception $e) {
+            Log::error('Failed to get grades for curriculum: ' . $e->getMessage(), [
+                'curriculum_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['message' => 'Failed to get grades: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function addGrade(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'grade_id' => 'required|exists:grades,id'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Find the curriculum by ID
+            $curriculum = Curriculum::findOrFail($id);
+
+            Log::info('Adding grade to curriculum', [
+                'curriculum_id' => $curriculum->id,
+                'grade_id' => $request->grade_id,
+                'curriculum_object' => $curriculum->toArray()
+            ]);
+
+            // Check if grade is already attached to curriculum
+            $exists = DB::table('curriculum_grade')
+                ->where('curriculum_id', $curriculum->id)
+                ->where('grade_id', $request->grade_id)
+                ->exists();
+                
+            if ($exists) {
+                return response()->json(['message' => 'Grade is already added to this curriculum'], 422);
+            }
+
+            // Attach grade to curriculum using direct DB insert with explicit values
+            $insertResult = DB::table('curriculum_grade')->insert([
+                'curriculum_id' => (int)$curriculum->id,
+                'grade_id' => (int)$request->grade_id
+            ]);
+
+            Log::info('Insert result', ['result' => $insertResult]);
+
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Grade successfully added to curriculum',
+                'curriculum' => $curriculum->fresh()->load(['grades', 'subjects'])
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to add grade to curriculum: ' . $e->getMessage(), [
+                'curriculum_id' => $id ?? 'null',
+                'grade_id' => $request->grade_id ?? 'null',
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['message' => 'Failed to add grade to curriculum: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function addSubjectToGrade(Request $request)
     {
         try {
