@@ -589,13 +589,6 @@ const submitGuestForm = () => {
                                     </button>
                                 </div>
 
-                                <!-- Scanner overlay with corners -->
-                                <div class="scanner-overlay">
-                                    <div class="scanner-corners">
-                                        <span></span>
-                                    </div>
-                                </div>
-
                                 <!-- Scan feedback notification -->
                                 <div v-if="scanFeedback.show" :class="['scan-feedback', 'feedback-' + scanFeedback.type]">
                                     <i :class="scanFeedback.type === 'success' ? 'pi pi-check-circle' : scanFeedback.type === 'checkout' ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
@@ -1148,103 +1141,6 @@ const submitGuestForm = () => {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
-
-.scanner-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-.scanner-corners {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 200px;
-    height: 200px;
-
-    &::before,
-    &::after {
-        content: '';
-        position: absolute;
-        width: 30px;
-        height: 30px;
-        border-color: rgba(255, 255, 255, 0.8);
-        border-style: solid;
-        border-width: 0;
-    }
-
-    &::before {
-        top: 0;
-        left: 0;
-        border-top-width: 3px;
-        border-left-width: 3px;
-    }
-
-    &::after {
-        top: 0;
-        right: 0;
-        border-top-width: 3px;
-        border-right-width: 3px;
-    }
-
-    span {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-
-        &::before,
-        &::after {
-            content: '';
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            border-color: rgba(255, 255, 255, 0.8);
-            border-style: solid;
-            border-width: 0;
-        }
-
-        &::before {
-            bottom: 0;
-            left: 0;
-            border-bottom-width: 3px;
-            border-left-width: 3px;
-        }
-
-        &::after {
-            bottom: 0;
-            right: 0;
-            border-bottom-width: 3px;
-            border-right-width: 3px;
-        }
-    }
-}
-
-.scanning-active .scanner-corners {
-    &::before,
-    &::after,
-    span::before,
-    span::after {
-        animation: pulse 2s infinite;
-    }
-}
-
-@keyframes pulse {
-    0% {
-        opacity: 0.5;
-    }
-    50% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0.5;
-    }
 }
 
 .scanner-paused {
