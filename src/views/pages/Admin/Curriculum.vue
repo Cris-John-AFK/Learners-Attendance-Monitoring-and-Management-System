@@ -3051,8 +3051,9 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     position: relative;
-    padding: 2rem;
-    overflow-x: hidden;
+    padding: 1rem;
+    overflow: hidden;
+    background: linear-gradient(135deg, #e8f4fd 0%, #d3e7f8 100%);
 }
 
 .background-container {
@@ -3102,16 +3103,6 @@ onMounted(() => {
     animation: float 18s infinite ease-in-out 2s;
 }
 
-.geometric-shape.rectangle {
-    width: 200px;
-    height: 100px;
-    background: linear-gradient(135deg, #fbc2eb, #a6c1ee);
-    bottom: 200px;
-    left: 300px;
-    transform: rotate(-15deg);
-    animation: float 12s infinite ease-in-out 1s;
-}
-
 .geometric-shape.diamond {
     width: 150px;
     height: 150px;
@@ -3144,9 +3135,9 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem 0;
-    margin-bottom: 2rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgba(74, 135, 213, 0.2) !important;
 }
 
 .search-container {
@@ -3158,15 +3149,17 @@ onMounted(() => {
 .search-box {
     display: flex;
     align-items: center;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    background: rgba(211, 233, 255, 0.8);
+    border-radius: 10px;
+    border: 1px solid rgba(74, 135, 213, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     padding: 0.5rem 1rem;
     transition: all 0.3s ease;
 }
 
 .search-box:focus-within {
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.2);
+    border-color: rgba(74, 135, 213, 0.6);
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.2);
 }
 
 .search-input {
@@ -3175,6 +3168,7 @@ onMounted(() => {
     padding: 0.5rem 0.75rem;
     font-size: 1rem;
     width: 100%;
+    color: #1a365d;
 }
 
 .search-input::placeholder {
@@ -3212,15 +3206,19 @@ onMounted(() => {
 /* Style the add button to match theme */
 :deep(.add-button) {
     border-radius: 8px !important;
-    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
+    background: linear-gradient(135deg, #4a87d5 0%, #1a365d 100%) !important;
     border: none !important;
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
+    border-radius: 10px !important;
+    padding: 0.5rem 1rem !important;
+    font-weight: 600 !important;
     transition: all 0.3s ease !important;
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
 }
 
 :deep(.add-button:hover) {
     box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
     transform: translateY(-2px) !important;
+    background: linear-gradient(135deg, #5a97e5 0%, #2a466d 100%) !important;
 }
 
 .nav-right {
@@ -3241,10 +3239,10 @@ onMounted(() => {
 /* Main curriculum card */
 .curriculum-main-card {
     position: relative;
-    padding: 2rem;
-    border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    margin-bottom: 2rem;
+    padding: 1.25rem;
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1rem;
     overflow: hidden;
     color: white;
 }
@@ -3286,37 +3284,39 @@ onMounted(() => {
 .stats-container {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2.5rem;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .stat-card {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    background: rgba(211, 233, 255, 0.8);
+    border: 1px solid rgba(74, 135, 213, 0.2);
+    padding: 1rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.1);
     text-align: center;
     transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
 }
 
 .stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(74, 135, 213, 0.2);
+    border-color: rgba(74, 135, 213, 0.4);
 }
 
 .stat-label {
-    font-size: 1rem;
+    font-size: 0.875rem;
     color: #64748b;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 .stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #1a365d;
+    text-shadow: 0 1px 3px rgba(74, 135, 213, 0.3);
+    margin-bottom: 0.25rem;
 }
 
 /* Grade level section */
@@ -3324,76 +3324,179 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(74, 135, 213, 0.2);
 }
 
 .section-header h3 {
-    font-size: 1.5rem;
-    color: #1e293b;
+    font-size: 1.25rem;
+    color: #1a365d;
+    text-shadow: 0 1px 3px rgba(74, 135, 213, 0.2);
+    font-weight: 600;
     margin: 0;
 }
 
 /* Grade cards grid */
-.cards-grid {
+.stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .grade-card {
     position: relative;
     overflow: hidden;
     padding: 1.5rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    min-height: 200px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    min-height: 180px;
     color: white;
     display: flex;
     flex-direction: column;
-    transition: all 0.3s ease;
+    transition: all 0.4s ease;
+    backdrop-filter: blur(5px);
+    cursor: pointer;
 }
 
 .grade-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-8px) !important;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15), 0 0 25px rgba(74, 135, 213, 0.4) !important;
+    border: 1px solid rgba(74, 135, 213, 0.5);
 }
 
 .floating-symbol {
     position: absolute;
-    font-size: 3rem;
-    opacity: 0.2;
-    color: white;
+    color: rgba(26, 54, 93, 0.5);
+    font-family: 'Courier New', monospace;
     pointer-events: none;
+    z-index: 1;
+    animation: float-symbol 8s linear infinite;
+    font-weight: bold;
 }
 
-.math-symbol {
-    top: 10px;
-    right: 15px;
+.floating-symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.floating-symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.floating-symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.floating-symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.floating-symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
 }
 
-.science-symbol {
-    bottom: 10px;
-    left: 15px;
+/* Math symbol content variations */
+.grade-card:nth-child(7n) .floating-symbol:nth-child(1)::after {
+    content: 'π';
+    font-size: 18px;
+}
+.grade-card:nth-child(7n) .floating-symbol:nth-child(2)::after {
+    content: '∑';
+    font-size: 20px;
+}
+.grade-card:nth-child(7n) .floating-symbol:nth-child(3)::after {
+    content: '∞';
+    font-size: 24px;
+}
+.grade-card:nth-child(7n) .floating-symbol:nth-child(4)::after {
+    content: '√';
+    font-size: 20px;
+}
+.grade-card:nth-child(7n) .floating-symbol:nth-child(5)::after {
+    content: 'θ';
+    font-size: 18px;
+}
+
+.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(1)::after {
+    content: 'ABC';
+    font-size: 16px;
+}
+.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(2)::after {
+    content: '123';
+    font-size: 16px;
+}
+.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(3)::after {
+    content: '📚';
+    font-size: 14px;
+}
+.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(4)::after {
+    content: '✏️';
+    font-size: 16px;
+}
+.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(5)::after {
+    content: '🎓';
+    font-size: 16px;
+}
+
+@keyframes float-symbol {
+    0% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+    }
+    80% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100px) translateX(20px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+.card-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
 }
 
 .card-title {
-    font-size: 1.5rem;
+    color: #1a365d !important;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4) !important;
+    font-size: 1.75rem;
+    font-weight: 700;
+    text-align: center;
     margin-bottom: 0.5rem;
-    font-weight: 600;
+    position: relative;
+    z-index: 2;
 }
 
-.card-code {
-    font-size: 1rem;
-    margin-bottom: 1rem;
-    opacity: 0.9;
-}
 
 .card-actions {
-    margin-top: auto;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
     display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.grade-card:hover .card-actions {
+    opacity: 1;
 }
 
 /* Empty state */
@@ -3402,13 +3505,13 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 200px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    color: #64748b;
+    min-height: 120px;
+    background: rgba(211, 233, 255, 0.7);
+    border-radius: 16px;
+    border: 1px solid rgba(74, 135, 213, 0.2);
+    color: #1a365d;
     text-align: center;
-    padding: 2rem;
+    padding: 1.5rem;
 }
 
 /* Status badge */
@@ -3473,7 +3576,7 @@ onMounted(() => {
             <!-- Top Navigation Section -->
             <div class="top-nav-bar">
                 <div class="nav-left">
-                    <h2 class="text-2xl font-semibold">Curriculum Management</h2>
+                    <h2 class="text-2xl font-semibold" style="color: #1a365d; text-shadow: 0 2px 6px rgba(74, 135, 213, 0.3); letter-spacing: 0.5px;">Curriculum Management</h2>
                 </div>
                 <div class="search-container">
                     <div class="search-box">
@@ -3554,11 +3657,15 @@ onMounted(() => {
                 <div v-if="curriculum.grade_levels?.length" class="cards-grid">
                     <div v-for="grade in curriculum.grade_levels" :key="grade.id" class="grade-card" :style="{ background: getRandomGradient() }">
                         <!-- Floating symbols -->
-                        <div class="floating-symbol math-symbol">+</div>
-                        <div class="floating-symbol science-symbol">⚛</div>
+                        <div class="floating-symbol"></div>
+                        <div class="floating-symbol"></div>
+                        <div class="floating-symbol"></div>
+                        <div class="floating-symbol"></div>
+                        <div class="floating-symbol"></div>
 
-                        <h3 class="card-title">{{ grade.name }}</h3>
-                        <p class="card-code">{{ grade.code }}</p>
+                        <div class="card-content">
+                            <h3 class="card-title">{{ grade.name }}</h3>
+                        </div>
 
                         <div class="card-actions">
                             <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" severity="secondary" tooltip="Edit Grade" @click.stop="editGrade(grade)" />

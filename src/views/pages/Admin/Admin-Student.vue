@@ -512,12 +512,17 @@ function generateTempId() {
                     justify-content:center;
                     letter-spacing:2px;
                 }
-                .front-content { padding: 60px 20px 20px 70px; text-align:center; }
-                .front-content img.photo { width: 120px; height: 150px; object-fit:cover; border:2px solid #000; }
-                .front-content h3 { margin:10px 0 0; font-size:18px; }
-                .front-content h2 { margin:2px 0 10px; font-size:20px; }
-                .front-content p { margin:4px 0; font-size:14px; }
-                .qr-small { width:90px; height:90px; margin:10px auto 0; }
+                .school-header { padding: 15px 20px 10px 70px; text-align: center; background: #fff; border-bottom: 2px solid #7a0c0c; }
+                .logos-container { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 8px; }
+                .school-logo { width: 50px; height: 50px; object-fit: contain; }
+                .school-name { font-size: 14px; font-weight: bold; color: #7a0c0c; margin: 0; line-height: 1.2; }
+                .school-subtitle { font-size: 10px; color: #666; margin: 2px 0 0; }
+                .front-content { padding: 20px 20px 20px 70px; text-align:center; }
+                .front-content img.photo { width: 120px; height: 120px; object-fit:cover; border:2px solid #000; margin-bottom: 10px; border-radius: 50%; }
+                .front-content h3 { margin:5px 0 0; font-size:18px; font-weight: bold; }
+                .front-content h2 { margin:2px 0 5px; font-size:16px; color: #7a0c0c; }
+                .front-content p { margin:2px 0; font-size:14px; }
+                .qr-small { width:180px; height:180px; margin:10px auto 0; }
                 /* back */
                 .back-content { padding:20px; font-size:14px; }
                 .field { margin:4px 0; }
@@ -531,6 +536,15 @@ function generateTempId() {
                 <!-- FRONT SIDE -->
                 <div class="front">
                     <div class="vertical-ribbon">TEMPORARY ID</div>
+                    <div class="school-header">
+                        <div class="logos-container">
+                            <img src="/demo/images/logo.png" class="school-logo" />
+                            <img src="/demo/images/logo-msunaawan.jpg" class="school-logo" />
+                            <img src="/demo/images/logo-cmas.jpg" class="school-logo" />
+                        </div>
+                        <div class="school-name">NAAWAN CENTRAL SCHOOL</div>
+                        <div class="school-subtitle">NAAWAN, MIS OR.</div>
+                    </div>
                     <div class="front-content">
                         <img src="${student.photo || 'https://via.placeholder.com/120x150?text=Photo'}" class="photo" />
                         <h3>${student.name.toUpperCase()}</h3>
@@ -712,10 +726,7 @@ onMounted(() => {
                     <Column field="section" header="Section" sortable style="width: 120px" />
                     <Column field="lrn" header="LRN" sortable style="min-width: 150px">
                         <template #body="slotProps">
-                            <div class="flex flex-column">
-                                <span class="font-semibold">{{ slotProps.data.lrn }}</span>
-                                <Button v-if="qrCodes[slotProps.data.lrn]" icon="pi pi-qrcode" class="p-button-rounded p-button-text p-button-sm mt-1" @click="showQRCode(slotProps.data)" />
-                            </div>
+                            <span class="font-semibold">{{ slotProps.data.lrn }}</span>
                         </template>
                     </Column>
                     <Column field="age" header="Age" sortable style="width: 80px">
@@ -762,7 +773,7 @@ onMounted(() => {
                     <img v-if="selectedStudent.photo" :src="selectedStudent.photo" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" />
                     <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">No Photo</div>
                     <p class="text-gray-600 font-medium">QR Code</p>
-                    <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-32 h-32 border rounded-md object-contain" />
+                    <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-48 h-48 border rounded-md object-contain" />
                     <p v-else class="text-xs text-gray-400">No QR</p>
                 </div>
 
