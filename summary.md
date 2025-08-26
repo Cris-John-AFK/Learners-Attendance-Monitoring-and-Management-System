@@ -73,33 +73,13 @@ LAMMS (Learning and Academic Management System) is a school management system th
 - Root cause: Curriculum model's grades relationship was trying to use a non-existent `display_order` column
 - Fix: Removed the `withPivot('display_order')` from the relationship definition
 
-### Curriculum Grade Addition Flow — End-to-End Fixes (2025-08-26)
-- Backend
-  - Added `getGrades($id)` to `lamms-backend/app/Http/Controllers/API/CurriculumController.php` to fetch grades for a curriculum.
-  - Hardened `addGrade($id)` with validation (prevents duplicates), error logging, and direct pivot insert without timestamps.
-  - Verified API routes in `lamms-backend/routes/api.php` for `GET /curriculums/{id}/grades`, `POST /curriculums/{id}/grades`, `DELETE /curriculums/{id}/grades/{gradeId}`.
-- Frontend
-  - In `src/views/pages/Admin/Curriculum.vue`, fixed Vue 3 `<script setup>` usage so `saveGrade` is callable from the template.
-  - Reworked grade dropdown filtering to rely on fresh backend data (`getGrades`) so already-added grades are excluded.
-  - Fixed `saveGrade` to stop calling undefined functions and to refresh with `await loadCurriculums()` after a successful add.
-  - Cleaned up logs and added toast notifications for success and error cases.
-
-### Removed Undefined Function Calls in Curriculum.vue (2025-08-26)
-- Removed calls to non-existent `loadGradeLevels()` and `loadAllGrades()` inside `saveGrade()`.
-- Replaced with `await loadCurriculums()` to refresh data consistently after adding a grade.
-
-### Migration Order Fix — Students Table (2025-08-26)
-- Problem: Fresh migrations failed because an update migration for `students` ran before the table existed.
-- Action: Renamed `2024_12_26_210205_update_students_table_qr_codes.php` to `2025_04_22_144308_update_students_table_qr_codes.php` so it runs after `2025_04_22_144307_create_students_table.php`.
-- Result: `php artisan migrate:fresh` now succeeds. All migrations run cleanly.
-
 ### Fixed Import Issues
-- Added missing `useToast` import in `src/views/pages/Admin/Curriculum.vue` (earlier fix retained).
+- Added missing `useToast` import in `src/views/pages/Admin/Curriculum.vue`
 
 ### Enhanced Error Handling
-- Added robust error handling in backend controllers with detailed logging.
-- Improved frontend error catching and display.
-- Added contextual error messages for different error types.
+- Added robust error handling in backend controllers with detailed logging
+- Improved frontend error catching and display
+- Added contextual error messages for different error types
 
 ## Database Schema
 
@@ -119,14 +99,17 @@ LAMMS (Learning and Academic Management System) is a school management system th
 
 ## Known Issues
 
-### Curriculum UI — Grade List Not Visible After Add
-- **Status**: Open
-- **Description**: Adding a grade now succeeds and persists in `curriculum_grade`, but the main curriculum page does not yet display the newly added grades.
-- **Impact**: Users cannot see grade cards/counts reflected immediately in the UI.
-- **Next Steps**:
-  - Bind the grade list to the refreshed curriculum data after `saveGrade()` (use `loadCurriculums()` result to populate `grades` for the active curriculum).
-  - Ensure stat cards (e.g., "Grade Levels") derive counts from the same reactive source.
-  - Verify the existing grade list markup in `Curriculum.vue` is connected to the correct refs and is rendered in the main view, not only in dialogs.
+### Curriculum Grade Addition - Persistent 422 Error
+- **Issue**: When attempting to add a grade level to curriculum, the system shows "Kinder 2" in the dropdown despite it already being added to the curriculum
+- **Error**: POST `/api/curriculums/1/grades` returns 422 (Unprocessable Content) with message "Grade is already added to this curriculum"
+- **Root Cause**: Frontend filtering logic in `openAddGradeDialog()` is not properly preventing already-added grades from appearing in the dropdown
+- **Attempted Fixes**:
+  - Fixed `loadGradeLevels()` to use `curriculum.value.id` instead of `selectedCurriculum.value.id`
+  - Enhanced filtering logic to call `loadGradeLevels()` before `loadAllGrades()`
+  - Added console logging to debug the filtering process
+- **Current Status**: Issue persists - the dropdown still shows "Kinder 2" even though it exists in `curriculum_grade` table
+- **Impact**: Users cannot add grade levels due to duplicate prevention on backend
+- **Next Steps**: Need to investigate why the frontend filtering is not working despite the fixes applied
 
 ## Pending Tasks and Considerations
 

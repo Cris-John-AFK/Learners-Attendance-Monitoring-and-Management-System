@@ -31,7 +31,12 @@ class CurriculumController extends Controller
                     'status' => 'Active',
                 ]);
             }
-            return response()->json($curriculum);
+            
+            // Transform the curriculum to include grade_levels for frontend compatibility
+            $curriculumData = $curriculum->toArray();
+            $curriculumData['grade_levels'] = $curriculum->grades;
+            
+            return response()->json($curriculumData);
         } catch (\Exception $e) {
             Log::error('Error in curriculum index: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to retrieve curriculum: ' . $e->getMessage()], 500);
