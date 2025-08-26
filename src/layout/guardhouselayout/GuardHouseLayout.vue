@@ -983,19 +983,28 @@ const submitGuestForm = () => {
 .guest-register-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background-color: #3b82f6;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background-color: #10b981;
     color: white;
     border: none;
-    border-radius: 0.375rem;
-    font-weight: 500;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 1.1rem;
     cursor: pointer;
-    transition: background-color 0.2s;
-}
+    transition: all 0.2s;
+    min-height: 50px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
-.guest-register-button:hover {
-    background-color: #2563eb;
+    &:hover {
+        background-color: #059669;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    i {
+        font-size: 1.2rem;
+    }
 }
 
 /* Attendance Columns */
@@ -1040,37 +1049,56 @@ const submitGuestForm = () => {
 .cancel-button {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 1rem;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
     background-color: #f3f4f6;
     color: #4b5563;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    font-weight: 500;
+    border: 2px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
     cursor: pointer;
-    transition: background-color 0.2s;
-}
+    transition: all 0.2s;
+    min-height: 48px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
-.cancel-button:hover {
-    background-color: #e5e7eb;
+    &:hover {
+        background-color: #e5e7eb;
+        border-color: #9ca3af;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    i {
+        font-size: 1.1rem;
+    }
 }
 
 .submit-button {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 1rem;
-    background-color: #3b82f6;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
+    background-color: #10b981;
     color: white;
     border: none;
-    border-radius: 0.375rem;
-    font-weight: 500;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
     cursor: pointer;
-    transition: background-color 0.2s;
-}
+    transition: all 0.2s;
+    min-height: 48px;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
 
-.submit-button:hover {
-    background-color: #2563eb;
+    &:hover {
+        background-color: #059669;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    }
+
+    i {
+        font-size: 1.1rem;
+    }
 }
 
 /* Section Header Styles */
@@ -1110,21 +1138,28 @@ const submitGuestForm = () => {
 .action-button {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
-    border: 1px solid #e2e8f0;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    border: 2px solid #3b82f6;
     background: white;
-    color: #64748b;
-    font-size: 0.875rem;
-    font-weight: 500;
+    color: #3b82f6;
+    font-size: 1.1rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    min-height: 50px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
     &:hover {
-        background: #f8fafc;
-        color: #3b82f6;
-        border-color: #bfdbfe;
+        background: #3b82f6;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    i {
+        font-size: 1.2rem;
     }
 }
 
@@ -1191,19 +1226,28 @@ const submitGuestForm = () => {
 .restart-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    border-radius: 0.375rem;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    border-radius: 0.5rem;
     border: none;
-    background: #3b82f6;
+    background: #ef4444;
     color: white;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 1.1rem;
     cursor: pointer;
     transition: all 0.2s;
-}
+    min-height: 50px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
-.restart-button:hover {
-    background: #2563eb;
+    &:hover {
+        background: #dc2626;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    i {
+        font-size: 1.2rem;
+    }
 }
 
 .scan-feedback {
@@ -1452,29 +1496,35 @@ const submitGuestForm = () => {
 .filter-button {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
-    border: 1px solid #e2e8f0;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    border: 2px solid #e2e8f0;
     background: white;
     color: #64748b;
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: 1rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    min-height: 45px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
     &:hover {
         background: #f8fafc;
+        border-color: #3b82f6;
+        color: #3b82f6;
+        transform: translateY(-1px);
     }
 
     &.active {
-        background: #eff6ff;
-        color: #3b82f6;
-        border-color: #bfdbfe;
+        background: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
     }
 
     i {
-        font-size: 0.875rem;
+        font-size: 1.1rem;
     }
 }
 
@@ -1568,18 +1618,27 @@ const submitGuestForm = () => {
     .export-button {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.75rem 1.5rem;
-        background: #3b82f6;
+        gap: 0.75rem;
+        padding: 1rem 2rem;
+        background: #8b5cf6;
         color: white;
         border: none;
-        border-radius: 0.375rem;
+        border-radius: 0.5rem;
         font-weight: 600;
+        font-size: 1.1rem;
         cursor: pointer;
         transition: all 0.2s;
+        min-height: 50px;
+        box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
 
         &:hover {
-            background: #2563eb;
+            background: #7c3aed;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+        }
+
+        i {
+            font-size: 1.2rem;
         }
     }
 }
