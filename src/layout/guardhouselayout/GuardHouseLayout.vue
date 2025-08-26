@@ -6,7 +6,6 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputMask from 'primevue/inputmask';
 import InputText from 'primevue/inputtext';
-import SelectButton from 'primevue/selectbutton';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -646,7 +645,16 @@ const submitGuestForm = () => {
                     <div class="right-column">
                         <!-- Toggle Button for Learners/Guests -->
                         <div class="visitor-toggle-container">
-                            <SelectButton v-model="visitorType" :options="visitorOptions" optionLabel="label" optionValue="value" class="visitor-toggle" />
+                            <div class="visitor-toggle-buttons">
+                                <button @click="visitorType = 'learners'" :class="['visitor-toggle-button', { active: visitorType === 'learners' }]">
+                                    <i class="pi pi-users"></i>
+                                    Learners
+                                </button>
+                                <button @click="visitorType = 'guests'" :class="['visitor-toggle-button', { active: visitorType === 'guests' }]">
+                                    <i class="pi pi-user"></i>
+                                    Guests
+                                </button>
+                            </div>
                             <button v-if="visitorType === 'guests'" @click="openGuestForm" class="guest-register-button">
                                 <i class="pi pi-user-plus"></i>
                                 Register Guest
@@ -976,34 +984,71 @@ const submitGuestForm = () => {
     grid-column: 1 / -1;
 }
 
-.visitor-toggle {
-    font-weight: 600;
+.visitor-toggle-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.visitor-toggle-button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem 2.5rem;
+    border-radius: 0.75rem;
+    border: 3px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-size: 1.4rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 65px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    &:hover {
+        background: #f8fafc;
+        border-color: #3b82f6;
+        color: #3b82f6;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    &.active {
+        background: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+    }
+
+    i {
+        font-size: 1.5rem;
+    }
 }
 
 .guest-register-button {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
+    gap: 1rem;
+    padding: 1.5rem 2.5rem;
     background-color: #10b981;
     color: white;
     border: none;
-    border-radius: 0.5rem;
-    font-weight: 600;
-    font-size: 1.1rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    font-size: 1.4rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 50px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 65px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
         background-color: #059669;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
     }
 
     i {
-        font-size: 1.2rem;
+        font-size: 1.5rem;
     }
 }
 
@@ -1049,55 +1094,55 @@ const submitGuestForm = () => {
 .cancel-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.875rem 1.5rem;
+    gap: 0.75rem;
+    padding: 1.25rem 2rem;
     background-color: #f3f4f6;
     color: #4b5563;
-    border: 2px solid #d1d5db;
-    border-radius: 0.5rem;
-    font-weight: 600;
-    font-size: 1rem;
+    border: 3px solid #d1d5db;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    font-size: 1.2rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 48px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    min-height: 60px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
     &:hover {
         background-color: #e5e7eb;
         border-color: #9ca3af;
         transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
 
     i {
-        font-size: 1.1rem;
+        font-size: 1.3rem;
     }
 }
 
 .submit-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.875rem 1.5rem;
+    gap: 0.75rem;
+    padding: 1.25rem 2rem;
     background-color: #10b981;
     color: white;
     border: none;
-    border-radius: 0.5rem;
-    font-weight: 600;
-    font-size: 1rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    font-size: 1.2rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 48px;
-    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+    min-height: 60px;
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
 
     &:hover {
         background-color: #059669;
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+        box-shadow: 0 6px 12px rgba(16, 185, 129, 0.5);
     }
 
     i {
-        font-size: 1.1rem;
+        font-size: 1.3rem;
     }
 }
 
@@ -1138,28 +1183,28 @@ const submitGuestForm = () => {
 .action-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    border-radius: 0.5rem;
-    border: 2px solid #3b82f6;
+    gap: 0.75rem;
+    padding: 1.5rem 2.5rem;
+    border-radius: 0.75rem;
+    border: 3px solid #3b82f6;
     background: white;
     color: #3b82f6;
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1.4rem;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 50px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 65px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
         background: #3b82f6;
         color: white;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
     }
 
     i {
-        font-size: 1.2rem;
+        font-size: 1.5rem;
     }
 }
 
@@ -1226,27 +1271,27 @@ const submitGuestForm = () => {
 .restart-button {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 2rem;
-    border-radius: 0.5rem;
+    gap: 1rem;
+    padding: 1.5rem 3rem;
+    border-radius: 0.75rem;
     border: none;
     background: #ef4444;
     color: white;
-    font-weight: 600;
-    font-size: 1.1rem;
+    font-weight: 700;
+    font-size: 1.4rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 50px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 65px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
         background: #dc2626;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
     }
 
     i {
-        font-size: 1.2rem;
+        font-size: 1.5rem;
     }
 }
 
@@ -1451,7 +1496,7 @@ const submitGuestForm = () => {
 .feed-actions {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    align-items: stretch;
 }
 
 .search-container {
@@ -1496,35 +1541,36 @@ const submitGuestForm = () => {
 .filter-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.25rem;
-    border-radius: 0.5rem;
-    border: 2px solid #e2e8f0;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    border-radius: 0.75rem;
+    border: 3px solid #e2e8f0;
     background: white;
     color: #64748b;
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.2rem;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 45px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    min-height: 55px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
     &:hover {
         background: #f8fafc;
         border-color: #3b82f6;
         color: #3b82f6;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
 
     &.active {
         background: #3b82f6;
         color: white;
         border-color: #3b82f6;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
     }
 
     i {
-        font-size: 1.1rem;
+        font-size: 1.3rem;
     }
 }
 
@@ -1618,27 +1664,27 @@ const submitGuestForm = () => {
     .export-button {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 1rem 2rem;
+        gap: 1rem;
+        padding: 1.5rem 3rem;
         background: #8b5cf6;
         color: white;
         border: none;
-        border-radius: 0.5rem;
-        font-weight: 600;
-        font-size: 1.1rem;
+        border-radius: 0.75rem;
+        font-weight: 700;
+        font-size: 1.4rem;
         cursor: pointer;
         transition: all 0.2s;
-        min-height: 50px;
-        box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+        min-height: 65px;
+        box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
 
         &:hover {
             background: #7c3aed;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(139, 92, 246, 0.5);
         }
 
         i {
-            font-size: 1.2rem;
+            font-size: 1.5rem;
         }
     }
 }
