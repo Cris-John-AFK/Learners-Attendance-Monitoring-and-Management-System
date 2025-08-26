@@ -87,7 +87,7 @@ const openAddGradeDialog = () => {
         id: '',
         name: '',
         code: '',
-        display_order: curriculum.value.grade_levels.length + 1
+        display_order: (curriculum.value?.grade_levels?.length || 0) + 1
     };
     gradeDialog.value = true;
 };
@@ -360,14 +360,24 @@ const loadGradesForCurriculum = async (curriculumId) => {
     try {
         console.log(`Loading grades for curriculum ${curriculumId}...`);
         loading.value = true;
-        const response = await GradeService.getGradesByCurriculum(curriculumId);
         
-        if (response && Array.isArray(response)) {
-            grades.value = response;
+        // Get the curriculum data first
+        const currResponse = await api.get(`/api/curriculums/${curriculumId}`);
+        
+        if (currResponse?.data?.grade_levels && Array.isArray(currResponse.data.grade_levels)) {
+            // Use the grades from the curriculum data
+            grades.value = currResponse.data.grade_levels;
             console.log(`Loaded ${grades.value.length} grades for curriculum ${curriculumId}`);
         } else {
-            console.log(`No grades found for curriculum ${curriculumId} or invalid response format`);
-            grades.value = [];
+            // Fallback to general grades
+            const gradeResponse = await GradeService.getGrades();
+            if (gradeResponse && Array.isArray(gradeResponse)) {
+                grades.value = gradeResponse;
+                console.log(`Loaded ${grades.value.length} general grades as fallback`);
+            } else {
+                console.log(`No grades found for curriculum ${curriculumId} or invalid response format`);
+                grades.value = [];
+            }
         }
     } catch (error) {
         console.error('Error loading grades for curriculum:', error);
