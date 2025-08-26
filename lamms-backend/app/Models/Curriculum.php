@@ -81,7 +81,8 @@ class Curriculum extends Model
     public function grades(): BelongsToMany
     {
         // Assuming curriculum_grade pivot table does not have timestamps based on controller logic
-        return $this->belongsToMany(Grade::class, 'curriculum_grade');
+        return $this->belongsToMany(Grade::class, 'curriculum_grade')
+            ->withPivot('curriculum_id', 'grade_id');
             // ->withTimestamps(); // Removed based on controller fallback logic
     }
 
