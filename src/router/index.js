@@ -133,6 +133,7 @@ const router = createRouter({
                     name: 'admin-settings',
                     component: () => import('@/views/pages/Admin/Admin-Settings.vue')
                 },
+
                 {
                     path: '/archive',
                     name: 'archive',

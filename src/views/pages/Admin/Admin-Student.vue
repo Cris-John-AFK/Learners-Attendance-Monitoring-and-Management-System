@@ -136,38 +136,48 @@ const generateAllQRCodes = async () => {
     }
 };
 
-// Load all students from localStorage
-const loadStudents = () => {
+// Load all students from database via API
+const loadStudents = async () => {
     try {
         loading.value = true;
 
-        // Get enrolled students from localStorage
-        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        // Fetch students from Laravel API
+        const response = await fetch('http://localhost:8000/api/students', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
 
-        // Format students for display
-        const formattedStudents = enrolledStudents.map((student, index) => {
-            // Extract data from original data if available
-            const originalData = student.originalData || student;
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
+        const apiStudents = await response.json();
+        console.log('Loaded students from API:', apiStudents);
+
+        // Format students for display (mapping from lowercase database fields)
+        const formattedStudents = apiStudents.map((student) => {
             return {
-                id: index + 1,
-                studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
-                name: student.name || `${originalData.firstName} ${originalData.lastName}`,
-                firstName: originalData.firstName,
-                lastName: originalData.lastName,
-                email: student.email || originalData.email || 'N/A',
-                gender: student.sex || originalData.sex || 'Male',
-                age: calculateAge(originalData.birthdate),
-                birthdate: originalData.birthdate ? new Date(originalData.birthdate).toLocaleDateString() : 'N/A',
-                address: formatAddress(originalData),
-                contact: student.contact || originalData.mother?.contactNumber || 'N/A',
-                photo: student.photo || `https://randomuser.me/api/portraits/${originalData.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
-                gradeLevel: student.gradeLevel,
+                id: student.id,
+                studentId: student.studentid || student.student_id,
+                name: student.name || `${student.firstname || ''} ${student.lastname || ''}`.trim(),
+                firstName: student.firstname,
+                lastName: student.lastname,
+                email: student.email || 'N/A',
+                gender: student.gender || student.sex || 'Male',
+                age: calculateAge(student.birthdate),
+                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
+                address: formatAddress(student),
+                contact: student.contactinfo || student.parentcontact || 'N/A',
+                photo: student.profilephoto || `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
+                gradeLevel: student.gradelevel,
                 section: student.section,
-                lrn: student.lrn || `${new Date().getFullYear()}${String(index + 1).padStart(8, '0')}`,
-                enrollmentDate: student.enrollmentDate || new Date().toLocaleDateString(),
+                lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
+                enrollmentDate: student.enrollmentdate ? new Date(student.enrollmentdate).toLocaleDateString() : new Date().toLocaleDateString(),
                 // Store original data for reference
-                originalData: originalData
+                originalData: student
             };
         });
 
@@ -177,13 +187,46 @@ const loadStudents = () => {
         // Update the filter counts
         updateFilterCounts();
     } catch (error) {
-        console.error('Error loading student data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load student data',
-            life: 3000
-        });
+        console.error('Error loading student data from API:', error);
+        
+        // Fallback to localStorage if API fails
+        console.log('Falling back to localStorage...');
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const formattedStudents = enrolledStudents.map((student, index) => {
+                const originalData = student.originalData || student;
+                return {
+                    id: index + 1,
+                    studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
+                    name: student.name || `${originalData.firstName} ${originalData.lastName}`,
+                    firstName: originalData.firstName,
+                    lastName: originalData.lastName,
+                    email: student.email || originalData.email || 'N/A',
+                    gender: student.sex || originalData.sex || 'Male',
+                    age: calculateAge(originalData.birthdate),
+                    birthdate: originalData.birthdate ? new Date(originalData.birthdate).toLocaleDateString() : 'N/A',
+                    address: formatAddress(originalData),
+                    contact: student.contact || originalData.mother?.contactNumber || 'N/A',
+                    photo: student.photo || `https://randomuser.me/api/portraits/${originalData.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
+                    gradeLevel: student.gradeLevel,
+                    section: student.section,
+                    lrn: student.lrn || `${new Date().getFullYear()}${String(index + 1).padStart(8, '0')}`,
+                    enrollmentDate: student.enrollmentDate || new Date().toLocaleDateString(),
+                    originalData: originalData
+                };
+            });
+            students.value = formattedStudents;
+            totalStudents.value = formattedStudents.length;
+            updateFilterCounts();
+        } catch (localError) {
+            console.error('Error loading from localStorage:', localError);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load student data from both API and localStorage',
+                life: 3000
+            });
+        }
     } finally {
         loading.value = false;
     }
@@ -271,8 +314,8 @@ const filteredStudents = computed(() => {
     });
 });
 
-// Save student
-const saveStudent = () => {
+// Save student to database via API
+const saveStudent = async () => {
     submitted.value = true;
 
     if (!student.value.name.trim()) {
@@ -286,52 +329,126 @@ const saveStudent = () => {
     }
 
     try {
-        // Get current students from localStorage
-        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+        // Prepare student data for API (using lowercase field names to match database)
+        const studentId = student.value.studentId || `STU${String(Date.now()).slice(-5)}`;
+        const studentData = {
+            name: student.value.name,
+            firstname: student.value.firstName || student.value.name.split(' ')[0],
+            lastname: student.value.lastName || student.value.name.split(' ').slice(1).join(' '),
+            email: student.value.email,
+            gender: student.value.gender,
+            sex: student.value.gender,
+            gradelevel: student.value.gradeLevel,
+            section: student.value.section,
+            lrn: student.value.lrn || `${new Date().getFullYear()}${String(Date.now()).slice(-8)}`,
+            studentid: studentId,
+            student_id: studentId, // Both fields for compatibility
+            birthdate: student.value.birthdate,
+            age: student.value.age,
+            contactinfo: student.value.phone,
+            parentcontact: student.value.phone,
+            profilephoto: student.value.photo,
+            currentaddress: typeof student.value.address === 'string' ? { full: student.value.address } : student.value.address,
+            enrollmentdate: new Date().toISOString(),
+            status: 'Enrolled'
+        };
 
+        let response;
         if (student.value.id) {
             // Update existing student
-            const index = enrolledStudents.findIndex((s) => s.id === student.value.id);
-            if (index !== -1) {
-                enrolledStudents[index] = {
-                    ...enrolledStudents[index],
-                    ...student.value
-                };
-            }
+            response = await fetch(`http://localhost:8000/api/students/${student.value.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(studentData)
+            });
         } else {
             // Create new student
-            const newStudent = {
-                ...student.value,
-                id: enrolledStudents.length + 1,
-                studentId: `STU${String(enrolledStudents.length + 1).padStart(5, '0')}`,
-                enrollmentDate: new Date().toISOString().split('T')[0],
-                status: 'Enrolled',
-                lrn: student.value.lrn || `${new Date().getFullYear()}${String(enrolledStudents.length + 1).padStart(8, '0')}`
-            };
-            enrolledStudents.push(newStudent);
+            response = await fetch('http://localhost:8000/api/students', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(studentData)
+            });
         }
 
-        // Save back to localStorage
-        localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
 
-        // Reload students
-        loadStudents();
+        const savedStudent = await response.json();
+        console.log('Student saved to database:', savedStudent);
+
+        // Also save to localStorage as backup
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            if (student.value.id) {
+                const index = enrolledStudents.findIndex((s) => s.id === student.value.id);
+                if (index !== -1) {
+                    enrolledStudents[index] = { ...enrolledStudents[index], ...student.value };
+                }
+            } else {
+                enrolledStudents.push({ ...student.value, id: savedStudent.id });
+            }
+            localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+        } catch (localError) {
+            console.warn('Failed to save to localStorage backup:', localError);
+        }
+
+        // Reload students from database
+        await loadStudents();
 
         studentDialog.value = false;
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: student.value.id ? 'Student Updated' : 'Student Created',
+            detail: `Student ${student.value.id ? 'Updated' : 'Created'} and saved to database!`,
             life: 3000
         });
     } catch (error) {
-        console.error('Error saving student:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to save student',
-            life: 3000
-        });
+        console.error('Error saving student to database:', error);
+        
+        // Fallback to localStorage only
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            if (student.value.id) {
+                const index = enrolledStudents.findIndex((s) => s.id === student.value.id);
+                if (index !== -1) {
+                    enrolledStudents[index] = { ...enrolledStudents[index], ...student.value };
+                }
+            } else {
+                const newStudent = {
+                    ...student.value,
+                    id: enrolledStudents.length + 1,
+                    studentId: `STU${String(enrolledStudents.length + 1).padStart(5, '0')}`,
+                    enrollmentDate: new Date().toISOString().split('T')[0],
+                    status: 'Enrolled',
+                    lrn: student.value.lrn || `${new Date().getFullYear()}${String(enrolledStudents.length + 1).padStart(8, '0')}`
+                };
+                enrolledStudents.push(newStudent);
+            }
+            localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+            await loadStudents();
+            studentDialog.value = false;
+            toast.add({
+                severity: 'warn',
+                summary: 'Saved Locally',
+                detail: 'Database unavailable. Student saved to local storage only.',
+                life: 5000
+            });
+        } catch (localError) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to save student to both database and localStorage',
+                life: 3000
+            });
+        }
     }
 };
 
@@ -347,43 +464,77 @@ function confirmDeleteStudent(studentData) {
     deleteStudentDialog.value = true;
 }
 
-// Delete student
-const deleteStudent = () => {
+// Delete student from database via API
+const deleteStudent = async () => {
     try {
-        // Get current students from localStorage
-        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-
-        // Filter out the student to delete
-        const updatedStudents = enrolledStudents.filter((s) => {
-            // Check if studentId exists and matches
-            if (s.studentId && student.value.studentId) {
-                return s.studentId !== student.value.studentId;
+        // Delete from database first
+        const response = await fetch(`http://localhost:8000/api/students/${student.value.id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             }
-            // Fallback to index-based comparison
-            return s.id !== student.value.id;
         });
 
-        // Save back to localStorage
-        localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-        // Reload students
-        loadStudents();
+        console.log('Student deleted from database:', student.value.id);
+
+        // Also remove from localStorage backup
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const updatedStudents = enrolledStudents.filter((s) => {
+                if (s.studentId && student.value.studentId) {
+                    return s.studentId !== student.value.studentId;
+                }
+                return s.id !== student.value.id;
+            });
+            localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
+        } catch (localError) {
+            console.warn('Failed to remove from localStorage backup:', localError);
+        }
+
+        // Reload students from database
+        await loadStudents();
 
         deleteStudentDialog.value = false;
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: 'Student Deleted Successfully',
+            detail: 'Student deleted from database successfully!',
             life: 3000
         });
     } catch (error) {
-        console.error('Error deleting student:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to delete student',
-            life: 3000
-        });
+        console.error('Error deleting student from database:', error);
+        
+        // Fallback to localStorage only
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const updatedStudents = enrolledStudents.filter((s) => {
+                if (s.studentId && student.value.studentId) {
+                    return s.studentId !== student.value.studentId;
+                }
+                return s.id !== student.value.id;
+            });
+            localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
+            await loadStudents();
+            deleteStudentDialog.value = false;
+            toast.add({
+                severity: 'warn',
+                summary: 'Deleted Locally',
+                detail: 'Database unavailable. Student removed from local storage only.',
+                life: 5000
+            });
+        } catch (localError) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to delete student from both database and localStorage',
+                life: 3000
+            });
+        }
     }
 };
 
