@@ -1059,6 +1059,7 @@ const submitGuestForm = () => {
     flex: 1;
     min-height: 0;
     overflow: auto;
+    padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
 .attendance-column {
@@ -1154,16 +1155,17 @@ const submitGuestForm = () => {
     margin-bottom: 1rem;
 
     h2 {
-        font-size: 1.25rem;
+        font-size: 2rem;
         font-weight: 600;
         color: #1e293b;
         margin: 0;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.75rem;
 
         i {
             color: #3b82f6;
+            font-size: 2.2rem;
         }
     }
 }
@@ -1491,6 +1493,11 @@ const submitGuestForm = () => {
     overflow: hidden;
     flex: 1;
     min-height: 0;
+
+    .section-header {
+        padding: 1.5rem 1.5rem 1rem 1.5rem;
+        margin-bottom: 0;
+    }
 }
 
 .feed-actions {
@@ -1506,10 +1513,10 @@ const submitGuestForm = () => {
 
 .search-input {
     width: 100%;
-    padding: 0.625rem 0.75rem 0.625rem 2.5rem;
+    padding: 1rem 1rem 1rem 3rem;
     border-radius: 0.375rem;
     border: 1px solid #e2e8f0;
-    font-size: 0.875rem;
+    font-size: 1.1rem;
     transition: all 0.2s;
 
     &:focus {
@@ -1525,10 +1532,11 @@ const submitGuestForm = () => {
 
     i {
         position: absolute;
-        left: 0.75rem;
+        left: 1rem;
         top: 50%;
         transform: translateY(-50%);
         color: #94a3b8;
+        font-size: 1.2rem;
     }
 }
 
@@ -1536,6 +1544,7 @@ const submitGuestForm = () => {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
+    margin-top: 1.5rem;
 }
 
 .filter-button {
