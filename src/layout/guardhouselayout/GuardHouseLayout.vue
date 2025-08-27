@@ -1212,7 +1212,9 @@ const submitGuestForm = () => {
 
 .scanner-container {
     position: relative;
-    height: 300px;
+    height: 400px;
+    width: 400px;
+    margin: 0 auto;
     border-radius: 0.75rem;
     overflow: hidden;
     background: #0f172a;
