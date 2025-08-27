@@ -356,14 +356,14 @@ const loadGradesForCurriculum = async (curriculumId) => {
         console.error('No curriculum ID provided to load grades');
         return;
     }
-    
+
     try {
         console.log(`Loading grades for curriculum ${curriculumId}...`);
         loading.value = true;
-        
+
         // Get the curriculum data first
         const currResponse = await api.get(`/api/curriculums/${curriculumId}`);
-        
+
         if (currResponse?.data?.grade_levels && Array.isArray(currResponse.data.grade_levels)) {
             // Use the grades from the curriculum data
             grades.value = currResponse.data.grade_levels;
@@ -434,7 +434,7 @@ const saveGrade = async () => {
         loading.value = true;
 
         // Find the selected grade object
-        const selectedGrade = availableGrades.value.find(g => g.id === selectedGradeToAdd.value);
+        const selectedGrade = availableGrades.value.find((g) => g.id === selectedGradeToAdd.value);
         if (!selectedGrade) {
             toast.add({
                 severity: 'error',
@@ -456,7 +456,7 @@ const saveGrade = async () => {
 
         // Reload curriculum data after successful addition
         await loadCurriculums();
-        
+
         // Clear the selected grade
         selectedGradeToAdd.value = null;
 
@@ -1149,10 +1149,10 @@ onMounted(() => {
 
             // Load all available grades first
             await loadAllGrades();
-            
+
             // Get current curriculum grades directly from API
             const curriculumGrades = await CurriculumService.getGradesByCurriculum(curriculum.value.id);
-            
+
             // Filter out already-added grades
             if (curriculumGrades && curriculumGrades.length > 0) {
                 const existingGradeIds = curriculumGrades.map((g) => g.id);
@@ -3041,19 +3041,16 @@ onMounted(() => {
 
     // Rest of the code remains the same
 }); // Close onMounted function
-
 </script>
 
 <style scoped>
 .curriculum-wrapper {
-    width: 100%;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
     position: relative;
-    padding: 1rem;
     overflow: hidden;
-    background: linear-gradient(135deg, #e8f4fd 0%, #d3e7f8 100%);
+    min-height: 100vh;
+    background-color: #e0f2ff;
+    border-radius: 0 0 24px 0;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
 }
 
 .background-container {
@@ -3125,50 +3122,90 @@ onMounted(() => {
     }
 }
 
-.curriculum-container {
-    width: 100%;
+.admin-grade-container {
     position: relative;
     z-index: 2;
+    padding: 1.5rem 2.5rem;
+    background: rgba(220, 236, 255, 0.85);
+    backdrop-filter: blur(10px);
+    min-height: 100vh;
+    color: #1a365d;
+    border-radius: 0 0 24px 0;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05) inset;
+    animation: subtle-glow 10s ease-in-out infinite alternate;
+}
+
+@keyframes subtle-glow {
+    0% {
+        box-shadow: 0 0 30px 10px rgba(74, 135, 213, 0.05) inset;
+    }
+    50% {
+        box-shadow: 0 0 40px 15px rgba(107, 157, 232, 0.08) inset;
+    }
+    100% {
+        box-shadow: 0 0 30px 10px rgba(74, 135, 213, 0.05) inset;
+    }
 }
 
 .top-nav-bar {
+    border-bottom: 1px solid rgba(74, 135, 213, 0.2);
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 0;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid rgba(74, 135, 213, 0.2) !important;
+}
+
+.top-nav-bar .nav-left h2 {
+    color: #1a365d;
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.3);
+    letter-spacing: 0.5px;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
 }
 
 .search-container {
     flex: 1;
-    max-width: 400px;
-    margin: 0 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 1.5rem;
 }
 
-.search-box {
-    display: flex;
-    align-items: center;
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
     background: rgba(211, 233, 255, 0.8);
     border-radius: 10px;
     border: 1px solid rgba(74, 135, 213, 0.3);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    padding: 0.5rem 1rem;
     transition: all 0.3s ease;
 }
 
-.search-box:focus-within {
+.search-input-wrapper:focus-within {
     border-color: rgba(74, 135, 213, 0.6);
     box-shadow: 0 6px 16px rgba(74, 135, 213, 0.2);
 }
 
 .search-input {
-    border: none;
+    flex: 1;
     background: transparent;
-    padding: 0.5rem 0.75rem;
-    font-size: 1rem;
-    width: 100%;
+    border: none;
+    height: 42px;
+    padding: 0 1rem;
     color: #1a365d;
+    font-size: 0.95rem;
+    width: 100%;
 }
 
 .search-input::placeholder {
@@ -3177,6 +3214,11 @@ onMounted(() => {
 
 .search-input:focus {
     outline: none;
+}
+
+.search-icon {
+    color: rgba(26, 54, 93, 0.6);
+    margin-left: 1rem;
 }
 
 .search-icon {
@@ -3203,170 +3245,42 @@ onMounted(() => {
     background: rgba(74, 135, 213, 0.1);
 }
 
-/* Style the add button to match theme */
-:deep(.add-button) {
-    border-radius: 8px !important;
-    background: linear-gradient(135deg, #4a87d5 0%, #1a365d 100%) !important;
-    border: none !important;
-    border-radius: 10px !important;
-    padding: 0.5rem 1rem !important;
-    font-weight: 600 !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
-}
-
-:deep(.add-button:hover) {
-    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
-    transform: translateY(-2px) !important;
-    background: linear-gradient(135deg, #5a97e5 0%, #2a466d 100%) !important;
-}
-
-.nav-right {
-    display: flex;
-    gap: 1rem;
-}
-
-/* Loading container */
 .loading-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 300px;
-    color: #4a87d5;
-}
-
-/* Main curriculum card */
-.curriculum-main-card {
-    position: relative;
-    padding: 1.25rem;
-    border-radius: 12px;
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
-    margin-bottom: 1rem;
-    overflow: hidden;
-    color: white;
-}
-
-.floating-shape {
-    position: absolute;
-    opacity: 0.1;
-    background: white;
-    pointer-events: none;
-}
-
-.floating-shape.circle {
-    width: 200px;
-    height: 200px;
-    border-radius: 50%;
-    top: -50px;
-    right: -50px;
-}
-
-.floating-shape.square {
-    width: 100px;
-    height: 100px;
-    bottom: -20px;
-    left: 30%;
-    transform: rotate(45deg);
-}
-
-.floating-shape.triangle {
-    width: 0;
-    height: 0;
-    border-left: 50px solid transparent;
-    border-right: 50px solid transparent;
-    border-bottom: 86px solid white;
-    bottom: 10%;
-    right: 10%;
-}
-
-/* Stats container */
-.stats-container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.stat-card {
-    background: rgba(211, 233, 255, 0.8);
-    border: 1px solid rgba(74, 135, 213, 0.2);
-    padding: 1rem;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.1);
-    text-align: center;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(5px);
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(74, 135, 213, 0.2);
-    border-color: rgba(74, 135, 213, 0.4);
-}
-
-.stat-label {
-    font-size: 0.875rem;
-    color: #64748b;
-    margin-bottom: 0.25rem;
-}
-
-.stat-value {
-    font-size: 1.5rem;
-    font-weight: bold;
+    padding: 3rem;
     color: #1a365d;
-    text-shadow: 0 1px 3px rgba(74, 135, 213, 0.3);
-    margin-bottom: 0.25rem;
 }
 
-/* Grade level section */
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid rgba(74, 135, 213, 0.2);
-}
-
-.section-header h3 {
-    font-size: 1.25rem;
-    color: #1a365d;
-    text-shadow: 0 1px 3px rgba(74, 135, 213, 0.2);
-    font-weight: 600;
-    margin: 0;
-}
-
-/* Grade cards grid */
-.stats-grid {
+.cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2.5rem;
+    padding: 0.5rem;
 }
 
-.grade-card {
-    position: relative;
-    overflow: hidden;
-    padding: 1.5rem;
+.subject-card {
+    height: 220px;
     border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    min-height: 180px;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    transition: all 0.4s ease;
-    backdrop-filter: blur(5px);
+    overflow: hidden;
     cursor: pointer;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    transition: all 0.4s ease;
+    position: relative;
+    border: 1px solid rgba(74, 135, 213, 0.3);
 }
 
-.grade-card:hover {
-    transform: translateY(-8px) !important;
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15), 0 0 25px rgba(74, 135, 213, 0.4) !important;
+.subject-card:hover {
+    transform: translateY(-8px);
+    box-shadow:
+        0 15px 30px rgba(0, 0, 0, 0.15),
+        0 0 25px rgba(74, 135, 213, 0.4);
     border: 1px solid rgba(74, 135, 213, 0.5);
 }
 
-.floating-symbol {
+.subject-card .symbol {
     position: absolute;
     color: rgba(26, 54, 93, 0.5);
     font-family: 'Courier New', monospace;
@@ -3376,72 +3290,80 @@ onMounted(() => {
     font-weight: bold;
 }
 
-.floating-symbol:nth-child(1) {
+.subject-card:nth-child(3n) .symbol {
+    animation-duration: 10s;
+}
+
+.subject-card:nth-child(3n + 1) .symbol {
+    animation-duration: 7s;
+}
+
+.subject-card .symbol:nth-child(1) {
     top: 10%;
     left: 10%;
     animation-delay: 0s;
 }
-.floating-symbol:nth-child(2) {
+.subject-card .symbol:nth-child(2) {
     top: 30%;
     left: 80%;
     animation-delay: 1s;
 }
-.floating-symbol:nth-child(3) {
+.subject-card .symbol:nth-child(3) {
     top: 70%;
     left: 30%;
     animation-delay: 2s;
 }
-.floating-symbol:nth-child(4) {
+.subject-card .symbol:nth-child(4) {
     top: 60%;
     left: 70%;
     animation-delay: 3s;
 }
-.floating-symbol:nth-child(5) {
+.subject-card .symbol:nth-child(5) {
     top: 20%;
     left: 50%;
     animation-delay: 4s;
 }
 
 /* Math symbol content variations */
-.grade-card:nth-child(7n) .floating-symbol:nth-child(1)::after {
-    content: 'π';
+.subject-card:nth-child(7n) .symbol:nth-child(1)::after {
+    content: 'K';
     font-size: 18px;
 }
-.grade-card:nth-child(7n) .floating-symbol:nth-child(2)::after {
-    content: '∑';
+.subject-card:nth-child(7n) .symbol:nth-child(2)::after {
+    content: '1';
     font-size: 20px;
 }
-.grade-card:nth-child(7n) .floating-symbol:nth-child(3)::after {
-    content: '∞';
+.subject-card:nth-child(7n) .symbol:nth-child(3)::after {
+    content: '2';
     font-size: 24px;
 }
-.grade-card:nth-child(7n) .floating-symbol:nth-child(4)::after {
-    content: '√';
+.subject-card:nth-child(7n) .symbol:nth-child(4)::after {
+    content: '3';
     font-size: 20px;
 }
-.grade-card:nth-child(7n) .floating-symbol:nth-child(5)::after {
-    content: 'θ';
+.subject-card:nth-child(7n) .symbol:nth-child(5)::after {
+    content: '4';
     font-size: 18px;
 }
 
-.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(1)::after {
-    content: 'ABC';
+.subject-card:nth-child(7n + 1) .symbol:nth-child(1)::after {
+    content: '5';
     font-size: 16px;
 }
-.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(2)::after {
-    content: '123';
+.subject-card:nth-child(7n + 1) .symbol:nth-child(2)::after {
+    content: '6';
     font-size: 16px;
 }
-.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(3)::after {
-    content: '📚';
+.subject-card:nth-child(7n + 1) .symbol:nth-child(3)::after {
+    content: 'K1';
     font-size: 14px;
 }
-.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(4)::after {
-    content: '✏️';
+.subject-card:nth-child(7n + 1) .symbol:nth-child(4)::after {
+    content: 'K2';
     font-size: 16px;
 }
-.grade-card:nth-child(7n + 1) .floating-symbol:nth-child(5)::after {
-    content: '🎓';
+.subject-card:nth-child(7n + 1) .symbol:nth-child(5)::after {
+    content: 'G1';
     font-size: 16px;
 }
 
@@ -3473,17 +3395,14 @@ onMounted(() => {
     padding: 1.5rem;
 }
 
-.card-title {
-    color: #1a365d !important;
-    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4) !important;
+.subject-title {
+    color: #1a365d;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4);
     font-size: 1.75rem;
     font-weight: 700;
     text-align: center;
     margin-bottom: 0.5rem;
-    position: relative;
-    z-index: 2;
 }
-
 
 .card-actions {
     position: absolute;
@@ -3495,7 +3414,7 @@ onMounted(() => {
     transition: opacity 0.2s ease;
 }
 
-.grade-card:hover .card-actions {
+.subject-card:hover .card-actions {
     opacity: 1;
 }
 
@@ -3505,64 +3424,26 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 120px;
-    background: rgba(211, 233, 255, 0.7);
-    border-radius: 16px;
-    border: 1px solid rgba(74, 135, 213, 0.2);
+    padding: 3rem;
     color: #1a365d;
-    text-align: center;
-    padding: 1.5rem;
 }
 
-/* Status badge */
-.status-badge {
-    background: rgba(255, 255, 255, 0.15);
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-weight: 500;
-    font-size: 0.9rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+:deep(.add-button) {
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #4a87d5, #6b9de8) !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(74, 135, 213, 0.3) !important;
+    transition: all 0.3s ease !important;
 }
 
-.status-badge.active {
-    background: #22c55e;
-    color: white;
-}
-
-/* Responsive styles */
-@media (max-width: 768px) {
-    .curriculum-wrapper {
-        padding: 1rem;
-    }
-
-    .top-nav-bar {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
-    }
-
-    .search-container {
-        width: 100%;
-        max-width: none;
-        margin: 1rem 0;
-    }
-
-    .nav-right {
-        width: 100%;
-    }
-
-    .stats-container {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .cards-grid {
-        grid-template-columns: 1fr;
-    }
+:deep(.add-button:hover) {
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
+    transform: translateY(-2px) !important;
 }
 </style>
 
 <template>
-    <div class="curriculum-wrapper">
+    <div class="admin-grade-wrapper">
         <!-- Light geometric background shapes -->
         <div class="background-container">
             <div class="geometric-shape circle"></div>
@@ -3572,24 +3453,23 @@ onMounted(() => {
             <div class="geometric-shape diamond"></div>
         </div>
 
-        <div class="curriculum-container">
+        <div class="admin-grade-container">
             <!-- Top Navigation Section -->
             <div class="top-nav-bar">
                 <div class="nav-left">
-                    <h2 class="text-2xl font-semibold" style="color: #1a365d; text-shadow: 0 2px 6px rgba(74, 135, 213, 0.3); letter-spacing: 0.5px;">Curriculum Management</h2>
+                    <h2 class="text-2xl font-semibold">Curriculum Management</h2>
                 </div>
                 <div class="search-container">
-                    <div class="search-box">
+                    <div class="search-input-wrapper">
                         <i class="pi pi-search search-icon"></i>
-                        <input v-model="searchQuery" type="text" class="search-input" placeholder="Search grades, sections, or subjects..." />
+                        <input v-model="searchQuery" type="text" class="search-input" placeholder="Search grades..." />
                         <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''">
                             <i class="pi pi-times"></i>
                         </button>
                     </div>
                 </div>
                 <div class="nav-right">
-                    <Button label="Edit Curriculum" icon="pi pi-pencil" class="p-button-info" @click="editCurriculum(curriculum)" />
-                    <Button label="Manage Grades" icon="pi pi-th-large" class="add-button p-button-success" @click="openGradeLevelManagement(curriculum)" />
+                    <Button label="Add Grade Level" icon="pi pi-plus" class="add-button p-button-success" @click="openAddGradeDialog" />
                 </div>
             </div>
 
@@ -3597,83 +3477,26 @@ onMounted(() => {
             <!-- Loading State -->
             <div v-if="loading" class="loading-container">
                 <ProgressSpinner />
-                <p>Loading curriculum data...</p>
+                <p>Loading grades...</p>
             </div>
 
-            <!-- Curriculum Display when loaded -->
-            <div v-else class="curriculum-content">
-                <!-- Main Curriculum Card -->
-                <div class="curriculum-main-card" :style="{ background: 'linear-gradient(135deg, #4a87d5, #6b9de8)' }">
-                    <div class="floating-shape circle"></div>
-                    <div class="floating-shape square"></div>
-                    <div class="floating-shape triangle"></div>
+            <!-- Cards Grid -->
+            <div v-else class="cards-grid">
+                <div v-for="grade in curriculum.grade_levels" :key="grade.id" class="subject-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }">
+                    <!-- Floating symbols -->
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
+                    <span class="symbol"></span>
 
                     <div class="card-content">
-                        <div class="flex justify-content-between align-items-center mb-4">
-                            <div>
-                                <h2 class="curriculum-name text-white text-3xl mb-2">{{ curriculum.name }}</h2>
-                                <div class="year-range">
-                                    <i class="pi pi-calendar text-white mr-2"></i>
-                                    <span class="year-badge text-lg">{{ curriculum.yearRange?.start }} - {{ curriculum.yearRange?.end }}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <p v-if="curriculum.description" class="description text-white mb-4 text-lg">{{ curriculum.description }}</p>
-                    </div>
-                </div>
-
-                <!-- Curriculum Stats -->
-                <div class="stats-container">
-                    <div class="stat-card">
-                        <i class="pi pi-book text-2xl mb-2"></i>
-                        <span class="stat-label">Grade Levels</span>
-                        <span class="stat-value">{{ curriculum.grade_levels?.length || 0 }}</span>
-                    </div>
-                    <div class="stat-card">
-                        <i class="pi pi-users text-2xl mb-2"></i>
-                        <span class="stat-label">Sections</span>
-                        <span class="stat-value">{{ sections?.length || 0 }}</span>
-                    </div>
-                    <div class="stat-card">
-                        <i class="pi pi-list text-2xl mb-2"></i>
-                        <span class="stat-label">Subjects</span>
-                        <span class="stat-value">{{ subjects?.length || 0 }}</span>
-                    </div>
-                    <div class="stat-card">
-                        <i class="pi pi-calendar text-2xl mb-2"></i>
-                        <span class="stat-label">Academic Year</span>
-                        <span class="stat-value">{{ curriculum.yearRange?.start }}-{{ curriculum.yearRange?.end }}</span>
-                    </div>
-                </div>
-
-                <!-- Grade Levels Section -->
-                <div class="section-header">
-                    <h3>Grade Levels</h3>
-                    <Button label="Add Grade Level" icon="pi pi-plus" class="add-button p-button-success" @click="openAddGradeDialog" />
-                </div>
-
-                <!-- Grade Level Cards -->
-                <div v-if="curriculum.grade_levels?.length" class="cards-grid">
-                    <div v-for="grade in curriculum.grade_levels" :key="grade.id" class="grade-card" :style="{ background: getRandomGradient() }">
-                        <!-- Floating symbols -->
-                        <div class="floating-symbol"></div>
-                        <div class="floating-symbol"></div>
-                        <div class="floating-symbol"></div>
-                        <div class="floating-symbol"></div>
-                        <div class="floating-symbol"></div>
-
-                        <div class="card-content">
-                            <h3 class="card-title">{{ grade.name }}</h3>
-                        </div>
-
+                        <h1 class="subject-title">{{ grade.name }}</h1>
                         <div class="card-actions">
-                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" severity="secondary" tooltip="Edit Grade" @click.stop="editGrade(grade)" />
+                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editGrade(grade)" />
                             <Button
                                 icon="pi pi-users"
                                 class="p-button-rounded p-button-text"
-                                severity="info"
-                                tooltip="Manage Sections"
                                 @click.stop="
                                     openSectionListDialog = true;
                                     selectedGrade = grade;
@@ -3682,8 +3505,6 @@ onMounted(() => {
                             <Button
                                 icon="pi pi-list"
                                 class="p-button-rounded p-button-text"
-                                severity="secondary"
-                                tooltip="Manage Subjects"
                                 @click.stop="
                                     openSubjectListDialog = true;
                                     selectedGrade = grade;
@@ -3692,15 +3513,17 @@ onMounted(() => {
                         </div>
                     </div>
                 </div>
-                <div v-else class="empty-state">
-                    <i class="pi pi-book text-4xl mb-3"></i>
-                    <p>No grade levels added yet. Click "Add Grade Level" to create one.</p>
-                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="curriculum.grade_levels?.length === 0 && !loading" class="empty-state">
+                <p>No grades found. Click "Add Grade Level" to create one.</p>
             </div>
         </div>
 
         <!-- Toast for notifications -->
         <Toast position="top-right" />
+        <!-- ... -->
         <ConfirmDialog />
 
         <!-- Add/Edit Curriculum Dialog -->
@@ -3848,13 +3671,13 @@ onMounted(() => {
             <template v-else>
                 <div class="field">
                     <label for="grade">Select Grade</label>
-                    <Select 
-                        id="grade" 
-                        v-model="selectedGradeToAdd" 
-                        :options="availableGrades || []" 
-                        optionLabel="name" 
+                    <Select
+                        id="grade"
+                        v-model="selectedGradeToAdd"
+                        :options="availableGrades || []"
+                        optionLabel="name"
                         optionValue="id"
-                        placeholder="Select a grade level" 
+                        placeholder="Select a grade level"
                         :class="{ 'p-invalid': submitted && !selectedGradeToAdd }"
                         :loading="loading"
                         showClear
@@ -4145,7 +3968,6 @@ onMounted(() => {
                 </div>
 
                 <template #footer>
-                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showTeacherAssignmentDialog = false" :disabled="loading" />
                     <Button label="Assign" icon="pi pi-check" class="p-button-primary" @click="assignTeacher" :loading="loading" />
                 </template>
             </Dialog>
@@ -4153,32 +3975,402 @@ onMounted(() => {
     </div>
 </template>
 <style scoped>
-:root {
-    --primary-color-rgb: 86, 141, 229; /* RGB value of #568de5 primary color */
-}
-
-.curriculum-wrapper {
+.admin-grade-wrapper {
     position: relative;
+    overflow: hidden;
     min-height: 100vh;
-    padding: 2rem;
-    background-color: #f8f9fa;
+    background-color: #e0f2ff;
+    border-radius: 0 0 24px 0;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
 }
 
-.curriculum-container {
-    padding: 2rem;
+/* Background container for shapes */
+.background-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 0.4;
+    z-index: 0;
+    border-radius: 0 0 24px 0;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* Base styles for all geometric shapes */
+.geometric-shape {
+    position: absolute;
+    opacity: 0.2;
+    filter: blur(1px);
+    z-index: 0;
+}
+
+/* Circle shape */
+.circle {
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background-color: #4a87d5;
+    top: -80px;
+    right: -80px;
+    animation: float 20s ease-in-out infinite;
+}
+
+/* Square shape */
+.square {
+    width: 250px;
+    height: 250px;
+    background-color: #ff7eb3;
+    bottom: -100px;
+    left: -100px;
+    transform: rotate(45deg);
+    animation: float 25s ease-in-out infinite reverse;
+}
+
+/* Triangle shape */
+.triangle {
+    width: 0;
+    height: 0;
+    border-left: 150px solid transparent;
+    border-right: 150px solid transparent;
+    border-bottom: 260px solid #96e6a1;
+    top: 200px;
+    right: 50px;
+    animation: float 30s ease-in-out infinite 5s;
+}
+
+/* Rectangle shape */
+.rectangle {
+    width: 350px;
+    height: 180px;
+    background-color: #a18cd1;
+    top: 300px;
+    left: -120px;
+    transform: rotate(-20deg);
+    animation: float 22s ease-in-out infinite 2s;
+}
+
+/* Diamond shape */
+.diamond {
+    width: 200px;
+    height: 200px;
+    background-color: #fbc2eb;
+    bottom: 150px;
+    right: 200px;
+    transform: rotate(45deg);
+    animation: float 18s ease-in-out infinite 8s;
+}
+
+@keyframes float {
+    0%,
+    100% {
+        transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+        transform: translateY(-20px) rotate(5deg);
+    }
+}
+
+.admin-grade-container {
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    padding: 1.5rem 2.5rem;
+    background: rgba(220, 236, 255, 0.85);
+    backdrop-filter: blur(10px);
+    min-height: 100vh;
+    color: #1a365d;
+    border-radius: 0 0 24px 0;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05) inset;
+    animation: subtle-glow 10s ease-in-out infinite alternate;
+}
+
+@keyframes subtle-glow {
+    0% {
+        box-shadow: 0 0 30px 10px rgba(74, 135, 213, 0.05) inset;
+    }
+    50% {
+        box-shadow: 0 0 40px 15px rgba(107, 157, 232, 0.08) inset;
+    }
+    100% {
+        box-shadow: 0 0 30px 10px rgba(74, 135, 213, 0.05) inset;
+    }
 }
 
 .top-nav-bar {
+    border-bottom: 1px solid rgba(74, 135, 213, 0.2);
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
-    padding: 0.5rem 1rem;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.top-nav-bar .nav-left h2 {
+    color: #1a365d;
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.3);
+    letter-spacing: 0.5px;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+}
+
+.search-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 1.5rem;
+}
+
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    background: rgba(211, 233, 255, 0.8);
+    border-radius: 10px;
+    border: 1px solid rgba(74, 135, 213, 0.3);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.search-input-wrapper:focus-within {
+    border-color: rgba(74, 135, 213, 0.6);
+    box-shadow: 0 6px 16px rgba(74, 135, 213, 0.2);
+}
+
+.search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    height: 42px;
+    padding: 0 1rem;
+    color: #1a365d;
+    font-size: 0.95rem;
+    width: 100%;
+}
+
+.search-input::placeholder {
+    color: rgba(26, 54, 93, 0.6);
+}
+
+.search-input:focus {
+    outline: none;
+}
+
+.search-icon {
+    color: rgba(26, 54, 93, 0.6);
+    margin-left: 0.5rem;
+}
+
+.clear-search-btn {
+    background: transparent;
+    border: none;
+    color: rgba(26, 54, 93, 0.6);
+    cursor: pointer;
+    margin-right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+    color: #1a365d;
+    background: rgba(74, 135, 213, 0.1);
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: #1a365d;
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2.5rem;
+    padding: 0.5rem;
+}
+
+.subject-card {
+    height: 220px;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    transition: all 0.4s ease;
+    position: relative;
+    border: 1px solid rgba(74, 135, 213, 0.3);
+}
+
+.subject-card:hover {
+    transform: translateY(-8px);
+    box-shadow:
+        0 15px 30px rgba(0, 0, 0, 0.15),
+        0 0 25px rgba(74, 135, 213, 0.4);
+    border: 1px solid rgba(74, 135, 213, 0.5);
+}
+
+.subject-card .symbol {
+    position: absolute;
+    color: rgba(26, 54, 93, 0.5);
+    font-family: 'Courier New', monospace;
+    pointer-events: none;
+    z-index: 1;
+    animation: float-symbol 8s linear infinite;
+    font-weight: bold;
+}
+
+.subject-card:nth-child(3n) .symbol {
+    animation-duration: 10s;
+}
+
+.subject-card:nth-child(3n + 1) .symbol {
+    animation-duration: 7s;
+}
+
+.subject-card .symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.subject-card .symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.subject-card .symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.subject-card .symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.subject-card .symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
+}
+
+/* Math symbol content variations */
+.subject-card:nth-child(7n) .symbol:nth-child(1)::after {
+    content: 'K';
+    font-size: 18px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(2)::after {
+    content: '1';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(3)::after {
+    content: '2';
+    font-size: 24px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(4)::after {
+    content: '3';
+    font-size: 20px;
+}
+.subject-card:nth-child(7n) .symbol:nth-child(5)::after {
+    content: '4';
+    font-size: 18px;
+}
+
+.subject-card:nth-child(7n + 1) .symbol:nth-child(1)::after {
+    content: '5';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(2)::after {
+    content: '6';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(3)::after {
+    content: 'K1';
+    font-size: 14px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(4)::after {
+    content: 'K2';
+    font-size: 16px;
+}
+.subject-card:nth-child(7n + 1) .symbol:nth-child(5)::after {
+    content: 'G1';
+    font-size: 16px;
+}
+
+@keyframes float-symbol {
+    0% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+    }
+    80% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100px) translateX(20px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+.card-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.subject-title {
+    color: #1a365d;
+    text-shadow: 0 2px 6px rgba(74, 135, 213, 0.4);
+    font-size: 1.75rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.card-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.subject-card:hover .card-actions {
+    opacity: 1;
+}
+
+/* Empty state */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: #1a365d;
 }
 
 .cards-grid {
