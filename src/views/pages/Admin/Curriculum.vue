@@ -3,13 +3,14 @@
 // import { API_URL } from '@/config';
 import api from '@/config/axios';
 import { CurriculumService } from '@/router/service/CurriculumService';
-import { GradeService } from '@/router/service/GradesService';
+import { GradesService } from '@/router/service/GradesService';
 import { SubjectService } from '@/router/service/Subjects';
 import { TeacherService } from '@/router/service/TeacherService';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
+// import Dropdown from 'primevue/dropdown'; // Deprecated - using Select instead
 import InputNumber from 'primevue/inputnumber';
+import InputSwitch from 'primevue/inputswitch';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
@@ -74,6 +75,23 @@ const selectedGrade = ref(null);
 const gradeDialog = ref(false);
 const availableGrades = ref([]);
 const selectedGradeToAdd = ref(null);
+const newGradeDialog = ref(false);
+const newGrade = ref({
+    code: '',
+    name: '',
+    is_active: true,
+    level: '0',
+    display_order: 0,
+    description: ''
+});
+const selectedGradeType = ref(null);
+const gradeValue = ref(null);
+const gradeTypes = [
+    { label: 'Kinder', value: 'KINDER' },
+    { label: 'Grade', value: 'GRADE' },
+    { label: 'ALS', value: 'ALS' }
+];
+const gradeSubmitted = ref(false);
 const grade = ref({
     id: '',
     name: '',
@@ -83,13 +101,18 @@ const grade = ref({
 
 // Add function to open grade dialog
 const openAddGradeDialog = () => {
-    grade.value = {
-        id: '',
-        name: '',
+    // Reset form
+    newGrade.value = {
         code: '',
-        display_order: (curriculum.value?.grade_levels?.length || 0) + 1
+        name: '',
+        level: '0',
+        display_order: 0,
+        description: ''
     };
-    gradeDialog.value = true;
+    selectedGradeType.value = null;
+    gradeValue.value = 1; // Set default value to 1
+    gradeSubmitted.value = false;
+    newGradeDialog.value = true;
 };
 
 // Function to open grade dialog (alias for template usage)
@@ -201,7 +224,7 @@ const normalizeYearRange = (curriculum) => {
     // Make sure status is properly set
     if (!curriculumCopy.status && (curriculumCopy.is_active === true || curriculumCopy.is_active === 1)) {
         // If no status but is active, set to Active
-        console.log(`Setting status to Active for curriculum ${curriculumCopy.id} based on is_active=${curriculumCopy.is_active}`);
+        // Setting status to Active based on is_active flag
         curriculumCopy.status = 'Active';
     } else if (!curriculumCopy.status) {
         // Default to Draft if no status is provided and not active
@@ -238,17 +261,17 @@ const curriculums = ref([curriculum.value]);
 const loadCurriculums = async () => {
     loading.value = true;
     try {
-        console.log('Loading the single curriculum...');
+        // Loading the single curriculum
         const response = await api.get('/api/curriculums');
         if (response.data) {
             // Update our single curriculum with data from backend
             curriculum.value = normalizeYearRange(response.data);
             // Also update the curriculums array to maintain compatibility
             curriculums.value = [curriculum.value];
-            console.log('Loaded curriculum:', curriculum.value);
+            // Curriculum loaded successfully
         }
     } catch (error) {
-        console.error('Error loading curriculum:', error);
+        // Error loading curriculum
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -346,7 +369,7 @@ const handleStartYearChange = () => {
 const checkDirectEndpoints = async () => {
     // Since the direct endpoints don't exist on the server (404 error),
     // we'll skip the API call and just return false
-    console.log('Direct database endpoints are not available on this server');
+    // Direct database endpoints are not available on this server
     return false;
 };
 
@@ -358,7 +381,7 @@ const loadGradesForCurriculum = async (curriculumId) => {
     }
 
     try {
-        console.log(`Loading grades for curriculum ${curriculumId}...`);
+        // Loading grades for curriculum
         loading.value = true;
 
         // Get the curriculum data first
@@ -367,15 +390,15 @@ const loadGradesForCurriculum = async (curriculumId) => {
         if (currResponse?.data?.grade_levels && Array.isArray(currResponse.data.grade_levels)) {
             // Use the grades from the curriculum data
             grades.value = currResponse.data.grade_levels;
-            console.log(`Loaded ${grades.value.length} grades for curriculum ${curriculumId}`);
+            // Grades loaded successfully
         } else {
             // Fallback to general grades
-            const gradeResponse = await GradeService.getGrades();
+            const gradeResponse = await GradesService.getGrades();
             if (gradeResponse && Array.isArray(gradeResponse)) {
                 grades.value = gradeResponse;
-                console.log(`Loaded ${grades.value.length} general grades as fallback`);
+                // General grades loaded as fallback
             } else {
-                console.log(`No grades found for curriculum ${curriculumId} or invalid response format`);
+                // No grades found or invalid response format
                 grades.value = [];
             }
         }
@@ -395,7 +418,7 @@ const clearLocalData = (sectionId = null) => {
             // Clear specific section data
             const key = `section_subjects_${sectionId}`;
             localStorage.removeItem(key);
-            console.log(`Cleared local data for section ${sectionId}`);
+            // Cleared local data for section
         } else {
             // Clear all section data by finding all keys with the pattern
             const keys = [];
@@ -408,7 +431,7 @@ const clearLocalData = (sectionId = null) => {
 
             // Remove all found keys
             keys.forEach((key) => localStorage.removeItem(key));
-            console.log(`Cleared all local section data (${keys.length} items)`);
+            // Cleared all local section data
         }
     } catch (error) {
         console.warn('Error clearing local data:', error);
@@ -451,7 +474,7 @@ const saveGrade = async () => {
             curriculum_id: curriculum.value.id
         };
 
-        console.log('Adding grade to curriculum:', curriculum.value.id, gradeData);
+        // Adding grade to curriculum
         await CurriculumService.addGradeToCurriculum(curriculum.value.id, gradeData);
 
         // Reload curriculum data after successful addition
@@ -486,7 +509,7 @@ onMounted(() => {
     // Use nextTick to defer async work until after component setup
     nextTick(async () => {
         try {
-            console.log('Component mounted, loading data...');
+            // Component mounted, loading data
             loading.value = true;
 
             // Clear any existing toasts that might be showing the wrong message
@@ -496,24 +519,24 @@ onMounted(() => {
 
             // Load initial data - single curriculum
             await loadCurriculums();
-            console.log('Curriculum loaded:', curriculum.value);
+            // Curriculum loaded
             await loadGrades();
-            console.log('Grades loaded:', grades.value);
+            // Grades loaded
             await loadAllGrades(); // Load all available grades for dropdown
-            console.log('Available grades loaded:', availableGrades.value);
+            // Available grades loaded
             await loadSubjects();
-            console.log('Subjects loaded:', subjects.value);
+            // Subjects loaded
             await loadTeachers();
             console.log('Teachers loaded:', teachers.value);
 
             // If we have curriculum data and a selected grade, load their sections
             if (curriculum.value?.id && selectedGrade.value?.id) {
-                console.log('Loading sections for curriculum:', curriculum.value.id, 'grade:', selectedGrade.value.id);
+                // Loading sections for curriculum and grade
                 try {
                     const loadedSections = await CurriculumService.getSectionsByGrade(curriculum.value.id, selectedGrade.value.id);
                     if (Array.isArray(loadedSections)) {
                         sections.value = loadedSections;
-                        console.log('Sections loaded:', sections.value);
+                        // Sections loaded
                         // For each section, load its subjects and homeroom teacher
                         await Promise.all(
                             sections.value.map(async (section) => {
@@ -540,7 +563,7 @@ onMounted(() => {
                 }
             }
 
-            console.log('Initial data loading complete');
+            // Initial data loading complete
         } catch (error) {
             console.error('Error during initial data loading:', error);
             toast.add({
@@ -584,13 +607,13 @@ onMounted(() => {
 
             try {
                 loading.value = true;
-                console.log('Selection changed, reloading sections...');
+                // Selection changed, reloading sections
 
                 const loadedSections = await CurriculumService.getSectionsByGrade(newCurriculum.id, newGrade.id);
 
                 if (Array.isArray(loadedSections)) {
                     sections.value = loadedSections;
-                    console.log('Sections reloaded:', sections.value);
+                    // Sections reloaded
 
                     if (sections.value.length > 0) {
                         // Load subjects and homeroom teachers for each section
@@ -640,11 +663,11 @@ onMounted(() => {
     const loadCurriculum = async () => {
         loading.value = true;
         try {
-            console.log('Loading curriculum...');
+            // Loading curriculum
             const response = await CurriculumService.getCurriculum();
             if (response && typeof response === 'object') {
                 curriculum.value = normalizeYearRange(response);
-                console.log('Loaded curriculum', curriculum.value);
+                // Curriculum loaded
             } else {
                 console.warn('Invalid curriculum data format:', response);
                 curriculum.value = {
@@ -658,7 +681,7 @@ onMounted(() => {
                 };
             }
         } catch (error) {
-            console.error('Error loading curriculum:', error);
+            // Error loading curriculum
             toast.add({
                 severity: 'error',
                 summary: 'Error',
@@ -685,7 +708,7 @@ onMounted(() => {
 
         while (retryCount < maxRetries) {
             try {
-                const data = await GradeService.getGrades();
+                const data = await GradesService.getGrades();
                 if (Array.isArray(data) && data.length > 0) {
                     grades.value = data;
                     return;
@@ -708,7 +731,7 @@ onMounted(() => {
                         life: 5000
                     });
                     // Only fall back to default grades if absolutely necessary
-                    const defaultGrades = await GradeService.getDefaultGrades();
+                    const defaultGrades = await GradesService.getDefaultGrades();
                     if (defaultGrades && defaultGrades.length > 0) {
                         grades.value = defaultGrades;
                     }
@@ -726,23 +749,23 @@ onMounted(() => {
             return;
         }
 
-        console.log('Loading grade levels for curriculum ID:', curriculum.value.id);
+        // Loading grade levels for curriculum
         loading.value = true;
 
         try {
             // Only get curriculum-specific grades - no fallbacks
             const data = await CurriculumService.getGradesByCurriculum(curriculum.value.id);
-            console.log('Grade levels loaded from API:', data);
+            // Grade levels loaded from API
 
             // Ensure we have a valid array
             grades.value = Array.isArray(data) ? data : [];
 
             // If no grades are linked to this curriculum, show empty list (no fallbacks)
             if (grades.value.length === 0) {
-                console.log('No grades are linked to this curriculum');
+                // No grades are linked to this curriculum
             }
 
-            console.log('Final grade levels:', grades.value);
+            // Final grade levels loaded
             showGradeLevelManagement.value = true;
         } catch (error) {
             console.error('Error loading grade levels:', error);
@@ -776,7 +799,7 @@ onMounted(() => {
 
     async function loadTeachers() {
         try {
-            console.log('Loading teachers from API...');
+            // Loading teachers from API
             const data = await TeacherService.getTeachers();
 
             if (!data) {
@@ -812,7 +835,7 @@ onMounted(() => {
     const loadAllGrades = async () => {
         try {
             console.log('Loading all available grades...');
-            const response = await GradeService.getGrades();
+            const response = await GradesService.getGrades();
             if (Array.isArray(response)) {
                 availableGrades.value = response;
                 console.log('Loaded available grades:', availableGrades.value);
@@ -3039,8 +3062,160 @@ onMounted(() => {
         }
     };
 
-    // Rest of the code remains the same
+
 }); // Close onMounted function
+
+// Watch for changes in grade type to reset value if needed
+watch(
+    selectedGradeType,
+    (newType) => {
+        console.log('Grade type changed to:', newType);
+        // Reset grade value when type changes to enforce limits
+        if (newType && gradeValue.value) {
+            if (newType === 'KINDER' && gradeValue.value > 2) {
+                gradeValue.value = 1; // Reset to valid value for Kinder
+            } else if (newType === 'GRADE' && gradeValue.value > 6) {
+                gradeValue.value = 1; // Reset to valid value for Grade
+            }
+        }
+    }
+);
+
+// Watch for changes in grade type and value to update code, name and level
+watch(
+    [selectedGradeType, gradeValue],
+    ([newType, newValue]) => {
+        console.log('Watch triggered - newType:', newType, 'newValue:', newValue);
+        
+        if (newType && newValue !== null && newValue !== undefined) {
+            if (newType === 'KINDER') {
+                newGrade.value.code = `K${newValue}`;
+                newGrade.value.name = `Kinder ${newValue}`;
+                newGrade.value.level = '0';
+                newGrade.value.display_order = Number(newValue);
+            } else if (newType === 'GRADE') {
+                newGrade.value.code = `G${newValue}`;
+                newGrade.value.name = `Grade ${newValue}`;
+                newGrade.value.level = newValue.toString();
+                newGrade.value.display_order = 2 + Number(newValue);
+            } else if (newType === 'ALS') {
+                newGrade.value.code = `ALS${newValue}`;
+                newGrade.value.name = `ALS ${newValue}`;
+                newGrade.value.level = (100 + Number(newValue)).toString();
+                newGrade.value.display_order = 100 + Number(newValue);
+            }
+            console.log('Updated newGrade:', newGrade.value);
+        } else {
+            // Clear the generated fields if no valid selection
+            newGrade.value.code = '';
+            newGrade.value.name = '';
+            newGrade.value.level = '0';
+            newGrade.value.display_order = 0;
+        }
+    },
+    { immediate: true, deep: true }
+);
+
+// Save new grade function - moved outside onMounted to be accessible to template
+const saveNewGrade = async () => {
+    console.log('saveNewGrade called');
+    console.log('selectedGradeType:', selectedGradeType.value);
+    console.log('gradeValue:', gradeValue.value);
+    console.log('newGrade:', newGrade.value);
+    
+    gradeSubmitted.value = true;
+
+    if (!newGrade.value.code?.trim() || !newGrade.value.name?.trim()) {
+        console.log('Validation failed - missing code or name');
+        console.log('Code:', newGrade.value.code);
+        console.log('Name:', newGrade.value.name);
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: 'Grade code and name are required. Please select a grade type and enter a value.',
+            life: 5000
+        });
+        return;
+    }
+
+    // Check if grade code already exists
+    const existingGrade = grades.value.find(grade => grade.code === newGrade.value.code);
+    if (existingGrade) {
+        toast.add({ 
+            severity: 'warn', 
+            summary: 'Duplicate Grade', 
+            detail: `Grade ${newGrade.value.code} already exists. Please select a different grade type or number.`, 
+            life: 5000 
+        });
+        return;
+    }
+
+    try {
+        loading.value = true;
+        
+        // Set grade as active by default
+        const gradeData = {
+            ...newGrade.value,
+            is_active: true
+        };
+        
+        console.log('Sending grade data:', gradeData);
+        await GradesService.createGrade(gradeData);
+        
+        toast.add({ 
+            severity: 'success', 
+            summary: 'Success', 
+            detail: 'Grade created successfully', 
+            life: 3000 
+        });
+
+        // Refresh grades data
+        await loadGrades();
+        await loadAllGrades();
+        
+        // Reset form
+        selectedGradeType.value = null;
+        gradeValue.value = 1;
+        newGrade.value = {
+            code: '',
+            name: '',
+            is_active: true,
+            level: '0',
+            display_order: 0,
+            description: ''
+        };
+        
+        // Close dialog
+        newGradeDialog.value = false;
+        
+    } catch (error) {
+        console.error('Error creating grade:', error);
+        let errorMessage = 'Failed to create grade';
+        
+        if (error.response) {
+            if (error.response.status === 422) {
+                if (error.response.data.errors) {
+                    const validationErrors = Object.values(error.response.data.errors).flat().join(', ');
+                    errorMessage = `Validation error: ${validationErrors}`;
+                } else if (error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                }
+            } else if (error.response.data && error.response.data.message) {
+                errorMessage = error.response.data.message;
+            }
+        }
+
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error', 
+            detail: errorMessage, 
+            life: 5000 
+        });
+    } finally {
+        loading.value = false;
+    }
+};
 </script>
 
 <style scoped>
@@ -3482,7 +3657,7 @@ onMounted(() => {
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="grade in curriculum.grade_levels" :key="grade.id" class="subject-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }">
+                <div v-for="grade in grades" :key="grade.id" class="subject-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }">
                     <!-- Floating symbols -->
                     <span class="symbol"></span>
                     <span class="symbol"></span>
@@ -3516,7 +3691,7 @@ onMounted(() => {
             </div>
 
             <!-- Empty State -->
-            <div v-if="curriculum.grade_levels?.length === 0 && !loading" class="empty-state">
+            <div v-if="grades?.length === 0 && !loading" class="empty-state">
                 <p>No grades found. Click "Add Grade Level" to create one.</p>
             </div>
         </div>
@@ -3683,13 +3858,79 @@ onMounted(() => {
                         showClear
                     />
                     <small class="p-error" v-if="submitted && !selectedGradeToAdd">Please select a grade level.</small>
-                    <small class="p-info" v-if="availableGrades && availableGrades.length === 0">No grades available. Create grades first in Grade Level management.</small>
+                    <small class="p-info" v-if="availableGrades && availableGrades.length === 0">No grades available. Create grades first by clicking "Create New Grade" below.</small>
+                </div>
+
+                <div class="flex justify-content-center mt-3">
+                    <Button label="Create New Grade" icon="pi pi-plus" class="p-button-outlined" @click="openAddGradeDialog" />
                 </div>
             </template>
 
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="gradeDialog = false" />
                 <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="saveGrade" />
+            </template>
+        </Dialog>
+
+        <!-- New Grade Creation Dialog -->
+        <Dialog v-model:visible="newGradeDialog" :style="{ width: '450px' }" header="Create New Grade" modal class="p-fluid">
+            <div class="field">
+                <label for="gradeType" class="font-medium mb-2 block">Grade Type</label>
+                <Select 
+                    id="gradeType" 
+                    v-model="selectedGradeType" 
+                    :options="gradeTypes" 
+                    optionLabel="label" 
+                    optionValue="value"
+                    placeholder="Select Grade Type" 
+                    class="w-full" 
+                    :class="{ 'p-invalid': gradeSubmitted && !selectedGradeType }" 
+                />
+                <small class="p-error" v-if="gradeSubmitted && !selectedGradeType">Grade type is required.</small>
+            </div>
+
+            <div class="field" v-if="selectedGradeType">
+                <label :for="selectedGradeType === 'ALS' ? 'alsValue' : 'gradeValue'" class="font-medium mb-2 block">
+                    {{ selectedGradeType === 'KINDER' ? 'Kinder' : selectedGradeType === 'GRADE' ? 'Grade' : 'ALS' }} {{ selectedGradeType === 'ALS' ? 'Level' : 'Number' }}
+                </label>
+                <div v-if="selectedGradeType === 'ALS'">
+                    <InputText 
+                        id="alsValue" 
+                        v-model="gradeValue" 
+                        placeholder="Enter ALS level" 
+                        :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" 
+                        class="w-full"
+                    />
+                </div>
+                <div v-else>
+                    <InputNumber 
+                        id="gradeValue" 
+                        v-model="gradeValue" 
+                        :min="1" 
+                        :max="selectedGradeType === 'KINDER' ? 2 : 6" 
+                        placeholder="Enter number" 
+                        :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" 
+                        class="w-full"
+                    />
+                </div>
+                <small class="p-error" v-if="gradeSubmitted && !gradeValue">Value is required.</small>
+                <small class="text-xs text-gray-500 mt-1" v-if="selectedGradeType === 'KINDER'">Enter 1 or 2 for Kinder level</small>
+                <small class="text-xs text-gray-500 mt-1" v-if="selectedGradeType === 'GRADE'">Enter 1-6 for Grade level</small>
+            </div>
+
+            <div class="field">
+                <label class="font-medium mb-2 block">Generated Code</label>
+                <InputText v-model="newGrade.code" disabled class="w-full" />
+            </div>
+
+            <div class="field">
+                <label class="font-medium mb-2 block">Generated Name</label>
+                <InputText v-model="newGrade.name" disabled class="w-full" />
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" outlined @click="newGradeDialog = false" />
+                <Button label="Create" icon="pi pi-check" @click="saveNewGrade" :loading="loading" />
             </template>
         </Dialog>
 
@@ -3757,7 +3998,7 @@ onMounted(() => {
             >
                 <div class="p-field mb-3">
                     <label for="day" class="font-medium mb-2 block">Day</label>
-                    <Dropdown id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
+                    <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
                 </div>
 
                 <div class="p-field mb-3">
@@ -3782,7 +4023,7 @@ onMounted(() => {
 
                 <div v-if="currentGradeHasSubjectTeachers" class="p-field mb-3">
                     <label for="teacher" class="font-medium mb-2 block">Teacher</label>
-                    <Dropdown id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" class="w-full" />
+                    <Select id="teacher" v-model="schedule.teacher_id" :options="teachers" optionLabel="name" optionValue="id" placeholder="Select Teacher" class="w-full" />
                 </div>
 
                 <div class="flex align-items-center p-3 border-round bg-blue-50 mb-3">
