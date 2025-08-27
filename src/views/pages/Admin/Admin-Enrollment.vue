@@ -17,6 +17,8 @@ const loading = ref(true);
 const enrollmentDialog = ref(false);
 const confirmationDialog = ref(false);
 const selectedStudent = ref(null);
+const showStudentDetails = ref(false);
+const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
 const activeTabIndex = ref(0); // Add active tab index for controlling which tab is active
@@ -202,6 +204,11 @@ function selectStudent(student) {
     selectedStudent.value = student;
 }
 
+function openStudentModal(student) {
+    selectedStudent.value = student;
+    showStudentDetails.value = true;
+}
+
 function openEnrollmentDialog() {
     if (!selectedStudent.value) {
         toast.add({ severity: 'warn', summary: 'No Student Selected', detail: 'Please select a student to enroll.', life: 3000 });
@@ -213,6 +220,9 @@ function openEnrollmentDialog() {
         return;
     }
 
+    // Close the student details modal first
+    showStudentDetails.value = false;
+    
     // Reset selection
     selectedGradeLevel.value = null;
     selectedSection.value = null;
@@ -325,14 +335,13 @@ function updateEnrollmentInStorage(student) {
                         </div>
                     </div>
 
-                    <!-- TabView for Enrolled/Not Enrolled separation -->
+                    <!-- Not Enrolled Students -->
                     <TabView v-model:activeIndex="activeTabIndex">
-                        <!-- Not Enrolled Students Tab -->
                         <TabPanel header="Not Enrolled">
                             <div class="p-2">
                                 <p v-if="notEnrolledStudents.length === 0" class="text-center text-color-secondary p-3">No students to enroll</p>
                                 <div v-else class="student-list">
-                                    <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="selectStudent(student)">
+                                    <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="openStudentModal(student)">
                                         <div class="flex align-items-center">
                                             <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
                                             <div class="flex-1">
@@ -348,140 +357,14 @@ function updateEnrollmentInStorage(student) {
                                 </div>
                             </div>
                         </TabPanel>
-
-                        <!-- Enrolled Students Tab -->
-                        <TabPanel header="Enrolled">
-                            <div class="p-2">
-                                <p v-if="enrolledStudents.length === 0" class="text-center text-color-secondary p-3">No enrolled students yet</p>
-                                <div v-else class="student-list">
-                                    <div v-for="student in enrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="selectStudent(student)">
-                                        <div class="flex align-items-center">
-                                            <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
-                                            <div class="flex-1">
-                                                <div class="flex align-items-center justify-content-between">
-                                                    <span class="font-medium">{{ student.name }}</span>
-                                                    <Tag value="Enrolled" severity="success" />
-                                                </div>
-                                                <div class="text-color-secondary text-sm mt-1">{{ student.studentId }}</div>
-                                                <div class="text-color-secondary text-sm mt-1">{{ student.gradeLevel }} - {{ student.section }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ enrolledStudents.length }} enrolled students</div>
-                                </div>
-                            </div>
-                        </TabPanel>
                     </TabView>
                 </div>
             </div>
 
-            <!-- Student Details Panel -->
-            <div class="col-12 md:col-7 lg:col-8">
-                <div v-if="selectedStudent" class="card mb-0">
-                    <div class="flex align-items-center justify-content-between mb-4">
-                        <div class="flex align-items-center">
-                            <Avatar :image="selectedStudent.photo" shape="circle" size="xlarge" class="mr-3" />
-                            <div>
-                                <h4 class="m-0">{{ selectedStudent.name }}</h4>
-                                <p class="text-color-secondary m-0"><i class="pi pi-id-card mr-1"></i>{{ selectedStudent.studentId }}</p>
-                            </div>
-                        </div>
-                        <Button v-if="selectedStudent.enrollmentStatus === 'Not Enrolled'" label="Enroll Student" icon="pi pi-user-plus" class="p-button-success" @click="openEnrollmentDialog" />
-                    </div>
-
-                    <TabView>
-                        <!-- Personal Information Tab -->
-                        <TabPanel header="Personal Information">
-                            <div class="grid">
-                                <div class="col-12 md:col-6">
-                                    <div class="field">
-                                        <label class="font-bold">Birthdate</label>
-                                        <div>{{ selectedStudent.birthdate }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12 md:col-6">
-                                    <div class="field">
-                                        <label class="font-bold">Contact Number</label>
-                                        <div>{{ selectedStudent.contact }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12">
-                                    <div class="field">
-                                        <label class="font-bold">Address</label>
-                                        <div>{{ selectedStudent.address }}</div>
-                                    </div>
-                                </div>
-                                <div class="col-12 md:col-6">
-                                    <div class="field">
-                                        <label class="font-bold">Email</label>
-                                        <div>{{ selectedStudent.email }}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </TabPanel>
-
-                        <!-- Enrollment Information Tab -->
-                        <TabPanel header="Enrollment Information">
-                            <div v-if="selectedStudent.enrollmentStatus === 'Enrolled'" class="card bg-green-50 border-round">
-                                <div class="flex align-items-center mb-3">
-                                    <i class="pi pi-check-circle text-green-500 text-2xl mr-3"></i>
-                                    <div>
-                                        <h5 class="m-0 text-green-700">Student Enrolled</h5>
-                                        <p class="m-0 mt-1">
-                                            Enrollment Date: <strong>{{ selectedStudent.enrollmentDate }}</strong>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="grid">
-                                    <div class="col-12 md:col-6">
-                                        <div class="field">
-                                            <label class="font-bold">Grade Level</label>
-                                            <div>{{ selectedStudent.gradeLevel }}</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-12 md:col-6">
-                                        <div class="field">
-                                            <label class="font-bold">Section</label>
-                                            <div>{{ selectedStudent.section }}</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <h6>Subjects</h6>
-                                <ul class="subject-list">
-                                    <li v-for="(subject, index) in selectedSubjects" :key="index">{{ subject }}</li>
-                                </ul>
-                            </div>
-
-                            <div v-else class="card border-round">
-                                <div class="flex align-items-center">
-                                    <i class="pi pi-info-circle text-blue-500 text-2xl mr-3"></i>
-                                    <div>
-                                        <h5 class="m-0 text-blue-700">Not Yet Enrolled</h5>
-                                        <p class="m-0 mt-1">This student has been admitted but is not yet enrolled in any class.</p>
-                                    </div>
-                                </div>
-
-                                <div class="mt-3">
-                                    <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="openEnrollmentDialog" />
-                                </div>
-                            </div>
-                        </TabPanel>
-                    </TabView>
-                </div>
-
-                <div v-else class="card flex align-items-center justify-content-center" style="min-height: 400px">
-                    <div class="text-center">
-                        <i class="pi pi-user text-4xl text-color-secondary mb-3"></i>
-                        <h5>Select a student to view details</h5>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Enrollment Dialog -->
-        <Dialog v-model:visible="enrollmentDialog" header="Enroll Student" :style="{ width: '450px' }" :modal="true">
+        <Dialog v-model:visible="enrollmentDialog" header="Enroll Student" :style="{ width: '450px', zIndex: '1100' }" :modal="true">
             <div class="enrollment-form p-fluid">
                 <div class="field">
                     <label for="gradeLevel">Grade Level</label>
@@ -501,7 +384,7 @@ function updateEnrollmentInStorage(student) {
         </Dialog>
 
         <!-- Confirmation Dialog -->
-        <Dialog v-model:visible="confirmationDialog" header="Confirm Enrollment" :style="{ width: '500px' }" :modal="true">
+        <Dialog v-model:visible="confirmationDialog" header="Confirm Enrollment" :style="{ width: '500px', zIndex: '1200' }" :modal="true">
             <div v-if="selectedStudent && selectedGradeLevel && selectedSection" class="confirmation-details">
                 <div class="student-summary flex align-items-center mb-4">
                     <Avatar :image="selectedStudent.photo" shape="circle" size="large" class="mr-3" />
@@ -545,6 +428,91 @@ function updateEnrollmentInStorage(student) {
                 />
                 <Button label="Confirm Enrollment" icon="pi pi-check" class="p-button-success" @click="confirmEnrollment" />
             </template>
+        </Dialog>
+
+        <!-- Student Details Modal -->
+        <Dialog v-model:visible="showStudentDetails" :modal="true" :dismissableMask="true" :style="{ width: '50vw' }" :breakpoints="{ '960px': '75vw', '641px': '90vw' }" class="student-details-dialog p-0" :showHeader="false">
+            <div class="card-container p-0">
+                <!-- Header with gradient background -->
+                <div class="student-header">
+                    <div class="flex align-items-center">
+                        <Avatar :image="selectedStudent?.photo" shape="circle" size="xlarge" class="mr-3" />
+                        <div>
+                            <h3 class="m-0 text-white">{{ selectedStudent?.name }}</h3>
+                            <p class="m-0 text-white-alpha-70"><i class="pi pi-id-card mr-1"></i>{{ selectedStudent?.studentId }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab navigation -->
+                <div class="tab-navigation">
+                    <div class="tab-item" :class="{ 'active-tab': activeStudentTab === 0 }" @click="activeStudentTab = 0">
+                        <i class="pi pi-user"></i>
+                        <span>Personal Information</span>
+                    </div>
+                    <div class="tab-item" :class="{ 'active-tab': activeStudentTab === 1 }" @click="activeStudentTab = 1">
+                        <i class="pi pi-graduation-cap"></i>
+                        <span>Enrollment Information</span>
+                    </div>
+                </div>
+
+                <!-- Tab content -->
+                <div class="tab-content p-3">
+                    <!-- Personal Information Tab -->
+                    <div v-if="activeStudentTab === 0">
+                        <div class="info-list">
+                            <div class="info-item">
+                                <div class="info-label">Birthdate</div>
+                                <div class="info-value">{{ selectedStudent?.birthdate }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Contact Number</div>
+                                <div class="info-value">{{ selectedStudent?.contact }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Address</div>
+                                <div class="info-value">{{ selectedStudent?.address }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Email</div>
+                                <div class="info-value">{{ selectedStudent?.email }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enrollment Information Tab -->
+                    <div v-if="activeStudentTab === 1">
+                        <div v-if="selectedStudent?.enrollmentStatus === 'Enrolled'" class="status-card bg-green-50">
+                            <div class="flex align-items-center">
+                                <i class="pi pi-check-circle text-green-500 text-2xl mr-3"></i>
+                                <div>
+                                    <h5 class="m-0 text-green-700">Student Enrolled</h5>
+                                    <p class="m-0">Enrollment Date: <strong>{{ selectedStudent?.enrollmentDate }}</strong></p>
+                                    <p class="m-0 mt-1">Grade: <strong>{{ selectedStudent?.gradeLevel }}</strong> | Section: <strong>{{ selectedStudent?.section }}</strong></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="status-card bg-blue-50">
+                            <div class="flex align-items-center">
+                                <i class="pi pi-info-circle text-blue-500 text-2xl mr-3"></i>
+                                <div>
+                                    <h5 class="m-0 text-blue-700">Not Yet Enrolled</h5>
+                                    <p class="m-0">This student has been admitted but is not yet enrolled in any class.</p>
+                                    
+                                    <div class="mt-3">
+                                        <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="openEnrollmentDialog" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Close button at the bottom -->
+                <div class="p-3 flex justify-content-end">
+                    <Button icon="pi pi-times" label="Close" class="p-button-rounded p-button-secondary" @click="showStudentDetails = false" />
+                </div>
+            </div>
         </Dialog>
 
         <Toast />
@@ -654,6 +622,92 @@ function updateEnrollmentInStorage(student) {
 
 .text-blue-700 {
     color: #1d4ed8;
+}
+
+/* Student Details Dialog Styling */
+.student-details-dialog :deep(.p-dialog-content) {
+    padding: 0 !important;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.card-container {
+    background: var(--surface-card);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.student-header {
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #4a90e2 0%, #5e35b1 100%);
+    color: white;
+}
+
+.tab-navigation {
+    display: flex;
+    background-color: var(--surface-50);
+    border-bottom: 1px solid var(--surface-200);
+}
+
+.tab-item {
+    padding: 1rem;
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tab-item:hover {
+    background-color: var(--surface-100);
+}
+
+.active-tab {
+    background-color: white;
+    border-bottom: 3px solid var(--primary-color);
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.tab-content {
+    padding: 1.5rem;
+    min-height: 300px;
+}
+
+.info-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--surface-200);
+}
+
+.info-label {
+    font-weight: 600;
+    color: var(--text-color-secondary);
+}
+
+.info-value {
+    color: var(--text-color);
+}
+
+.status-card {
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.bg-blue-50 {
+    background-color: #eff6ff;
 }
 
 /* Responsive adjustments */
