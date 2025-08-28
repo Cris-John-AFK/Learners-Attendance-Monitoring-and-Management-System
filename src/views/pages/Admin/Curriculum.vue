@@ -10,7 +10,6 @@ import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 // import Dropdown from 'primevue/dropdown'; // Deprecated - using Select instead
 import InputNumber from 'primevue/inputnumber';
-import InputSwitch from 'primevue/inputswitch';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
@@ -99,6 +98,18 @@ const grade = ref({
     display_order: 0
 });
 
+// Section management variables
+const sectionManagementDialog = ref(false);
+const selectedGradeForSections = ref(null);
+const gradeSections = ref([]);
+const newSectionDialog = ref(false);
+const newSection = ref({
+    name: '',
+    description: '',
+    capacity: 40
+});
+const sectionSubmitted = ref(false);
+
 // Add function to open grade dialog
 const openAddGradeDialog = () => {
     // Reset form
@@ -159,6 +170,11 @@ const selectedTeacher = ref(null);
 const homeRoomTeacherAssignmentDialog = ref(false);
 const subjectTeacherAssignmentDialog = ref(false);
 const teacherSubmitted = ref(false); // Flag for teacher selection validation
+
+// Homeroom teacher assignment
+const teacherAssignmentDialog = ref(false);
+const selectedSectionForTeacher = ref(null);
+const selectedTeacherForAssignment = ref(null);
 
 // Search variables
 const searchYear = ref('');
@@ -520,7 +536,7 @@ onMounted(() => {
             // Load initial data - single curriculum
             await loadCurriculums();
             // Curriculum loaded
-            await loadGrades();
+            await loadGradesForCurriculum(curriculum.value.id);
             // Grades loaded
             await loadAllGrades(); // Load all available grades for dropdown
             // Available grades loaded
@@ -2178,11 +2194,7 @@ onMounted(() => {
                 gradeId = localStorage.getItem('currentGradeId');
             }
 
-            // Parse numeric IDs
-            if (curriculumId) curriculumId = parseInt(curriculumId);
-            if (gradeId) gradeId = parseInt(gradeId);
-
-            console.log('IDs from assignHomeRoomTeacher:');
+            console.log('IDs for homeroom teacher assignment:');
             console.log('- Curriculum ID:', curriculumId);
             console.log('- Grade ID:', gradeId);
             console.log('- Section ID:', sectionId);
@@ -2460,6 +2472,41 @@ onMounted(() => {
         return `Teacher ${teacherId}`;
     };
 
+
+// Homeroom teacher assignment function - moved to top level
+function openTeacherAssignment(section) {
+    selectedSectionForTeacher.value = section;
+    selectedTeacherForAssignment.value = section.homeroom_teacher_id || null;
+    teacherAssignmentDialog.value = true;
+}
+
+    // Assign teacher to section
+    const assignTeacherToSection = async () => {
+        if (!selectedSectionForTeacher.value || !selectedTeacherForAssignment.value) {
+            toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a teacher', life: 3000 });
+            return;
+        }
+
+        try {
+            loading.value = true;
+            await CurriculumService.assignHomeroomTeacher(selectedSectionForTeacher.value.id, selectedTeacherForAssignment.value);
+            
+            // Update local state
+            const sectionIndex = gradeSections.value.findIndex(s => s.id === selectedSectionForTeacher.value.id);
+            if (sectionIndex !== -1) {
+                gradeSections.value[sectionIndex].homeroom_teacher_id = selectedTeacherForAssignment.value;
+            }
+
+            toast.add({ severity: 'success', summary: 'Success', detail: 'Homeroom teacher assigned successfully', life: 3000 });
+            teacherAssignmentDialog.value = false;
+        } catch (error) {
+            console.error('Error assigning teacher:', error);
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to assign teacher', life: 3000 });
+        } finally {
+            loading.value = false;
+        }
+    };
+
     // Add this function after loadSubjects
     const loadSubjectSchedules = async (sectionId, subjectId) => {
         try {
@@ -2723,6 +2770,14 @@ onMounted(() => {
         return requiresSubjectTeachers(selectedGrade.value.code);
     });
 
+    // Computed property to format teachers with full names for the dropdown
+    const teachersWithFullName = computed(() => {
+        return teachers.value.map(teacher => ({
+            ...teacher,
+            full_name: `${teacher.first_name} ${teacher.last_name}`
+        }));
+    });
+
     // Teacher Assignment Dialog
     const openTeacherAssignmentDialog = () => {
         showTeacherAssignmentDialog.value = true;
@@ -2880,6 +2935,7 @@ onMounted(() => {
 
             // Set the selected section first
             selectedSection.value = section;
+            selectedSectionForTeacher.value = section;
 
             // Find and set selected curriculum and grade from their IDs
             selectedCurriculum.value = curriculums.value.find((c) => c.id === curriculumId);
@@ -2922,8 +2978,10 @@ onMounted(() => {
             if (section.homeroom_teacher_id) {
                 console.log('Pre-selecting teacher with ID:', section.homeroom_teacher_id);
                 selectedTeacher.value = section.homeroom_teacher_id;
+                selectedTeacherForAssignment.value = section.homeroom_teacher_id;
             } else {
                 selectedTeacher.value = null;
+                selectedTeacherForAssignment.value = null;
             }
 
             // Now use our function to handle teacher loading and dialog display
@@ -2941,7 +2999,7 @@ onMounted(() => {
                         return;
                     }
                     // Open dialog after teachers are loaded
-                    homeRoomTeacherAssignmentDialog.value = true;
+                    teacherAssignmentDialog.value = true;
                 } catch (error) {
                     console.error('Failed to load teachers:', error);
                     toast.add({
@@ -2953,7 +3011,7 @@ onMounted(() => {
                 }
             } else {
                 // Teachers already loaded, open dialog
-                homeRoomTeacherAssignmentDialog.value = true;
+                teacherAssignmentDialog.value = true;
             }
         } catch (error) {
             console.error('Error opening homeroom teacher dialog:', error);
@@ -3061,32 +3119,110 @@ onMounted(() => {
             }, 300);
         }
     };
-
-
 }); // Close onMounted function
 
+// Section management functions
+const openSectionManagement = async (grade) => {
+    selectedGradeForSections.value = grade;
+    sectionManagementDialog.value = true;
+
+    // Load sections for this grade
+    try {
+        loading.value = true;
+        const sections = await CurriculumService.getSectionsByGrade(curriculum.value.id, grade.id);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        gradeSections.value = [];
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections for this grade',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+const openNewSectionDialog = () => {
+    newSection.value = {
+        name: '',
+        description: '',
+        capacity: 40
+    };
+    sectionSubmitted.value = false;
+    newSectionDialog.value = true;
+};
+
+const saveNewSection = async () => {
+    sectionSubmitted.value = true;
+
+    if (!newSection.value.name?.trim()) {
+        return;
+    }
+
+    try {
+        loading.value = true;
+
+        // Get curriculum_grade_id first
+        const curriculumGrade = await CurriculumService.getCurriculumGrade(curriculum.value.id, selectedGradeForSections.value.id);
+
+        const sectionData = {
+            ...newSection.value,
+            curriculum_grade_id: curriculumGrade.id
+        };
+
+        await CurriculumService.addSection(sectionData);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section created successfully',
+            life: 3000
+        });
+
+        // Refresh sections
+        console.log('Refreshing sections for curriculum:', curriculum.value.id, 'grade:', selectedGradeForSections.value.id);
+        const sections = await CurriculumService.getSectionsByGrade(curriculum.value.id, selectedGradeForSections.value.id);
+        console.log('Fetched sections:', sections);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
+        console.log('Updated gradeSections:', gradeSections.value);
+
+        newSectionDialog.value = false;
+    } catch (error) {
+        console.error('Error creating section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to create section',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+        sectionSubmitted.value = false;
+    }
+};
+
 // Watch for changes in grade type to reset value if needed
-watch(
-    selectedGradeType,
-    (newType) => {
-        console.log('Grade type changed to:', newType);
-        // Reset grade value when type changes to enforce limits
-        if (newType && gradeValue.value) {
-            if (newType === 'KINDER' && gradeValue.value > 2) {
-                gradeValue.value = 1; // Reset to valid value for Kinder
-            } else if (newType === 'GRADE' && gradeValue.value > 6) {
-                gradeValue.value = 1; // Reset to valid value for Grade
-            }
+watch(selectedGradeType, (newType) => {
+    console.log('Grade type changed to:', newType);
+    // Reset grade value when type changes to enforce limits
+    if (newType && gradeValue.value) {
+        if (newType === 'KINDER' && gradeValue.value > 2) {
+            gradeValue.value = 1; // Reset to valid value for Kinder
+        } else if (newType === 'GRADE' && gradeValue.value > 6) {
+            gradeValue.value = 1; // Reset to valid value for Grade
         }
     }
-);
+});
 
 // Watch for changes in grade type and value to update code, name and level
 watch(
     [selectedGradeType, gradeValue],
     ([newType, newValue]) => {
         console.log('Watch triggered - newType:', newType, 'newValue:', newValue);
-        
+
         if (newType && newValue !== null && newValue !== undefined) {
             if (newType === 'KINDER') {
                 newGrade.value.code = `K${newValue}`;
@@ -3122,14 +3258,14 @@ const saveNewGrade = async () => {
     console.log('selectedGradeType:', selectedGradeType.value);
     console.log('gradeValue:', gradeValue.value);
     console.log('newGrade:', newGrade.value);
-    
+
     gradeSubmitted.value = true;
 
     if (!newGrade.value.code?.trim() || !newGrade.value.name?.trim()) {
         console.log('Validation failed - missing code or name');
         console.log('Code:', newGrade.value.code);
         console.log('Name:', newGrade.value.name);
-        
+
         toast.add({
             severity: 'error',
             summary: 'Validation Error',
@@ -3140,40 +3276,40 @@ const saveNewGrade = async () => {
     }
 
     // Check if grade code already exists
-    const existingGrade = grades.value.find(grade => grade.code === newGrade.value.code);
+    const existingGrade = grades.value.find((grade) => grade.code === newGrade.value.code);
     if (existingGrade) {
-        toast.add({ 
-            severity: 'warn', 
-            summary: 'Duplicate Grade', 
-            detail: `Grade ${newGrade.value.code} already exists. Please select a different grade type or number.`, 
-            life: 5000 
+        toast.add({
+            severity: 'warn',
+            summary: 'Duplicate Grade',
+            detail: `Grade ${newGrade.value.code} already exists. Please select a different grade type or number.`,
+            life: 5000
         });
         return;
     }
 
     try {
         loading.value = true;
-        
+
         // Set grade as active by default
         const gradeData = {
             ...newGrade.value,
             is_active: true
         };
-        
+
         console.log('Sending grade data:', gradeData);
         await GradesService.createGrade(gradeData);
-        
-        toast.add({ 
-            severity: 'success', 
-            summary: 'Success', 
-            detail: 'Grade created successfully', 
-            life: 3000 
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Grade created successfully',
+            life: 3000
         });
 
         // Refresh grades data
         await loadGrades();
         await loadAllGrades();
-        
+
         // Reset form
         selectedGradeType.value = null;
         gradeValue.value = 1;
@@ -3185,14 +3321,13 @@ const saveNewGrade = async () => {
             display_order: 0,
             description: ''
         };
-        
+
         // Close dialog
         newGradeDialog.value = false;
-        
     } catch (error) {
         console.error('Error creating grade:', error);
         let errorMessage = 'Failed to create grade';
-        
+
         if (error.response) {
             if (error.response.status === 422) {
                 if (error.response.data.errors) {
@@ -3206,11 +3341,11 @@ const saveNewGrade = async () => {
             }
         }
 
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Error', 
-            detail: errorMessage, 
-            life: 5000 
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage,
+            life: 5000
         });
     } finally {
         loading.value = false;
@@ -3579,18 +3714,36 @@ const saveNewGrade = async () => {
     margin-bottom: 0.5rem;
 }
 
-.card-actions {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    display: flex;
-    gap: 0.25rem;
-    opacity: 0;
-    transition: opacity 0.2s ease;
+.clickable-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
-.subject-card:hover .card-actions {
-    opacity: 1;
+.clickable-card:hover {
+    transform: translateY(-12px);
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.2),
+        0 0 30px rgba(74, 135, 213, 0.6);
+    border: 2px solid rgba(74, 135, 213, 0.8);
+}
+
+.grade-info {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.grade-code {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #4a87d5;
+    margin: 0.5rem 0;
+}
+
+.sections-count {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin: 0;
+    font-style: italic;
 }
 
 /* Empty state */
@@ -3614,6 +3767,201 @@ const saveNewGrade = async () => {
 :deep(.add-button:hover) {
     box-shadow: 0 6px 16px rgba(74, 135, 213, 0.5) !important;
     transform: translateY(-2px) !important;
+}
+
+/* Section Management Styles */
+.section-management-content {
+    padding: 1rem 0;
+}
+
+.sections-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.sections-header h3 {
+    margin: 0;
+    color: #1a365d;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.empty-sections {
+    text-align: center;
+    padding: 2rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.sections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+.modern-section-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.modern-section-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #4a87d5, #6366f1);
+    border-radius: 16px 16px 0 0;
+}
+
+.modern-section-card:hover {
+    transform: translateY(-4px);
+    border-color: #4a87d5;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(74, 135, 213, 0.1);
+}
+
+.section-header {
+    margin-bottom: 1rem;
+}
+
+.section-name {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.section-body {
+    margin-bottom: 1.5rem;
+}
+
+.section-description {
+    color: #64748b;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin: 0 0 1rem 0;
+    font-style: italic;
+}
+
+.section-capacity {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #475569;
+    font-size: 0.875rem;
+}
+
+.section-capacity i {
+    color: #4a87d5;
+    font-size: 1rem;
+}
+
+.section-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+}
+
+.apple-button {
+    padding: 0.75rem 1.5rem !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    border-radius: 12px !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    min-width: 90px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+}
+
+.edit-button {
+    background: #007AFF !important;
+    color: white !important;
+    border-color: #007AFF !important;
+}
+
+.edit-button:hover {
+    background: #0056CC !important;
+    border-color: #0056CC !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3) !important;
+}
+
+.delete-button {
+    background: #FF3B30 !important;
+    color: white !important;
+    border-color: #FF3B30 !important;
+}
+
+.delete-button:hover {
+    background: #D70015 !important;
+    border-color: #D70015 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3) !important;
+}
+
+.apple-button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.section-info h4 {
+    margin: 0 0 0.5rem 0;
+    color: #1a365d;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.section-info p {
+    margin: 0 0 0.75rem 0;
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.section-details {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+}
+
+.capacity {
+    color: #4a87d5;
+    font-weight: 500;
+}
+
+.status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.status.active {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.section-actions {
+    display: flex;
+    gap: 0.25rem;
 }
 </style>
 
@@ -3657,7 +4005,7 @@ const saveNewGrade = async () => {
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="grade in grades" :key="grade.id" class="subject-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }">
+                <div v-for="grade in grades" :key="grade.id" class="subject-card clickable-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }" @click="openSectionManagement(grade)">
                     <!-- Floating symbols -->
                     <span class="symbol"></span>
                     <span class="symbol"></span>
@@ -3667,25 +4015,6 @@ const saveNewGrade = async () => {
 
                     <div class="card-content">
                         <h1 class="subject-title">{{ grade.name }}</h1>
-                        <div class="card-actions">
-                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editGrade(grade)" />
-                            <Button
-                                icon="pi pi-users"
-                                class="p-button-rounded p-button-text"
-                                @click.stop="
-                                    openSectionListDialog = true;
-                                    selectedGrade = grade;
-                                "
-                            />
-                            <Button
-                                icon="pi pi-list"
-                                class="p-button-rounded p-button-text"
-                                @click.stop="
-                                    openSubjectListDialog = true;
-                                    selectedGrade = grade;
-                                "
-                            />
-                        </div>
                     </div>
                 </div>
             </div>
@@ -3872,20 +4201,106 @@ const saveNewGrade = async () => {
             </template>
         </Dialog>
 
+        <!-- Section Management Dialog -->
+        <Dialog v-model:visible="sectionManagementDialog" :style="{ width: '800px' }" :header="`Manage Sections - ${selectedGradeForSections?.name}`" modal class="p-fluid">
+            <div class="section-management-content">
+                <div class="sections-header">
+                    <h3>Sections for {{ selectedGradeForSections?.name }}</h3>
+                    <Button label="Add Section" icon="pi pi-plus" class="p-button-success" @click="openNewSectionDialog" />
+                </div>
+
+                <div v-if="gradeSections.length === 0" class="empty-sections">
+                    <p>No sections found for this grade level. Click "Add Section" to create one.</p>
+                </div>
+
+                <div v-else class="sections-grid">
+                    <div v-for="section in gradeSections" :key="section.id" class="modern-section-card">
+                        <div class="section-header">
+                            <h3 class="section-name">{{ section.name }}</h3>
+                        </div>
+                        
+                        <div class="section-body">
+                            <p v-if="section.description" class="section-description">{{ section.description }}</p>
+                            <div class="section-capacity">
+                                <i class="pi pi-users"></i>
+                                <span>Capacity: <strong>{{ section.capacity }}</strong> students</span>
+                            </div>
+                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id">
+                                <i class="pi pi-user-edit"></i>
+                                <span>Homeroom Teacher: <strong>{{ getTeacherName(section.homeroom_teacher_id) }}</strong></span>
+                            </div>
+                            <div class="homeroom-teacher no-teacher" v-else>
+                                <i class="pi pi-user-plus"></i>
+                                <span>No homeroom teacher assigned</span>
+                            </div>
+                        </div>
+                        
+                        <div class="section-actions">
+                            <Button 
+                                v-if="!section.homeroom_teacher_id"
+                                icon="pi pi-user-plus" 
+                                label="Assign Teacher" 
+                                class="apple-button assign-teacher-button" 
+                                @click="selectedSectionForTeacher = section; selectedTeacherForAssignment = section.homeroom_teacher_id || null; teacherAssignmentDialog = true" 
+                            />
+                            <Button 
+                                v-else
+                                icon="pi pi-user-edit" 
+                                label="Change Teacher" 
+                                class="apple-button change-teacher-button" 
+                                @click="selectedSectionForTeacher = section; selectedTeacherForAssignment = section.homeroom_teacher_id || null; teacherAssignmentDialog = true" 
+                            />
+                            <Button 
+                                icon="pi pi-pencil" 
+                                label="Edit" 
+                                class="apple-button edit-button" 
+                                @click="editSection(section)" 
+                            />
+                            <Button 
+                                icon="pi pi-trash" 
+                                label="Delete" 
+                                class="apple-button delete-button" 
+                                @click="deleteSection(section)" 
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="sectionManagementDialog = false" />
+            </template>
+        </Dialog>
+
+        <!-- New Section Dialog -->
+        <Dialog v-model:visible="newSectionDialog" :style="{ width: '450px' }" header="Create New Section" modal class="p-fluid">
+            <div class="field">
+                <label for="sectionName" class="font-medium mb-2 block">Section Name</label>
+                <InputText id="sectionName" v-model="newSection.name" placeholder="Enter section name (e.g., A, B, Rose, etc.)" :class="{ 'p-invalid': sectionSubmitted && !newSection.name?.trim() }" class="w-full" />
+                <small class="p-error" v-if="sectionSubmitted && !newSection.name?.trim()">Section name is required.</small>
+            </div>
+
+            <div class="field">
+                <label for="sectionDescription" class="font-medium mb-2 block">Description (Optional)</label>
+                <InputText id="sectionDescription" v-model="newSection.description" placeholder="Enter section description" class="w-full" />
+            </div>
+
+            <div class="field">
+                <label for="sectionCapacity" class="font-medium mb-2 block">Capacity</label>
+                <InputNumber id="sectionCapacity" v-model="newSection.capacity" :min="1" :max="100" placeholder="Enter capacity" class="w-full" />
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="newSectionDialog = false" />
+                <Button label="Create" icon="pi pi-check" class="p-button-primary" @click="saveNewSection" :loading="loading" />
+            </template>
+        </Dialog>
+
         <!-- New Grade Creation Dialog -->
         <Dialog v-model:visible="newGradeDialog" :style="{ width: '450px' }" header="Create New Grade" modal class="p-fluid">
             <div class="field">
                 <label for="gradeType" class="font-medium mb-2 block">Grade Type</label>
-                <Select 
-                    id="gradeType" 
-                    v-model="selectedGradeType" 
-                    :options="gradeTypes" 
-                    optionLabel="label" 
-                    optionValue="value"
-                    placeholder="Select Grade Type" 
-                    class="w-full" 
-                    :class="{ 'p-invalid': gradeSubmitted && !selectedGradeType }" 
-                />
+                <Select id="gradeType" v-model="selectedGradeType" :options="gradeTypes" optionLabel="label" optionValue="value" placeholder="Select Grade Type" class="w-full" :class="{ 'p-invalid': gradeSubmitted && !selectedGradeType }" />
                 <small class="p-error" v-if="gradeSubmitted && !selectedGradeType">Grade type is required.</small>
             </div>
 
@@ -3894,24 +4309,10 @@ const saveNewGrade = async () => {
                     {{ selectedGradeType === 'KINDER' ? 'Kinder' : selectedGradeType === 'GRADE' ? 'Grade' : 'ALS' }} {{ selectedGradeType === 'ALS' ? 'Level' : 'Number' }}
                 </label>
                 <div v-if="selectedGradeType === 'ALS'">
-                    <InputText 
-                        id="alsValue" 
-                        v-model="gradeValue" 
-                        placeholder="Enter ALS level" 
-                        :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" 
-                        class="w-full"
-                    />
+                    <InputText id="alsValue" v-model="gradeValue" placeholder="Enter ALS level" :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" class="w-full" />
                 </div>
                 <div v-else>
-                    <InputNumber 
-                        id="gradeValue" 
-                        v-model="gradeValue" 
-                        :min="1" 
-                        :max="selectedGradeType === 'KINDER' ? 2 : 6" 
-                        placeholder="Enter number" 
-                        :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" 
-                        class="w-full"
-                    />
+                    <InputNumber id="gradeValue" v-model="gradeValue" :min="1" :max="selectedGradeType === 'KINDER' ? 2 : 6" placeholder="Enter number" :class="{ 'p-invalid': gradeSubmitted && !gradeValue }" class="w-full" />
                 </div>
                 <small class="p-error" v-if="gradeSubmitted && !gradeValue">Value is required.</small>
                 <small class="text-xs text-gray-500 mt-1" v-if="selectedGradeType === 'KINDER'">Enter 1 or 2 for Kinder level</small>
@@ -3964,7 +4365,7 @@ const saveNewGrade = async () => {
                         </div>
                         <div class="flex gap-2">
                             <Button icon="pi pi-book" class="p-button-rounded p-button-primary p-button-outlined" @click="openSubjectList(section)" v-tooltip.top="'Manage Subjects'" />
-                            <Button v-if="!section.homeroom_teacher_id" icon="pi pi-user" class="p-button-rounded p-button-success p-button-outlined" @click="openHomeRoomTeacherDialog(section)" v-tooltip.top="'Assign Teacher'" />
+                            <Button v-if="!section.homeroom_teacher_id" icon="pi pi-user" class="p-button-rounded p-button-success p-button-outlined" @click="() => { selectedSectionForTeacher = section; selectedTeacherForAssignment = section.homeroom_teacher_id || null; teacherAssignmentDialog = true; }" v-tooltip.top="'Assign Teacher'" />
                             <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="confirmRemoveSection(section)" v-tooltip.top="'Remove Section'" />
                         </div>
                     </div>
@@ -4142,25 +4543,59 @@ const saveNewGrade = async () => {
             </Dialog>
         </Teleport>
 
-        <!-- Homeroom Teacher Dialog -->
-        <Dialog v-model:visible="homeRoomTeacherAssignmentDialog" :style="{ width: '450px' }" header="Assign Homeroom Teacher" :modal="true" class="p-fluid" :closable="true" @hide="selectedTeacher = null">
-            <div v-if="loading" class="flex justify-content-center">
-                <ProgressSpinner />
-            </div>
-            <div v-else class="field">
-                <label for="teacher">Select Homeroom Teacher</label>
-                <select v-model="selectedTeacher" class="p-inputtext w-full" :class="{ 'p-invalid': teacherSubmitted && !selectedTeacher }">
-                    <option value="">Select a teacher</option>
-                    <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">{{ teacher.first_name }} {{ teacher.last_name }}</option>
-                </select>
-                <small class="p-error" v-if="teacherSubmitted && !selectedTeacher">Please select a teacher.</small>
-            </div>
+        <!-- Homeroom Teacher Assignment Dialog -->
+        <Teleport to="body">
+            <Dialog 
+                v-model:visible="teacherAssignmentDialog" 
+                header="Assign Homeroom Teacher" 
+                modal 
+                class="p-fluid" 
+                :style="{ width: '450px', zIndex: 9999 }" 
+                :closable="true" 
+                appendTo="body"
+            >
+                <div class="field mb-4">
+                    <label class="font-medium mb-2 block">Section</label>
+                    <div class="p-field-value text-lg font-semibold">{{ selectedSectionForTeacher?.name }}</div>
+                </div>
 
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="homeRoomTeacherAssignmentDialog = false" :disabled="loading" />
-                <Button label="Assign" icon="pi pi-check" class="p-button-text" @click="assignHomeRoomTeacher" :loading="loading" />
-            </template>
-        </Dialog>
+                <div class="field mb-4">
+                    <label for="homeroom-teacher" class="font-medium mb-2 block">Select Homeroom Teacher</label>
+                    <Select 
+                        id="homeroom-teacher"
+                        v-model="selectedTeacherForAssignment" 
+                        :options="teachersWithFullName" 
+                        optionLabel="full_name" 
+                        optionValue="id" 
+                        placeholder="Select a teacher" 
+                        class="w-full"
+                    />
+                </div>
+
+                <div class="flex align-items-center p-3 border-round bg-blue-50 mb-3">
+                    <i class="pi pi-info-circle text-blue-500 mr-2"></i>
+                    <span class="text-sm">The homeroom teacher will be responsible for this section's general management and attendance.</span>
+                </div>
+
+                <template #footer>
+                    <div class="flex justify-content-end gap-2">
+                        <Button 
+                            label="Cancel" 
+                            icon="pi pi-times" 
+                            class="p-button-text" 
+                            @click="teacherAssignmentDialog = false" 
+                        />
+                        <Button 
+                            label="Assign Teacher" 
+                            icon="pi pi-check" 
+                            class="p-button-primary" 
+                            @click="assignTeacherToSection" 
+                            :loading="loading" 
+                        />
+                    </div>
+                </template>
+            </Dialog>
+        </Teleport>
 
         <!-- Add Section Dialog -->
         <Dialog v-model:visible="sectionDialog" header="Add Section" modal class="p-fluid" :style="{ width: '450px' }">

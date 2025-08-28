@@ -12,8 +12,8 @@ class Section extends Model
 {
     use HasFactory, SoftDeletes;
 
-    // Disable timestamps since the table doesn't have timestamp columns
-    public $timestamps = false;
+    // Enable timestamps for proper Laravel functionality
+    public $timestamps = true;
 
     protected $fillable = [
         'name',
