@@ -557,11 +557,11 @@ const submitGuestForm = () => {
                             <div class="section-header">
                                 <h2><i class="pi pi-camera"></i> QR Scanner</h2>
                                 <div class="scanner-actions">
-                                    <button @click="scanning = !scanning" class="action-button">
+                                    <button @click="scanning = !scanning" class="action-button pause-button" :class="{ 'resume-state': !scanning }">
                                         <i :class="scanning ? 'pi pi-pause' : 'pi pi-play'"></i>
                                         {{ scanning ? 'Pause' : 'Resume' }}
                                     </button>
-                                    <button @click="manualCheckIn" class="action-button">
+                                    <button @click="manualCheckIn" class="action-button manual-button">
                                         <i class="pi pi-pencil"></i>
                                         Manual
                                     </button>
@@ -1210,6 +1210,45 @@ const submitGuestForm = () => {
     }
 }
 
+.pause-button {
+    background-color: #ef4444;
+    color: white;
+    border-color: #ef4444;
+    box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+
+    &:hover {
+        background-color: #dc2626;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(239, 68, 68, 0.5);
+    }
+}
+
+.pause-button.resume-state {
+    background-color: #10b981;
+    color: white;
+    border-color: #10b981;
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+
+    &:hover {
+        background-color: #059669;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(16, 185, 129, 0.5);
+    }
+}
+
+.manual-button {
+    background-color: #8b5cf6;
+    color: white;
+    border-color: #8b5cf6;
+    box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+
+    &:hover {
+        background-color: #7c3aed;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(139, 92, 246, 0.5);
+    }
+}
+
 .scanner-container {
     position: relative;
     height: 400px;
@@ -1234,8 +1273,9 @@ const submitGuestForm = () => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: white;
-    background: rgba(15, 23, 42, 0.9);
+    color: red;
+    font-weight: bold;
+    background: rgba(104, 105, 105, 0.582);
 }
 
 .scanner-paused i {
