@@ -377,32 +377,38 @@ function admitApplicant() {
     activeTab.value = 1;
 }
 
+function toggleRequirement(requirementKey) {
+    if (!selectedApplicant.value || selectedApplicant.value.status !== 'Pending') return;
+    
+    // Toggle the requirement status
+    selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
+    
+    // Update in storage
+    updateApplicantInStorage(selectedApplicant.value);
+}
+
 function updateApplicantInStorage(applicant) {
     // Get current data from localStorage
     const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
     const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
 
-    if (applicant.status === 'Admitted') {
-        // Remove from pending if present
-        const updatedPending = pendingApplicants.filter((app) => app.firstName !== applicant.firstName || app.lastName !== applicant.lastName);
-
-        // Add to admitted with updated status
-        const updatedApplicant = {
-            ...applicant.originalData,
-            status: 'Admitted',
-            studentId: applicant.studentId,
-            requirements: applicant.requirements
-        };
-        admittedApplicants.push(updatedApplicant);
-
-        // Save back to localStorage
-        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
+    // Find and update the applicant in the appropriate array
+    let found = false;
+    
+    // Check pending applicants
+    const pendingIndex = pendingApplicants.findIndex(app => app.id === applicant.id);
+    if (pendingIndex !== -1) {
+        pendingApplicants[pendingIndex] = { ...applicant };
+        localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        found = true;
+    }
+    
+    // Check admitted applicants
+    const admittedIndex = admittedApplicants.findIndex(app => app.id === applicant.id);
+    if (admittedIndex !== -1) {
+        admittedApplicants[admittedIndex] = { ...applicant };
         localStorage.setItem('admittedApplicants', JSON.stringify(admittedApplicants));
-    } else if (applicant.status === 'Rejected') {
-        // Remove from pending
-        const updatedPending = pendingApplicants.filter((app) => app.firstName !== applicant.firstName || app.lastName !== applicant.lastName);
-
-        // Save back to localStorage
+        found = true;
         localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
     } else {
         // Just update requirements
@@ -498,13 +504,6 @@ function navigateToEnrollment() {
                     <div class="flex-1">
                         <Dropdown v-model="selectedGradeLevel" :options="gradeLevelOptions" optionLabel="name" placeholder="Select Grade Level" class="w-full" />
                     </div>
-                    <div class="flex-1" v-if="selectedGradeLevel">
-                        <Dropdown v-model="selectedSection" :options="sectionOptions" optionLabel="name" placeholder="Select Section" class="w-full" />
-                    </div>
-                    <div class="flex align-items-center">
-                        <Checkbox v-model="showPendingOnly" :binary="true" inputId="pending-only" />
-                        <label for="pending-only" class="ml-2">Pending Only</label>
-                    </div>
                 </div>
             </div>
         </div>
@@ -517,12 +516,6 @@ function navigateToEnrollment() {
                     <span class="font-semibold">Pending Applications ({{ pendingCount }})</span>
                 </div>
             </TabPanel>
-            <TabPanel header="Admitted Students">
-                <div class="status-indicator">
-                    <i class="pi pi-check-circle text-green-500 mr-2"></i>
-                    <span class="font-semibold">Admitted Students ({{ admittedCount }})</span>
-                </div>
-            </TabPanel>
         </TabView>
 
         <div class="grid">
@@ -530,8 +523,7 @@ function navigateToEnrollment() {
             <div class="col-12">
                 <div class="card mb-0">
                     <h5>
-                        {{ activeTab === 0 ? 'Pending Applicants' : 'Admitted Students' }}
-                        ({{ filteredApplicants.length }})
+                        Pending Applicants ({{ filteredApplicants.length }})
                     </h5>
                     <!-- Modern DataTable list -->
 <div class="applicant-table p-2 mb-3">
@@ -621,7 +613,7 @@ function navigateToEnrollment() {
         <Toast />
 
         <!-- Student Details Dialog -->
-        <Dialog v-model:visible="showStudentDetails" :modal="true" :style="{ width: '50vw' }" :breakpoints="{ '960px': '75vw', '641px': '90vw' }" class="student-details-dialog p-0" :showHeader="false">
+        <Dialog v-model:visible="showStudentDetails" :modal="true" :dismissableMask="true" :style="{ width: '50vw' }" :breakpoints="{ '960px': '75vw', '641px': '90vw' }" class="student-details-dialog p-0" :showHeader="false">
             <div class="card-container p-0">
                 <!-- Header with gradient background -->
                 <div class="student-header">
@@ -690,7 +682,9 @@ function navigateToEnrollment() {
                     <!-- Requirements Tab -->
                     <div v-if="activeStudentTab === 1">
                         <div class="requirements-list">
-                            <div v-for="req in requirements" :key="req.key" class="requirement-item">
+                            <div v-for="req in requirements" :key="req.key" class="requirement-item clickable-requirement" 
+                                 :class="{ 'disabled': selectedApplicant?.status !== 'Pending' }"
+                                 @click="toggleRequirement(req.key)">
                                 <div class="requirement-name">{{ req.label }}</div>
                                 <div class="requirement-status">
                                     <Checkbox v-model="selectedApplicant.requirements[req.key]" :binary="true" :disabled="selectedApplicant?.status !== 'Pending'" class="mr-2" @change="updateApplicantInStorage(selectedApplicant)" />
@@ -923,6 +917,23 @@ function navigateToEnrollment() {
     align-items: center;
     padding: 0.75rem;
     border-bottom: 1px solid var(--surface-200);
+}
+
+.clickable-requirement {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+
+.clickable-requirement:hover:not(.disabled) {
+    background-color: var(--surface-100);
+    border-color: var(--primary-color);
+}
+
+.clickable-requirement.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .requirement-name {
