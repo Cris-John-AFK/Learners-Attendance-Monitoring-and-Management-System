@@ -146,16 +146,6 @@ onMounted(() => {
     loadApplicants();
 });
 
-// Clear localStorage and reload test data (for debugging)
-function clearAndReloadData() {
-    // Clear localStorage
-    localStorage.removeItem('pendingApplicants');
-    localStorage.removeItem('admittedApplicants');
-    localStorage.removeItem('enrolledStudents');
-    
-    // Reload the page to start fresh
-    window.location.reload();
-}
 
 // Load pending applications from localStorage
 function loadApplicants() {
@@ -483,26 +473,34 @@ function navigateToEnrollment() {
 </script>
 
 <template>
-    <div class="card p-fluid">
-        <div class="flex align-items-center justify-content-between mb-4">
-            <div>
-                <h2 class="text-2xl font-bold m-0"><i class="pi pi-user-plus mr-2"></i>Admission Center</h2>
-                <p class="text-color-secondary mt-1 mb-0">Review and process student admission applications</p>
-            </div>
-            <div class="flex flex-column gap-2">
-                <!-- Debug button to reset data -->
-                <Button label="Reset Test Data" icon="pi pi-refresh" class="p-button-sm p-button-secondary mb-2" @click="clearAndReloadData" />
-                
-                <!-- Search bar -->
-                <span class="p-input-icon-left">
-                    <i class="pi pi-search" />
-                    <InputText v-model="search" placeholder="Search applicants..." class="p-inputtext-sm" />
-                </span>
-
-                <!-- Grade Level and Section Filters -->
-                <div class="flex gap-2 align-items-center">
-                    <div class="flex-1">
-                        <Dropdown v-model="selectedGradeLevel" :options="gradeLevelOptions" optionLabel="name" placeholder="Select Grade Level" class="w-full" />
+    <div class="card p-6 shadow-lg rounded-lg bg-white">
+        <!-- Modern Gradient Header -->
+        <div class="modern-header-container mb-6">
+            <div class="gradient-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="pi pi-user-plus"></i>
+                        </div>
+                        <div class="header-text">
+                            <h1 class="header-title">Admission Center</h1>
+                            <p class="header-subtitle">Naawan Central School - Student Applications</p>
+                            <div class="student-count">
+                                <i class="pi pi-chart-bar mr-2"></i>
+                                Pending Applications: <span class="count-badge">{{ pendingCount }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="search-container">
+                            <span class="p-input-icon-left">
+                                <i class="pi pi-search" />
+                                <InputText v-model="search" placeholder="Search applicants..." class="search-input" />
+                            </span>
+                        </div>
+                        <div class="filter-container">
+                            <Dropdown v-model="selectedGradeLevel" :options="gradeLevelOptions" optionLabel="name" placeholder="Select Grade Level" class="grade-filter" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -950,5 +948,178 @@ function navigateToEnrollment() {
     padding: 1.5rem;
     border-radius: 8px;
     margin-top: 1rem;
+}
+
+/* Modern Header Styling - Matching Student Management System */
+.modern-header-container {
+    margin: -1.5rem -1.5rem 0 -1.5rem;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+}
+
+.gradient-header {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.gradient-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.header-icon {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-icon i {
+    font-size: 1.5rem;
+    color: white;
+}
+
+.header-text {
+    color: white;
+}
+
+.header-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-subtitle {
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 400;
+}
+
+.student-count {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+}
+
+.count-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    margin-left: 0.5rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.search-container {
+    position: relative;
+}
+
+.search-input {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 25px;
+    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    width: 300px;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.search-input::placeholder {
+    color: #000000;
+}
+
+.search-input:focus {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.search-container .p-input-icon-left i {
+    color: rgba(255, 255, 255, 0.8);
+    left: 1rem;
+}
+
+.filter-container {
+    width: 300px;
+}
+
+.grade-filter {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.grade-filter :deep(.p-dropdown-label) {
+    color: white;
+}
+
+.grade-filter :deep(.p-dropdown-trigger) {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1.5rem;
+        text-align: center;
+    }
+    
+    .header-actions {
+        align-items: center;
+        width: 100%;
+    }
+    
+    .search-input,
+    .grade-filter {
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .header-title {
+        font-size: 1.5rem;
+    }
 }
 </style>

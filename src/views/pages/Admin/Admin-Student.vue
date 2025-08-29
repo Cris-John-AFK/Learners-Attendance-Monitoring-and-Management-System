@@ -157,7 +157,7 @@ const viewEnrollmentStats = () => {
             }
         });
         // Set QR codes from backend data
-        students.value.forEach(student => {
+        students.value.forEach((student) => {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
             }
@@ -182,7 +182,7 @@ const loadStudents = async () => {
         loading.value = true;
 
         // Fetch students from Laravel API
-        const response = await fetch('http://localhost:8000/api/students', {
+        const response = await fetch('http://127.0.0.1:8000/api/students', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -197,85 +197,59 @@ const loadStudents = async () => {
         const apiStudents = await response.json();
         console.log('Loaded students from API:', apiStudents);
 
-        // Format students for display (mapping from lowercase database fields)
+        // Format students for display (mapping from camelCase database fields)
         const formattedStudents = apiStudents.map((student) => {
             return {
                 id: student.id,
-                studentId: student.studentid || student.student_id,
-                name: student.name || `${student.firstname || ''} ${student.lastname || ''}`.trim(),
-                firstName: student.firstname,
-                lastName: student.lastname,
+                studentId: student.studentId,
+                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                firstName: student.firstName,
+                lastName: student.lastName,
                 email: student.email || 'N/A',
                 gender: student.gender || student.sex || 'Male',
-                age: calculateAge(student.birthdate),
+                age: student.age || calculateAge(student.birthdate),
                 birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                address: formatAddress(student),
-                contact: student.contactinfo || student.parentcontact || 'N/A',
-                photo: student.profilephoto ? (student.profilephoto.startsWith('data:') ? student.profilephoto : `http://localhost:8000/${student.profilephoto}`) : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
+                address: student.address || formatAddress(student),
+                contact: student.contactInfo || student.parentContact || 'N/A',
+                photo: student.profilePhoto
+                    ? student.profilePhoto.startsWith('data:')
+                        ? student.profilePhoto
+                        : `http://localhost:8000/${student.profilePhoto}`
+                    : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
                 qrCodePath: student.qr_code_path ? `http://localhost:8000/${student.qr_code_path}` : null,
-                gradeLevel: student.gradelevel,
+                gradeLevel: student.gradeLevel,
                 section: student.section,
                 lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
-                enrollmentDate: student.enrollmentdate ? new Date(student.enrollmentdate).toLocaleDateString() : new Date().toLocaleDateString(),
+                enrollmentDate: student.enrollmentDate ? new Date(student.enrollmentDate).toLocaleDateString() : new Date().toLocaleDateString(),
+                status: student.status || 'Enrolled',
                 // Store original data for reference
                 originalData: student
             };
         });
 
         students.value = formattedStudents;
-        
+
         // Set QR codes from backend data
-        formattedStudents.forEach(student => {
+        formattedStudents.forEach((student) => {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
             }
         });
-        
+
         totalStudents.value = formattedStudents.length;
 
         // Update the filter counts
         updateFilterCounts();
     } catch (error) {
         console.error('Error loading student data from API:', error);
-
-        // Fallback to localStorage if API fails
-        console.log('Falling back to localStorage...');
-        try {
-            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            const formattedStudents = enrolledStudents.map((student, index) => {
-                const originalData = student.originalData || student;
-                return {
-                    id: index + 1,
-                    studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
-                    name: student.name || `${originalData.firstName} ${originalData.lastName}`,
-                    firstName: originalData.firstName,
-                    lastName: originalData.lastName,
-                    email: student.email || originalData.email || 'N/A',
-                    gender: student.sex || originalData.sex || 'Male',
-                    age: calculateAge(originalData.birthdate),
-                    birthdate: originalData.birthdate ? new Date(originalData.birthdate).toLocaleDateString() : 'N/A',
-                    address: formatAddress(originalData),
-                    contact: student.contact || originalData.mother?.contactNumber || 'N/A',
-                    photo: student.photo || `https://randomuser.me/api/portraits/${originalData.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
-                    gradeLevel: student.gradeLevel,
-                    section: student.section,
-                    lrn: student.lrn || `${new Date().getFullYear()}${String(index + 1).padStart(8, '0')}`,
-                    enrollmentDate: student.enrollmentDate || new Date().toLocaleDateString(),
-                    originalData: originalData
-                };
-            });
-            students.value = formattedStudents;
-            totalStudents.value = formattedStudents.length;
-            updateFilterCounts();
-        } catch (localError) {
-            console.error('Error loading from localStorage:', localError);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to load student data from both API and localStorage',
-                life: 3000
-            });
-        }
+        toast.add({
+            severity: 'error',
+            summary: 'Connection Error',
+            detail: 'Failed to load students from database. Please check if the server is running.',
+            life: 5000
+        });
+        students.value = [];
+        totalStudents.value = 0;
     } finally {
         loading.value = false;
     }
@@ -299,9 +273,11 @@ const updateFilterCounts = () => {
 
 // Calculate age from birthdate
 function calculateAge(birthdate) {
-    if (!birthdate) return 'N/A';
+    if (!birthdate || birthdate === 'N/A') return 0;
 
     const birthDate = new Date(birthdate);
+    if (isNaN(birthDate.getTime())) return 0;
+
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
@@ -310,7 +286,7 @@ function calculateAge(birthdate) {
         age--;
     }
 
-    return age;
+    return age > 0 ? age : 0;
 }
 
 // Format address for display
@@ -367,8 +343,9 @@ const filteredStudents = computed(() => {
 const saveStudent = async () => {
     submitted.value = true;
 
-    // Validation
-    if (!student.value.firstName?.trim() && !student.value.name?.trim()) {
+    // Validation - only check for name and grade level
+    const hasName = student.value.firstName?.trim() || student.value.name?.trim();
+    if (!hasName) {
         toast.add({
             severity: 'warn',
             summary: 'Validation Error',
@@ -404,34 +381,69 @@ const saveStudent = async () => {
     }
 
     try {
-        // Prepare student data for API (matching Laravel validation requirements)
+        // Prepare student data for API (using correct camelCase field names)
         const studentId = student.value.studentId || `STU${String(Date.now()).slice(-5)}`;
         const studentData = {
             // Required fields for Laravel validation
             name: student.value.name || `${student.value.firstName || ''} ${student.value.lastName || ''}`.trim() || 'Unknown',
-            gradelevel: student.value.gradeLevel || 'Grade 1',
+            gradeLevel: student.value.gradeLevel || 'Grade 1',
             section: student.value.section || 'Default',
 
             // Optional fields
-            firstname: student.value.firstName || '',
-            middlename: student.value.middleName || '',
-            lastname: student.value.lastName || '',
-            extensionname: student.value.extensionName || '',
-            birthdate: student.value.birthdate ? new Date(student.value.birthdate).toISOString().split('T')[0] : null,
-            age: student.value.age || calculateAge(student.value.birthdate) || 0,
+            firstName: student.value.firstName || '',
+            middleName: student.value.middleName || '',
+            lastName: student.value.lastName || '',
+            extensionName: student.value.extensionName || '',
+            birthdate: (() => {
+                if (!student.value.birthdate) return null;
+                try {
+                    const date = new Date(student.value.birthdate);
+                    if (isNaN(date.getTime())) return null;
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return null;
+                }
+            })(),
+            age: (() => {
+                const ageValue = student.value.age || calculateAge(student.value.birthdate);
+                return ageValue && ageValue !== 'N/A' && !isNaN(ageValue) ? parseInt(ageValue) : 0;
+            })(),
             gender: student.value.gender || 'Male',
             sex: student.value.gender || 'Male',
-            email: student.value.email || null,
-            contactinfo: student.value.phone || '',
-            parentcontact: student.value.parentContact || student.value.phone || '',
+            email: student.value.email && student.value.email.trim() !== '' ? student.value.email.trim() : null,
+            contactInfo: student.value.phone || '',
+            parentContact: student.value.parentContact || student.value.phone || '',
             address: student.value.address || '',
             lrn: student.value.lrn || `${new Date().getFullYear()}${String(Date.now()).slice(-8)}`,
-            studentid: studentId,
-            student_id: studentId,
+            studentId: studentId,
             // Include base64 photo data for backend processing
             photo: student.value.photo || null,
-            profilephoto: student.value.photo || student.value.profilephoto || null,
-            status: student.value.status || 'Enrolled'
+            profilePhoto: student.value.photo || student.value.profilePhoto || null,
+            status: student.value.status || 'Enrolled',
+            enrollmentDate: (() => {
+                if (!student.value.enrollmentDate || student.value.enrollmentDate === 'N/A') {
+                    return new Date().toISOString().split('T')[0];
+                }
+                try {
+                    const date = new Date(student.value.enrollmentDate);
+                    if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return new Date().toISOString().split('T')[0];
+                }
+            })(),
+            admissionDate: (() => {
+                if (!student.value.admissionDate || student.value.admissionDate === 'N/A') {
+                    return new Date().toISOString().split('T')[0];
+                }
+                try {
+                    const date = new Date(student.value.admissionDate);
+                    if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return new Date().toISOString().split('T')[0];
+                }
+            })()
         };
 
         console.log('Saving student data:', studentData);
@@ -441,7 +453,7 @@ const saveStudent = async () => {
         if (student.value.id) {
             // Update existing student
             console.log('Updating existing student with ID:', student.value.id);
-            response = await fetch(`http://localhost:8000/api/students/${student.value.id}`, {
+            response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -453,7 +465,7 @@ const saveStudent = async () => {
         } else {
             // Create new student
             console.log('Creating new student');
-            response = await fetch('http://localhost:8000/api/students', {
+            response = await fetch('http://127.0.0.1:8000/api/students', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -465,6 +477,7 @@ const saveStudent = async () => {
         }
 
         console.log('API Response status:', response.status);
+        console.log('API Response headers:', response.headers);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -478,74 +491,42 @@ const saveStudent = async () => {
             throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
         }
 
-        const savedStudent = await response.json();
-        console.log('Student saved to database:', savedStudent);
+        // Success - database save worked
+        const result = await response.json();
+        console.log('Student saved successfully:', result);
 
-        // Also save to localStorage as backup
-        try {
-            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            if (student.value.id) {
-                const index = enrolledStudents.findIndex((s) => s.id === student.value.id);
-                if (index !== -1) {
-                    enrolledStudents[index] = { ...enrolledStudents[index], ...student.value };
-                }
-            } else {
-                enrolledStudents.push({ ...student.value, id: savedStudent.id });
-            }
-            localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
-        } catch (localError) {
-            console.warn('Failed to save to localStorage backup:', localError);
-        }
-
-        // Reload students from database
+        // Reload students from database to get updated data
         await loadStudents();
 
+        // Close dialog and reset form
         studentDialog.value = false;
+        student.value = {};
+        submitted.value = false;
+
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: `Student ${student.value.id ? 'Updated' : 'Created'} and saved to database!`,
+            detail: result.id ? 'Student updated successfully!' : 'Student added successfully!',
             life: 3000
         });
     } catch (error) {
         console.error('Error saving student to database:', error);
-
-        // Fallback to localStorage only
-        try {
-            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            if (student.value.id) {
-                const index = enrolledStudents.findIndex((s) => s.id === student.value.id);
-                if (index !== -1) {
-                    enrolledStudents[index] = { ...enrolledStudents[index], ...student.value };
-                }
-            } else {
-                const newStudent = {
-                    ...student.value,
-                    id: enrolledStudents.length + 1,
-                    studentId: `STU${String(enrolledStudents.length + 1).padStart(5, '0')}`,
-                    enrollmentDate: new Date().toISOString().split('T')[0],
-                    status: 'Enrolled',
-                    lrn: student.value.lrn || `${new Date().getFullYear()}${String(enrolledStudents.length + 1).padStart(8, '0')}`
-                };
-                enrolledStudents.push(newStudent);
-            }
-            localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
-            await loadStudents();
-            studentDialog.value = false;
-            toast.add({
-                severity: 'warn',
-                summary: 'Saved Locally',
-                detail: 'Database unavailable. Student saved to local storage only.',
-                life: 5000
-            });
-        } catch (localError) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to save student to both database and localStorage',
-                life: 3000
-            });
+        
+        // Show detailed error message
+        let errorMessage = 'Failed to save student to database.';
+        if (error.message) {
+            errorMessage += ` Error: ${error.message}`;
         }
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Database Error',
+            detail: errorMessage,
+            life: 8000
+        });
+        
+        // Don't close dialog on error so user can retry
+        submitted.value = false;
     }
 };
 
@@ -560,7 +541,7 @@ function editStudent(studentData) {
         lastName: studentData.lastName || studentData.name?.split(' ').slice(1).join(' ') || '',
         extensionName: studentData.extensionName || '',
         name: studentData.name || '',
-        birthdate: studentData.birthdate ? new Date(studentData.birthdate) : null,
+        birthdate: studentData.birthdate && studentData.birthdate !== 'N/A' ? new Date(studentData.birthdate) : null,
         age: studentData.age || '',
         gender: studentData.gender || 'Male',
 
@@ -617,7 +598,7 @@ function confirmDeleteStudent(studentData) {
 const deleteStudent = async () => {
     try {
         // Delete from database first
-        const response = await fetch(`http://localhost:8000/api/students/${student.value.id}`, {
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
@@ -631,20 +612,6 @@ const deleteStudent = async () => {
 
         console.log('Student deleted from database:', student.value.id);
 
-        // Also remove from localStorage backup
-        try {
-            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            const updatedStudents = enrolledStudents.filter((s) => {
-                if (s.studentId && student.value.studentId) {
-                    return s.studentId !== student.value.studentId;
-                }
-                return s.id !== student.value.id;
-            });
-            localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
-        } catch (localError) {
-            console.warn('Failed to remove from localStorage backup:', localError);
-        }
-
         // Reload students from database
         await loadStudents();
 
@@ -652,38 +619,17 @@ const deleteStudent = async () => {
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: 'Student deleted from database successfully!',
+            detail: 'Student deleted successfully!',
             life: 3000
         });
     } catch (error) {
         console.error('Error deleting student from database:', error);
-
-        // Fallback to localStorage only
-        try {
-            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            const updatedStudents = enrolledStudents.filter((s) => {
-                if (s.studentId && student.value.studentId) {
-                    return s.studentId !== student.value.studentId;
-                }
-                return s.id !== student.value.id;
-            });
-            localStorage.setItem('enrolledStudents', JSON.stringify(updatedStudents));
-            await loadStudents();
-            deleteStudentDialog.value = false;
-            toast.add({
-                severity: 'warn',
-                summary: 'Deleted Locally',
-                detail: 'Database unavailable. Student removed from local storage only.',
-                life: 5000
-            });
-        } catch (localError) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to delete student from both database and localStorage',
-                life: 3000
-            });
-        }
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to delete student from database. Please check your connection.',
+            life: 5000
+        });
     }
 };
 
@@ -1137,12 +1083,12 @@ onMounted(() => {
     loadStudents();
 
     // Set QR codes from backend data first
-    students.value.forEach(student => {
+    students.value.forEach((student) => {
         if (student.qrCodePath && student.lrn) {
             qrCodes.value[student.lrn] = student.qrCodePath;
         }
     });
-    
+
     // Generate QR codes for students without backend QR codes
     setTimeout(() => {
         generateAllQRCodes();
