@@ -17,17 +17,27 @@ class StudentController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string',
-            'gradelevel' => 'required|string',
-            'section' => 'required|string',
-            'studentid' => 'nullable|string|unique:students',
-            'student_id' => 'nullable|string|unique:students',
-            'email' => 'nullable|email',
-            'gender' => 'nullable|string',
+            'name' => 'required|string|max:255',
+            'gradeLevel' => 'required|string|max:50',
+            'section' => 'nullable|string|max:50',
+            'studentId' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
+            'gender' => 'nullable|string|max:10',
             'birthdate' => 'nullable|date',
-            'lrn' => 'nullable|string',
+            'lrn' => 'nullable|string|max:50',
             'photo' => 'nullable|string',
-            'profilephoto' => 'nullable|string'
+            'profilePhoto' => 'nullable|string',
+            'age' => 'nullable|integer|min:0|max:150',
+            'firstName' => 'nullable|string|max:100',
+            'middleName' => 'nullable|string|max:100',
+            'lastName' => 'nullable|string|max:100',
+            'extensionName' => 'nullable|string|max:20',
+            'contactInfo' => 'nullable|string|max:255',
+            'parentContact' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:500',
+            'status' => 'nullable|string|max:50',
+            'enrollmentDate' => 'nullable|date',
+            'admissionDate' => 'nullable|date'
         ]);
 
         $data = $request->all();
@@ -35,17 +45,17 @@ class StudentController extends Controller
         // Handle photo upload if base64 data is provided
         if ($request->has('photo') && $request->photo && strpos($request->photo, 'data:image') === 0) {
             $photoPath = $this->saveBase64Image($request->photo, 'photos');
-            $data['profilephoto'] = $photoPath;
+            $data['profilePhoto'] = $photoPath;
             $data['photo'] = $photoPath;
             \Log::info('Photo saved to: ' . $photoPath);
         }
         
-        // Generate and save QR code
-        if ($request->has('lrn') && $request->lrn) {
-            $qrPath = $this->generateAndSaveQRCode($request->lrn);
-            $data['qr_code_path'] = $qrPath;
-            \Log::info('QR code saved to: ' . $qrPath);
-        }
+        // Generate and save QR code (temporarily disabled due to imagick requirement)
+        // if ($request->has('lrn') && $request->lrn) {
+        //     $qrPath = $this->generateAndSaveQRCode($request->lrn);
+        //     $data['qr_code_path'] = $qrPath;
+        //     \Log::info('QR code saved to: ' . $qrPath);
+        // }
 
         $student = Student::create($data);
         return response()->json($student, 201);
@@ -59,13 +69,27 @@ class StudentController extends Controller
     public function update(Request $request, Student $student)
     {
         $request->validate([
-            'name' => 'required|string',
-            'gradelevel' => 'required|string',
-            'section' => 'required|string',
-            'email' => 'nullable|email',
-            'gender' => 'nullable|string',
+            'name' => 'required|string|max:255',
+            'gradeLevel' => 'required|string|max:50',
+            'section' => 'nullable|string|max:50',
+            'studentId' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
+            'gender' => 'nullable|string|max:10',
             'birthdate' => 'nullable|date',
-            'lrn' => 'nullable|string'
+            'lrn' => 'nullable|string|max:50',
+            'photo' => 'nullable|string',
+            'profilePhoto' => 'nullable|string',
+            'age' => 'nullable|integer|min:0|max:150',
+            'firstName' => 'nullable|string|max:100',
+            'middleName' => 'nullable|string|max:100',
+            'lastName' => 'nullable|string|max:100',
+            'extensionName' => 'nullable|string|max:20',
+            'contactInfo' => 'nullable|string|max:255',
+            'parentContact' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:500',
+            'status' => 'nullable|string|max:50',
+            'enrollmentDate' => 'nullable|date',
+            'admissionDate' => 'nullable|date'
         ]);
 
         $student->update($request->all());
@@ -80,12 +104,12 @@ class StudentController extends Controller
 
     public function byGrade($gradeLevel)
     {
-        return Student::where('gradelevel', $gradeLevel)->get();
+        return Student::where('gradeLevel', $gradeLevel)->get();
     }
 
     public function bySection($gradeLevel, $section)
     {
-        return Student::where('gradelevel', $gradeLevel)
+        return Student::where('gradeLevel', $gradeLevel)
                       ->where('section', $section)
                       ->get();
     }
