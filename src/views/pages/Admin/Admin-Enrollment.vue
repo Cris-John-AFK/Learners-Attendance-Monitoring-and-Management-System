@@ -4,8 +4,6 @@ import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import TabPanel from 'primevue/tabpanel';
-import TabView from 'primevue/tabview';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
@@ -91,37 +89,34 @@ onMounted(() => {
     loadAdmittedStudents();
 });
 
-// Load admitted students from database
+// Load admitted students from localStorage
 async function loadAdmittedStudents() {
     loading.value = true;
     try {
-        // Fetch students from database with status 'Admitted' and enrollmentStatus 'Not Enrolled'
-        const response = await fetch('http://localhost:8000/api/students');
-        if (!response.ok) {
-            throw new Error('Failed to fetch students from database');
-        }
+        // Load admitted students from localStorage where Admission Center saves them
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
         
-        const allStudents = await response.json();
-        
-        // Filter for admitted students who are not yet enrolled
-        const admittedNotEnrolledStudents = allStudents.filter(student => 
+        // Combine both sources and filter for admitted students
+        const allStudents = [...enrollmentRegistrations, ...pendingApplicants];
+        const admittedNotEnrolledStudents = allStudents.filter((student) => 
             student.status === 'Admitted' && 
-            (student.enrollmentstatus === 'Not Enrolled' || !student.enrollmentstatus)
+            (student.enrollmentStatus === 'Not Enrolled' || !student.enrollmentStatus)
         );
-        
+
         // Format students for display
         const formattedStudents = admittedNotEnrolledStudents.map((student, index) => {
             return {
-                id: student.id,
-                studentId: student.studentid || `STU${String(student.id).padStart(5, '0')}`,
-                name: `${student.firstname} ${student.lastname}`,
-                firstName: student.firstname,
-                lastName: student.lastname,
+                id: student.id || index + 1,
+                studentId: student.studentId || student.studentid || `STU${String(student.id || index + 1).padStart(5, '0')}`,
+                name: student.name || `${student.firstName || student.firstname || ''} ${student.lastName || student.lastname || ''}`.trim(),
+                firstName: student.firstName || student.firstname || '',
+                lastName: student.lastName || student.lastname || '',
                 email: student.email || 'N/A',
                 birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
                 address: student.address || 'N/A',
-                contact: student.contact || 'N/A',
-                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
+                contact: student.contact || student.phone || 'N/A',
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
                 status: 'Admitted',
                 enrollmentStatus: 'Not Enrolled',
                 gradeLevel: student.gradelevel || '',
@@ -130,14 +125,15 @@ async function loadAdmittedStudents() {
                 originalData: student
             };
         });
-        
+
         students.value = formattedStudents;
+        console.log('Loaded admitted students from localStorage:', formattedStudents);
     } catch (error) {
-        console.error('Error loading admitted students:', error);
+        console.error('Error loading admitted students from localStorage:', error);
         toast.add({
             severity: 'error',
-            summary: 'Database Error',
-            detail: 'Failed to load student data from database.',
+            summary: 'Loading Error',
+            detail: 'Failed to load admitted students.',
             life: 3000
         });
         students.value = [];
@@ -182,7 +178,6 @@ const selectedSubjects = computed(() => {
     return subjects[gradeCode] || [];
 });
 
-
 const notEnrolledStudents = computed(() => {
     return students.value.filter((s) => s.enrollmentStatus === 'Not Enrolled');
 });
@@ -210,7 +205,7 @@ function openEnrollmentDialog() {
 
     // Close the student details modal first
     showStudentDetails.value = false;
-    
+
     // Reset selection
     selectedGradeLevel.value = null;
     selectedSection.value = null;
@@ -242,7 +237,7 @@ async function confirmEnrollment() {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             },
             body: JSON.stringify(updateData)
         });
@@ -360,7 +355,6 @@ async function confirmEnrollment() {
                     </div>
                 </div>
             </div>
-
         </div>
 
         <!-- Enrollment Dialog -->
@@ -487,8 +481,12 @@ async function confirmEnrollment() {
                                 <i class="pi pi-check-circle text-green-500 text-2xl mr-3"></i>
                                 <div>
                                     <h5 class="m-0 text-green-700">Student Enrolled</h5>
-                                    <p class="m-0">Enrollment Date: <strong>{{ selectedStudent?.enrollmentDate }}</strong></p>
-                                    <p class="m-0 mt-1">Grade: <strong>{{ selectedStudent?.gradeLevel }}</strong> | Section: <strong>{{ selectedStudent?.section }}</strong></p>
+                                    <p class="m-0">
+                                        Enrollment Date: <strong>{{ selectedStudent?.enrollmentDate }}</strong>
+                                    </p>
+                                    <p class="m-0 mt-1">
+                                        Grade: <strong>{{ selectedStudent?.gradeLevel }}</strong> | Section: <strong>{{ selectedStudent?.section }}</strong>
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -498,7 +496,7 @@ async function confirmEnrollment() {
                                 <div>
                                     <h5 class="m-0 text-blue-700">Not Yet Enrolled</h5>
                                     <p class="m-0">This student has been admitted but is not yet enrolled in any class.</p>
-                                    
+
                                     <div class="mt-3">
                                         <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="openEnrollmentDialog" />
                                     </div>
@@ -847,21 +845,21 @@ async function confirmEnrollment() {
         gap: 1.5rem;
         text-align: center;
     }
-    
+
     .header-actions {
         align-items: center;
         width: 100%;
     }
-    
+
     .search-input {
         width: 100%;
         max-width: 300px;
     }
-    
+
     .header-title {
         font-size: 1.5rem;
     }
-    
+
     .grid > .col-12 {
         padding: 0.5rem;
     }

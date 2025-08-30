@@ -1,13 +1,14 @@
 <script setup>
+import Dropdown from 'primevue/dropdown';
 import { useToast } from 'primevue/usetoast';
 import { reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import Dropdown from 'primevue/dropdown';
 
 const router = useRouter();
 const toast = useToast();
 const currentStep = ref(1);
 const submitted = ref(false);
+const showSuccessAnimation = ref(false);
 
 // Grade levels for dropdown
 const gradeLevels = [
@@ -209,7 +210,7 @@ const validateCurrentStep = () => {
 // Submit the form
 const submitForm = async () => {
     submitted.value = true;
-    
+
     if (!validateCurrentStep()) {
         toast.add({
             severity: 'error',
@@ -219,11 +220,11 @@ const submitForm = async () => {
         });
         return;
     }
-    
+
     try {
         // Create a unique ID for the application
         const applicationId = 'APP' + Date.now().toString();
-        
+
         // Format the student data for storage
         const applicationData = {
             id: applicationId,
@@ -243,16 +244,19 @@ const submitForm = async () => {
                 others: false
             }
         };
-        
+
         // Save to enrollmentRegistrations for the admission system to read
         const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
         enrollmentRegistrations.push(student);
         localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
-        
+
         // Also save to pendingApplicants for backward compatibility
         const existingApplications = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
         existingApplications.push(applicationData);
         localStorage.setItem('pendingApplicants', JSON.stringify(existingApplications));
+
+        // Show success animation
+        showSuccessAnimation.value = true;
 
         // Show success message
         toast.add({
@@ -262,10 +266,11 @@ const submitForm = async () => {
             life: 5000
         });
 
-        // Reset form or redirect
+        // Reset form or redirect after animation
         setTimeout(() => {
+            showSuccessAnimation.value = false;
             router.push('/enrollment/landing');
-        }, 2000);
+        }, 5000);
     } catch (error) {
         console.error('Error submitting form:', error);
         toast.add({
@@ -283,6 +288,30 @@ const copyCurrentToPermanent = () => {
         student.permanentAddress = { ...student.currentAddress };
     }
 };
+
+// Calculate age from birthdate
+const calculateAge = (birthdate) => {
+    if (!birthdate) return null;
+
+    const today = new Date();
+    const birth = new Date(birthdate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+    }
+
+    return age;
+};
+
+// Watch for changes in birthdate to auto-calculate age
+watch(
+    () => student.birthdate,
+    (newBirthdate) => {
+        student.age = calculateAge(newBirthdate);
+    }
+);
 
 // Watch for changes in sameAddress
 watch(
@@ -335,6 +364,41 @@ const floatingItems = reactive([
             }"
         >
             {{ item.content }}
+        </div>
+
+        <!-- Success Animation Overlay -->
+        <div v-if="showSuccessAnimation" class="success-overlay">
+            <div class="success-content">
+                <div class="success-icon">
+                    <i class="pi pi-check-circle"></i>
+                </div>
+                <h2 class="success-title">Thank You for Enrolling!</h2>
+                <p class="success-message">Your enrollment application has been submitted successfully.</p>
+                <p class="success-submessage">We will review your application and contact you soon.</p>
+            </div>
+
+            <!-- Fireworks Animation -->
+            <div class="fireworks">
+                <div class="firework" v-for="n in 6" :key="n" :style="{ '--delay': (n - 1) * 0.5 + 's' }">
+                    <div class="explosion">
+                        <div class="spark" v-for="i in 12" :key="i" :style="{ '--angle': i * 30 + 'deg' }"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confetti -->
+            <div class="confetti">
+                <div
+                    class="confetti-piece"
+                    v-for="n in 50"
+                    :key="n"
+                    :style="{
+                        '--delay': Math.random() * 3 + 's',
+                        '--x': Math.random() * 100 + '%',
+                        '--color': ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3'][Math.floor(Math.random() * 6)]
+                    }"
+                ></div>
+            </div>
         </div>
 
         <div class="registration-card">
@@ -528,7 +592,7 @@ const floatingItems = reactive([
 
                 <div class="form-group">
                     <label for="age">Age</label>
-                    <InputNumber id="age" v-model="student.age" :min="0" :max="100" />
+                    <InputNumber id="age" v-model="student.age" :min="0" :max="100" :disabled="true" placeholder="Auto-calculated from birthdate" />
                     <small v-if="submitted && !student.age" class="p-error">Age is required</small>
                 </div>
 
@@ -1438,6 +1502,206 @@ label {
     .checkbox-options {
         flex-direction: column;
         gap: 0.75rem;
+    }
+}
+
+/* Success Animation Styles */
+.success-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.success-content {
+    text-align: center;
+    color: white;
+    z-index: 10001;
+    animation: bounceIn 1s ease-out;
+}
+
+.success-icon {
+    font-size: 5rem;
+    color: #4ade80;
+    margin-bottom: 1rem;
+    animation: pulse 2s infinite;
+}
+
+.success-title {
+    font-size: 3rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.success-message {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.9;
+}
+
+.success-submessage {
+    font-size: 1.2rem;
+    opacity: 0.8;
+}
+
+/* Fireworks Animation */
+.fireworks {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10000;
+}
+
+.firework {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: fireworkLaunch 3s infinite;
+    animation-delay: var(--delay);
+}
+
+.explosion {
+    position: relative;
+    width: 0;
+    height: 0;
+}
+
+.spark {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: radial-gradient(circle, #ffd700, #ff6b6b);
+    border-radius: 50%;
+    animation: sparkFly 1.5s ease-out infinite;
+    animation-delay: var(--delay);
+    transform: rotate(var(--angle)) translateX(0);
+}
+
+/* Confetti Animation */
+.confetti {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10000;
+}
+
+.confetti-piece {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--color);
+    top: -10px;
+    left: var(--x);
+    animation: confettiFall 3s linear infinite;
+    animation-delay: var(--delay);
+    border-radius: 2px;
+}
+
+/* Keyframe Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0.3);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+@keyframes fireworkLaunch {
+    0% {
+        transform: translate(-50%, 100vh) scale(0);
+    }
+    15% {
+        transform: translate(-50%, -50%) scale(0);
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+@keyframes sparkFly {
+    0% {
+        transform: rotate(var(--angle)) translateX(0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: rotate(var(--angle)) translateX(200px) scale(0);
+        opacity: 0;
+    }
+}
+
+@keyframes confettiFall {
+    0% {
+        transform: translateY(-10px) rotateZ(0deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(100vh) rotateZ(720deg);
+        opacity: 0;
+    }
+}
+
+/* Responsive adjustments for success animation */
+@media (max-width: 768px) {
+    .success-title {
+        font-size: 2rem;
+    }
+
+    .success-message {
+        font-size: 1.2rem;
+    }
+
+    .success-submessage {
+        font-size: 1rem;
+    }
+
+    .success-icon {
+        font-size: 3rem;
     }
 }
 </style>

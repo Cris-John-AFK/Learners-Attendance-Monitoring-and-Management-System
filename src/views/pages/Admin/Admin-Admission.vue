@@ -146,35 +146,34 @@ onMounted(() => {
     loadApplicants();
 });
 
-// Load pending applications from database
+// Load pending applications from localStorage
 async function loadApplicants() {
     loading.value = true;
     try {
-        // Fetch students from database with status 'Pending' or 'Admitted'
-        const response = await fetch('http://localhost:8000/api/students');
-        if (!response.ok) {
-            throw new Error('Failed to fetch students from database');
-        }
-        
-        const students = await response.json();
-        
-        // Filter for pending and admitted students only
-        const pendingAndAdmittedStudents = students.filter(student => 
-            student.status === 'Pending' || student.status === 'Admitted'
-        );
-        
+        // Load from localStorage where Registration Form saves data
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+
+        // Combine both localStorage sources
+        const allApplicants = [...enrollmentRegistrations, ...pendingApplicants];
+
+        // Remove duplicates based on email or name
+        const uniqueApplicants = allApplicants.filter((applicant, index, arr) => {
+            return arr.findIndex((a) => a.email === applicant.email || (a.firstName === applicant.firstName && a.lastName === applicant.lastName)) === index;
+        });
+
         // Format students for display
-        const formattedApplicants = pendingAndAdmittedStudents.map((student, index) => {
+        const formattedApplicants = uniqueApplicants.map((student, index) => {
             return {
-                id: student.id,
-                name: `${student.firstname} ${student.lastname}`,
-                firstName: student.firstname,
-                lastName: student.lastname,
+                id: student.id || index + 1,
+                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+                firstName: student.firstName || student.firstname || '',
+                lastName: student.lastName || student.lastname || '',
                 email: student.email || 'N/A',
                 birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
                 address: student.address || 'N/A',
-                contact: student.contact || 'N/A',
-                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
+                contact: student.contact || student.phone || 'N/A',
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
                 requirements: {
                     form138: student.form138 || false,
                     psa: student.psa || false,
@@ -188,14 +187,15 @@ async function loadApplicants() {
                 originalData: student
             };
         });
-        
+
         applicants.value = formattedApplicants;
+        console.log('Loaded applicants from localStorage:', formattedApplicants);
     } catch (error) {
-        console.error('Error loading applicants:', error);
+        console.error('Error loading applicants from localStorage:', error);
         toast.add({
             severity: 'error',
-            summary: 'Database Error',
-            detail: 'Failed to load student data from database.',
+            summary: 'Loading Error',
+            detail: 'Failed to load registration data.',
             life: 3000
         });
         applicants.value = [];
@@ -258,7 +258,7 @@ async function admitApplicant() {
     try {
         // Generate a student ID if not exists
         const studentId = selectedApplicant.value.studentId || 'STU' + String(Date.now()).slice(-8);
-        
+
         // Prepare data for database update
         const updateData = {
             status: 'Admitted',
@@ -271,23 +271,40 @@ async function admitApplicant() {
             others: selectedApplicant.value.requirements.others
         };
 
-        // Update student in database
-        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(updateData)
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to update student in database');
-        }
-
-        // Update local state
+        // Update in localStorage
         selectedApplicant.value.status = 'Admitted';
         selectedApplicant.value.studentId = studentId;
+
+        // Update in localStorage sources
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+
+        // Find and update in enrollmentRegistrations
+        const regIndex = enrollmentRegistrations.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (regIndex !== -1) {
+            enrollmentRegistrations[regIndex].status = 'Admitted';
+            enrollmentRegistrations[regIndex].studentId = studentId;
+            enrollmentRegistrations[regIndex] = { ...enrollmentRegistrations[regIndex], ...updateData };
+            localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
+        }
+
+        // Find and update in pendingApplicants
+        const pendingIndex = pendingApplicants.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (pendingIndex !== -1) {
+            pendingApplicants[pendingIndex].status = 'Admitted';
+            pendingApplicants[pendingIndex].studentId = studentId;
+            pendingApplicants[pendingIndex] = { ...pendingApplicants[pendingIndex], ...updateData };
+            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        }
+
+        // Update the applicants array
+        const applicantIndex = applicants.value.findIndex((app) => app.id === selectedApplicant.value.id);
+        if (applicantIndex !== -1) {
+            applicants.value[applicantIndex].status = 'Admitted';
+            applicants.value[applicantIndex].studentId = studentId;
+        }
 
         // Show success message
         toast.add({
@@ -299,7 +316,6 @@ async function admitApplicant() {
 
         // Reload the applicant list
         await loadApplicants();
-
     } catch (error) {
         console.error('Error admitting student:', error);
         toast.add({
@@ -312,36 +328,47 @@ async function admitApplicant() {
 }
 
 async function toggleRequirement(requirementKey) {
-    if (!selectedApplicant.value || selectedApplicant.value.status !== 'Pending') return;
+    if (!selectedApplicant.value) return;
 
     try {
-        // Toggle the requirement status
+        // Update the requirement status
         selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
 
-        // Prepare data for database update
-        const updateData = {
-            form138: selectedApplicant.value.requirements.form138,
-            psa: selectedApplicant.value.requirements.psa,
-            goodmoral: selectedApplicant.value.requirements.goodMoral,
-            others: selectedApplicant.value.requirements.others
-        };
+        // Update in localStorage
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
 
-        // Update in database
-        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(updateData)
-        });
+        // Find and update in enrollmentRegistrations
+        const regIndex = enrollmentRegistrations.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
 
-        if (!response.ok) {
-            throw new Error('Failed to update requirements in database');
+        if (regIndex !== -1) {
+            enrollmentRegistrations[regIndex].requirements = selectedApplicant.value.requirements;
+            localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
         }
+
+        // Find and update in pendingApplicants
+        const pendingIndex = pendingApplicants.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (pendingIndex !== -1) {
+            pendingApplicants[pendingIndex].requirements = selectedApplicant.value.requirements;
+            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        }
+
+        // Update the applicants array
+        const applicantIndex = applicants.value.findIndex((app) => app.id === selectedApplicant.value.id);
+        if (applicantIndex !== -1) {
+            applicants.value[applicantIndex].requirements = selectedApplicant.value.requirements;
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Updated',
+            detail: 'Requirement status updated successfully.',
+            life: 2000
+        });
     } catch (error) {
         console.error('Error updating requirements:', error);
-        // Revert the change if database update failed
+        // Revert the change if update failed
         selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
         toast.add({
             severity: 'error',
@@ -358,22 +385,35 @@ async function markIncomplete() {
     if (!selectedApplicant.value) return;
 
     try {
-        // Update student status in database
-        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ status: 'Incomplete' })
-        });
+        // Update status in localStorage
+        selectedApplicant.value.status = 'Incomplete';
 
-        if (!response.ok) {
-            throw new Error('Failed to update student status');
+        // Update in localStorage sources
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+
+        // Find and update in enrollmentRegistrations
+        const regIndex = enrollmentRegistrations.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (regIndex !== -1) {
+            enrollmentRegistrations[regIndex].status = 'Incomplete';
+            localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
         }
 
-        selectedApplicant.value.status = 'Incomplete';
-        
+        // Find and update in pendingApplicants
+        const pendingIndex = pendingApplicants.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (pendingIndex !== -1) {
+            pendingApplicants[pendingIndex].status = 'Incomplete';
+            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        }
+
+        // Update the applicants array
+        const applicantIndex = applicants.value.findIndex((app) => app.id === selectedApplicant.value.id);
+        if (applicantIndex !== -1) {
+            applicants.value[applicantIndex].status = 'Incomplete';
+        }
+
         toast.add({
             severity: 'info',
             summary: 'Marked Incomplete',
@@ -397,22 +437,35 @@ async function rejectApplicant() {
     if (!selectedApplicant.value) return;
 
     try {
-        // Update student status in database
-        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ status: 'Rejected' })
-        });
+        // Update status in localStorage
+        selectedApplicant.value.status = 'Rejected';
 
-        if (!response.ok) {
-            throw new Error('Failed to reject student');
+        // Update in localStorage sources
+        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
+        const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
+
+        // Find and update in enrollmentRegistrations
+        const regIndex = enrollmentRegistrations.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (regIndex !== -1) {
+            enrollmentRegistrations[regIndex].status = 'Rejected';
+            localStorage.setItem('enrollmentRegistrations', JSON.stringify(enrollmentRegistrations));
         }
 
-        selectedApplicant.value.status = 'Rejected';
-        
+        // Find and update in pendingApplicants
+        const pendingIndex = pendingApplicants.findIndex((app) => app.email === selectedApplicant.value.email || (app.firstName === selectedApplicant.value.firstName && app.lastName === selectedApplicant.value.lastName));
+
+        if (pendingIndex !== -1) {
+            pendingApplicants[pendingIndex].status = 'Rejected';
+            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
+        }
+
+        // Update the applicants array
+        const applicantIndex = applicants.value.findIndex((app) => app.id === selectedApplicant.value.id);
+        if (applicantIndex !== -1) {
+            applicants.value[applicantIndex].status = 'Rejected';
+        }
+
         toast.add({
             severity: 'info',
             summary: 'Application Rejected',

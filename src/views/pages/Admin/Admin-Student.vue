@@ -511,20 +511,20 @@ const saveStudent = async () => {
         });
     } catch (error) {
         console.error('Error saving student to database:', error);
-        
+
         // Show detailed error message
         let errorMessage = 'Failed to save student to database.';
         if (error.message) {
             errorMessage += ` Error: ${error.message}`;
         }
-        
+
         toast.add({
             severity: 'error',
             summary: 'Database Error',
             detail: errorMessage,
             life: 8000
         });
-        
+
         // Don't close dialog on error so user can retry
         submitted.value = false;
     }
