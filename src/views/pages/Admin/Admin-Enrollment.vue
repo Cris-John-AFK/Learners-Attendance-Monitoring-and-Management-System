@@ -21,7 +21,7 @@ const showStudentDetails = ref(false);
 const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
-const activeTabIndex = ref(0); // Add active tab index for controlling which tab is active
+// Removed activeTabIndex since we no longer use tabs
 
 // Initialize with empty array, will be loaded from localStorage
 const students = ref([]);
@@ -91,65 +91,56 @@ onMounted(() => {
     loadAdmittedStudents();
 });
 
-// Load admitted students from localStorage
-function loadAdmittedStudents() {
+// Load admitted students from database
+async function loadAdmittedStudents() {
     loading.value = true;
     try {
-        // Get admitted students from localStorage
-        const admittedStudents = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
-
-        // Get enrolled students from localStorage
-        const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-
-        // Create a Map to track unique students by ID or name
-        const uniqueStudentsMap = new Map();
-
-        // Process admitted students and keep only unique ones
-        admittedStudents.forEach((student) => {
-            // Create a unique key using studentId or name
-            const uniqueKey = student.studentId || `${student.firstName}-${student.lastName}`;
-
-            // Only add if not already in the map
-            if (!uniqueStudentsMap.has(uniqueKey)) {
-                uniqueStudentsMap.set(uniqueKey, student);
-            }
-        });
-
-        // Convert map values to array and format for display
-        const formattedStudents = Array.from(uniqueStudentsMap.values()).map((student, index) => {
-            // Check if student is already enrolled
-            const enrolledStudent = enrolledStudents.find((es) => es.studentId === student.studentId || (es.firstName === student.firstName && es.lastName === student.lastName));
-
+        // Fetch students from database with status 'Admitted' and enrollmentStatus 'Not Enrolled'
+        const response = await fetch('http://localhost:8000/api/students');
+        if (!response.ok) {
+            throw new Error('Failed to fetch students from database');
+        }
+        
+        const allStudents = await response.json();
+        
+        // Filter for admitted students who are not yet enrolled
+        const admittedNotEnrolledStudents = allStudents.filter(student => 
+            student.status === 'Admitted' && 
+            (student.enrollmentstatus === 'Not Enrolled' || !student.enrollmentstatus)
+        );
+        
+        // Format students for display
+        const formattedStudents = admittedNotEnrolledStudents.map((student, index) => {
             return {
-                id: index + 1,
-                studentId: student.studentId || `STU${String(index + 1).padStart(5, '0')}`,
-                name: student.name || `${student.firstName} ${student.lastName}`,
-                firstName: student.firstName,
-                lastName: student.lastName,
+                id: student.id,
+                studentId: student.studentid || `STU${String(student.id).padStart(5, '0')}`,
+                name: `${student.firstname} ${student.lastname}`,
+                firstName: student.firstname,
+                lastName: student.lastname,
                 email: student.email || 'N/A',
                 birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                address: formatAddress(student),
+                address: student.address || 'N/A',
                 contact: student.contact || 'N/A',
-                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
                 status: 'Admitted',
-                enrollmentStatus: enrolledStudent ? 'Enrolled' : 'Not Enrolled',
-                gradeLevel: enrolledStudent?.gradeLevel || '',
-                section: enrolledStudent?.section || '',
-                enrollmentDate: enrolledStudent?.enrollmentDate || '',
-                // Store original data for reference
+                enrollmentStatus: 'Not Enrolled',
+                gradeLevel: student.gradelevel || '',
+                section: student.section || '',
+                enrollmentDate: student.enrollmentdate || '',
                 originalData: student
             };
         });
-
+        
         students.value = formattedStudents;
     } catch (error) {
         console.error('Error loading admitted students:', error);
         toast.add({
             severity: 'error',
-            summary: 'Error Loading Data',
-            detail: 'Failed to load student data.',
+            summary: 'Database Error',
+            detail: 'Failed to load student data from database.',
             life: 3000
         });
+        students.value = [];
     } finally {
         loading.value = false;
     }
@@ -191,9 +182,6 @@ const selectedSubjects = computed(() => {
     return subjects[gradeCode] || [];
 });
 
-const enrolledStudents = computed(() => {
-    return students.value.filter((s) => s.enrollmentStatus === 'Enrolled');
-});
 
 const notEnrolledStudents = computed(() => {
     return students.value.filter((s) => s.enrollmentStatus === 'Not Enrolled');
@@ -239,19 +227,38 @@ function proceedToConfirmation() {
     confirmationDialog.value = true;
 }
 
-function confirmEnrollment() {
+async function confirmEnrollment() {
     try {
-        // Update student record in the UI
+        // Prepare data for database update
+        const updateData = {
+            enrollmentstatus: 'Enrolled',
+            gradelevel: selectedGradeLevel.value.code,
+            section: selectedSection.value.name,
+            enrollmentdate: new Date().toISOString().split('T')[0]
+        };
+
+        // Update student in database
+        const response = await fetch(`http://localhost:8000/api/students/${selectedStudent.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to enroll student in database');
+        }
+
+        // Update local state
         selectedStudent.value.enrollmentStatus = 'Enrolled';
         selectedStudent.value.gradeLevel = selectedGradeLevel.value.name;
         selectedStudent.value.section = selectedSection.value.name;
-        selectedStudent.value.enrollmentDate = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+        selectedStudent.value.enrollmentDate = new Date().toISOString().split('T')[0];
 
-        // Update in localStorage
-        updateEnrollmentInStorage(selectedStudent.value);
-
-        // Switch to Enrolled tab
-        activeTabIndex.value = 1;
+        // Reload the student list to reflect changes
+        await loadAdmittedStudents();
 
         // Close dialog and show success message
         confirmationDialog.value = false;
@@ -262,16 +269,15 @@ function confirmEnrollment() {
             life: 3000
         });
 
-        // Ask if user wants to view the student in Student page
+        // Navigate to Student page after enrollment
         setTimeout(() => {
             toast.add({
                 severity: 'info',
-                summary: 'Student Added',
+                summary: 'Student Enrolled',
                 detail: `The student is now available in the Student Management page.`,
                 life: 5000
             });
 
-            // Navigate to Student page after a brief delay
             setTimeout(() => {
                 window.location.href = '#/admin/students';
             }, 2000);
@@ -280,32 +286,14 @@ function confirmEnrollment() {
         console.error('Error enrolling student:', error);
         toast.add({
             severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to enroll student.',
+            summary: 'Database Error',
+            detail: 'Failed to enroll student. Please try again.',
             life: 3000
         });
     }
 }
 
-function updateEnrollmentInStorage(student) {
-    // Get current data from localStorage
-    const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-
-    // Create enrollment record
-    const enrollmentRecord = {
-        ...student.originalData,
-        enrollmentStatus: 'Enrolled',
-        gradeLevel: student.gradeLevel,
-        section: student.section,
-        enrollmentDate: student.enrollmentDate
-    };
-
-    // Add to enrolled students
-    enrolledStudents.push(enrollmentRecord);
-
-    // Save back to localStorage
-    localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
-}
+// Remove localStorage function - now using direct database operations
 </script>
 
 <template>
@@ -324,8 +312,6 @@ function updateEnrollmentInStorage(student) {
                             <div class="student-count">
                                 <i class="pi pi-chart-bar mr-2"></i>
                                 Not Enrolled: <span class="count-badge">{{ notEnrolledStudents.length }}</span>
-                                <span class="mx-2">|</span>
-                                Enrolled: <span class="count-badge">{{ enrolledStudents.length }}</span>
                             </div>
                         </div>
                     </div>
@@ -354,28 +340,24 @@ function updateEnrollmentInStorage(student) {
                     </div>
 
                     <!-- Not Enrolled Students -->
-                    <TabView v-model:activeIndex="activeTabIndex">
-                        <TabPanel header="Not Enrolled">
-                            <div class="p-2">
-                                <p v-if="notEnrolledStudents.length === 0" class="text-center text-color-secondary p-3">No students to enroll</p>
-                                <div v-else class="student-list">
-                                    <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="openStudentModal(student)">
-                                        <div class="flex align-items-center">
-                                            <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
-                                            <div class="flex-1">
-                                                <div class="flex align-items-center justify-content-between">
-                                                    <span class="font-medium">{{ student.name }}</span>
-                                                    <Tag value="Not Enrolled" severity="warning" />
-                                                </div>
-                                                <div class="text-color-secondary text-sm mt-1">{{ student.studentId }}</div>
-                                            </div>
+                    <div class="p-2">
+                        <p v-if="notEnrolledStudents.length === 0" class="text-center text-color-secondary p-3">No students to enroll</p>
+                        <div v-else class="student-list">
+                            <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="openStudentModal(student)">
+                                <div class="flex align-items-center">
+                                    <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
+                                    <div class="flex-1">
+                                        <div class="flex align-items-center justify-content-between">
+                                            <span class="font-medium">{{ student.name }}</span>
+                                            <Tag value="Not Enrolled" severity="warning" />
                                         </div>
+                                        <div class="text-color-secondary text-sm mt-1">{{ student.studentId }}</div>
                                     </div>
-                                    <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ notEnrolledStudents.length }} not enrolled students</div>
                                 </div>
                             </div>
-                        </TabPanel>
-                    </TabView>
+                            <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ notEnrolledStudents.length }} not enrolled students</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

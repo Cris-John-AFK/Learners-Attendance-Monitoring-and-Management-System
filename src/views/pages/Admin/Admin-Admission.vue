@@ -5,6 +5,7 @@ import Checkbox from 'primevue/checkbox';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import TabPanel from 'primevue/tabpanel';
 import TabView from 'primevue/tabview';
@@ -12,7 +13,6 @@ import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
-import Dropdown from 'primevue/dropdown';
 
 const toast = useToast();
 const search = ref('');
@@ -106,7 +106,7 @@ const filteredApplicants = computed(() => {
             // Convert both to strings for comparison to avoid type issues
             const studentGrade = String(a.gradeLevel);
             const selectedGrade = String(selectedGradeLevel.value.code);
-            
+
             // Compare as strings to ensure proper matching
             return studentGrade === selectedGrade;
         });
@@ -141,130 +141,64 @@ const pendingCount = computed(() => applicants.value.filter((a) => a.status === 
 
 const admittedCount = computed(() => applicants.value.filter((a) => a.status === 'Admitted').length);
 
-// Load applicants from localStorage on component mount
+// Load applicants from database on component mount
 onMounted(() => {
     loadApplicants();
 });
 
-
-// Load pending applications from localStorage
-function loadApplicants() {
+// Load pending applications from database
+async function loadApplicants() {
     loading.value = true;
     try {
-        // Get pending applicants from localStorage or use test data if empty
-        let pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
-        console.log('Loaded pendingApplicants:', pendingApplicants);
-
-        // Get enrollment registrations from localStorage
-        const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
-        console.log('Loaded enrollmentRegistrations:', enrollmentRegistrations);
-
-        // Convert enrollment registrations to applicants format
-        if (enrollmentRegistrations.length > 0) {
-            const registrationApplicants = enrollmentRegistrations.map(registration => {
-                return {
-                    firstName: registration.firstName,
-                    lastName: registration.lastName,
-                    email: registration.email || registration.firstName.toLowerCase() + '@example.com',
-                    birthdate: registration.birthdate,
-                    contact: registration.father?.contactNumber || registration.mother?.contactNumber || 'N/A',
-                    address: formatAddress(registration.currentAddress),
-                    gradeLevel: registration.gradeLevel, // This will now match our system
-                    section: '',
-                    status: 'Pending',
-                    requirements: { 
-                        form138: false, 
-                        psa: registration.psaBirthCertNo ? true : false, 
-                        goodMoral: false, 
-                        others: false 
-                    },
-                    // Store the original data for reference
-                    originalData: registration
-                };
-            });
-            
-            // Add registration applicants to pending applicants
-            pendingApplicants = [...pendingApplicants, ...registrationApplicants];
+        // Fetch students from database with status 'Pending' or 'Admitted'
+        const response = await fetch('http://localhost:8000/api/students');
+        if (!response.ok) {
+            throw new Error('Failed to fetch students from database');
         }
-
-        // Add test data if no applicants exist
-        if (pendingApplicants.length === 0) {
-            // Add test students for different grade levels
-            pendingApplicants = [
-                {
-                    firstName: 'Beng',
-                    lastName: 'Beng',
-                    email: 'bengbeng@example.com',
-                    birthdate: '2014-05-15',
-                    contact: '09123456789',
-                    gradeLevel: '5', // Grade 5
-                    section: '5A', // Section A
-                    status: 'Pending',
-                    requirements: { form138: true, psa: true, goodMoral: false, others: false }
-                },
-                {
-                    firstName: 'New',
-                    lastName: 'Student',
-                    email: 'newstudent@example.com',
-                    birthdate: '2018-04-01',
-                    contact: '09123456788',
-                    gradeLevel: '1', // Grade 1
-                    section: '1A', // Section A
-                    status: 'Pending',
-                    requirements: { form138: true, psa: true, goodMoral: true, others: true }
-                }
-            ];
-            // Save to localStorage
-            localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
-        }
-
-        // Get admitted applicants from localStorage
-        const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
-
-        // Create a map to track unique applicants by email or studentId
-        const uniqueApplicantsMap = new Map();
-
-        // Process all applicants and keep only unique ones
-        [...pendingApplicants, ...admittedApplicants].forEach((applicant) => {
-            const uniqueKey = applicant.email || applicant.studentId || `${applicant.firstName}-${applicant.lastName}`;
-            // Only add if not already in the map
-            if (!uniqueApplicantsMap.has(uniqueKey)) {
-                uniqueApplicantsMap.set(uniqueKey, applicant);
-            }
-        });
-
-        // Convert map values to array and format for display
-        const formattedApplicants = Array.from(uniqueApplicantsMap.values()).map((applicant, index) => {
+        
+        const students = await response.json();
+        
+        // Filter for pending and admitted students only
+        const pendingAndAdmittedStudents = students.filter(student => 
+            student.status === 'Pending' || student.status === 'Admitted'
+        );
+        
+        // Format students for display
+        const formattedApplicants = pendingAndAdmittedStudents.map((student, index) => {
             return {
-                id: index + 1,
-                // Use name if available, otherwise construct from first and last name
-                name: applicant.name || `${applicant.firstName} ${applicant.lastName}`,
-                firstName: applicant.firstName,
-                lastName: applicant.lastName,
-                email: applicant.email || 'N/A',
-                birthdate: applicant.birthdate ? new Date(applicant.birthdate).toLocaleDateString() : 'N/A',
-                address: formatAddress(applicant),
-                contact: applicant.contact || 'N/A',
-                photo: applicant.photo || `https://randomuser.me/api/portraits/${applicant.sex === 'Female' ? 'women' : 'men'}/${index + 1}.jpg`,
-                requirements: applicant.requirements || { form138: false, psa: false, goodMoral: false, others: false },
-                status: applicant.status || 'Pending',
-                studentId: applicant.studentId || '',
-                gradeLevel: applicant.gradeLevel || 'K', // Default to Kindergarten if not specified
-                section: applicant.section || null,
-                // Store the original data for reference
-                originalData: applicant
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+                firstName: student.firstname,
+                lastName: student.lastname,
+                email: student.email || 'N/A',
+                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
+                address: student.address || 'N/A',
+                contact: student.contact || 'N/A',
+                photo: student.photo || `https://randomuser.me/api/portraits/${student.sex === 'Female' ? 'women' : 'men'}/${(index % 50) + 1}.jpg`,
+                requirements: {
+                    form138: student.form138 || false,
+                    psa: student.psa || false,
+                    goodMoral: student.goodmoral || false,
+                    others: student.others || false
+                },
+                status: student.status || 'Pending',
+                studentId: student.studentid || '',
+                gradeLevel: student.gradelevel || 'K',
+                section: student.section || null,
+                originalData: student
             };
         });
-
+        
         applicants.value = formattedApplicants;
     } catch (error) {
         console.error('Error loading applicants:', error);
         toast.add({
             severity: 'error',
-            summary: 'Error Loading Data',
-            detail: 'Failed to load applicant data.',
+            summary: 'Database Error',
+            detail: 'Failed to load student data from database.',
             life: 3000
         });
+        applicants.value = [];
     } finally {
         loading.value = false;
     }
@@ -281,10 +215,10 @@ function formatAddress(input) {
         if (input.city) parts.push(input.city);
         if (input.province) parts.push(input.province);
         if (input.zipCode) parts.push(input.zipCode);
-        
+
         return parts.join(', ') || 'N/A';
     }
-    
+
     // Handle applicant object
     if (!input || !input.address) return 'N/A';
     return input.address;
@@ -307,7 +241,7 @@ const allRequirementsComplete = computed(() => {
     return requirements.every((req) => selectedApplicant.value.requirements[req.key]);
 });
 
-function admitApplicant() {
+async function admitApplicant() {
     if (!selectedApplicant.value) return;
 
     // Check if all requirements are complete
@@ -321,155 +255,201 @@ function admitApplicant() {
         return;
     }
 
-    // Update student status to admitted
-    selectedApplicant.value.status = 'Admitted';
+    try {
+        // Generate a student ID if not exists
+        const studentId = selectedApplicant.value.studentId || 'STU' + String(Date.now()).slice(-8);
+        
+        // Prepare data for database update
+        const updateData = {
+            status: 'Admitted',
+            studentid: studentId,
+            admissiondate: new Date().toISOString().split('T')[0],
+            enrollmentstatus: 'Not Enrolled',
+            form138: selectedApplicant.value.requirements.form138,
+            psa: selectedApplicant.value.requirements.psa,
+            goodmoral: selectedApplicant.value.requirements.goodMoral,
+            others: selectedApplicant.value.requirements.others
+        };
 
-    // Generate a student ID
-    selectedApplicant.value.studentId = 'STU' + String(Date.now()).slice(-8);
-
-    // Update the data in localStorage
-    updateApplicantInStorage(selectedApplicant.value);
-
-    // Get the original data to create an admitted student record
-    const originalData = selectedApplicant.value.originalData || selectedApplicant.value;
-
-    // Create a student record for enrollment
-    const admittedStudent = {
-        ...originalData,
-        studentId: selectedApplicant.value.studentId,
-        name: selectedApplicant.value.name || `${originalData.firstName} ${originalData.lastName}`,
-        status: 'Admitted',
-        enrollmentStatus: 'Not Enrolled', // Initial status for enrollment
-        admissionDate: new Date().toISOString()
-    };
-
-    // Get existing admitted students from localStorage
-    const admittedStudents = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
-
-    // Add the new admitted student
-    admittedStudents.push(admittedStudent);
-
-    // Save back to localStorage
-    localStorage.setItem('admittedApplicants', JSON.stringify(admittedStudents));
-
-    // Show success message
-    toast.add({
-        severity: 'success',
-        summary: 'Student Admitted',
-        detail: `${selectedApplicant.value.name} has been successfully admitted with Student ID: ${selectedApplicant.value.studentId}`,
-        life: 3000
-    });
-
-    // Reload the applicant list
-    loadApplicants();
-
-    // Switch to Admitted tab
-    activeTab.value = 1;
-}
-
-function toggleRequirement(requirementKey) {
-    if (!selectedApplicant.value || selectedApplicant.value.status !== 'Pending') return;
-    
-    // Toggle the requirement status
-    selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
-    
-    // Update in storage
-    updateApplicantInStorage(selectedApplicant.value);
-}
-
-function updateApplicantInStorage(applicant) {
-    // Get current data from localStorage
-    const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
-    const admittedApplicants = JSON.parse(localStorage.getItem('admittedApplicants') || '[]');
-
-    // Find and update the applicant in the appropriate array
-    let found = false;
-    
-    // Check pending applicants
-    const pendingIndex = pendingApplicants.findIndex(app => app.id === applicant.id);
-    if (pendingIndex !== -1) {
-        pendingApplicants[pendingIndex] = { ...applicant };
-        localStorage.setItem('pendingApplicants', JSON.stringify(pendingApplicants));
-        found = true;
-    }
-    
-    // Check admitted applicants
-    const admittedIndex = admittedApplicants.findIndex(app => app.id === applicant.id);
-    if (admittedIndex !== -1) {
-        admittedApplicants[admittedIndex] = { ...applicant };
-        localStorage.setItem('admittedApplicants', JSON.stringify(admittedApplicants));
-        found = true;
-        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
-    } else {
-        // Just update requirements
-        const updatedPending = pendingApplicants.map((app) => {
-            if (app.firstName === applicant.firstName && app.lastName === applicant.lastName) {
-                return {
-                    ...app,
-                    requirements: applicant.requirements
-                };
-            }
-            return app;
+        // Update student in database
+        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(updateData)
         });
 
-        localStorage.setItem('pendingApplicants', JSON.stringify(updatedPending));
+        if (!response.ok) {
+            throw new Error('Failed to update student in database');
+        }
+
+        // Update local state
+        selectedApplicant.value.status = 'Admitted';
+        selectedApplicant.value.studentId = studentId;
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Student Admitted',
+            detail: `${selectedApplicant.value.name} has been successfully admitted with Student ID: ${studentId}`,
+            life: 3000
+        });
+
+        // Reload the applicant list
+        await loadApplicants();
+
+    } catch (error) {
+        console.error('Error admitting student:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Database Error',
+            detail: 'Failed to admit student. Please try again.',
+            life: 3000
+        });
     }
 }
 
-function markIncomplete() {
-    if (!selectedApplicant.value) return;
+async function toggleRequirement(requirementKey) {
+    if (!selectedApplicant.value || selectedApplicant.value.status !== 'Pending') return;
 
-    toast.add({
-        severity: 'info',
-        summary: 'Marked Incomplete',
-        detail: 'Applicant marked as incomplete requirements.',
-        life: 3000
-    });
+    try {
+        // Toggle the requirement status
+        selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
 
-    // Update in local storage
-    updateApplicantInStorage(selectedApplicant.value);
+        // Prepare data for database update
+        const updateData = {
+            form138: selectedApplicant.value.requirements.form138,
+            psa: selectedApplicant.value.requirements.psa,
+            goodmoral: selectedApplicant.value.requirements.goodMoral,
+            others: selectedApplicant.value.requirements.others
+        };
+
+        // Update in database
+        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update requirements in database');
+        }
+    } catch (error) {
+        console.error('Error updating requirements:', error);
+        // Revert the change if database update failed
+        selectedApplicant.value.requirements[requirementKey] = !selectedApplicant.value.requirements[requirementKey];
+        toast.add({
+            severity: 'error',
+            summary: 'Update Failed',
+            detail: 'Failed to update requirements. Please try again.',
+            life: 3000
+        });
+    }
 }
 
-function rejectApplicant() {
+// Remove localStorage function - now using direct database operations
+
+async function markIncomplete() {
     if (!selectedApplicant.value) return;
 
-    // Update student status to rejected
-    selectedApplicant.value.status = 'Rejected';
+    try {
+        // Update student status in database
+        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ status: 'Incomplete' })
+        });
 
-    // Update the data in localStorage
-    updateApplicantInStorage(selectedApplicant.value);
+        if (!response.ok) {
+            throw new Error('Failed to update student status');
+        }
 
-    // Show success message
-    toast.add({
-        severity: 'info',
-        summary: 'Application Rejected',
-        detail: `${selectedApplicant.value.name}'s application has been rejected.`,
-        life: 3000
-    });
+        selectedApplicant.value.status = 'Incomplete';
+        
+        toast.add({
+            severity: 'info',
+            summary: 'Marked Incomplete',
+            detail: 'Applicant marked as incomplete requirements.',
+            life: 3000
+        });
 
-    // Reload the applicant list
-    loadApplicants();
+        await loadApplicants();
+    } catch (error) {
+        console.error('Error marking incomplete:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Update Failed',
+            detail: 'Failed to update student status.',
+            life: 3000
+        });
+    }
+}
+
+async function rejectApplicant() {
+    if (!selectedApplicant.value) return;
+
+    try {
+        // Update student status in database
+        const response = await fetch(`http://localhost:8000/api/students/${selectedApplicant.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ status: 'Rejected' })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to reject student');
+        }
+
+        selectedApplicant.value.status = 'Rejected';
+        
+        toast.add({
+            severity: 'info',
+            summary: 'Application Rejected',
+            detail: `${selectedApplicant.value.name}'s application has been rejected.`,
+            life: 3000
+        });
+
+        await loadApplicants();
+    } catch (error) {
+        console.error('Error rejecting student:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Rejection Failed',
+            detail: 'Failed to reject student application.',
+            life: 3000
+        });
+    }
 }
 
 // Navigate to enrollment page with the selected student
 function navigateToEnrollment() {
     if (!selectedApplicant.value) return;
-    
-    // Store the selected student ID in localStorage to pass it to the enrollment page
-    localStorage.setItem('selectedStudentForEnrollment', selectedApplicant.value.studentId);
-    
-    // Navigate to enrollment page
-    window.location.href = '/admin/enrollment';
-    
+
+    // Close the current dialog first
+    showStudentDetails.value = false;
+
+    // Navigate to enrollment page with correct hash routing
+    window.location.href = '#/admin/enrollment';
+
     // Show toast message
     toast.add({
         severity: 'success',
         summary: 'Redirecting to Enrollment',
-        detail: `Preparing to enroll ${selectedApplicant.value.name}`,
+        detail: 'Taking you to the enrollment page...',
         life: 3000
     });
 }
-
 </script>
 
 <template>
@@ -520,63 +500,61 @@ function navigateToEnrollment() {
             <!-- Applicant Table Panel -->
             <div class="col-12">
                 <div class="card mb-0">
-                    <h5>
-                        Pending Applicants ({{ filteredApplicants.length }})
-                    </h5>
+                    <h5>Pending Applicants ({{ filteredApplicants.length }})</h5>
                     <!-- Modern DataTable list -->
-<div class="applicant-table p-2 mb-3">
-    <DataTable
-        :value="filteredApplicants"
-        dataKey="id"
-        class="p-datatable-sm"
-        :loading="loading"
-        stripedRows
-        responsiveLayout="scroll"
-        selectionMode="single"
-        :selection="selectedApplicant"
-        @rowSelect="selectApplicant($event.data)"
-        @rowClick="selectApplicant($event.data)"
-    >
-        <Column field="studentId" header="LRN" style="min-width: 140px" />
+                    <div class="applicant-table p-2 mb-3">
+                        <DataTable
+                            :value="filteredApplicants"
+                            dataKey="id"
+                            class="p-datatable-sm"
+                            :loading="loading"
+                            stripedRows
+                            responsiveLayout="scroll"
+                            selectionMode="single"
+                            :selection="selectedApplicant"
+                            @rowSelect="selectApplicant($event.data)"
+                            @rowClick="selectApplicant($event.data)"
+                        >
+                            <Column field="studentId" header="LRN" style="min-width: 140px" />
 
-        <Column header="Name" style="min-width: 200px">
-            <template #body="slotProps">
-                <div class="flex align-items-center">
-                    <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
-                    <span>{{ slotProps.data.name }}</span>
-                </div>
-            </template>
-        </Column>
+                            <Column header="Name" style="min-width: 200px">
+                                <template #body="slotProps">
+                                    <div class="flex align-items-center">
+                                        <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
+                                        <span>{{ slotProps.data.name }}</span>
+                                    </div>
+                                </template>
+                            </Column>
 
-        <Column field="gradeLevel" header="Grade" style="width: 100px" />
+                            <Column field="gradeLevel" header="Grade" style="width: 100px" />
 
-        <Column header="Validity" style="min-width: 140px">
-            <template #body="slotProps">
-                <span>{{ slotProps.data.validity || 'N/A' }}</span>
-            </template>
-        </Column>
+                            <Column header="Validity" style="min-width: 140px">
+                                <template #body="slotProps">
+                                    <span>{{ slotProps.data.validity || 'N/A' }}</span>
+                                </template>
+                            </Column>
 
-        <Column header="Status" style="width: 100px">
-            <template #body="slotProps">
-                <Tag :severity="slotProps.data.status === 'Pending' ? 'info' : slotProps.data.status === 'Admitted' ? 'success' : 'danger'" :value="slotProps.data.status" />
-            </template>
-        </Column>
+                            <Column header="Status" style="width: 100px">
+                                <template #body="slotProps">
+                                    <Tag :severity="slotProps.data.status === 'Pending' ? 'info' : slotProps.data.status === 'Admitted' ? 'success' : 'danger'" :value="slotProps.data.status" />
+                                </template>
+                            </Column>
 
-        <Column header="Registered" style="min-width: 160px">
-            <template #body="slotProps">
-                {{ formatDate(slotProps.data.createdAt) }}
-            </template>
-        </Column>
+                            <Column header="Registered" style="min-width: 160px">
+                                <template #body="slotProps">
+                                    {{ formatDate(slotProps.data.createdAt) }}
+                                </template>
+                            </Column>
 
-        <Column header="Actions" style="width: 8rem">
-            <template #body="slotProps">
-                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="selectApplicant(slotProps.data)" />
-            </template>
-        </Column>
-    </DataTable>
-</div>
-<!-- Legacy list hidden for reference -->
-<div class="applicant-list p-2" v-if="false">
+                            <Column header="Actions" style="width: 8rem">
+                                <template #body="slotProps">
+                                    <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="selectApplicant(slotProps.data)" />
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
+                    <!-- Legacy list hidden for reference -->
+                    <div class="applicant-list p-2" v-if="false">
                         <div
                             v-for="applicant in filteredApplicants"
                             :key="applicant.id"
@@ -680,9 +658,7 @@ function navigateToEnrollment() {
                     <!-- Requirements Tab -->
                     <div v-if="activeStudentTab === 1">
                         <div class="requirements-list">
-                            <div v-for="req in requirements" :key="req.key" class="requirement-item clickable-requirement" 
-                                 :class="{ 'disabled': selectedApplicant?.status !== 'Pending' }"
-                                 @click="toggleRequirement(req.key)">
+                            <div v-for="req in requirements" :key="req.key" class="requirement-item clickable-requirement" :class="{ disabled: selectedApplicant?.status !== 'Pending' }" @click="toggleRequirement(req.key)">
                                 <div class="requirement-name">{{ req.label }}</div>
                                 <div class="requirement-status">
                                     <Checkbox v-model="selectedApplicant.requirements[req.key]" :binary="true" :disabled="selectedApplicant?.status !== 'Pending'" class="mr-2" @change="updateApplicantInStorage(selectedApplicant)" />
@@ -718,7 +694,7 @@ function navigateToEnrollment() {
                                         Student ID: <strong>{{ selectedApplicant?.studentId }}</strong>
                                     </p>
                                     <p class="m-0 mt-2">This student can now proceed to the enrollment process.</p>
-                                    
+
                                     <div class="mt-3">
                                         <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="navigateToEnrollment" />
                                     </div>
@@ -1106,18 +1082,18 @@ function navigateToEnrollment() {
         gap: 1.5rem;
         text-align: center;
     }
-    
+
     .header-actions {
         align-items: center;
         width: 100%;
     }
-    
+
     .search-input,
     .grade-filter {
         width: 100%;
         max-width: 300px;
     }
-    
+
     .header-title {
         font-size: 1.5rem;
     }
