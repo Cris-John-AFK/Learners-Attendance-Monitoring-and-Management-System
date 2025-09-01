@@ -57,13 +57,15 @@ const student = ref({
     photo: null,
     profilephoto: null,
     enrollmentDate: new Date().toISOString().split('T')[0],
-    status: 'Enrolled'
+    status: 'Enrolled',
+    isActive: true
 });
 const submitted = ref(false);
 const filters = ref({
     grade: null,
     section: null,
     gender: null,
+    status: null,
     searchTerm: ''
 });
 const sections = ref([]);
@@ -176,6 +178,115 @@ const generateAllQRCodes = async () => {
     }
 };
 
+// Get proper photo URL for student
+const getStudentPhotoUrl = (student) => {
+    if (!student.photo || student.photo === 'N/A') {
+        return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    }
+    
+    // If it's already a data URL (base64), return as is
+    if (student.photo.startsWith('data:')) {
+        return student.photo;
+    }
+    
+    // If it's a relative path, prepend the server URL
+    if (student.photo.startsWith('/') || student.photo.startsWith('storage/')) {
+        return `http://localhost:8000/${student.photo}`;
+    }
+    
+    // If it's already a full URL, return as is
+    if (student.photo.startsWith('http')) {
+        return student.photo;
+    }
+    
+    // Default fallback
+    return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+};
+
+// Handle photo loading errors
+const handlePhotoError = (event) => {
+    const img = event.target;
+    const student = selectedStudent.value;
+    if (student) {
+        img.src = `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    }
+};
+
+// Generate QR code for specific student
+const generateStudentQR = async (student) => {
+    if (student.lrn) {
+        await generateQRCode(student.lrn);
+    }
+};
+
+// Update sections when grade changes for selected student
+const updateSelectedStudentSections = () => {
+    if (selectedStudent.value && selectedStudent.value.gradeLevel) {
+        selectedStudent.value.section = null; // Reset section when grade changes
+    }
+};
+
+// Save student changes from dialog
+const saveStudentChanges = async () => {
+    if (!selectedStudent.value) return;
+
+    try {
+        // Prepare student data for API update
+        const studentData = {
+            name: selectedStudent.value.name || '',
+            gradeLevel: selectedStudent.value.gradeLevel || '',
+            section: selectedStudent.value.section || '',
+            gender: selectedStudent.value.gender || 'Male',
+            email: selectedStudent.value.email && selectedStudent.value.email.trim() !== '' ? selectedStudent.value.email.trim() : null,
+            address: selectedStudent.value.address || '',
+            contact: selectedStudent.value.contact || '',
+            lrn: selectedStudent.value.lrn || '',
+            isActive: selectedStudent.value.isActive !== undefined ? selectedStudent.value.isActive : true,
+            birthdate: selectedStudent.value.birthdate ? new Date(selectedStudent.value.birthdate).toISOString().split('T')[0] : null
+        };
+
+        console.log('Updating student:', selectedStudent.value.id, studentData);
+
+        // Update student in database
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(studentData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('Student updated successfully:', result);
+
+        // Close dialog and reload students
+        viewStudentDialog.value = false;
+        await loadStudents();
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Student information updated successfully!',
+            life: 3000
+        });
+
+    } catch (error) {
+        console.error('Error updating student:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update student information. Please try again.',
+            life: 5000
+        });
+    }
+};
+
 // Load all students from database via API
 const loadStudents = async () => {
     try {
@@ -222,6 +333,7 @@ const loadStudents = async () => {
                 lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
                 enrollmentDate: student.enrollmentDate ? new Date(student.enrollmentDate).toLocaleDateString() : new Date().toLocaleDateString(),
                 status: student.status || 'Enrolled',
+                isActive: student.isActive !== undefined ? student.isActive : true,
                 // Store original data for reference
                 originalData: student
             };
@@ -229,12 +341,15 @@ const loadStudents = async () => {
 
         students.value = formattedStudents;
 
-        // Set QR codes from backend data
-        formattedStudents.forEach((student) => {
+        // Set QR codes from backend data and generate missing ones
+        for (const student of formattedStudents) {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
+            } else if (student.lrn && !qrCodes.value[student.lrn]) {
+                // Generate QR code if not exists
+                await generateQRCode(student.lrn);
             }
-        });
+        }
 
         totalStudents.value = formattedStudents.length;
 
@@ -324,6 +439,11 @@ const filteredStudents = computed(() => {
 
         // Apply gender filter
         if (filters.value.gender && student.gender !== filters.value.gender) {
+            return false;
+        }
+
+        // Apply status filter
+        if (filters.value.status !== null && student.isActive !== filters.value.status) {
             return false;
         }
 
@@ -420,6 +540,7 @@ const saveStudent = async () => {
             photo: student.value.photo || null,
             profilePhoto: student.value.photo || student.value.profilePhoto || null,
             status: student.value.status || 'Enrolled',
+            isActive: student.value.isActive !== undefined ? student.value.isActive : true,
             enrollmentDate: (() => {
                 if (!student.value.enrollmentDate || student.value.enrollmentDate === 'N/A') {
                     return new Date().toISOString().split('T')[0];
@@ -577,7 +698,8 @@ function editStudent(studentData) {
         photo: studentData.photo || null,
         profilephoto: studentData.profilephoto || null,
         enrollmentDate: studentData.enrollmentDate || new Date().toISOString().split('T')[0],
-        status: studentData.status || 'Enrolled'
+        status: studentData.status || 'Enrolled',
+        isActive: studentData.isActive !== undefined ? studentData.isActive : true
     };
 
     // Update sections based on grade level
@@ -593,6 +715,53 @@ function confirmDeleteStudent(studentData) {
     student.value = { ...studentData };
     deleteStudentDialog.value = true;
 }
+
+// Toggle student active status
+const toggleStudentStatus = async (studentData) => {
+    try {
+        const newStatus = !studentData.isActive;
+        
+        // Update student status in database
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${studentData.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                ...studentData.originalData,
+                isActive: newStatus
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Update local data
+        studentData.isActive = newStatus;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Student ${newStatus ? 'activated' : 'deactivated'} successfully!`,
+            life: 3000
+        });
+
+        // Reload students to ensure data consistency
+        await loadStudents();
+        
+    } catch (error) {
+        console.error('Error updating student status:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update student status. Please try again.',
+            life: 5000
+        });
+    }
+};
 
 // Delete student from database via API
 const deleteStudent = async () => {
@@ -637,6 +806,16 @@ const deleteStudent = async () => {
 function viewStudentDetails(studentData) {
     selectedStudent.value = studentData;
     viewStudentDialog.value = true;
+}
+
+// Edit student from dialog (opens enrollment form)
+function editStudentFromDialog() {
+    if (selectedStudent.value) {
+        // Close the view dialog first
+        viewStudentDialog.value = false;
+        // Open the edit form with the selected student data
+        editStudent(selectedStudent.value);
+    }
 }
 
 // Row click handler to open student info dialog
@@ -1153,6 +1332,20 @@ onMounted(() => {
                     class="w-full"
                 />
             </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Status</label>
+                <Dropdown
+                    v-model="filters.status"
+                    :options="[
+                        { name: 'Active', value: true },
+                        { name: 'Inactive', value: false }
+                    ]"
+                    optionLabel="name"
+                    optionValue="value"
+                    placeholder="Select Status"
+                    class="w-full"
+                />
+            </div>
         </div>
 
         <!-- Student List -->
@@ -1167,7 +1360,12 @@ onMounted(() => {
                     <Column header="Student" style="min-width: 200px">
                         <template #body="slotProps">
                             <div class="flex align-items-center">
-                                <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
+                                <Avatar 
+                                    :image="getStudentPhotoUrl(slotProps.data)" 
+                                    shape="circle" 
+                                    size="large" 
+                                    class="mr-2"
+                                />
                                 <div>
                                     <div class="font-bold">{{ slotProps.data.name }}</div>
                                     <div class="text-sm text-color-secondary">{{ slotProps.data.studentId }}</div>
@@ -1194,11 +1392,27 @@ onMounted(() => {
                     </Column>
                     <Column field="email" header="Email" sortable style="min-width: 200px" />
                     <Column field="contact" header="Contact" style="width: 130px" />
-                    <Column header="Actions" style="width: 8rem">
+                    <Column header="Status" style="width: 120px">
+                        <template #body="slotProps">
+                            <div class="flex align-items-center gap-2">
+                                <Tag 
+                                    :value="slotProps.data.isActive ? 'Active' : 'Inactive'" 
+                                    :severity="slotProps.data.isActive ? 'success' : 'danger'" 
+                                />
+                                <Button 
+                                    :icon="slotProps.data.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'" 
+                                    class="p-button-rounded p-button-text p-button-sm" 
+                                    :class="slotProps.data.isActive ? 'p-button-warning' : 'p-button-success'"
+                                    @click="toggleStudentStatus(slotProps.data)"
+                                    :title="slotProps.data.isActive ? 'Deactivate Student' : 'Activate Student'"
+                                />
+                            </div>
+                        </template>
+                    </Column>
+                    <Column header="Actions" style="width: 6rem">
                         <template #body="slotProps">
                             <div class="flex gap-1">
                                 <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" />
-                                <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editStudent(slotProps.data)" />
                                 <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click="confirmDeleteStudent(slotProps.data)" />
                             </div>
                         </template>
@@ -1223,76 +1437,117 @@ onMounted(() => {
                 <!-- Left column -->
                 <div class="flex flex-col items-center space-y-4">
                     <p class="text-gray-600 font-medium">Temporary ID Photo</p>
-                    <img v-if="selectedStudent.photo" :src="selectedStudent.photo" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" />
-                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">No Photo</div>
+                    <img 
+                        v-if="selectedStudent.photo && selectedStudent.photo !== 'N/A'" 
+                        :src="getStudentPhotoUrl(selectedStudent)" 
+                        alt="Student Photo" 
+                        class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300"
+                        @error="handlePhotoError"
+                    />
+                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                        <i class="pi pi-user text-4xl text-gray-400"></i>
+                    </div>
                     <p class="text-gray-600 font-medium">QR Code</p>
-                    <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-48 h-48 border rounded-md object-contain" />
-                    <p v-else class="text-xs text-gray-400">No QR</p>
+                    <div v-if="selectedStudent.lrn" class="flex flex-col items-center">
+                        <img 
+                            v-if="qrCodes[selectedStudent.lrn]" 
+                            :src="qrCodes[selectedStudent.lrn]" 
+                            class="w-48 h-48 border rounded-md object-contain" 
+                            alt="QR Code"
+                        />
+                        <div v-else class="w-48 h-48 border rounded-md bg-gray-100 flex items-center justify-center">
+                            <Button 
+                                label="Generate QR" 
+                                icon="pi pi-qrcode" 
+                                class="p-button-sm p-button-outlined" 
+                                @click="generateStudentQR(selectedStudent)"
+                            />
+                        </div>
+                    </div>
+                    <p v-else class="text-xs text-gray-400">No LRN Available</p>
                 </div>
 
                 <!-- Right column -->
-                <div v-if="!isEdit" class="md:col-span-2 space-y-2">
+                <div class="md:col-span-2 space-y-2">
                     <h2 class="font-bold text-2xl mb-1">{{ selectedStudent.name }}</h2>
                     <p class="text-gray-600 mb-3">{{ selectedStudent.studentId }}</p>
                     <hr />
-                    <div class="space-y-2 text-sm mt-2">
-                        <p><span class="font-semibold">Grade & Section:</span> {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
-                        <p><span class="font-semibold">Sex:</span> {{ selectedStudent.gender }}</p>
-                        <p><span class="font-semibold">Date of Birth:</span> {{ selectedStudent.birthdate || 'N/A' }}</p>
-                        <p><span class="font-semibold">Age:</span> {{ selectedStudentAge || 'N/A' }}</p>
-                        <p><span class="font-semibold">Enrollment Date:</span> {{ selectedStudent.enrollmentDate }}</p>
-                        <p><span class="font-semibold">LRN:</span> {{ selectedStudent.lrn }}</p>
-                        <p><span class="font-semibold">Address:</span> {{ selectedStudent.address }}</p>
-                        <p><span class="font-semibold">Email:</span> {{ selectedStudent.email }}</p>
-                        <p><span class="font-semibold">Contact:</span> {{ selectedStudent.contact }}</p>
-                    </div>
-
-                    <div class="col-12 sm:col-6">
-                        <label class="font-semibold">Email</label>
-                        <p>{{ selectedStudent.email }}</p>
-                    </div>
-                    <div class="col-12 sm:col-6">
-                        <label class="font-semibold">Contact</label>
-                        <p>{{ selectedStudent.contact }}</p>
-                    </div>
-                </div>
-                <div v-else class="md:col-span-2 space-y-2">
-                    <div class="space-y-2 text-sm mt-2">
-                        <div>
-                            <label class="font-semibold">Student Name</label>
-                            <InputText v-model="selectedStudent.name" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Grade Level</label>
-                            <Dropdown v-model="selectedStudent.gradeLevel" :options="['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6']" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Section</label>
-                            <Dropdown v-model="selectedStudent.section" :options="sectionsByGrade[selectedStudent.gradeLevel] || []" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Gender</label>
-                            <Dropdown v-model="selectedStudent.gender" :options="['Male', 'Female']" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Date of Birth</label>
-                            <Calendar v-model="selectedStudent.birthdate" showIcon dateFormat="yy-mm-dd" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Address</label>
-                            <InputText v-model="selectedStudent.address" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Email</label>
-                            <InputText v-model="selectedStudent.email" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">Contact</label>
-                            <InputText v-model="selectedStudent.contact" class="w-full" />
-                        </div>
-                        <div>
-                            <label class="font-semibold">LRN</label>
-                            <InputText v-model="selectedStudent.lrn" class="w-full" />
+                    <div class="space-y-3 text-sm mt-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="font-semibold block mb-1">Student Name</label>
+                                <InputText v-model="selectedStudent.name" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Grade Level</label>
+                                <Dropdown 
+                                    v-model="selectedStudent.gradeLevel" 
+                                    :options="gradeLevels" 
+                                    optionLabel="name" 
+                                    optionValue="code" 
+                                    class="w-full" 
+                                    @change="updateSelectedStudentSections"
+                                />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Section</label>
+                                <Dropdown 
+                                    v-model="selectedStudent.section" 
+                                    :options="sectionsByGrade[selectedStudent.gradeLevel] || []" 
+                                    class="w-full" 
+                                />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Gender</label>
+                                <Dropdown 
+                                    v-model="selectedStudent.gender" 
+                                    :options="[
+                                        { name: 'Male', value: 'Male' },
+                                        { name: 'Female', value: 'Female' }
+                                    ]" 
+                                    optionLabel="name" 
+                                    optionValue="value" 
+                                    class="w-full" 
+                                />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Date of Birth</label>
+                                <Calendar 
+                                    v-model="selectedStudent.birthdate" 
+                                    showIcon 
+                                    dateFormat="mm/dd/yy" 
+                                    class="w-full" 
+                                />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">LRN</label>
+                                <InputText v-model="selectedStudent.lrn" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Student Status</label>
+                                <Dropdown 
+                                    v-model="selectedStudent.isActive" 
+                                    :options="[
+                                        { name: 'Active', value: true },
+                                        { name: 'Inactive', value: false }
+                                    ]" 
+                                    optionLabel="name" 
+                                    optionValue="value" 
+                                    class="w-full" 
+                                />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Email</label>
+                                <InputText v-model="selectedStudent.email" class="w-full" type="email" />
+                            </div>
+                            <div class="col-span-2">
+                                <label class="font-semibold block mb-1">Address</label>
+                                <InputText v-model="selectedStudent.address" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="font-semibold block mb-1">Contact</label>
+                                <InputText v-model="selectedStudent.contact" class="w-full" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1301,9 +1556,7 @@ onMounted(() => {
                 <div class="flex justify-end gap-2 w-full">
                     <Button label="Update Photo" icon="pi pi-camera" class="p-button-warning p-button-sm" @click="updatePhoto(selectedStudent)" />
                     <Button label="Update E-Signature" icon="pi pi-pencil" class="p-button-danger p-button-sm" @click="updateSignature(selectedStudent)" />
-                    <Button v-if="!isEdit" label="Update Profile" icon="pi pi-user-edit" class="p-button-info p-button-sm" @click="startEditProfile" />
-                    <Button v-else label="Save Changes" icon="pi pi-check" class="p-button-success p-button-sm" @click="saveInlineProfile" />
-                    <Button v-if="isEdit" label="Cancel" icon="pi pi-times" class="p-button-text p-button-sm" @click="cancelInlineEdit" />
+                    <Button label="Save Changes" icon="pi pi-check" class="p-button-success p-button-sm" @click="saveStudentChanges" />
                 </div>
             </template>
         </Dialog>
