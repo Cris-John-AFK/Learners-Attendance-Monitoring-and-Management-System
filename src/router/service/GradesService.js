@@ -15,7 +15,9 @@ export const GradesService = {
             state.loading = true;
             console.log('Fetching grades from API...');
 
-            const response = await api.get('/api/grades');
+            const response = await api.get('/api/grades', {
+                timeout: 10000 // Restored timeout to 10 seconds
+            });
 
             // Process response
             let data;

@@ -20,21 +20,29 @@ class TeacherController extends Controller
      */
     public function index()
     {
-        $teachers = Teacher::with(['user', 'assignments.section.grade', 'assignments.subject'])
-            ->get()
-            ->map(function ($teacher) {
-                $teacherData = $teacher->toArray();
-                $teacherData['email'] = $teacher->user->email;
-                $teacherData['username'] = $teacher->user->username;
-                $teacherData['is_active'] = $teacher->user->is_active;
-                $teacherData['status'] = $teacher->status;
-                // These fields are automatically included due to the appends in the Teacher model
-                // $teacherData['primary_assignment'] = $teacher->primary_assignment;
-                // $teacherData['subject_assignments'] = $teacher->subject_assignments;
-                return $teacherData;
-            });
+        try {
+            // Lightweight query with only essential fields and relationships (removed 'status' column that doesn't exist)
+            $teachers = Teacher::select(['id', 'first_name', 'last_name', 'phone_number', 'user_id'])
+                ->with(['user:id,email,username,is_active'])
+                ->get()
+                ->map(function ($teacher) {
+                    return [
+                        'id' => $teacher->id,
+                        'first_name' => $teacher->first_name,
+                        'last_name' => $teacher->last_name,
+                        'phone_number' => $teacher->phone_number,
+                        'email' => $teacher->user->email ?? null,
+                        'username' => $teacher->user->username ?? null,
+                        'is_active' => $teacher->user->is_active ?? false,
+                    ];
+                });
 
-        return response()->json($teachers);
+            Log::info("Retrieved {$teachers->count()} teachers successfully");
+            return response()->json($teachers);
+        } catch (\Exception $e) {
+            Log::error('Error fetching teachers: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch teachers'], 500);
+        }
     }
 
     /**
@@ -42,10 +50,29 @@ class TeacherController extends Controller
      */
     public function getActiveTeachers()
     {
-        $teachers = Teacher::active()
-            ->with(['assignments.section.grade', 'assignments.subject'])
-            ->get();
-        return response()->json($teachers);
+        try {
+            $teachers = Teacher::active()
+                ->select(['id', 'first_name', 'last_name', 'phone_number', 'user_id'])
+                ->with(['user:id,email,username,is_active'])
+                ->get()
+                ->map(function ($teacher) {
+                    return [
+                        'id' => $teacher->id,
+                        'first_name' => $teacher->first_name,
+                        'last_name' => $teacher->last_name,
+                        'phone_number' => $teacher->phone_number,
+                        'email' => $teacher->user->email ?? null,
+                        'username' => $teacher->user->username ?? null,
+                        'is_active' => $teacher->user->is_active ?? false,
+                    ];
+                });
+
+            Log::info("Retrieved {$teachers->count()} active teachers successfully");
+            return response()->json($teachers);
+        } catch (\Exception $e) {
+            Log::error('Error fetching active teachers: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch active teachers'], 500);
+        }
     }
 
     /**

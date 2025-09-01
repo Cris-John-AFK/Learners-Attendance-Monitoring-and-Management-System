@@ -24,7 +24,8 @@ class Section extends Model
         'is_active'
     ];
 
-    protected $with = ['curriculumGrade', 'homeroomTeacher'];
+    // Removed automatic eager loading to prevent performance issues
+    // protected $with = ['curriculumGrade', 'homeroomTeacher'];
 
     protected $casts = [
         'is_active' => 'boolean',

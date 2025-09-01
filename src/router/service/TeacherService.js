@@ -56,7 +56,7 @@ async function getTeachers() {
         console.log('Fetching teachers from API...');
 
         const response = await api.get('/api/teachers', {
-            timeout: API_TIMEOUT,
+            timeout: 10000, // Restored timeout to 10 seconds
             headers: {
                 'Cache-Control': 'no-cache',
                 Pragma: 'no-cache'

@@ -34,7 +34,7 @@ class Teacher extends Authenticatable
         'is_head_teacher' => 'boolean'
     ];
 
-    protected $appends = ['full_name', 'primary_assignment', 'subject_assignments'];
+    protected $appends = ['full_name'];
 
     public function user()
     {
