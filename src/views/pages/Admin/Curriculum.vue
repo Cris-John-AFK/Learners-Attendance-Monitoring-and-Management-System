@@ -3199,11 +3199,60 @@ const saveNewGrade = async () => {
     }
 };
 
+// Edit section function
+const editSection = async (section) => {
+    // For now, just show a placeholder - this would open an edit dialog
+    toast.add({
+        severity: 'info',
+        summary: 'Info',
+        detail: 'Edit section functionality coming soon',
+        life: 3000
+    });
+};
+
+// Delete section function
+const deleteSection = async (section) => {
+    try {
+        loading.value = true;
+        
+        // Call the API to delete the section
+        await CurriculumService.removeSection(curriculum.value.id, selectedGradeForSections.value.id, section.id);
+        
+        // Clear cache to force fresh data
+        CurriculumService.clearCache();
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}`);
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}_timestamp`);
+        
+        // Force fresh API call to get updated sections
+        const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section deleted successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error deleting section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to delete section',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
 // Expose functions to template
 defineExpose({
     getTeacherName,
     saveGrade,
-    saveNewGrade
+    saveNewGrade,
+    editSection,
+    deleteSection
 });
 
 // Section management functions
@@ -3258,7 +3307,16 @@ const saveNewSection = async () => {
             curriculum_grade_id: curriculumGrade.id
         };
 
-        await CurriculumService.addSection(sectionData);
+        const response = await CurriculumService.addSection(sectionData);
+
+        // Clear cache to force fresh data
+        CurriculumService.clearCache();
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}`);
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}_timestamp`);
+
+        // Force fresh API call to get updated sections
+        const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
 
         toast.add({
             severity: 'success',
@@ -3266,13 +3324,6 @@ const saveNewSection = async () => {
             detail: 'Section created successfully',
             life: 3000
         });
-
-        // Refresh sections
-        console.log('Refreshing sections for curriculum:', curriculum.value.id, 'grade:', selectedGradeForSections.value.id);
-        const sections = await CurriculumService.getSectionsByGrade(curriculum.value.id, selectedGradeForSections.value.id);
-        console.log('Fetched sections:', sections);
-        gradeSections.value = Array.isArray(sections) ? sections : [];
-        console.log('Updated gradeSections:', gradeSections.value);
 
         newSectionDialog.value = false;
     } catch (error) {
