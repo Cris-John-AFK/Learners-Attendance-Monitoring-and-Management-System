@@ -15,8 +15,17 @@ class GradeController extends Controller
      */
     public function index()
     {
-        $grades = Grade::orderBy('display_order')->get();
-        return response()->json($grades);
+        try {
+            $grades = Grade::select(['id', 'code', 'name', 'level', 'display_order', 'is_active'])
+                ->orderBy('display_order')
+                ->get();
+            
+            Log::info("Retrieved {$grades->count()} grades successfully");
+            return response()->json($grades);
+        } catch (\Exception $e) {
+            Log::error('Error fetching grades: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch grades'], 500);
+        }
     }
 
     /**
@@ -103,11 +112,18 @@ class GradeController extends Controller
      */
     public function getActiveGrades()
     {
-        $grades = Grade::where('is_active', true)
-            ->orderBy('display_order')
-            ->get();
+        try {
+            $grades = Grade::select(['id', 'code', 'name', 'level', 'display_order', 'is_active'])
+                ->where('is_active', true)
+                ->orderBy('display_order')
+                ->get();
 
-        return response()->json($grades);
+            Log::info("Retrieved {$grades->count()} active grades successfully");
+            return response()->json($grades);
+        } catch (\Exception $e) {
+            Log::error('Error fetching active grades: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch active grades'], 500);
+        }
     }
 
     /**

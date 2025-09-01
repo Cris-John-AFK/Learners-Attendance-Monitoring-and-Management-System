@@ -364,36 +364,35 @@ export const CurriculumService = {
                 console.log('Using memory cached section data');
                 return memoryCache.data;
             }
+        } catch (cacheError) {
+            console.warn('Cache error, proceeding to API call:', cacheError);
+        }
 
-            // Then check localStorage (second fastest)
-            try {
-                const localData = localStorage.getItem(cacheKey);
-                if (localData) {
-                    const parsedData = JSON.parse(localData);
-                    if (Array.isArray(parsedData) && parsedData.length > 0) {
-                        console.log('Using localStorage cached section data');
-                        sectionCache.set(cacheKey, { data: parsedData, timestamp: now });
-                        return parsedData;
-                    }
-                }
-            } catch (storageError) {
-                console.warn('Could not retrieve section data from localStorage:', storageError);
-            }
+        return this.getSectionsByGradeForced(curriculumId, gradeId);
+    },
 
-            // Prepare a fallback response right away
-            const fallbackSections = this.getFallbackSections(gradeId);
+    // Force fresh API call bypassing all caches
+    async getSectionsByGradeForced(curriculumId, gradeId) {
+        if (!curriculumId || !gradeId) {
+            console.warn('Missing required parameters for getSectionsByGradeForced');
+            return this.getFallbackSections(gradeId);
+        }
 
-            // If no cache hit, fetch from API with timeout protection
-            console.log('Fetching sections from API...');
+        const cacheKey = `sections_${curriculumId}_${gradeId}`;
+        const now = Date.now();
+
+        try {
+            // Skip all caches and fetch directly from API
+            console.log('Forcing fresh API call for sections...');
 
             // Create an AbortController for timeout handling
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
             try {
-                // Try direct API call with shorter timeout
+                // Try direct API call with longer timeout
                 const response = await api.get(`/api/sections/grade/${gradeId}`, {
-                    timeout: 3000, // 3 seconds
+                    timeout: 10000, // 10 seconds
                     signal: controller.signal,
                     params: {
                         curriculum_id: curriculumId
@@ -435,11 +434,11 @@ export const CurriculumService = {
                 }
 
                 // If no cached data, return the fallback right away
-                return fallbackSections;
+                return this.getFallbackSections(gradeId);
             }
 
             // If we got here with no data, return the fallback
-            return fallbackSections;
+            return this.getFallbackSections(gradeId);
         } catch (error) {
             console.error('Error in getSectionsByGrade:', error);
             return this.getFallbackSections(gradeId);
@@ -1001,6 +1000,64 @@ export const CurriculumService = {
         } catch (error) {
             console.error('Error fetching subject schedules:', error);
             return [];
+        }
+    },
+
+    // Assign homeroom teacher to section
+    async assignHomeroomTeacher(sectionId, teacherId) {
+        try {
+            console.log('Assigning homeroom teacher:', { sectionId, teacherId });
+            
+            // Get curriculum and section details to build the correct API path
+            const curriculums = await this.getCurriculums();
+            if (!curriculums || !Array.isArray(curriculums) || curriculums.length === 0) {
+                throw new Error('No curriculum found');
+            }
+            
+            // Get the first (and only) curriculum since system enforces single curriculum
+            const curriculum = curriculums[0];
+            if (!curriculum || !curriculum.id) {
+                throw new Error('Invalid curriculum data');
+            }
+            
+            // We need to get the section details directly from the API since we don't have a getSections method
+            // Instead, we'll use the section ID directly and let the backend handle the relationship lookup
+            const curriculumId = curriculum.id;
+            
+            // Try to get section details from the API to find the grade
+            let gradeId = null;
+            try {
+                const sectionResponse = await api.get(`/api/sections/${sectionId}`);
+                const section = sectionResponse.data;
+                if (section && section.curriculum_grade && section.curriculum_grade.grade_id) {
+                    gradeId = section.curriculum_grade.grade_id;
+                } else if (section && section.grade_id) {
+                    gradeId = section.grade_id;
+                } else {
+                    throw new Error('Could not determine grade ID from section data');
+                }
+            } catch (sectionError) {
+                console.error('Error fetching section details:', sectionError);
+                throw new Error('Could not fetch section details to determine grade');
+            }
+            
+            console.log('API call details:', { curriculumId, gradeId, sectionId, teacherId });
+            
+            const response = await api.post(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/teacher`, {
+                teacher_id: teacherId
+            });
+            
+            // Clear section cache to force refresh
+            sectionCache.clear();
+            
+            // Also clear localStorage cache
+            const cacheKey = `sections_${curriculumId}_${gradeId}`;
+            localStorage.removeItem(cacheKey);
+            
+            return response.data;
+        } catch (error) {
+            console.error('Error assigning homeroom teacher:', error);
+            throw error;
         }
     },
 

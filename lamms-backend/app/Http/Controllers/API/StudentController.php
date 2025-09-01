@@ -50,12 +50,17 @@ class StudentController extends Controller
             \Log::info('Photo saved to: ' . $photoPath);
         }
         
-        // Generate and save QR code (temporarily disabled due to imagick requirement)
-        // if ($request->has('lrn') && $request->lrn) {
-        //     $qrPath = $this->generateAndSaveQRCode($request->lrn);
-        //     $data['qr_code_path'] = $qrPath;
-        //     \Log::info('QR code saved to: ' . $qrPath);
-        // }
+        // Generate and save QR code
+        if ($request->has('lrn') && $request->lrn) {
+            try {
+                $qrPath = $this->generateAndSaveQRCode($request->lrn);
+                $data['qr_code_path'] = $qrPath;
+                \Log::info('QR code saved to: ' . $qrPath);
+            } catch (\Exception $e) {
+                \Log::error('QR code generation error: ' . $e->getMessage());
+                // Continue without QR code if there's an error
+            }
+        }
 
         $student = Student::create($data);
         return response()->json($student, 201);
@@ -92,7 +97,36 @@ class StudentController extends Controller
             'admissionDate' => 'nullable|date'
         ]);
 
-        $student->update($request->all());
+        $data = $request->all();
+        
+        // Handle photo upload if base64 data is provided
+        if ($request->has('photo') && $request->photo && strpos($request->photo, 'data:image') === 0) {
+            try {
+                $photoPath = $this->saveBase64Image($request->photo, 'photos');
+                $data['profilePhoto'] = $photoPath;
+                $data['photo'] = $photoPath;
+                \Log::info('Photo updated and saved to: ' . $photoPath);
+            } catch (\Exception $e) {
+                \Log::error('Photo save error: ' . $e->getMessage());
+                // Continue without photo if there's an error
+                unset($data['photo']);
+                unset($data['profilePhoto']);
+            }
+        }
+        
+        // Generate and save QR code if LRN is provided
+        if ($request->has('lrn') && $request->lrn) {
+            try {
+                $qrPath = $this->generateAndSaveQRCode($request->lrn);
+                $data['qr_code_path'] = $qrPath;
+                \Log::info('QR code updated and saved to: ' . $qrPath);
+            } catch (\Exception $e) {
+                \Log::error('QR code generation error: ' . $e->getMessage());
+                // Continue without QR code if there's an error
+            }
+        }
+
+        $student->update($data);
         return response()->json($student);
     }
 

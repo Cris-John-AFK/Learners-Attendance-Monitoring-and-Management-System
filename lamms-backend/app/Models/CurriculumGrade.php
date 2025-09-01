@@ -22,7 +22,8 @@ class CurriculumGrade extends Model
         'display_order'
     ];
 
-    protected $with = ['grade'];
+    // Removed automatic eager loading to prevent performance issues
+    // protected $with = ['grade'];
 
     /**
      * Get the curriculum that owns this grade.
