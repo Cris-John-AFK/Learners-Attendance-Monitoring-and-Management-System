@@ -42,7 +42,7 @@ class SectionController extends Controller
     {
         try {
             Log::info("Getting sections for grade ID: {$gradeId}");
-            
+
             // Lightweight query with selective fields (removed 'status' column that doesn't exist)
             $sections = Section::select(['id', 'name', 'capacity', 'is_active', 'curriculum_grade_id', 'homeroom_teacher_id'])
                 ->with([
@@ -54,7 +54,7 @@ class SectionController extends Controller
                     $query->where('grade_id', $gradeId);
                 })
                 ->get();
-                
+
             Log::info("Found {$sections->count()} sections for grade {$gradeId}");
             return response()->json($sections);
         } catch (\Exception $e) {
@@ -191,18 +191,18 @@ class SectionController extends Controller
         try {
             // Find the section
             $section = Section::findOrFail($sectionId);
-            
+
             Log::info("Attempting to assign teacher {$request->teacher_id} to section {$section->id}");
-            
+
             // Update the section with homeroom teacher
             $section->homeroom_teacher_id = $request->teacher_id;
             $saved = $section->save();
-            
+
             Log::info("Save result: " . ($saved ? 'success' : 'failed'));
-            
+
             // Refresh the section from database to get latest data
             $section->refresh();
-            
+
             Log::info("Section after refresh - homeroom_teacher_id: " . $section->homeroom_teacher_id);
 
             return response()->json([
@@ -313,11 +313,22 @@ class SectionController extends Controller
     }
 
     /**
-     * Set the schedule for a subject in a section
+     * Set the schedule for a subject in a section (direct route)
      */
-    public function setSubjectSchedule(Request $request, $curriculumId, $gradeId, $sectionId, $subjectId)
+    public function setSubjectSchedule(Request $request, $sectionId, $subjectId)
+    {
+        return $this->setSubjectScheduleWithParams($request, null, null, $sectionId, $subjectId);
+    }
+
+    /**
+     * Set the schedule for a subject in a section (with all parameters)
+     */
+    public function setSubjectScheduleWithParams(Request $request, $curriculumId = null, $gradeId = null, $sectionId, $subjectId)
     {
         try {
+            Log::info("Setting schedule for section {$sectionId}, subject {$subjectId}");
+            Log::info("Request data: " . json_encode($request->all()));
+            
             $validated = $request->validate([
                 'day' => 'required|string',
                 'start_time' => 'required|string',
@@ -325,21 +336,28 @@ class SectionController extends Controller
                 'teacher_id' => 'nullable|exists:teachers,id'
             ]);
 
+            // Convert times to standard format for comparison
+            $startTime = date('H:i:s', strtotime($validated['start_time']));
+            $endTime = date('H:i:s', strtotime($validated['end_time']));
+            
+            Log::info("Converted times - Start: {$startTime}, End: {$endTime}");
+
             // Check for schedule conflicts if a teacher is assigned
             if (!empty($validated['teacher_id'])) {
-                // Convert times to standard format for comparison
-                $startTime = date('H:i:s', strtotime($validated['start_time']));
-                $endTime = date('H:i:s', strtotime($validated['end_time']));
-
                 // Check if this would create a scheduling conflict for the teacher
-                $conflict = SubjectSchedule::hasConflict(
-                    $validated['teacher_id'],
-                    $validated['day'],
-                    $startTime,
-                    $endTime
-                );
+                $existingSchedule = SubjectSchedule::where('teacher_id', $validated['teacher_id'])
+                    ->where('day', $validated['day'])
+                    ->where(function($query) use ($startTime, $endTime) {
+                        $query->whereBetween('start_time', [$startTime, $endTime])
+                              ->orWhereBetween('end_time', [$startTime, $endTime])
+                              ->orWhere(function($q) use ($startTime, $endTime) {
+                                  $q->where('start_time', '<=', $startTime)
+                                    ->where('end_time', '>=', $endTime);
+                              });
+                    })
+                    ->exists();
 
-                if ($conflict) {
+                if ($existingSchedule) {
                     return response()->json([
                         'message' => 'Teacher already has a schedule at this time',
                         'error' => 'Schedule conflict detected'
@@ -355,11 +373,13 @@ class SectionController extends Controller
                     'day' => $validated['day']
                 ],
                 [
-                    'start_time' => $startTime ?? $validated['start_time'],
-                    'end_time' => $endTime ?? $validated['end_time'],
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
                     'teacher_id' => $validated['teacher_id'] ?? null
                 ]
             );
+            
+            Log::info("Schedule created/updated successfully: " . json_encode($schedule->toArray()));
 
             return response()->json([
                 'message' => 'Schedule set successfully',
@@ -453,6 +473,64 @@ class SectionController extends Controller
     /**
      * Get subjects for a section
      */
+    /**
+     * Get subjects for a section (nested route version)
+     */
+    public function getSectionSubjects(Request $request, $curriculumId, $gradeId, $sectionId)
+    {
+        try {
+            Log::info("Getting subjects for section via nested route: curriculum={$curriculumId}, grade={$gradeId}, section={$sectionId}");
+            Log::info("Request params: " . json_encode($request->all()));
+
+            $section = Section::findOrFail($sectionId);
+            $userAddedOnly = $request->boolean('user_added_only');
+
+            Log::info("User added only flag: " . ($userAddedOnly ? 'true' : 'false'));
+
+            if ($userAddedOnly) {
+                Log::info("Getting ONLY user-added subjects for section $sectionId");
+                $subjects = $section->directSubjects()->get();
+                
+                // Load schedules for user-added subjects too
+                $subjects = $subjects->map(function ($subject) use ($sectionId) {
+                    $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
+                        ->where('subject_id', $subject->id)
+                        ->get();
+                    $subject->schedules = $schedules;
+                    return $subject;
+                });
+                
+                Log::info("Found " . count($subjects) . " user-added subjects for section $sectionId");
+                return response()->json($subjects);
+            }
+
+            Log::info("Getting ALL subjects for section $sectionId (including auto-assigned)");
+            $allSubjects = $section->subjects()->with('schedules')->get();
+            $directSubjects = $section->directSubjects()->with('schedules')->get();
+            $mergedSubjects = $allSubjects->concat($directSubjects)->unique('id');
+
+            // Load schedules for each subject
+            $mergedSubjects = $mergedSubjects->map(function ($subject) use ($sectionId) {
+                $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
+                    ->where('subject_id', $subject->id)
+                    ->get();
+                $subject->schedules = $schedules;
+                return $subject;
+            });
+
+            Log::info("Found " . count($mergedSubjects) . " total subjects for section $sectionId");
+            Log::debug("Subjects with schedules: " . json_encode($mergedSubjects->toArray()));
+            return response()->json($mergedSubjects);
+        } catch (\Exception $e) {
+            Log::error("Error in getSectionSubjects: " . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get subjects for a section (direct route version)
+     */
     public function getSubjects(Request $request, $sectionId)
     {
         try {
@@ -488,8 +566,18 @@ class SectionController extends Controller
             // Merge them and ensure uniqueness by ID
             $mergedSubjects = $allSubjects->concat($directSubjects)->unique('id');
 
+            // Load schedules for each subject
+            $mergedSubjects = $mergedSubjects->map(function ($subject) use ($sectionId) {
+                $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
+                    ->where('subject_id', $subject->id)
+                    ->get();
+                $subject->schedules = $schedules;
+                return $subject;
+            });
+
             Log::info("Found " . count($mergedSubjects) . " total subjects for section $sectionId");
             Log::debug("All subjects: " . json_encode($mergedSubjects->pluck('name')));
+            Log::debug("Subjects with schedules: " . json_encode($mergedSubjects->toArray()));
 
             return response()->json($mergedSubjects);
         } catch (\Exception $e) {
@@ -526,11 +614,14 @@ class SectionController extends Controller
     }
 
     /**
-     * Add a subject to a section
+     * Add a subject to a section (nested route version)
      */
-    public function addSubject(Request $request, $sectionId)
+    public function addSubjectToSection(Request $request, $curriculumId, $gradeId, $sectionId)
     {
         try {
+            Log::info("Adding subject to section via nested route: curriculum={$curriculumId}, grade={$gradeId}, section={$sectionId}");
+            Log::info("Request data: " . json_encode($request->all()));
+            
             $validated = $request->validate([
                 'subject_id' => 'required|exists:subjects,id'
             ]);
@@ -540,15 +631,18 @@ class SectionController extends Controller
             // Add the subject to the section using the pivot table
             $section->directSubjects()->syncWithoutDetaching([$validated['subject_id']]);
 
-            Log::info("Added subject {$validated['subject_id']} to section {$sectionId}");
+            Log::info("Successfully added subject {$validated['subject_id']} to section {$sectionId}");
 
             return response()->json([
                 'message' => 'Subject added to section successfully',
                 'section_id' => $sectionId,
-                'subject_id' => $validated['subject_id']
+                'subject_id' => $validated['subject_id'],
+                'curriculum_id' => $curriculumId,
+                'grade_id' => $gradeId
             ]);
         } catch (\Exception $e) {
-            Log::error("Error adding subject to section: " . $e->getMessage());
+            Log::error("Error adding subject to section via nested route: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
             return response()->json([
                 'message' => 'Failed to add subject to section',
                 'error' => $e->getMessage()
@@ -557,17 +651,85 @@ class SectionController extends Controller
     }
 
     /**
-     * Remove a subject from a section
+     * Add a subject to a section (direct route version)
      */
-    public function removeSubject($sectionId, $subjectId)
+    public function addSubject(Request $request, $sectionId)
     {
         try {
+            Log::info("Adding subject to section via direct route: section={$sectionId}");
+            Log::info("Request data: " . json_encode($request->all()));
+            
+            $validated = $request->validate([
+                'subject_id' => 'required|exists:subjects,id'
+            ]);
+
+            $section = Section::findOrFail($sectionId);
+
+            // Add the subject to the section using the pivot table
+            $section->directSubjects()->syncWithoutDetaching([$validated['subject_id']]);
+
+            Log::info("Successfully added subject {$validated['subject_id']} to section {$sectionId}");
+
+            return response()->json([
+                'message' => 'Subject added to section successfully',
+                'section_id' => $sectionId,
+                'subject_id' => $validated['subject_id']
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error adding subject to section via direct route: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            return response()->json([
+                'message' => 'Failed to add subject to section',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a subject from a section (nested route version)
+     */
+    public function removeSubjectFromSection($curriculumId, $gradeId, $sectionId, $subjectId)
+    {
+        try {
+            Log::info("Removing subject from section via nested route: curriculum={$curriculumId}, grade={$gradeId}, section={$sectionId}, subject={$subjectId}");
+            
             $section = Section::findOrFail($sectionId);
 
             // Remove the subject from the section
             $section->directSubjects()->detach($subjectId);
 
-            Log::info("Removed subject {$subjectId} from section {$sectionId}");
+            Log::info("Successfully removed subject {$subjectId} from section {$sectionId}");
+
+            return response()->json([
+                'message' => 'Subject removed from section successfully',
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId,
+                'curriculum_id' => $curriculumId,
+                'grade_id' => $gradeId
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error removing subject from section via nested route: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to remove subject from section',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a subject from a section (direct route version)
+     */
+    public function removeSubject($sectionId, $subjectId)
+    {
+        try {
+            Log::info("Removing subject from section via direct route: section={$sectionId}, subject={$subjectId}");
+            
+            $section = Section::findOrFail($sectionId);
+
+            // Remove the subject from the section
+            $section->directSubjects()->detach($subjectId);
+
+            Log::info("Successfully removed subject {$subjectId} from section {$sectionId}");
 
             return response()->json([
                 'message' => 'Subject removed from section successfully',
@@ -575,7 +737,7 @@ class SectionController extends Controller
                 'subject_id' => $subjectId
             ]);
         } catch (\Exception $e) {
-            Log::error("Error removing subject from section: " . $e->getMessage());
+            Log::error("Error removing subject from section via direct route: " . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to remove subject from section',
                 'error' => $e->getMessage()

@@ -73,10 +73,10 @@ const assignTeacherToSection = async () => {
         if (selectedGradeForSections.value) {
             const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
             gradeSections.value = Array.isArray(sections) ? sections : [];
-            
+
             // Update the specific section with response data if available
             if (response && response.section) {
-                const sectionIndex = gradeSections.value.findIndex(s => s.id === response.section.id);
+                const sectionIndex = gradeSections.value.findIndex((s) => s.id === response.section.id);
                 if (sectionIndex !== -1) {
                     gradeSections.value[sectionIndex] = response.section;
                 }
@@ -600,15 +600,15 @@ onMounted(() => {
 
             // Load initial data - single curriculum
             await loadCurriculums();
-            
+
             // Only load grades if curriculum is available
             if (curriculum.value && curriculum.value.id) {
                 await loadGradesForCurriculum(curriculum.value.id);
             }
-            
+
             // Load all available grades for dropdown
             await loadAllGrades();
-            
+
             // Load subjects and teachers
             await loadSubjects();
             await loadTeachers();
@@ -891,18 +891,45 @@ onMounted(() => {
                 throw new Error('No data returned from teachers API');
             }
 
-            teachers.value = Array.isArray(data) ? data : [];
+            const allTeachers = Array.isArray(data) ? data : [];
+
+            // Get all sections to check which teachers are already assigned as homeroom teachers
+            let assignedTeacherIds = [];
+            try {
+                const sectionsResponse = await api.get('/api/sections');
+                const allSections = sectionsResponse.data || [];
+
+                // Extract homeroom teacher IDs from all sections
+                assignedTeacherIds = allSections.filter((section) => section.homeroom_teacher_id).map((section) => section.homeroom_teacher_id);
+
+                console.log('Teachers already assigned as homeroom teachers:', assignedTeacherIds);
+            } catch (sectionError) {
+                console.warn('Could not load sections to check teacher assignments:', sectionError);
+            }
+
+            // Filter out teachers who are already assigned as homeroom teachers
+            teachers.value = allTeachers.filter((teacher) => !assignedTeacherIds.includes(teacher.id));
 
             if (teachers.value.length === 0) {
-                console.warn('No teachers returned from API');
-                toast.add({
-                    severity: 'warn',
-                    summary: 'Warning',
-                    detail: 'No teachers found in the database. You may need to add teachers first.',
-                    life: 5000
-                });
+                if (allTeachers.length > 0) {
+                    console.warn('All teachers are already assigned as homeroom teachers');
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Warning',
+                        detail: 'All teachers are already assigned as homeroom teachers to other sections.',
+                        life: 5000
+                    });
+                } else {
+                    console.warn('No teachers returned from API');
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Warning',
+                        detail: 'No teachers found in the database. You may need to add teachers first.',
+                        life: 5000
+                    });
+                }
             } else {
-                console.log(`Successfully loaded ${teachers.value.length} teachers:`, teachers.value);
+                console.log(`Successfully loaded ${teachers.value.length} available teachers (${allTeachers.length - teachers.value.length} already assigned):`, teachers.value);
             }
         } catch (error) {
             console.error('Error loading teachers:', error);
@@ -2700,23 +2727,50 @@ const addSubjectToSection = async (subjectId) => {
     }
 
     // If subjectId is not provided directly, use the selected subject's ID
-    const actualSubjectId = subjectId || selectedSubject.value.id;
+    const actualSubjectId = subjectId || selectedSubject.value?.id;
+
+    if (!actualSubjectId) {
+        console.error('No subject selected or provided');
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Please select a subject first',
+            life: 3000
+        });
+        return;
+    }
 
     try {
         loading.value = true;
         console.log('Adding subject', actualSubjectId, 'to section', selectedSection.value.id);
 
         // Prepare the data object
+        // Use stored context if main context is lost
+        const sectionId = selectedSection.value?.id || tempSectionContext.value?.id;
+        const curriculumId = selectedCurriculum.value?.id || tempCurriculumContext.value?.id;
+        const gradeId = selectedGrade.value?.id || tempGradeContext.value?.id;
+
+        if (!sectionId || !curriculumId || !gradeId) {
+            console.error('Missing context data:', { sectionId, curriculumId, gradeId });
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Context lost. Please try again.',
+                life: 3000
+            });
+            return;
+        }
+
         const subjectData = {
             subject_id: actualSubjectId,
-            section_id: selectedSection.value.id,
-            curriculum_id: selectedCurriculum.value.id,
-            grade_id: selectedGrade.value.id
+            section_id: sectionId,
+            curriculum_id: curriculumId,
+            grade_id: gradeId
         };
 
         // First try using the nested API endpoint
         try {
-            await CurriculumService.addSubjectToSection(selectedCurriculum.value.id, selectedGrade.value.id, selectedSection.value.id, subjectData);
+            await CurriculumService.addSubjectToSection(curriculumId, gradeId, sectionId, subjectData);
 
             console.log('Successfully added subject to section');
 
@@ -3164,10 +3218,27 @@ const saveNewGrade = async () => {
     try {
         loading.value = true;
 
+        // Check if grade already exists before creating
+        const existingGrades = await api.get('/api/grades');
+        const gradeExists = existingGrades.data.some((grade) => grade.code === newGrade.value.code);
+
+        if (gradeExists) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: `Grade ${newGrade.value.code} already exists`,
+                life: 3000
+            });
+            return;
+        }
+
+        // Use the properly structured newGrade data
         const gradeData = {
-            name: `${selectedGradeType.value} ${gradeValue.value}`,
-            level: gradeValue.value,
-            type: selectedGradeType.value,
+            code: newGrade.value.code,
+            name: newGrade.value.name,
+            level: newGrade.value.level,
+            display_order: newGrade.value.display_order,
+            description: newGrade.value.description || '',
             is_active: true
         };
 
@@ -3184,16 +3255,45 @@ const saveNewGrade = async () => {
         selectedGradeType.value = null;
         gradeValue.value = null;
 
+        // Clear cache and refresh grades with auto-refresh
+        try {
+            if (typeof GradesService !== 'undefined' && GradesService.clearCache) {
+                GradesService.clearCache();
+            }
+        } catch (cacheError) {
+            console.warn('Cache clearing failed:', cacheError);
+        }
+        localStorage.removeItem('grades_cache');
+        localStorage.removeItem('grades_cache_timestamp');
+
         // Refresh grades
         await loadGradeLevels();
     } catch (error) {
         console.error('Error creating grade:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to create grade level',
-            life: 3000
-        });
+
+        // Handle specific validation errors
+        if (error.response && error.response.status === 422) {
+            const errors = error.response.data.errors;
+            let errorMessage = 'Validation failed';
+
+            if (errors.code && errors.code[0]) {
+                errorMessage = errors.code[0];
+            }
+
+            toast.add({
+                severity: 'error',
+                summary: 'Validation Error',
+                detail: errorMessage,
+                life: 3000
+            });
+        } else {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to create grade level',
+                life: 3000
+            });
+        }
     } finally {
         loading.value = false;
     }
@@ -3210,23 +3310,516 @@ const editSection = async (section) => {
     });
 };
 
+// Section management refs
+const sectionEditDialog = ref(false);
+const editingSection = ref(null);
+const sectionScheduleDialog = ref(false);
+const selectedSectionForSchedule = ref(null);
+const sectionSchedules = ref([]);
+const sectionManagementHub = ref(false);
+const selectedSectionForHub = ref(null);
+const activeManagementTab = ref('schedules'); // schedules, subjects, details
+
+// Open section edit dialog
+const openSectionEditDialog = (section) => {
+    editingSection.value = { ...section };
+    sectionEditDialog.value = true;
+};
+
+// Save section edits
+const saveSectionEdit = async () => {
+    if (!editingSection.value.name?.trim()) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Section name is required',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        loading.value = true;
+
+        // Update section via API
+        await api.put(`/api/sections/${editingSection.value.id}`, {
+            name: editingSection.value.name,
+            description: editingSection.value.description,
+            capacity: editingSection.value.capacity
+        });
+
+        // Clear cache and refresh
+        CurriculumService.clearCache();
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}`);
+
+        // Refresh sections list
+        const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section updated successfully',
+            life: 3000
+        });
+
+        sectionEditDialog.value = false;
+    } catch (error) {
+        console.error('Error updating section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update section',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Open section schedule manager
+const openSectionScheduleManager = async (section) => {
+    selectedSectionForSchedule.value = section;
+
+    try {
+        loading.value = true;
+
+        // Fetch schedules for this section
+        const response = await api.get(`/api/schedules/section/${section.id}`);
+        sectionSchedules.value = response.data || [];
+
+        sectionScheduleDialog.value = true;
+    } catch (error) {
+        console.error('Error loading section schedules:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load section schedules',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Refresh section schedules
+const refreshSectionSchedules = async () => {
+    if (!selectedSectionForSchedule.value) return;
+
+    try {
+        loading.value = true;
+        const response = await api.get(`/api/schedules/section/${selectedSectionForSchedule.value.id}`);
+        sectionSchedules.value = Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+        console.error('Error refreshing schedules:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to refresh schedules',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Check if section has homeroom schedule
+const hasHomeroomSchedule = computed(() => {
+    if (!Array.isArray(sectionSchedules.value)) {
+        return false;
+    }
+    return sectionSchedules.value.some((schedule) => !schedule.subject_id);
+});
+
+// Fix the openHomeroomTeacherDialog function reference
+const openHomeroomTeacherDialog = (section) => {
+    selectedSectionForTeacher.value = section;
+    selectedTeacherForAssignment.value = section.homeroom_teacher_id || null;
+    teacherAssignmentDialog.value = true;
+};
+
+// Open the consolidated section management hub
+const openSectionManagementHub = async (section) => {
+    selectedSectionForHub.value = { ...section }; // Create a copy for editing
+    selectedSectionForSchedule.value = section;
+    selectedSection.value = section;
+    activeManagementTab.value = 'schedules';
+
+    // Load all necessary data
+    try {
+        loading.value = true;
+
+        // Load schedules
+        const scheduleResponse = await api.get(`/api/schedules/section/${section.id}`);
+        sectionSchedules.value = Array.isArray(scheduleResponse.data) ? scheduleResponse.data : [];
+
+        // Load subjects for this section
+        const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, selectedGradeForSections.value.id, section.id);
+        selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
+
+        sectionManagementHub.value = true;
+    } catch (error) {
+        console.error('Error loading section data:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load section data',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Refresh section subjects function
+const refreshSectionSubjects = async () => {
+    if (!selectedSection.value || !selectedSection.value.id) {
+        console.warn('Cannot refresh subjects: No section selected');
+        return;
+    }
+
+    try {
+        loading.value = true;
+        console.log('Refreshing subjects for section:', selectedSection.value.id);
+
+        // Clear any cached data for this section
+        try {
+            const cacheKey = `section_subjects_${selectedSection.value.id}`;
+            localStorage.removeItem(cacheKey);
+            localStorage.removeItem(`${cacheKey}_timestamp`);
+        } catch (e) {
+            console.warn('Could not clear cache:', e);
+        }
+
+        // Fetch fresh data
+        const response = await CurriculumService.getSubjectsBySection(curriculum.value.id, selectedGradeForSections.value.id, selectedSection.value.id);
+
+        if (Array.isArray(response)) {
+            console.log('Successfully refreshed subjects:', response.length);
+            console.log('Subject data with schedules:', response);
+            console.log('First subject schedules:', response[0]?.schedules);
+            selectedSubjects.value = response;
+        } else {
+            console.warn('Invalid response format:', response);
+            selectedSubjects.value = [];
+        }
+    } catch (error) {
+        console.error('Error refreshing subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to refresh subjects',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Store context when opening Add Subject dialog
+const tempSectionContext = ref(null);
+const tempGradeContext = ref(null);
+const tempCurriculumContext = ref(null);
+
+// Schedule dialog data
+const selectedScheduleData = ref({
+    day: '',
+    start_time: '',
+    end_time: '',
+    teacher_id: null
+});
+
+// Add Subject Dialog handler - moved to top level
+const openAddSubjectDialog = () => {
+    console.log('Opening Add Subject dialog');
+
+    // Store current context before closing main dialog
+    tempSectionContext.value = selectedSection.value;
+    tempGradeContext.value = selectedGradeForSections.value;
+    tempCurriculumContext.value = curriculum.value;
+
+    // First, make sure we have subjects loaded
+    if (!subjects.value || subjects.value.length === 0) {
+        loadSubjects();
+    }
+
+    // Reset form state
+    selectedSubject.value = null;
+    submitted.value = false;
+
+    // Temporarily close the main dialog to avoid z-index issues
+    sectionManagementHub.value = false;
+
+    // Show the add subject dialog
+    subjectDialog.value = true;
+};
+
+// Close Add Subject Dialog
+const closeAddSubjectDialog = () => {
+    subjectDialog.value = false;
+
+    // Restore context if it was lost
+    if (!selectedSection.value && tempSectionContext.value) {
+        selectedSection.value = tempSectionContext.value;
+    }
+    if (!selectedGradeForSections.value && tempGradeContext.value) {
+        selectedGradeForSections.value = tempGradeContext.value;
+    }
+    if (!curriculum.value && tempCurriculumContext.value) {
+        curriculum.value = tempCurriculumContext.value;
+    }
+
+    // Reopen the main dialog
+    sectionManagementHub.value = true;
+
+    // Clear temp context
+    tempSectionContext.value = null;
+    tempGradeContext.value = null;
+    tempCurriculumContext.value = null;
+};
+
+// Open Schedule Dialog
+const openScheduleDialog = async (subject) => {
+    try {
+        console.log('Opening schedule dialog for subject:', subject);
+        selectedSubjectForSchedule.value = subject;
+        selectedScheduleData.value = {
+            day: 'Monday',
+            start_time: '08:00',
+            end_time: '09:00',
+            teacher_id: null
+        };
+
+        // Temporarily close main dialog to avoid z-index issues
+        sectionManagementHub.value = false;
+
+        // Small delay to ensure main dialog closes first
+        setTimeout(() => {
+            showScheduleDialog.value = true;
+            console.log('Schedule dialog should now be visible:', showScheduleDialog.value);
+        }, 100);
+    } catch (error) {
+        console.error('Error opening schedule dialog:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to open schedule dialog',
+            life: 3000
+        });
+    }
+};
+
+// Open Teacher Dialog
+const openTeacherDialog = async (subject) => {
+    try {
+        console.log('Opening teacher dialog for subject:', subject);
+        selectedSubjectForTeacher.value = subject;
+        selectedTeacher.value = null;
+        teacherDialog.value = true;
+    } catch (error) {
+        console.error('Error opening teacher dialog:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to open teacher dialog',
+            life: 3000
+        });
+    }
+};
+
+// Save Schedule
+const saveSchedule = async () => {
+    try {
+        console.log('Saving schedule data:', selectedScheduleData.value);
+        console.log('Selected subject:', selectedSubjectForSchedule.value);
+
+        const sectionId = selectedSection.value?.id || tempSectionContext.value?.id;
+        const subjectId = selectedSubjectForSchedule.value?.id;
+
+        if (!sectionId || !subjectId) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Missing section or subject information',
+                life: 3000
+            });
+            return;
+        }
+
+        await api.post(`/api/sections/${sectionId}/subjects/${subjectId}/schedule`, selectedScheduleData.value);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Schedule saved successfully',
+            life: 3000
+        });
+
+        showScheduleDialog.value = false;
+
+        // Refresh subject data to show updated schedule
+        await refreshSectionSubjects();
+
+        // Reopen main dialog
+        setTimeout(() => {
+            sectionManagementHub.value = true;
+        }, 100);
+    } catch (error) {
+        console.error('Error saving schedule:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to save schedule',
+            life: 3000
+        });
+    }
+};
+
+// Save section details from the hub
+const saveSectionDetailsFromHub = async () => {
+    if (!selectedSectionForHub.value.name?.trim()) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Section name is required',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        loading.value = true;
+
+        // Update section via API
+        await api.put(`/api/sections/${selectedSectionForHub.value.id}`, {
+            name: selectedSectionForHub.value.name,
+            description: selectedSectionForHub.value.description,
+            capacity: selectedSectionForHub.value.capacity
+        });
+
+        // Clear cache and refresh
+        CurriculumService.clearCache();
+        localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}`);
+
+        // Refresh sections list
+        const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
+        gradeSections.value = Array.isArray(sections) ? sections : [];
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Section updated successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error updating section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update section',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Create homeroom schedule for section
+const createHomeroomSchedule = async () => {
+    if (!selectedSectionForSchedule.value) return;
+
+    try {
+        loading.value = true;
+
+        // Create homeroom schedules for Monday to Friday
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+        for (const day of days) {
+            await api.post('/api/schedules/homeroom', {
+                section_id: selectedSectionForSchedule.value.id,
+                day: day,
+                start_time: '07:30',
+                end_time: '08:00',
+                teacher_id: selectedSectionForSchedule.value.homeroom_teacher_id
+            });
+        }
+
+        // Refresh schedules
+        await refreshSectionSchedules();
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Homeroom schedules created successfully',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error creating homeroom schedule:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to create homeroom schedule',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Delete schedule
+const deleteSchedule = async (scheduleId) => {
+    confirmDialog.require({
+        message: 'Are you sure you want to delete this schedule?',
+        header: 'Delete Schedule',
+        icon: 'pi pi-exclamation-triangle',
+        accept: async () => {
+            try {
+                loading.value = true;
+
+                await api.delete(`/api/schedules/${scheduleId}`);
+
+                // Refresh schedules
+                const response = await api.get(`/api/schedules/section/${selectedSectionForSchedule.value.id}`);
+                sectionSchedules.value = Array.isArray(response.data) ? response.data : [];
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: 'Schedule deleted successfully',
+                    life: 3000
+                });
+            } catch (error) {
+                console.error('Error deleting schedule:', error);
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to delete schedule',
+                    life: 3000
+                });
+            } finally {
+                loading.value = false;
+            }
+        }
+    });
+};
+
 // Delete section function
 const deleteSection = async (section) => {
     try {
         loading.value = true;
-        
+
         // Call the API to delete the section
         await CurriculumService.removeSection(curriculum.value.id, selectedGradeForSections.value.id, section.id);
-        
+
         // Clear cache to force fresh data
         CurriculumService.clearCache();
         localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}`);
         localStorage.removeItem(`sections_${curriculum.value.id}_${selectedGradeForSections.value.id}_timestamp`);
-        
+
         // Force fresh API call to get updated sections
         const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, selectedGradeForSections.value.id);
         gradeSections.value = Array.isArray(sections) ? sections : [];
-        
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -3246,13 +3839,40 @@ const deleteSection = async (section) => {
     }
 };
 
+// Confirm section removal
+const confirmRemoveSection = (section) => {
+    confirmDialog.require({
+        message: `Are you sure you want to delete section "${section.name}"? This action cannot be undone.`,
+        header: 'Delete Section',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClass: 'p-button-danger',
+        accept: () => deleteSection(section)
+    });
+};
+
 // Expose functions to template
 defineExpose({
     getTeacherName,
     saveGrade,
     saveNewGrade,
     editSection,
-    deleteSection
+    deleteSection,
+    openSectionEditDialog,
+    saveSectionEdit,
+    openSectionScheduleManager,
+    deleteSchedule,
+    confirmRemoveSection,
+    refreshSectionSchedules,
+    createHomeroomSchedule,
+    openSectionManagementHub,
+    saveSectionDetailsFromHub,
+    refreshSectionSubjects,
+    openAddSubjectDialog,
+    closeAddSubjectDialog,
+    openScheduleDialog,
+    openTeacherDialog,
+    removeSubjectFromSection,
+    saveSchedule
 });
 
 // Section management functions
@@ -3299,12 +3919,51 @@ const saveNewSection = async () => {
     try {
         loading.value = true;
 
-        // Get curriculum_grade_id first
-        const curriculumGrade = await CurriculumService.getCurriculumGrade(curriculum.value.id, selectedGradeForSections.value.id);
+        // Get curriculum_grade_id first - try direct API call
+        let curriculumGradeId = null;
+
+        try {
+            // Use the relationship endpoint to get the curriculum_grade_id
+            const relationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
+
+            if (relationshipResponse.data && relationshipResponse.data.id) {
+                curriculumGradeId = relationshipResponse.data.id;
+                console.log(`Found curriculum_grade_id: ${curriculumGradeId} for grade ${selectedGradeForSections.value.id}`);
+            } else {
+                throw new Error('Invalid relationship response');
+            }
+        } catch (error) {
+            console.error('Error getting curriculum_grade_id:', error);
+
+            // If relationship doesn't exist, try to create it
+            try {
+                console.log('Creating curriculum-grade relationship...');
+                await api.post(`/api/curriculums/${curriculum.value.id}/grades`, {
+                    grade_id: selectedGradeForSections.value.id
+                });
+
+                // Try to get the relationship ID again
+                const newRelationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
+
+                if (newRelationshipResponse.data && newRelationshipResponse.data.id) {
+                    curriculumGradeId = newRelationshipResponse.data.id;
+                    console.log(`Created and got curriculum_grade_id: ${curriculumGradeId}`);
+                } else {
+                    throw new Error('Failed to get relationship ID after creation');
+                }
+            } catch (createError) {
+                console.error('Error creating curriculum-grade relationship:', createError);
+                throw new Error('Failed to create curriculum-grade relationship');
+            }
+        }
+
+        if (!curriculumGradeId) {
+            throw new Error('Could not obtain valid curriculum_grade_id');
+        }
 
         const sectionData = {
             ...newSection.value,
-            curriculum_grade_id: curriculumGrade.id
+            curriculum_grade_id: curriculumGradeId
         };
 
         const response = await CurriculumService.addSection(sectionData);
@@ -4305,7 +4964,7 @@ watch(
                                     teacherAssignmentDialog = true;
                                 "
                             />
-                            <Button icon="pi pi-pencil" label="Edit" class="apple-button edit-button" @click="editSection(section)" />
+                            <Button icon="pi pi-calendar" label="Schedules" class="apple-button schedules-button" @click="openSectionManagementHub(section)" />
                             <Button icon="pi pi-trash" label="Delete" class="apple-button delete-button" @click="deleteSection(section)" />
                         </div>
                     </div>
@@ -4314,6 +4973,79 @@ watch(
 
             <template #footer>
                 <Button label="Close" icon="pi pi-times" class="p-button-text" @click="sectionManagementDialog = false" />
+            </template>
+        </Dialog>
+
+        <!-- Section Management Hub Dialog -->
+        <Dialog v-model:visible="sectionManagementHub" :style="{ width: '90vw', maxWidth: '1200px', zIndex: 1000 }" :header="`Section Management - ${selectedSectionForHub?.name}`" :modal="true" class="p-fluid" :maximizable="true">
+            <div class="section-management-content">
+                <div class="sections-header">
+                    <h3>Sections for {{ selectedGradeForSections?.name }}</h3>
+                    <Button label="Add Section" icon="pi pi-plus" class="p-button-success" @click="openNewSectionDialog" />
+                </div>
+
+                <div v-if="gradeSections.length === 0" class="empty-sections">
+                    <p>No sections found for this grade level. Click "Add Section" to create one.</p>
+                </div>
+
+                <div v-else class="sections-grid">
+                    <div v-for="section in gradeSections" :key="section.id" class="modern-section-card">
+                        <div class="section-header">
+                            <h3 class="section-name">{{ section.name }}</h3>
+                        </div>
+
+                        <div class="section-body">
+                            <p v-if="section.description" class="section-description">{{ section.description }}</p>
+                            <div class="section-capacity">
+                                <i class="pi pi-users"></i>
+                                <span
+                                    >Capacity: <strong>{{ section.capacity }}</strong> students</span
+                                >
+                            </div>
+                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id">
+                                <i class="pi pi-user-edit"></i>
+                                <span
+                                    >Homeroom Teacher: <strong>{{ getTeacherName(section.homeroom_teacher_id) }}</strong></span
+                                >
+                            </div>
+                            <div class="homeroom-teacher no-teacher" v-else>
+                                <i class="pi pi-user-plus"></i>
+                                <span>No homeroom teacher assigned</span>
+                            </div>
+                        </div>
+
+                        <div class="section-actions">
+                            <Button
+                                v-if="!section.homeroom_teacher_id"
+                                icon="pi pi-user-plus"
+                                label="Assign Teacher"
+                                class="apple-button assign-teacher-button"
+                                @click="
+                                    selectedSectionForTeacher = section;
+                                    selectedTeacherForAssignment = section.homeroom_teacher_id || null;
+                                    teacherAssignmentDialog = true;
+                                "
+                            />
+                            <Button
+                                v-else
+                                icon="pi pi-user-edit"
+                                label="Change Teacher"
+                                class="apple-button change-teacher-button"
+                                @click="
+                                    selectedSectionForTeacher = section;
+                                    selectedTeacherForAssignment = section.homeroom_teacher_id || null;
+                                    teacherAssignmentDialog = true;
+                                "
+                            />
+                            <Button icon="pi pi-calendar" label="Schedules" class="apple-button schedules-button" @click="openSectionManagementHub(section)" />
+                            <Button icon="pi pi-trash" label="Delete" class="apple-button delete-button" @click="deleteSection(section)" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="sectionManagementHub = false" />
             </template>
         </Dialog>
 
@@ -4409,11 +5141,9 @@ watch(
                             <p v-if="section.description" class="m-0 text-sm text-500">{{ section.description }}</p>
                         </div>
                         <div class="flex gap-2">
-                            <Button icon="pi pi-book" class="p-button-rounded p-button-primary p-button-outlined" @click="openSubjectList(section)" v-tooltip.top="'Manage Subjects'" />
                             <Button
-                                v-if="!section.homeroom_teacher_id"
-                                icon="pi pi-user"
-                                class="p-button-rounded p-button-success p-button-outlined"
+                                :icon="section.homeroom_teacher_id ? 'pi pi-user-edit' : 'pi pi-user-plus'"
+                                :class="section.homeroom_teacher_id ? 'p-button-rounded p-button-warning p-button-outlined' : 'p-button-rounded p-button-success p-button-outlined'"
                                 @click="
                                     () => {
                                         selectedSectionForTeacher = section;
@@ -4421,9 +5151,10 @@ watch(
                                         teacherAssignmentDialog = true;
                                     }
                                 "
-                                v-tooltip.top="'Assign Teacher'"
+                                v-tooltip.top="section.homeroom_teacher_id ? 'Change Homeroom Teacher' : 'Assign Homeroom Teacher'"
                             />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="confirmRemoveSection(section)" v-tooltip.top="'Remove Section'" />
+                            <Button label="Schedules" icon="pi pi-calendar" class="p-button-primary" @click="openSectionManagementHub(section)" v-tooltip.top="'Manage Subjects, Schedules & Section Details'" />
+                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="confirmRemoveSection(section)" v-tooltip.top="'Delete Section'" />
                         </div>
                     </div>
                     <div v-if="section.homeroom_teacher_id" class="teacher-info flex align-items-center gap-2 mt-2">
@@ -4449,7 +5180,7 @@ watch(
                 :header="`Set Schedule for ${selectedSubjectForSchedule?.name || 'Subject'}`"
                 modal
                 class="p-fluid schedule-dialog"
-                :style="{ width: '450px' }"
+                :style="{ width: '500px', zIndex: 9999 }"
                 :closable="true"
                 appendTo="body"
                 @hide="handleScheduleDialogClose"
@@ -4555,7 +5286,8 @@ watch(
                                 <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" v-tooltip.top="'Remove Subject'" />
                             </div>
                         </div>
-
+                        <!-- Debug schedule data -->
+                        <div class="debug-info mb-2" style="background: #f0f0f0; padding: 8px; font-size: 12px; border-radius: 4px"><strong>Debug:</strong> schedules = {{ JSON.stringify(subject.schedules) }}</div>
                         <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-section">
                             <h5 class="mt-0 mb-2">Schedule</h5>
                             <ul class="schedule-list">
@@ -4595,7 +5327,7 @@ watch(
 
                 <template #footer>
                     <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="closeAddSubjectDialog" />
-                    <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" />
+                    <Button label="Add" icon="pi pi-check" class="p-button-primary" @click="addSubjectToSection(selectedSubject?.id)" :disabled="!selectedSubject" />
                 </template>
             </Dialog>
         </Teleport>
@@ -4678,6 +5410,217 @@ watch(
                 </template>
             </Dialog>
         </Teleport>
+
+        <!-- Section Edit Dialog -->
+        <Dialog v-model:visible="sectionEditDialog" header="Edit Section" modal class="p-fluid" :style="{ width: '450px' }">
+            <div v-if="loading" class="flex justify-content-center">
+                <ProgressSpinner />
+            </div>
+            <div v-else-if="editingSection" class="section-form">
+                <div class="field">
+                    <label for="editSectionName">Section Name</label>
+                    <InputText id="editSectionName" v-model="editingSection.name" required />
+                </div>
+
+                <div class="field">
+                    <label for="editCapacity">Capacity</label>
+                    <InputNumber id="editCapacity" v-model="editingSection.capacity" :min="1" :max="100" />
+                </div>
+
+                <div class="field">
+                    <label for="editDescription">Description (Optional)</label>
+                    <InputText id="editDescription" v-model="editingSection.description" />
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="sectionEditDialog = false" />
+                <Button label="Save Changes" icon="pi pi-check" class="p-button-primary" @click="saveSectionEdit" :loading="loading" />
+            </template>
+        </Dialog>
+
+        <!-- Consolidated Section Management Hub Dialog -->
+        <Dialog v-model:visible="sectionManagementHub" :header="'Section Management - ' + (selectedSectionForHub?.name || '')" modal class="p-fluid section-management-hub" :style="{ width: '95vw', maxWidth: '1200px', height: '90vh' }">
+            <!-- Tab Navigation -->
+            <div class="management-tabs mb-4">
+                <div class="flex gap-2 border-bottom-1 surface-border pb-2">
+                    <Button :class="activeManagementTab === 'schedules' ? 'p-button-primary' : 'p-button-outlined'" label="📅 Schedules" @click="activeManagementTab = 'schedules'" />
+                    <Button :class="activeManagementTab === 'subjects' ? 'p-button-primary' : 'p-button-outlined'" label="📚 Subjects" @click="activeManagementTab = 'subjects'" />
+                    <Button :class="activeManagementTab === 'details' ? 'p-button-primary' : 'p-button-outlined'" label="⚙️ Section Details" @click="activeManagementTab = 'details'" />
+                </div>
+            </div>
+
+            <!-- Schedules Tab -->
+            <div v-if="activeManagementTab === 'schedules'" class="tab-content">
+                <div class="flex justify-content-between align-items-center mb-4">
+                    <h3 class="m-0">📅 All Schedules for Section {{ selectedSectionForHub?.name }}</h3>
+                    <div class="flex gap-2">
+                        <Button label="Create Homeroom Schedule" icon="pi pi-plus" class="p-button-success" @click="createHomeroomSchedule" v-if="!hasHomeroomSchedule" />
+                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSchedules" v-tooltip.top="'Refresh Schedules'" />
+                    </div>
+                </div>
+
+                <div v-if="loading" class="flex justify-content-center">
+                    <ProgressSpinner />
+                </div>
+
+                <div v-else-if="sectionSchedules.length === 0" class="text-center p-4">
+                    <i class="pi pi-calendar-times text-5xl text-primary mb-3"></i>
+                    <p class="text-lg font-semibold">No schedules found for this section.</p>
+                    <p>Create a homeroom schedule above, or add subjects first to create subject schedules.</p>
+                </div>
+
+                <div v-else class="schedule-management-grid" style="max-height: 500px; overflow-y: auto">
+                    <div class="grid">
+                        <div v-for="schedule in sectionSchedules" :key="schedule.id" class="col-12 md:col-6 lg:col-4">
+                            <div class="schedule-management-card p-3 border-round shadow-2">
+                                <div class="flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h4 class="m-0 mb-1 text-lg">
+                                            <i :class="schedule.subject_id ? 'pi pi-book' : 'pi pi-home'" class="mr-2"></i>
+                                            {{ schedule.subject_id ? schedule.subject?.name || 'Subject' : 'Homeroom' }}
+                                        </h4>
+                                        <div class="schedule-details mt-2">
+                                            <div class="flex align-items-center gap-2 mb-1">
+                                                <i class="pi pi-calendar text-primary"></i>
+                                                <span class="font-semibold">{{ schedule.day }}</span>
+                                            </div>
+                                            <div class="flex align-items-center gap-2 mb-1">
+                                                <i class="pi pi-clock text-primary"></i>
+                                                <span>{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                            </div>
+                                            <div v-if="schedule.teacher_id" class="flex align-items-center gap-2 mb-1">
+                                                <i class="pi pi-user text-primary"></i>
+                                                <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                            </div>
+                                            <div v-if="schedule.room_number" class="flex align-items-center gap-2">
+                                                <i class="pi pi-map-marker text-primary"></i>
+                                                <span>Room {{ schedule.room_number }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-column gap-2">
+                                        <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="deleteSchedule(schedule.id)" v-tooltip.top="'Delete Schedule'" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subjects Tab -->
+            <div v-if="activeManagementTab === 'subjects'" class="tab-content">
+                <div class="flex justify-content-between align-items-center mb-4">
+                    <h3 class="m-0">📚 Subjects for Section {{ selectedSectionForHub?.name }}</h3>
+                    <div class="flex gap-2">
+                        <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
+                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
+                    </div>
+                </div>
+
+                <div v-if="loading" class="flex justify-content-center">
+                    <ProgressSpinner />
+                </div>
+
+                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
+                    <i class="pi pi-book text-5xl text-primary mb-3"></i>
+                    <p class="text-lg font-semibold">No subjects assigned to this section.</p>
+                    <p>Click "Add Subject" to add subjects to this section.</p>
+                </div>
+
+                <div v-else class="subject-grid" style="max-height: 500px; overflow-y: auto">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2 mb-3">
+                        <div class="flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
+                                <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
+                                <div v-if="currentGradeHasSubjectTeachers">
+                                    <div v-if="subject.teacher" class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="teacher-name">{{ subject.teacher.name }}</span>
+                                    </div>
+                                    <div v-else class="teacher-display mt-2">
+                                        <i class="pi pi-user mr-2"></i>
+                                        <span class="no-teacher-text">No teacher assigned</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="flex gap-2">
+                                <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
+                                <Button v-if="currentGradeHasSubjectTeachers" label="Assign Teacher" icon="pi pi-user" class="p-button-sm p-button-outlined" @click="openAssignTeacherDialog(subject)" />
+                                <Button label="Remove" icon="pi pi-trash" class="p-button-sm p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" />
+                            </div>
+                        </div>
+                        
+                        <!-- Schedule Display -->
+                        <div class="schedule-section mt-3">
+                            <div v-if="subject.schedules && subject.schedules.length > 0" class="schedules-list">
+                                <ul class="list-none p-0 m-0">
+                                    <li v-for="schedule in subject.schedules" :key="schedule.id" class="schedule-item flex justify-content-between align-items-center p-2 border-round mb-2" style="background: var(--surface-100)">
+                                        <div class="schedule-info">
+                                            <div class="flex align-items-center gap-2">
+                                                <i class="pi pi-calendar text-primary"></i>
+                                                <span class="schedule-day-badge">{{ schedule.day }}</span>
+                                                <span class="schedule-time-badge">{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                            </div>
+                                            <div v-if="currentGradeHasSubjectTeachers && schedule.teacher_id" class="teacher-info">
+                                                <i class="pi pi-user mr-1"></i>
+                                                <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                            </div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div v-else class="no-schedules text-center mt-3">
+                                <i class="pi pi-calendar-times text-3xl"></i>
+                                <p class="m-0">No schedules set</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Details Tab -->
+            <div v-if="activeManagementTab === 'details'" class="tab-content">
+                <div class="flex justify-content-between align-items-center mb-4">
+                    <h3 class="m-0">⚙️ Section Details for {{ selectedSectionForHub?.name }}</h3>
+                </div>
+
+                <div class="section-details-form">
+                    <div class="grid">
+                        <div class="col-12 md:col-6">
+                            <div class="field">
+                                <label for="hubSectionName" class="font-medium mb-2 block">Section Name</label>
+                                <InputText id="hubSectionName" v-model="selectedSectionForHub.name" class="w-full" />
+                            </div>
+                        </div>
+                        <div class="col-12 md:col-6">
+                            <div class="field">
+                                <label for="hubCapacity" class="font-medium mb-2 block">Capacity</label>
+                                <InputNumber id="hubCapacity" v-model="selectedSectionForHub.capacity" :min="1" :max="100" class="w-full" />
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="field">
+                                <label for="hubDescription" class="font-medium mb-2 block">Description</label>
+                                <InputText id="hubDescription" v-model="selectedSectionForHub.description" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-content-end gap-2 mt-4">
+                        <Button label="Save Changes" icon="pi pi-check" class="p-button-primary" @click="saveSectionDetailsFromHub" :loading="loading" />
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="sectionManagementHub = false" />
+            </template>
+        </Dialog>
     </div>
 </template>
 <style scoped>

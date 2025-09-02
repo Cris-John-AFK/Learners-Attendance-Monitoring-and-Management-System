@@ -12,9 +12,12 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            GradeSeeder::class,
-            SubjectsTableSeeder::class,
-            TeacherSeeder::class,
+            // Naawan Central School Complete Seeding
+            NaawaanGradesSeeder::class,
+            NaawaanSubjectsSeeder::class,
+            NaawaanCurriculumSeeder::class,
+            NaawaanTeachersSeeder::class,
+            NaawaanSectionsSeeder::class,
         ]);
     }
 }

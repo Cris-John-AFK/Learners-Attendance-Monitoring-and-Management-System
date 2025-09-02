@@ -7,6 +7,7 @@ use App\Http\Controllers\API\SectionController;
 use App\Http\Controllers\API\TeacherController;
 use App\Http\Controllers\API\CurriculumController;
 use App\Http\Controllers\API\CurriculumGradeController;
+use App\Http\Controllers\API\ScheduleController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -96,7 +97,7 @@ Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections', [Curriculum
 Route::delete('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}', [CurriculumController::class, 'removeSection']);
 
 // Subject routes for sections
-Route::get('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects', [SectionController::class, 'getSectionSubjects']);
+Route::get('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects', [SectionController::class, 'getSubjects']);
 Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects', [SectionController::class, 'addSubjectToSection']);
 Route::delete('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}', [SectionController::class, 'removeSubjectFromSection']);
 
@@ -106,11 +107,12 @@ Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/s
 Route::get('/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionController::class, 'getSubjectTeacher']);
 
 // Schedule routes
-Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'setSubjectSchedule']);
+Route::post('/curriculums/{curriculumId}/grades/{gradeId}/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'setSubjectScheduleWithParams']);
 Route::get('/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'getSubjectSchedule']);
+Route::post('/sections/{sectionId}/subjects/{subjectId}/schedule', [SectionController::class, 'setSubjectSchedule']);
 
 // Alternative endpoints for section subjects
-Route::get('/sections/{sectionId}/subjects', [SectionController::class, 'getSectionSubjects']);
+Route::get('/sections/{sectionId}/subjects', [SectionController::class, 'getSubjects']);
 Route::post('/sections/{sectionId}/subjects', [SectionController::class, 'addSubjectToSection']);
 Route::delete('/sections/{sectionId}/subjects/{subjectId}', [SectionController::class, 'removeSubjectFromSection']);
 Route::post('/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionController::class, 'assignTeacherToSubject']);
@@ -146,6 +148,16 @@ Route::prefix('system')->group(function () {
             ], 500);
         }
     });
+});
+
+// Schedule routes
+Route::prefix('schedules')->group(function () {
+    Route::get('/section/{sectionId}', [ScheduleController::class, 'getSectionSchedules']);
+    Route::post('/homeroom/create-all', [ScheduleController::class, 'createHomeroomSchedules']);
+    Route::post('/subject', [ScheduleController::class, 'createSubjectSchedule']);
+    Route::put('/{id}', [ScheduleController::class, 'updateSchedule']);
+    Route::delete('/{id}', [ScheduleController::class, 'deleteSchedule']);
+    Route::get('/teacher/{teacherId}', [ScheduleController::class, 'getTeacherSchedule']);
 });
 
 // Add these routes if missing

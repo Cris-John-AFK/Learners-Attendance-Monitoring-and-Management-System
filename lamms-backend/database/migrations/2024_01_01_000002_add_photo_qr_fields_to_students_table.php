@@ -11,11 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('students', function (Blueprint $table) {
-            $table->string('photo')->nullable()->after('profilephoto');
-            $table->string('qr_code_path')->nullable()->after('photo');
-            $table->text('address')->nullable()->after('qr_code_path');
-        });
+        // Check if students table exists before trying to modify it
+        if (Schema::hasTable('students')) {
+            Schema::table('students', function (Blueprint $table) {
+                if (!Schema::hasColumn('students', 'photo')) {
+                    $table->string('photo')->nullable();
+                }
+                if (!Schema::hasColumn('students', 'qr_code_path')) {
+                    $table->string('qr_code_path')->nullable();
+                }
+                if (!Schema::hasColumn('students', 'address')) {
+                    $table->text('address')->nullable();
+                }
+            });
+        }
     }
 
     /**
@@ -23,8 +32,15 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('students', function (Blueprint $table) {
-            $table->dropColumn(['photo', 'qr_code_path', 'address']);
-        });
+        if (Schema::hasTable('students')) {
+            Schema::table('students', function (Blueprint $table) {
+                $columns = ['photo', 'qr_code_path', 'address'];
+                foreach ($columns as $column) {
+                    if (Schema::hasColumn('students', $column)) {
+                        $table->dropColumn($column);
+                    }
+                }
+            });
+        }
     }
 };

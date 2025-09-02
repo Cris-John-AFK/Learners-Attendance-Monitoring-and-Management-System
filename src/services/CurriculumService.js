@@ -85,7 +85,9 @@ class CurriculumService {
      */
     async getSubjectsBySection(curriculumId, gradeId, sectionId) {
         try {
-            const response = await axios.get(`${this.baseUrl}/curriculum/${curriculumId}/grade/${gradeId}/section/${sectionId}/subjects`);
+            const response = await axios.get(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/subjects`, {
+                params: { user_added_only: true, force: true, timestamp: Date.now() }
+            });
             return response.data;
         } catch (error) {
             throw this.handleError(error);

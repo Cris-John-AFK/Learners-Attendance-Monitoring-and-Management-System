@@ -50,4 +50,12 @@ class Subject extends Model
     {
         return $query->where('is_active', true);
     }
+
+    /**
+     * Get schedules for this subject in a specific section
+     */
+    public function schedules()
+    {
+        return $this->hasMany(SubjectSchedule::class);
+    }
 }
