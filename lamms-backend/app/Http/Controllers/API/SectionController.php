@@ -549,8 +549,18 @@ class SectionController extends Controller
                 // This specifically gets only manually added subjects
                 $subjects = $section->directSubjects()->get();
 
+                // Load schedules for user-added subjects too
+                $subjects = $subjects->map(function ($subject) use ($sectionId) {
+                    $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
+                        ->where('subject_id', $subject->id)
+                        ->where('is_active', true)
+                        ->get();
+                    $subject->schedules = $schedules;
+                    return $subject;
+                });
+
                 Log::info("Found " . count($subjects) . " user-added subjects for section $sectionId");
-                Log::debug("User-added subjects: " . json_encode($subjects->pluck('name')));
+                Log::debug("User-added subjects with schedules: " . json_encode($subjects->toArray()));
 
                 return response()->json($subjects);
             }

@@ -3402,14 +3402,21 @@ const openSectionScheduleManager = async (section) => {
     }
 };
 
-// Refresh section schedules
+// Refresh section schedules - use unified subjects with schedules data
 const refreshSectionSchedules = async () => {
-    if (!selectedSectionForSchedule.value) return;
+    if (!selectedSectionForHub.value) return;
 
     try {
         loading.value = true;
-        const response = await api.get(`/api/schedules/section/${selectedSectionForSchedule.value.id}`);
-        sectionSchedules.value = Array.isArray(response.data) ? response.data : [];
+        const gradeId = selectedSectionForHub.value.grade_id || selectedGradeForSections.value?.id || 1;
+        const subjectsResponse = await CurriculumService.getSubjectsBySection(
+            curriculum.value.id, 
+            gradeId, 
+            selectedSectionForHub.value.id
+        );
+        selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
+        // Use the same data for schedules tab
+        sectionSchedules.value = selectedSubjects.value;
     } catch (error) {
         console.error('Error refreshing schedules:', error);
         toast.add({
@@ -3423,12 +3430,11 @@ const refreshSectionSchedules = async () => {
     }
 };
 
-// Check if section has homeroom schedule
+// Check if section has homeroom schedule - updated for unified data structure
 const hasHomeroomSchedule = computed(() => {
-    if (!Array.isArray(sectionSchedules.value)) {
-        return false;
-    }
-    return sectionSchedules.value.some((schedule) => !schedule.subject_id);
+    // Since we're now using subjects with schedules, homeroom schedules would be handled separately
+    // For now, return false to hide the homeroom schedule button until homeroom is properly implemented
+    return false;
 });
 
 // Fix the openHomeroomTeacherDialog function reference
@@ -3438,6 +3444,37 @@ const openHomeroomTeacherDialog = (section) => {
     teacherAssignmentDialog.value = true;
 };
 
+// Refresh subjects for the hub dialog - unified with schedules
+const refreshSubjectsForHub = async () => {
+    if (!selectedSectionForHub.value) return;
+    
+    loading.value = true;
+    try {
+        // Get grade ID from section's grade_id property or fallback to 1
+        const gradeId = selectedSectionForHub.value.grade_id || selectedGradeForSections.value?.id || 1;
+        
+        const subjects = await CurriculumService.getSubjectsBySection(
+            curriculum.value.id,
+            gradeId,
+            selectedSectionForHub.value.id
+        );
+        selectedSubjects.value = Array.isArray(subjects) ? subjects : [];
+        
+        // Keep schedules tab synchronized
+        sectionSchedules.value = selectedSubjects.value;
+    } catch (error) {
+        console.error('Error refreshing hub subjects:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to refresh subjects',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
+    }
+};
+
 // Open the consolidated section management hub
 const openSectionManagementHub = async (section) => {
     selectedSectionForHub.value = { ...section }; // Create a copy for editing
@@ -3445,17 +3482,17 @@ const openSectionManagementHub = async (section) => {
     selectedSection.value = section;
     activeManagementTab.value = 'schedules';
 
-    // Load all necessary data
+    // Load all necessary data - use unified subjects with schedules for both tabs
     try {
         loading.value = true;
 
-        // Load schedules
-        const scheduleResponse = await api.get(`/api/schedules/section/${section.id}`);
-        sectionSchedules.value = Array.isArray(scheduleResponse.data) ? scheduleResponse.data : [];
-
-        // Load subjects for this section
-        const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, selectedGradeForSections.value.id, section.id);
+        // Load subjects with schedules for this section (unified data source)
+        const gradeId = section.grade_id || selectedGradeForSections.value?.id || 1;
+        const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, gradeId, section.id);
         selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
+        
+        // Use the same data for schedules tab (subjects with schedules)
+        sectionSchedules.value = selectedSubjects.value;
 
         sectionManagementHub.value = true;
     } catch (error) {
@@ -3766,7 +3803,7 @@ const createHomeroomSchedule = async () => {
     }
 };
 
-// Delete schedule
+// Delete individual schedule
 const deleteSchedule = async (scheduleId) => {
     confirmDialog.require({
         message: 'Are you sure you want to delete this schedule?',
@@ -3775,12 +3812,10 @@ const deleteSchedule = async (scheduleId) => {
         accept: async () => {
             try {
                 loading.value = true;
-
                 await api.delete(`/api/schedules/${scheduleId}`);
-
-                // Refresh schedules
-                const response = await api.get(`/api/schedules/section/${selectedSectionForSchedule.value.id}`);
-                sectionSchedules.value = Array.isArray(response.data) ? response.data : [];
+                
+                // Refresh unified data for both tabs
+                await refreshSectionSchedules();
 
                 toast.add({
                     severity: 'success',
@@ -3794,6 +3829,47 @@ const deleteSchedule = async (scheduleId) => {
                     severity: 'error',
                     summary: 'Error',
                     detail: 'Failed to delete schedule',
+                    life: 3000
+                });
+            } finally {
+                loading.value = false;
+            }
+        }
+    });
+};
+
+// Delete all schedules for a subject
+const deleteSubjectSchedules = async (subject) => {
+    if (!subject.schedules || subject.schedules.length === 0) return;
+    
+    confirmDialog.require({
+        message: `Are you sure you want to delete all schedules for ${subject.name}?`,
+        header: 'Delete All Schedules',
+        icon: 'pi pi-exclamation-triangle',
+        accept: async () => {
+            try {
+                loading.value = true;
+                
+                // Delete all schedules for this subject
+                for (const schedule of subject.schedules) {
+                    await api.delete(`/api/schedules/${schedule.id}`);
+                }
+                
+                // Refresh unified data for both tabs
+                await refreshSectionSchedules();
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: 'All schedules deleted successfully',
+                    life: 3000
+                });
+            } catch (error) {
+                console.error('Error deleting schedules:', error);
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: 'Failed to delete schedules',
                     life: 3000
                 });
             } finally {
@@ -3867,6 +3943,8 @@ defineExpose({
     openSectionManagementHub,
     saveSectionDetailsFromHub,
     refreshSectionSubjects,
+    refreshSubjectsForHub,
+    deleteSubjectSchedules,
     openAddSubjectDialog,
     closeAddSubjectDialog,
     openScheduleDialog,
@@ -5464,43 +5542,53 @@ watch(
                     <ProgressSpinner />
                 </div>
 
-                <div v-else-if="sectionSchedules.length === 0" class="text-center p-4">
+                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
                     <i class="pi pi-calendar-times text-5xl text-primary mb-3"></i>
-                    <p class="text-lg font-semibold">No schedules found for this section.</p>
-                    <p>Create a homeroom schedule above, or add subjects first to create subject schedules.</p>
+                    <p class="text-lg font-semibold">No subjects found for this section.</p>
+                    <p>Add subjects first to create schedules.</p>
                 </div>
 
                 <div v-else class="schedule-management-grid" style="max-height: 500px; overflow-y: auto">
                     <div class="grid">
-                        <div v-for="schedule in sectionSchedules" :key="schedule.id" class="col-12 md:col-6 lg:col-4">
+                        <div v-for="subject in selectedSubjects" :key="subject.id" class="col-12 md:col-6 lg:col-4">
                             <div class="schedule-management-card p-3 border-round shadow-2">
                                 <div class="flex justify-content-between align-items-start mb-3">
                                     <div>
                                         <h4 class="m-0 mb-1 text-lg">
-                                            <i :class="schedule.subject_id ? 'pi pi-book' : 'pi pi-home'" class="mr-2"></i>
-                                            {{ schedule.subject_id ? schedule.subject?.name || 'Subject' : 'Homeroom' }}
+                                            <i class="pi pi-book mr-2"></i>
+                                            {{ subject.name }}
                                         </h4>
-                                        <div class="schedule-details mt-2">
-                                            <div class="flex align-items-center gap-2 mb-1">
-                                                <i class="pi pi-calendar text-primary"></i>
-                                                <span class="font-semibold">{{ schedule.day }}</span>
+                                        <p v-if="subject.description" class="mt-0 mb-2 text-sm text-600">{{ subject.description }}</p>
+                                        
+                                        <!-- Schedule Display -->
+                                        <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-details mt-2">
+                                            <div v-for="schedule in subject.schedules" :key="schedule.id" class="schedule-item mb-2 p-2 border-round" style="background: var(--surface-100)">
+                                                <div class="flex align-items-center gap-2 mb-1">
+                                                    <i class="pi pi-calendar text-primary"></i>
+                                                    <span class="font-semibold">{{ schedule.day }}</span>
+                                                </div>
+                                                <div class="flex align-items-center gap-2 mb-1">
+                                                    <i class="pi pi-clock text-primary"></i>
+                                                    <span>{{ schedule.start_time }} - {{ schedule.end_time }}</span>
+                                                </div>
+                                                <div v-if="schedule.teacher_id" class="flex align-items-center gap-2 mb-1">
+                                                    <i class="pi pi-user text-primary"></i>
+                                                    <span>{{ getTeacherName(schedule.teacher_id) }}</span>
+                                                </div>
+                                                <div v-if="schedule.room_number" class="flex align-items-center gap-2">
+                                                    <i class="pi pi-map-marker text-primary"></i>
+                                                    <span>Room {{ schedule.room_number }}</span>
+                                                </div>
                                             </div>
-                                            <div class="flex align-items-center gap-2 mb-1">
-                                                <i class="pi pi-clock text-primary"></i>
-                                                <span>{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                            </div>
-                                            <div v-if="schedule.teacher_id" class="flex align-items-center gap-2 mb-1">
-                                                <i class="pi pi-user text-primary"></i>
-                                                <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                            </div>
-                                            <div v-if="schedule.room_number" class="flex align-items-center gap-2">
-                                                <i class="pi pi-map-marker text-primary"></i>
-                                                <span>Room {{ schedule.room_number }}</span>
-                                            </div>
+                                        </div>
+                                        <div v-else class="no-schedules text-center mt-3 p-2 border-round" style="background: var(--surface-50)">
+                                            <i class="pi pi-calendar-times text-2xl text-400"></i>
+                                            <p class="m-0 text-sm text-600">No schedule set</p>
                                         </div>
                                     </div>
                                     <div class="flex flex-column gap-2">
-                                        <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="deleteSchedule(schedule.id)" v-tooltip.top="'Delete Schedule'" />
+                                        <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
+                                        <Button v-if="subject.schedules && subject.schedules.length > 0" icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="deleteSubjectSchedules(subject)" v-tooltip.top="'Delete All Schedules'" />
                                     </div>
                                 </div>
                             </div>
@@ -5515,7 +5603,7 @@ watch(
                     <h3 class="m-0">📚 Subjects for Section {{ selectedSectionForHub?.name }}</h3>
                     <div class="flex gap-2">
                         <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
-                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSubjects" v-tooltip.top="'Refresh Subjects'" />
+                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSubjectsForHub" v-tooltip.top="'Refresh Subjects'" />
                     </div>
                 </div>
 

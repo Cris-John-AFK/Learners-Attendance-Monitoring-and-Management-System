@@ -88,6 +88,8 @@ class CurriculumService {
             const response = await axios.get(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/subjects`, {
                 params: { user_added_only: true, force: true, timestamp: Date.now() }
             });
+            console.log('CurriculumService raw response:', response.data);
+            console.log('First subject from service:', response.data[0]);
             return response.data;
         } catch (error) {
             throw this.handleError(error);
