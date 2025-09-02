@@ -1873,6 +1873,7 @@ onMounted(() => {
                             <div class="form-group">
                                 <label>First Name</label>
                                 <InputText v-model="student.firstName" placeholder="Enter first name" class="w-full" @input="updateFullName" />
+                                <small v-if="!student.firstName" class="text-red-500">First Name is required</small>
                             </div>
                             <div class="form-group">
                                 <label>Middle Name</label>
@@ -1881,6 +1882,7 @@ onMounted(() => {
                             <div class="form-group">
                                 <label>Last Name</label>
                                 <InputText v-model="student.lastName" placeholder="Enter last name" class="w-full" @input="updateFullName" />
+                                <small v-if="!student.lastName" class="text-red-500">Last Name is required</small>
                             </div>
                             <div class="form-group">
                                 <label>Extension Name</label>
@@ -1892,6 +1894,7 @@ onMounted(() => {
                             <div class="form-group">
                                 <label>Date of Birth</label>
                                 <Calendar v-model="student.birthdate" showIcon dateFormat="mm/dd/yy" placeholder="Select date" class="w-full" @date-select="calculateStudentAge" />
+                                <small v-if="!student.birthdate" class="text-red-500">Date of Birth is required</small>
                             </div>
                             <div class="form-group">
                                 <label>Place of Birth</label>
@@ -2071,14 +2074,17 @@ onMounted(() => {
                             <div class="form-group">
                                 <label>Email Address</label>
                                 <InputText v-model="student.email" placeholder="Enter email address" class="w-full" type="email" />
+                                <small v-if="!student.email" class="text-red-500">Email Address is required</small>
                             </div>
                             <div class="form-group">
                                 <label>Contact Number</label>
                                 <InputText v-model="student.phone" placeholder="Enter contact number" class="w-full" />
+                                <small v-if="!student.phone" class="text-red-500">Contact Number is required</small>
                             </div>
                             <div class="form-group">
                                 <label>Parent/Guardian Contact</label>
                                 <InputText v-model="student.parentContact" placeholder="Enter parent/guardian contact" class="w-full" />
+                                <small v-if="!student.parentContact" class="text-red-500">Parent/Guardian Contact is required</small>
                             </div>
                         </div>
                     </div>
