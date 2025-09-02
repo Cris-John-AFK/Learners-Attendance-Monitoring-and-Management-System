@@ -45,7 +45,7 @@ class StudentController extends Controller
         ]);
 
         $data = $request->all();
-        
+
         // Handle photo upload if base64 data is provided
         if ($request->has('photo') && $request->photo && strpos($request->photo, 'data:image') === 0) {
             $photoPath = $this->saveBase64Image($request->photo, 'photos');
@@ -53,7 +53,7 @@ class StudentController extends Controller
             $data['photo'] = $photoPath;
             \Log::info('Photo saved to: ' . $photoPath);
         }
-        
+
         // Generate and save QR code
         if ($request->has('lrn') && $request->lrn) {
             try {
@@ -102,7 +102,7 @@ class StudentController extends Controller
         ]);
 
         $data = $request->all();
-        
+
         // Handle photo upload if base64 data is provided
         if ($request->has('photo') && $request->photo && strpos($request->photo, 'data:image') === 0) {
             try {
@@ -117,7 +117,7 @@ class StudentController extends Controller
                 unset($data['profilePhoto']);
             }
         }
-        
+
         // Generate and save QR code if LRN is provided
         if ($request->has('lrn') && $request->lrn) {
             try {
@@ -159,19 +159,19 @@ class StudentController extends Controller
         $image_type_aux = explode("image/", $image_parts[0]);
         $image_type = $image_type_aux[1];
         $image_base64 = base64_decode($image_parts[1]);
-        
+
         // Generate unique filename
         $fileName = uniqid() . '.' . $image_type;
         $filePath = public_path($folder . '/' . $fileName);
-        
+
         // Create directory if it doesn't exist
         if (!file_exists(public_path($folder))) {
             mkdir(public_path($folder), 0755, true);
         }
-        
+
         // Save the image
         file_put_contents($filePath, $image_base64);
-        
+
         return $folder . '/' . $fileName;
     }
 
@@ -182,16 +182,16 @@ class StudentController extends Controller
         if (!file_exists($qrDir)) {
             mkdir($qrDir, 0755, true);
         }
-        
+
         // Generate QR code filename
         $fileName = $lrn . '_qr.svg';
         $filePath = $qrDir . '/' . $fileName;
-        
+
         // Delete old QR code if it exists
         if (file_exists($filePath)) {
             unlink($filePath);
         }
-        
+
         // Generate QR code using SVG (doesn't require imagick)
         $renderer = new ImageRenderer(
             new RendererStyle(300, 3),
@@ -199,9 +199,9 @@ class StudentController extends Controller
         );
         $writer = new Writer($renderer);
         $qrCodeString = $writer->writeString($lrn);
-        
+
         file_put_contents($filePath, $qrCodeString);
-        
+
         return 'qr-codes/' . $fileName;
     }
 }
