@@ -5,8 +5,8 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\Request;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\Image\ImagickImageBackEnd;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
@@ -57,13 +57,18 @@ class StudentController extends Controller
         // Generate and save QR code
         if ($request->has('lrn') && $request->lrn) {
             try {
-                $qrPath = $this->generateAndSaveQRCode($request->lrn);
+                // Use studentId if provided, otherwise use LRN as fallback
+                $studentIdForQR = $request->studentId ?: $request->lrn;
+                $qrPath = $this->generateAndSaveQRCode($request->lrn, $studentIdForQR);
                 $data['qr_code_path'] = $qrPath;
-                \Log::info('QR code saved to: ' . $qrPath);
+                \Log::info('QR code saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
             } catch (\Exception $e) {
-                \Log::error('QR code generation error: ' . $e->getMessage());
+                \Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
+                \Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
                 // Continue without QR code if there's an error
             }
+        } else {
+            \Log::info('No LRN provided, skipping QR code generation');
         }
 
         $student = Student::create($data);
@@ -121,13 +126,18 @@ class StudentController extends Controller
         // Generate and save QR code if LRN is provided
         if ($request->has('lrn') && $request->lrn) {
             try {
-                $qrPath = $this->generateAndSaveQRCode($request->lrn);
+                // Use studentId if provided, otherwise use LRN as fallback
+                $studentIdForQR = $request->studentId ?: $request->lrn;
+                $qrPath = $this->generateAndSaveQRCode($request->lrn, $studentIdForQR);
                 $data['qr_code_path'] = $qrPath;
-                \Log::info('QR code updated and saved to: ' . $qrPath);
+                \Log::info('QR code updated and saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
             } catch (\Exception $e) {
-                \Log::error('QR code generation error: ' . $e->getMessage());
+                \Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
+                \Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
                 // Continue without QR code if there's an error
             }
+        } else {
+            \Log::info('No LRN provided, skipping QR code generation');
         }
 
         $student->update($data);
@@ -175,7 +185,7 @@ class StudentController extends Controller
         return $folder . '/' . $fileName;
     }
 
-    private function generateAndSaveQRCode($lrn)
+    private function generateAndSaveQRCode($lrn, $studentId = null)
     {
         // Create QR codes directory if it doesn't exist
         $qrDir = public_path('qr-codes');
@@ -183,8 +193,9 @@ class StudentController extends Controller
             mkdir($qrDir, 0755, true);
         }
 
-        // Generate QR code filename
-        $fileName = $lrn . '_qr.svg';
+        // Use studentId if available, otherwise use LRN
+        $qrData = $studentId ? $studentId : $lrn;
+        $fileName = $qrData . '_qr.png';
         $filePath = $qrDir . '/' . $fileName;
 
         // Delete old QR code if it exists
@@ -192,16 +203,44 @@ class StudentController extends Controller
             unlink($filePath);
         }
 
-        // Generate QR code using SVG (doesn't require imagick)
-        $renderer = new ImageRenderer(
-            new RendererStyle(300, 3),
-            new SvgImageBackEnd()
-        );
-        $writer = new Writer($renderer);
-        $qrCodeString = $writer->writeString($lrn);
+        // Generate QR code as PNG image using BaconQrCode
+        try {
+            $renderer = new ImageRenderer(
+                new RendererStyle(300, 2),
+                new \BaconQrCode\Renderer\Image\ImagickImageBackEnd()
+            );
+            $writer = new Writer($renderer);
+            $qrCodeString = $writer->writeString($qrData);
 
-        file_put_contents($filePath, $qrCodeString);
+            file_put_contents($filePath, $qrCodeString);
 
-        return 'qr-codes/' . $fileName;
+            \Log::info('QR code generated and saved: ' . $filePath);
+
+            return 'qr-codes/' . $fileName;
+        } catch (\Exception $e) {
+            \Log::error('QR code generation failed: ' . $e->getMessage());
+
+            // Fallback to SVG if PNG fails
+            try {
+                $fileName = $qrData . '_qr.svg';
+                $filePath = $qrDir . '/' . $fileName;
+
+                $renderer = new ImageRenderer(
+                    new RendererStyle(300, 2),
+                    new SvgImageBackEnd()
+                );
+                $writer = new Writer($renderer);
+                $qrCodeString = $writer->writeString($qrData);
+
+                file_put_contents($filePath, $qrCodeString);
+
+                \Log::info('QR code generated as SVG: ' . $filePath);
+
+                return 'qr-codes/' . $fileName;
+            } catch (\Exception $svgError) {
+                \Log::error('SVG QR code generation also failed: ' . $svgError->getMessage());
+                throw $e;
+            }
+        }
     }
 }

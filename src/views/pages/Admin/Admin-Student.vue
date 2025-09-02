@@ -280,50 +280,37 @@ const loadStudents = async () => {
         }
 
         const apiStudents = await response.json();
-        console.log('Loaded students from API:', apiStudents);
+        console.log('Raw API response:', apiStudents);
 
-        // Format students for display (mapping from camelCase database fields)
+        // Format students data for frontend
         const formattedStudents = apiStudents.map((student) => {
-            return {
-                id: student.id,
-                studentId: student.studentId,
-                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
-                firstName: student.firstName,
-                lastName: student.lastName,
-                email: student.email || 'N/A',
-                gender: student.gender || student.sex || 'Male',
-                age: student.age || calculateAge(student.birthdate),
-                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                address: student.address || formatAddress(student),
-                contact: student.contactInfo || student.parentContact || 'N/A',
-                photo: student.profilePhoto
-                    ? student.profilePhoto.startsWith('data:')
-                        ? student.profilePhoto
-                        : `http://localhost:8000/${student.profilePhoto}`
-                    : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
+            // Map backend field names to frontend field names
+            const formatted = {
+                ...student,
+                // Map qr_code_path from backend to qrCodePath for frontend
                 qrCodePath: student.qr_code_path ? `http://127.0.0.1:8000/${student.qr_code_path}` : null,
-                gradeLevel: student.gradeLevel,
-                section: student.section,
-                lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
-                enrollmentDate: student.enrollmentDate ? new Date(student.enrollmentDate).toLocaleDateString() : new Date().toLocaleDateString(),
-                status: student.status || 'Enrolled',
-                isActive: student.isActive !== undefined ? student.isActive : true,
-                // Store original data for reference
-                originalData: student
+                // Ensure other fields are properly mapped
+                photo: student.profilePhoto || student.photo,
+                contact: student.contactInfo || student.parentContact || '',
+                address: student.address || (student.currentAddress ? (typeof student.currentAddress === 'string' ? student.currentAddress : JSON.stringify(student.currentAddress)) : ''),
+                // Calculate age if birthdate exists
+                age: student.birthdate ? calculateAge(student.birthdate) : student.age || null,
+                // Ensure boolean fields are properly set
+                isActive: student.is_active !== undefined ? student.is_active : true
             };
+
+            console.log('Formatted student:', formatted);
+            return formatted;
         });
 
         students.value = formattedStudents;
 
-        // Set QR codes from backend data and generate missing ones
-        for (const student of formattedStudents) {
+        // Set QR codes from backend data
+        students.value.forEach((student) => {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
-            } else if (student.lrn && !qrCodes.value[student.lrn]) {
-                // Generate QR code if not exists
-                await generateQRCode(student.lrn);
             }
-        }
+        });
 
         totalStudents.value = formattedStudents.length;
 
@@ -1112,7 +1099,7 @@ async function saveInlineProfile() {
             parentContact: selectedStudent.value.parentContact || selectedStudent.value.contact || '',
             address: selectedStudent.value.address || '',
             lrn: selectedStudent.value.lrn || '',
-            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilephoto || null,
+            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilePhoto || null,
             status: selectedStudent.value.status || 'Enrolled',
             isActive: selectedStudent.value.isActive !== undefined ? selectedStudent.value.isActive : true
         };
@@ -1934,7 +1921,7 @@ onMounted(() => {
 }
 
 .enrollment-header {
-    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
     color: white;
     text-align: center;
     padding: 17px 0;
