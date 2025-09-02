@@ -48,7 +48,8 @@ class Student extends Model
         'is4PsBeneficiary',
         'householdID',
         'hasDisability',
-        'disabilities'
+        'disabilities',
+        'isActive'
     ];
 
     protected $casts = [
@@ -63,7 +64,8 @@ class Student extends Model
         'admissionDate' => 'datetime',
         'isIndigenous' => 'boolean',
         'is4PsBeneficiary' => 'boolean',
-        'hasDisability' => 'boolean'
+        'hasDisability' => 'boolean',
+        'isActive' => 'boolean'
     ];
 
     public function attendance()

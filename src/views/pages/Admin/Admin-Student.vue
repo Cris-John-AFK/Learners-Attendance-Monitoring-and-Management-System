@@ -57,13 +57,15 @@ const student = ref({
     photo: null,
     profilephoto: null,
     enrollmentDate: new Date().toISOString().split('T')[0],
-    status: 'Enrolled'
+    status: 'Enrolled',
+    isActive: true
 });
 const submitted = ref(false);
 const filters = ref({
     grade: null,
     section: null,
     gender: null,
+    status: null,
     searchTerm: ''
 });
 const sections = ref([]);
@@ -176,6 +178,89 @@ const generateAllQRCodes = async () => {
     }
 };
 
+// Get proper photo URL for student
+const getStudentPhotoUrl = (student) => {
+    if (!student.photo || student.photo === 'N/A') {
+        return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    }
+
+    // If it's already a data URL (base64), return as is
+    if (student.photo.startsWith('data:')) {
+        return student.photo;
+    }
+
+    // If it's a relative path, prepend the server URL
+    if (student.photo.startsWith('/') || student.photo.startsWith('storage/')) {
+        return `http://localhost:8000/${student.photo}`;
+    }
+
+    // If it's already a full URL, return as is
+    if (student.photo.startsWith('http')) {
+        return student.photo;
+    }
+
+    // Default fallback
+    return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+};
+
+// Handle photo loading errors
+const handlePhotoError = (event) => {
+    const img = event.target;
+    const student = selectedStudent.value;
+    if (student) {
+        img.src = `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    }
+};
+
+// Generate QR code for specific student
+const generateStudentQR = async (student) => {
+    if (student.lrn) {
+        try {
+            // Call backend API to generate QR code
+            const response = await fetch(`http://127.0.0.1:8000/api/generate-qr/${student.lrn}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('QR code generated:', result);
+
+                // Update the QR code path for this student
+                const qrPath = `http://127.0.0.1:8000/${result.qr_path}`;
+                qrCodes.value[student.lrn] = qrPath;
+
+                // Update student data with QR code path
+                const studentIndex = students.value.findIndex((s) => s.id === student.id);
+                if (studentIndex !== -1) {
+                    students.value[studentIndex].qrCodePath = qrPath;
+                }
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'QR Code Generated',
+                    detail: `QR code saved for LRN: ${student.lrn}`,
+                    life: 3000
+                });
+            } else {
+                throw new Error('Failed to generate QR code');
+            }
+        } catch (error) {
+            console.error('Error generating QR code:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'QR Generation Failed',
+                detail: 'Could not generate QR code',
+                life: 3000
+            });
+        }
+    }
+};
+
 // Load all students from database via API
 const loadStudents = async () => {
     try {
@@ -195,42 +280,33 @@ const loadStudents = async () => {
         }
 
         const apiStudents = await response.json();
-        console.log('Loaded students from API:', apiStudents);
+        console.log('Raw API response:', apiStudents);
 
-        // Format students for display (mapping from camelCase database fields)
+        // Format students data for frontend
         const formattedStudents = apiStudents.map((student) => {
-            return {
-                id: student.id,
-                studentId: student.studentId,
-                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
-                firstName: student.firstName,
-                lastName: student.lastName,
-                email: student.email || 'N/A',
-                gender: student.gender || student.sex || 'Male',
-                age: student.age || calculateAge(student.birthdate),
-                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                address: student.address || formatAddress(student),
-                contact: student.contactInfo || student.parentContact || 'N/A',
-                photo: student.profilePhoto
-                    ? student.profilePhoto.startsWith('data:')
-                        ? student.profilePhoto
-                        : `http://localhost:8000/${student.profilePhoto}`
-                    : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
-                qrCodePath: student.qr_code_path ? `http://localhost:8000/${student.qr_code_path}` : null,
-                gradeLevel: student.gradeLevel,
-                section: student.section,
-                lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
-                enrollmentDate: student.enrollmentDate ? new Date(student.enrollmentDate).toLocaleDateString() : new Date().toLocaleDateString(),
-                status: student.status || 'Enrolled',
-                // Store original data for reference
-                originalData: student
+            // Map backend field names to frontend field names
+            const formatted = {
+                ...student,
+                // Map qr_code_path from backend to qrCodePath for frontend
+                qrCodePath: student.qr_code_path ? `http://127.0.0.1:8000/${student.qr_code_path}` : null,
+                // Ensure other fields are properly mapped
+                photo: student.profilePhoto || student.photo,
+                contact: student.contactInfo || student.parentContact || '',
+                address: student.address || (student.currentAddress ? (typeof student.currentAddress === 'string' ? student.currentAddress : JSON.stringify(student.currentAddress)) : ''),
+                // Calculate age if birthdate exists
+                age: student.birthdate ? calculateAge(student.birthdate) : student.age || null,
+                // Ensure boolean fields are properly set
+                isActive: student.is_active !== undefined ? student.is_active : true
             };
+
+            console.log('Formatted student:', formatted);
+            return formatted;
         });
 
         students.value = formattedStudents;
 
         // Set QR codes from backend data
-        formattedStudents.forEach((student) => {
+        students.value.forEach((student) => {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
             }
@@ -327,6 +403,11 @@ const filteredStudents = computed(() => {
             return false;
         }
 
+        // Apply status filter
+        if (filters.value.status !== null && student.isActive !== filters.value.status) {
+            return false;
+        }
+
         // Apply search term
         if (filters.value.searchTerm) {
             const term = filters.value.searchTerm.toLowerCase();
@@ -420,6 +501,7 @@ const saveStudent = async () => {
             photo: student.value.photo || null,
             profilePhoto: student.value.photo || student.value.profilePhoto || null,
             status: student.value.status || 'Enrolled',
+            isActive: student.value.isActive !== undefined ? student.value.isActive : true,
             enrollmentDate: (() => {
                 if (!student.value.enrollmentDate || student.value.enrollmentDate === 'N/A') {
                     return new Date().toISOString().split('T')[0];
@@ -577,7 +659,8 @@ function editStudent(studentData) {
         photo: studentData.photo || null,
         profilephoto: studentData.profilephoto || null,
         enrollmentDate: studentData.enrollmentDate || new Date().toISOString().split('T')[0],
-        status: studentData.status || 'Enrolled'
+        status: studentData.status || 'Enrolled',
+        isActive: studentData.isActive !== undefined ? studentData.isActive : true
     };
 
     // Update sections based on grade level
@@ -593,6 +676,52 @@ function confirmDeleteStudent(studentData) {
     student.value = { ...studentData };
     deleteStudentDialog.value = true;
 }
+
+// Toggle student active status
+const toggleStudentStatus = async (studentData) => {
+    try {
+        const newStatus = !studentData.isActive;
+
+        // Update student status in database
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${studentData.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                ...studentData.originalData,
+                isActive: newStatus
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Update local data
+        studentData.isActive = newStatus;
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Student ${newStatus ? 'activated' : 'deactivated'} successfully!`,
+            life: 3000
+        });
+
+        // Reload students to ensure data consistency
+        await loadStudents();
+    } catch (error) {
+        console.error('Error updating student status:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update student status. Please try again.',
+            life: 5000
+        });
+    }
+};
 
 // Delete student from database via API
 const deleteStudent = async () => {
@@ -637,6 +766,16 @@ const deleteStudent = async () => {
 function viewStudentDetails(studentData) {
     selectedStudent.value = studentData;
     viewStudentDialog.value = true;
+}
+
+// Edit student from dialog (opens enrollment form)
+function editStudentFromDialog() {
+    if (selectedStudent.value) {
+        // Close the view dialog first
+        viewStudentDialog.value = false;
+        // Open the edit form with the selected student data
+        editStudent(selectedStudent.value);
+    }
 }
 
 // Row click handler to open student info dialog
@@ -827,30 +966,98 @@ function generateTempId() {
 }
 
 // -- ACTION BUTTON HANDLERS --
-function updatePhoto() {
+function updatePhoto(studentData) {
     if (fileInput.value) {
         fileInput.value.click();
     }
 }
-function handlePhotoUpload(event) {
+
+async function handlePhotoUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+        toast.add({
+            severity: 'error',
+            summary: 'Invalid File',
+            detail: 'Please select an image file',
+            life: 3000
+        });
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        toast.add({
+            severity: 'error',
+            summary: 'File Too Large',
+            detail: 'Please select an image smaller than 5MB',
+            life: 3000
+        });
+        return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () => {
-        selectedStudent.value.photo = reader.result;
-        // persist immediately
+    reader.onload = async () => {
         try {
-            const enrolled = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
-            const idx = enrolled.findIndex((s) => s.id === selectedStudent.value.id || s.studentId === selectedStudent.value.studentId);
-            if (idx > -1) {
-                enrolled[idx].photo = reader.result;
-                localStorage.setItem('enrolledStudents', JSON.stringify(enrolled));
-                loadStudents();
-                toast.add({ severity: 'success', summary: 'Photo Updated', detail: 'Student photo updated successfully', life: 3000 });
+            // Update the photo in the UI immediately
+            selectedStudent.value.photo = reader.result;
+
+            // Use the original data from the database for the update
+            const originalData = selectedStudent.value.originalData || {};
+
+            // Prepare data for database update - use original data and only update the photo
+            const studentData = {
+                ...originalData,
+                photo: reader.result // Send as 'photo' field for backend processing
+            };
+
+            console.log('Updating student photo for ID:', selectedStudent.value.id);
+
+            // Save to database
+            const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(studentData)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API Error Response:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        } catch (err) {
-            console.error('Save photo error', err);
-            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to save photo', life: 3000 });
+
+            const result = await response.json();
+            console.log('Photo updated successfully:', result);
+
+            // Reload students to get updated data
+            await loadStudents();
+
+            toast.add({
+                severity: 'success',
+                summary: 'Photo Updated',
+                detail: 'Student photo updated successfully!',
+                life: 3000
+            });
+        } catch (error) {
+            console.error('Error updating photo:', error);
+
+            // Revert the UI change on error
+            if (selectedStudent.value.originalData?.profilePhoto) {
+                selectedStudent.value.photo = selectedStudent.value.originalData.profilePhoto;
+            }
+
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to update photo. Please try again.',
+                life: 3000
+            });
         }
     };
     reader.readAsDataURL(file);
@@ -875,32 +1082,33 @@ async function saveInlineProfile() {
         const studentData = {
             // Required fields for Laravel validation
             name: selectedStudent.value.name || `${selectedStudent.value.firstName || ''} ${selectedStudent.value.lastName || ''}`.trim() || 'Unknown',
-            gradelevel: selectedStudent.value.gradeLevel || 'Grade 1',
+            gradeLevel: selectedStudent.value.gradeLevel || 'Grade 1',
             section: selectedStudent.value.section || 'Default',
 
             // Optional fields
-            firstname: selectedStudent.value.firstName || selectedStudent.value.name?.split(' ')[0] || '',
-            middlename: selectedStudent.value.middleName || '',
-            lastname: selectedStudent.value.lastName || selectedStudent.value.name?.split(' ').slice(1).join(' ') || '',
-            extensionname: selectedStudent.value.extensionName || '',
+            firstName: selectedStudent.value.firstName || selectedStudent.value.name?.split(' ')[0] || '',
+            middleName: selectedStudent.value.middleName || '',
+            lastName: selectedStudent.value.lastName || selectedStudent.value.name?.split(' ').slice(1).join(' ') || '',
+            extensionName: selectedStudent.value.extensionName || '',
             birthdate: selectedStudent.value.birthdate ? new Date(selectedStudent.value.birthdate).toISOString().split('T')[0] : null,
             age: selectedStudent.value.age || calculateAge(selectedStudent.value.birthdate) || 0,
             gender: selectedStudent.value.gender || 'Male',
             sex: selectedStudent.value.gender || 'Male',
-            email: selectedStudent.value.email || null,
-            contactinfo: selectedStudent.value.contact || selectedStudent.value.phone || '',
-            parentcontact: selectedStudent.value.parentContact || selectedStudent.value.contact || '',
+            email: selectedStudent.value.email && selectedStudent.value.email.trim() !== '' ? selectedStudent.value.email.trim() : null,
+            contactInfo: selectedStudent.value.contact || selectedStudent.value.phone || '',
+            parentContact: selectedStudent.value.parentContact || selectedStudent.value.contact || '',
             address: selectedStudent.value.address || '',
             lrn: selectedStudent.value.lrn || '',
-            profilephoto: selectedStudent.value.photo || selectedStudent.value.profilephoto || null,
-            status: selectedStudent.value.status || 'Enrolled'
+            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilePhoto || null,
+            status: selectedStudent.value.status || 'Enrolled',
+            isActive: selectedStudent.value.isActive !== undefined ? selectedStudent.value.isActive : true
         };
 
         console.log('Sending student data to API:', studentData);
 
         // Update student in backend database
         console.log('Updating student with ID:', selectedStudent.value.id);
-        const response = await fetch(`http://localhost:8000/api/students/${selectedStudent.value.id}`, {
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -926,6 +1134,18 @@ async function saveInlineProfile() {
 
         const updatedStudent = await response.json();
         console.log('Student updated in database:', updatedStudent);
+
+        // Update QR code if LRN changed and new QR code path is provided
+        if (updatedStudent.qr_code_path && selectedStudent.value.lrn) {
+            const qrPath = `http://127.0.0.1:8000/${updatedStudent.qr_code_path}`;
+            qrCodes.value[selectedStudent.value.lrn] = qrPath;
+
+            // Update the student's QR code path in the table
+            const studentIndex = students.value.findIndex((s) => s.id === selectedStudent.value.id);
+            if (studentIndex !== -1) {
+                students.value[studentIndex].qrCodePath = qrPath;
+            }
+        }
 
         // Also update localStorage as backup
         try {
@@ -1153,6 +1373,20 @@ onMounted(() => {
                     class="w-full"
                 />
             </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Status</label>
+                <Dropdown
+                    v-model="filters.status"
+                    :options="[
+                        { name: 'Active', value: true },
+                        { name: 'Inactive', value: false }
+                    ]"
+                    optionLabel="name"
+                    optionValue="value"
+                    placeholder="Select Status"
+                    class="w-full"
+                />
+            </div>
         </div>
 
         <!-- Student List -->
@@ -1167,7 +1401,7 @@ onMounted(() => {
                     <Column header="Student" style="min-width: 200px">
                         <template #body="slotProps">
                             <div class="flex align-items-center">
-                                <Avatar :image="slotProps.data.photo" shape="circle" size="large" class="mr-2" />
+                                <Avatar :image="getStudentPhotoUrl(slotProps.data)" shape="circle" size="large" class="mr-2" />
                                 <div>
                                     <div class="font-bold">{{ slotProps.data.name }}</div>
                                     <div class="text-sm text-color-secondary">{{ slotProps.data.studentId }}</div>
@@ -1182,6 +1416,16 @@ onMounted(() => {
                             <span class="font-semibold">{{ slotProps.data.lrn }}</span>
                         </template>
                     </Column>
+                    <Column header="QR Code" style="width: 80px">
+                        <template #body="slotProps">
+                            <div v-if="slotProps.data.qrCodePath" class="flex justify-center">
+                                <img :src="slotProps.data.qrCodePath" alt="QR Code" class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform" @click="showQRCode(slotProps.data)" />
+                            </div>
+                            <div v-else class="flex justify-center">
+                                <Button icon="pi pi-qrcode" class="p-button-rounded p-button-text p-button-sm p-button-secondary" @click="generateStudentQR(slotProps.data)" title="Generate QR Code" />
+                            </div>
+                        </template>
+                    </Column>
                     <Column field="age" header="Age" sortable style="width: 80px">
                         <template #body="slotProps">
                             <span>{{ slotProps.data.age }}</span>
@@ -1194,11 +1438,24 @@ onMounted(() => {
                     </Column>
                     <Column field="email" header="Email" sortable style="min-width: 200px" />
                     <Column field="contact" header="Contact" style="width: 130px" />
-                    <Column header="Actions" style="width: 8rem">
+                    <Column header="Status" style="width: 120px">
+                        <template #body="slotProps">
+                            <div class="flex align-items-center gap-2">
+                                <Tag :value="slotProps.data.isActive ? 'Active' : 'Inactive'" :severity="slotProps.data.isActive ? 'success' : 'danger'" />
+                                <Button
+                                    :icon="slotProps.data.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                                    class="p-button-rounded p-button-text p-button-sm"
+                                    :class="slotProps.data.isActive ? 'p-button-warning' : 'p-button-success'"
+                                    @click="toggleStudentStatus(slotProps.data)"
+                                    :title="slotProps.data.isActive ? 'Deactivate Student' : 'Activate Student'"
+                                />
+                            </div>
+                        </template>
+                    </Column>
+                    <Column header="Actions" style="width: 6rem">
                         <template #body="slotProps">
                             <div class="flex gap-1">
                                 <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" />
-                                <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editStudent(slotProps.data)" />
                                 <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click="confirmDeleteStudent(slotProps.data)" />
                             </div>
                         </template>
@@ -1223,11 +1480,18 @@ onMounted(() => {
                 <!-- Left column -->
                 <div class="flex flex-col items-center space-y-4">
                     <p class="text-gray-600 font-medium">Temporary ID Photo</p>
-                    <img v-if="selectedStudent.photo" :src="selectedStudent.photo" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" />
-                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">No Photo</div>
+                    <img v-if="selectedStudent.photo && selectedStudent.photo !== 'N/A'" :src="getStudentPhotoUrl(selectedStudent)" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" @error="handlePhotoError" />
+                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                        <i class="pi pi-user text-4xl text-gray-400"></i>
+                    </div>
                     <p class="text-gray-600 font-medium">QR Code</p>
-                    <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-48 h-48 border rounded-md object-contain" />
-                    <p v-else class="text-xs text-gray-400">No QR</p>
+                    <div v-if="selectedStudent.lrn" class="flex flex-col items-center">
+                        <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-48 h-48 border rounded-md object-contain" alt="QR Code" />
+                        <div v-else class="w-48 h-48 border rounded-md bg-gray-100 flex items-center justify-center">
+                            <Button label="Generate QR" icon="pi pi-qrcode" class="p-button-sm p-button-outlined" @click="generateStudentQR(selectedStudent)" />
+                        </div>
+                    </div>
+                    <p v-else class="text-xs text-gray-400">No LRN Available</p>
                 </div>
 
                 <!-- Right column -->
@@ -1242,6 +1506,10 @@ onMounted(() => {
                         <p><span class="font-semibold">Age:</span> {{ selectedStudentAge || 'N/A' }}</p>
                         <p><span class="font-semibold">Enrollment Date:</span> {{ selectedStudent.enrollmentDate }}</p>
                         <p><span class="font-semibold">LRN:</span> {{ selectedStudent.lrn }}</p>
+                        <p>
+                            <span class="font-semibold">Status:</span>
+                            <Tag :value="selectedStudent.isActive ? 'Active' : 'Inactive'" :severity="selectedStudent.isActive ? 'success' : 'danger'" class="ml-2" />
+                        </p>
                         <p><span class="font-semibold">Address:</span> {{ selectedStudent.address }}</p>
                         <p><span class="font-semibold">Email:</span> {{ selectedStudent.email }}</p>
                         <p><span class="font-semibold">Contact:</span> {{ selectedStudent.contact }}</p>
@@ -1256,8 +1524,8 @@ onMounted(() => {
                         <p>{{ selectedStudent.contact }}</p>
                     </div>
                 </div>
-                <div v-else class="md:col-span-2 space-y-2">
-                    <div class="space-y-2 text-sm mt-2">
+                <div v-else class="md:col-span-2">
+                    <div class="grid grid-cols-2 gap-4 text-sm mt-2">
                         <div>
                             <label class="font-semibold">Student Name</label>
                             <InputText v-model="selectedStudent.name" class="w-full" />
@@ -1279,20 +1547,33 @@ onMounted(() => {
                             <Calendar v-model="selectedStudent.birthdate" showIcon dateFormat="yy-mm-dd" class="w-full" />
                         </div>
                         <div>
-                            <label class="font-semibold">Address</label>
-                            <InputText v-model="selectedStudent.address" class="w-full" />
+                            <label class="font-semibold">LRN</label>
+                            <InputText v-model="selectedStudent.lrn" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Student Status</label>
+                            <Dropdown
+                                v-model="selectedStudent.isActive"
+                                :options="[
+                                    { name: 'Active', value: true },
+                                    { name: 'Inactive', value: false }
+                                ]"
+                                optionLabel="name"
+                                optionValue="value"
+                                class="w-full"
+                            />
                         </div>
                         <div>
                             <label class="font-semibold">Email</label>
                             <InputText v-model="selectedStudent.email" class="w-full" />
                         </div>
                         <div>
-                            <label class="font-semibold">Contact</label>
-                            <InputText v-model="selectedStudent.contact" class="w-full" />
+                            <label class="font-semibold">Address</label>
+                            <InputText v-model="selectedStudent.address" class="w-full" />
                         </div>
                         <div>
-                            <label class="font-semibold">LRN</label>
-                            <InputText v-model="selectedStudent.lrn" class="w-full" />
+                            <label class="font-semibold">Contact</label>
+                            <InputText v-model="selectedStudent.contact" class="w-full" />
                         </div>
                     </div>
                 </div>
@@ -1301,8 +1582,8 @@ onMounted(() => {
                 <div class="flex justify-end gap-2 w-full">
                     <Button label="Update Photo" icon="pi pi-camera" class="p-button-warning p-button-sm" @click="updatePhoto(selectedStudent)" />
                     <Button label="Update E-Signature" icon="pi pi-pencil" class="p-button-danger p-button-sm" @click="updateSignature(selectedStudent)" />
-                    <Button v-if="!isEdit" label="Update Profile" icon="pi pi-user-edit" class="p-button-info p-button-sm" @click="startEditProfile" />
-                    <Button v-else label="Save Changes" icon="pi pi-check" class="p-button-success p-button-sm" @click="saveInlineProfile" />
+                    <Button v-if="!isEdit" label="Update Profile" icon="pi pi-user-edit" class="p-button-warning p-button-sm" @click="startEditProfile" />
+                    <Button v-if="isEdit" label="Save Changes" icon="pi pi-check" class="p-button-success p-button-sm" @click="saveInlineProfile" />
                     <Button v-if="isEdit" label="Cancel" icon="pi pi-times" class="p-button-text p-button-sm" @click="cancelInlineEdit" />
                 </div>
             </template>
@@ -1640,7 +1921,7 @@ onMounted(() => {
 }
 
 .enrollment-header {
-    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
     color: white;
     text-align: center;
     padding: 17px 0;

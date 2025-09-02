@@ -1,5 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
+import axios from 'axios';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -49,39 +50,16 @@ const departments = [
     { name: 'Accounting', code: 'accounting' }
 ];
 
-// Mock student data instead of using AttendanceService.getData()
-const allStudents = ref([
-    {
-        id: '12345',
-        name: 'Jess Smith',
-        gradeLevel: '10',
-        section: 'A',
-        contact: '(555) 123-4567',
-        emergencyContact: '(555) 987-6543',
-        validUntil: 'June 30, 2024',
-        photo: '/demo/images/student-photo.jpg'
-    },
-    {
-        id: '23456',
-        name: 'John Doe',
-        gradeLevel: '11',
-        section: 'B',
-        contact: '(555) 234-5678',
-        emergencyContact: '(555) 876-5432',
-        validUntil: 'June 30, 2024',
-        photo: '/demo/images/student-photo.jpg'
-    },
-    {
-        id: '34567',
-        name: 'Alice Johnson',
-        gradeLevel: '9',
-        section: 'C',
-        contact: '(555) 345-6789',
-        emergencyContact: '(555) 765-4321',
-        validUntil: 'June 30, 2024',
-        photo: '/demo/images/student-photo.jpg'
-    }
-]);
+// Load students from API
+const allStudents = ref([]);
+axios
+    .get('/api/students')
+    .then((response) => {
+        allStudents.value = response.data;
+    })
+    .catch((error) => {
+        console.error('Error loading students:', error);
+    });
 
 const currentDateTime = ref(new Date());
 const guardName = ref('Bread Doe');
@@ -215,8 +193,8 @@ const processStudentScan = async (scannedId) => {
         console.log('All students:', allStudents.value);
 
         // Find the student in our allStudents array
-        // Handle both string and number IDs
-        const student = allStudents.value.find((s) => s.id.toString() === scannedId.toString());
+        // Handle both string and number IDs - search by studentId to match QR code data
+        const student = allStudents.value.find((s) => s.studentId === scannedId || s.id.toString() === scannedId.toString());
 
         console.log('Found student:', student);
 

@@ -25,6 +25,7 @@ Route::get('/health-check', function() {
 Route::apiResource('students', StudentController::class);
 Route::get('students/grade/{gradeLevel}', [StudentController::class, 'byGrade']);
 Route::get('students/grade/{gradeLevel}/section/{section}', [StudentController::class, 'bySection']);
+Route::post('students/{student}/generate-qr', [StudentController::class, 'generateQRForStudent']);
 Route::get('subjects/homeroom/assignments', [SubjectController::class, 'getHomeroomAssignments']);
 // Subject routes
 Route::apiResource('subjects', SubjectController::class);
