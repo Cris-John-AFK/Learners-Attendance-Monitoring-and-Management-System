@@ -8,6 +8,10 @@ const state = reactive({
     error: null
 });
 
+// Cache variables
+let gradeCache = null;
+let cacheTimestamp = null;
+
 export const GradesService = {
     // Get all grades - only from API, no fallback data
     async getGrades() {

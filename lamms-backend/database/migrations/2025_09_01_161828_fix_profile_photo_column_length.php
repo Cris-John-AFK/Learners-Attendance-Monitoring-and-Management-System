@@ -13,7 +13,6 @@ return new class extends Migration
     {
         Schema::table('students', function (Blueprint $table) {
             $table->longText('profilePhoto')->nullable()->change();
-            $table->longText('photo')->nullable()->change();
         });
     }
 
@@ -24,7 +23,6 @@ return new class extends Migration
     {
         Schema::table('students', function (Blueprint $table) {
             $table->string('profilePhoto')->nullable()->change();
-            $table->string('photo')->nullable()->change();
         });
     }
 };

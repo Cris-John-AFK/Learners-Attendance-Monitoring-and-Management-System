@@ -243,36 +243,47 @@ const generateAllQRCodes = async () => {
 
 // Get proper photo URL for student
 const getStudentPhotoUrl = (student) => {
-    if (!student.photo || student.photo === 'N/A') {
-        return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Student photo data length:', student.photo ? student.photo.length : 'null', 'for student:', student.name);
+
+    if (!student.photo || student.photo === 'N/A' || student.photo === '' || student.photo === null || student.photo === '/demo/images/student-photo.jpg') {
+        console.log('Using placeholder for student:', student.name);
+        return 'demo/images/student-photo.jpg';
     }
 
-    // If it's already a data URL (base64), return as is
-    if (student.photo.startsWith('data:')) {
+    // If it's base64 data, validate it's properly formatted
+    if (student.photo.startsWith('data:image')) {
+        // Check if base64 data is valid (not too short, has proper format)
+        if (student.photo.length < 100 || !student.photo.includes('base64,')) {
+            console.log('Invalid base64 data for student:', student.name, 'using placeholder');
+            return 'demo/images/student-photo.jpg';
+        }
         return student.photo;
     }
 
-    // If it's a relative path, prepend the server URL
-    if (student.photo.startsWith('/') || student.photo.startsWith('storage/')) {
-        return `http://localhost:8000/${student.photo}`;
-    }
-
-    // If it's already a full URL, return as is
+    // If it's a full URL, return as is
     if (student.photo.startsWith('http')) {
         return student.photo;
     }
 
+    // If it's a path starting with /, make it absolute with backend URL
+    if (student.photo.startsWith('/')) {
+        return `http://127.0.0.1:8000${student.photo}`;
+    }
+
+    // If it's just a filename in photos directory
+    if (student.photo.includes('photos/')) {
+        return `http://127.0.0.1:8000/${student.photo}`;
+    }
+
     // Default fallback
-    return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Using fallback placeholder for student:', student.name);
+    return 'demo/images/student-photo.jpg';
 };
 
 // Handle photo loading errors
 const handlePhotoError = (event) => {
     const img = event.target;
-    const student = selectedStudent.value;
-    if (student) {
-        img.src = `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
-    }
+    img.src = 'demo/images/student-photo.jpg';
 };
 
 // Generate QR code for specific student
@@ -343,50 +354,37 @@ const loadStudents = async () => {
         }
 
         const apiStudents = await response.json();
-        console.log('Loaded students from API:', apiStudents);
+        console.log('Raw API response:', apiStudents);
 
-        // Format students for display (mapping from camelCase database fields)
+        // Format students data for frontend
         const formattedStudents = apiStudents.map((student) => {
-            return {
-                id: student.id,
-                studentId: student.studentId,
-                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
-                firstName: student.firstName,
-                lastName: student.lastName,
-                email: student.email || 'N/A',
-                gender: student.gender || student.sex || 'Male',
-                age: student.age || calculateAge(student.birthdate),
-                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                address: student.address || formatAddress(student),
-                contact: student.contactInfo || student.parentContact || 'N/A',
-                photo: student.profilePhoto
-                    ? student.profilePhoto.startsWith('data:')
-                        ? student.profilePhoto
-                        : `http://localhost:8000/${student.profilePhoto}`
-                    : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
+            // Map backend field names to frontend field names
+            const formatted = {
+                ...student,
+                // Map qr_code_path from backend to qrCodePath for frontend
                 qrCodePath: student.qr_code_path ? `http://127.0.0.1:8000/${student.qr_code_path}` : null,
-                gradeLevel: student.gradeLevel,
-                section: student.section,
-                lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
-                enrollmentDate: student.enrollmentDate ? new Date(student.enrollmentDate).toLocaleDateString() : new Date().toLocaleDateString(),
-                status: student.status || 'Enrolled',
-                isActive: student.isActive !== undefined ? student.isActive : true,
-                // Store original data for reference
-                originalData: student
+                // Ensure other fields are properly mapped
+                photo: student.profilePhoto || student.photo,
+                contact: student.contactInfo || student.parentContact || '',
+                address: student.address || (student.currentAddress ? (typeof student.currentAddress === 'string' ? student.currentAddress : JSON.stringify(student.currentAddress)) : ''),
+                // Calculate age if birthdate exists
+                age: student.birthdate ? calculateAge(student.birthdate) : student.age || null,
+                // Ensure boolean fields are properly set
+                isActive: student.is_active !== undefined ? student.is_active : true
             };
+
+            console.log('Formatted student:', formatted);
+            return formatted;
         });
 
         students.value = formattedStudents;
 
-        // Set QR codes from backend data and generate missing ones
-        for (const student of formattedStudents) {
+        // Set QR codes from backend data
+        students.value.forEach((student) => {
             if (student.qrCodePath && student.lrn) {
                 qrCodes.value[student.lrn] = student.qrCodePath;
-            } else if (student.lrn && !qrCodes.value[student.lrn]) {
-                // Generate QR code if not exists
-                await generateQRCode(student.lrn);
             }
-        }
+        });
 
         totalStudents.value = formattedStudents.length;
 
@@ -1197,7 +1195,7 @@ async function saveInlineProfile() {
             parentContact: selectedStudent.value.parentContact || selectedStudent.value.contact || '',
             address: selectedStudent.value.address || '',
             lrn: selectedStudent.value.lrn || '',
-            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilephoto || null,
+            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilePhoto || null,
             status: selectedStudent.value.status || 'Enrolled',
             isActive: selectedStudent.value.isActive !== undefined ? selectedStudent.value.isActive : true
         };
@@ -2529,7 +2527,7 @@ onMounted(() => {
 }
 
 .enrollment-header {
-    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
     color: white;
     text-align: center;
     padding: 17px 0;
