@@ -221,7 +221,7 @@ const generateStudentQR = async (student) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             });
@@ -229,17 +229,17 @@ const generateStudentQR = async (student) => {
             if (response.ok) {
                 const result = await response.json();
                 console.log('QR code generated:', result);
-                
+
                 // Update the QR code path for this student
                 const qrPath = `http://127.0.0.1:8000/${result.qr_path}`;
                 qrCodes.value[student.lrn] = qrPath;
-                
+
                 // Update student data with QR code path
-                const studentIndex = students.value.findIndex(s => s.id === student.id);
+                const studentIndex = students.value.findIndex((s) => s.id === student.id);
                 if (studentIndex !== -1) {
                     students.value[studentIndex].qrCodePath = qrPath;
                 }
-                
+
                 toast.add({
                     severity: 'success',
                     summary: 'QR Code Generated',
@@ -1152,9 +1152,9 @@ async function saveInlineProfile() {
         if (updatedStudent.qr_code_path && selectedStudent.value.lrn) {
             const qrPath = `http://127.0.0.1:8000/${updatedStudent.qr_code_path}`;
             qrCodes.value[selectedStudent.value.lrn] = qrPath;
-            
+
             // Update the student's QR code path in the table
-            const studentIndex = students.value.findIndex(s => s.id === selectedStudent.value.id);
+            const studentIndex = students.value.findIndex((s) => s.id === selectedStudent.value.id);
             if (studentIndex !== -1) {
                 students.value[studentIndex].qrCodePath = qrPath;
             }
@@ -1432,16 +1432,10 @@ onMounted(() => {
                     <Column header="QR Code" style="width: 80px">
                         <template #body="slotProps">
                             <div v-if="slotProps.data.qrCodePath" class="flex justify-center">
-                                <img :src="slotProps.data.qrCodePath" 
-                                     alt="QR Code" 
-                                     class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform"
-                                     @click="showQRCode(slotProps.data)" />
+                                <img :src="slotProps.data.qrCodePath" alt="QR Code" class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform" @click="showQRCode(slotProps.data)" />
                             </div>
                             <div v-else class="flex justify-center">
-                                <Button icon="pi pi-qrcode" 
-                                        class="p-button-rounded p-button-text p-button-sm p-button-secondary"
-                                        @click="generateStudentQR(slotProps.data)"
-                                        title="Generate QR Code" />
+                                <Button icon="pi pi-qrcode" class="p-button-rounded p-button-text p-button-sm p-button-secondary" @click="generateStudentQR(slotProps.data)" title="Generate QR Code" />
                             </div>
                         </template>
                     </Column>
