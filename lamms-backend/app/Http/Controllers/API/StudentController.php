@@ -6,6 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 
 class StudentController extends Controller
 {
@@ -180,17 +184,23 @@ class StudentController extends Controller
         }
         
         // Generate QR code filename
-        $fileName = $lrn . '_qr.png';
+        $fileName = $lrn . '_qr.svg';
         $filePath = $qrDir . '/' . $fileName;
         
-        // Generate QR code content with student LRN
-        $qrContent = "LRN: " . $lrn;
+        // Delete old QR code if it exists
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
         
-        // Generate and save QR code using SimpleSoftwareIO/simple-qrcode
-        QrCode::format('png')
-              ->size(200)
-              ->margin(1)
-              ->generate($qrContent, $filePath);
+        // Generate QR code using SVG (doesn't require imagick)
+        $renderer = new ImageRenderer(
+            new RendererStyle(300, 3),
+            new SvgImageBackEnd()
+        );
+        $writer = new Writer($renderer);
+        $qrCodeString = $writer->writeString($lrn);
+        
+        file_put_contents($filePath, $qrCodeString);
         
         return 'qr-codes/' . $fileName;
     }

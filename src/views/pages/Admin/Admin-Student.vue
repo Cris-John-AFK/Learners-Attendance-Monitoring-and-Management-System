@@ -215,7 +215,49 @@ const handlePhotoError = (event) => {
 // Generate QR code for specific student
 const generateStudentQR = async (student) => {
     if (student.lrn) {
-        await generateQRCode(student.lrn);
+        try {
+            // Call backend API to generate QR code
+            const response = await fetch(`http://127.0.0.1:8000/api/generate-qr/${student.lrn}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('QR code generated:', result);
+                
+                // Update the QR code path for this student
+                const qrPath = `http://127.0.0.1:8000/${result.qr_path}`;
+                qrCodes.value[student.lrn] = qrPath;
+                
+                // Update student data with QR code path
+                const studentIndex = students.value.findIndex(s => s.id === student.id);
+                if (studentIndex !== -1) {
+                    students.value[studentIndex].qrCodePath = qrPath;
+                }
+                
+                toast.add({
+                    severity: 'success',
+                    summary: 'QR Code Generated',
+                    detail: `QR code saved for LRN: ${student.lrn}`,
+                    life: 3000
+                });
+            } else {
+                throw new Error('Failed to generate QR code');
+            }
+        } catch (error) {
+            console.error('Error generating QR code:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'QR Generation Failed',
+                detail: 'Could not generate QR code',
+                life: 3000
+            });
+        }
     }
 };
 
@@ -259,7 +301,7 @@ const loadStudents = async () => {
                         ? student.profilePhoto
                         : `http://localhost:8000/${student.profilePhoto}`
                     : `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id}.jpg`,
-                qrCodePath: student.qr_code_path ? `http://localhost:8000/${student.qr_code_path}` : null,
+                qrCodePath: student.qr_code_path ? `http://127.0.0.1:8000/${student.qr_code_path}` : null,
                 gradeLevel: student.gradeLevel,
                 section: student.section,
                 lrn: student.lrn || `${new Date().getFullYear()}${String(student.id).padStart(8, '0')}`,
@@ -1106,6 +1148,18 @@ async function saveInlineProfile() {
         const updatedStudent = await response.json();
         console.log('Student updated in database:', updatedStudent);
 
+        // Update QR code if LRN changed and new QR code path is provided
+        if (updatedStudent.qr_code_path && selectedStudent.value.lrn) {
+            const qrPath = `http://127.0.0.1:8000/${updatedStudent.qr_code_path}`;
+            qrCodes.value[selectedStudent.value.lrn] = qrPath;
+            
+            // Update the student's QR code path in the table
+            const studentIndex = students.value.findIndex(s => s.id === selectedStudent.value.id);
+            if (studentIndex !== -1) {
+                students.value[studentIndex].qrCodePath = qrPath;
+            }
+        }
+
         // Also update localStorage as backup
         try {
             const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
@@ -1373,6 +1427,22 @@ onMounted(() => {
                     <Column field="lrn" header="LRN" sortable style="min-width: 150px">
                         <template #body="slotProps">
                             <span class="font-semibold">{{ slotProps.data.lrn }}</span>
+                        </template>
+                    </Column>
+                    <Column header="QR Code" style="width: 80px">
+                        <template #body="slotProps">
+                            <div v-if="slotProps.data.qrCodePath" class="flex justify-center">
+                                <img :src="slotProps.data.qrCodePath" 
+                                     alt="QR Code" 
+                                     class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform"
+                                     @click="showQRCode(slotProps.data)" />
+                            </div>
+                            <div v-else class="flex justify-center">
+                                <Button icon="pi pi-qrcode" 
+                                        class="p-button-rounded p-button-text p-button-sm p-button-secondary"
+                                        @click="generateStudentQR(slotProps.data)"
+                                        title="Generate QR Code" />
+                            </div>
                         </template>
                     </Column>
                     <Column field="age" header="Age" sortable style="width: 80px">
