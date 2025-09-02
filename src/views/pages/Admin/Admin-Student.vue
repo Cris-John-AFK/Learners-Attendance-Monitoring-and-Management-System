@@ -180,36 +180,47 @@ const generateAllQRCodes = async () => {
 
 // Get proper photo URL for student
 const getStudentPhotoUrl = (student) => {
-    if (!student.photo || student.photo === 'N/A') {
-        return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Student photo data length:', student.photo ? student.photo.length : 'null', 'for student:', student.name);
+
+    if (!student.photo || student.photo === 'N/A' || student.photo === '' || student.photo === null || student.photo === '/demo/images/student-photo.jpg') {
+        console.log('Using placeholder for student:', student.name);
+        return 'demo/images/student-photo.jpg';
     }
 
-    // If it's already a data URL (base64), return as is
-    if (student.photo.startsWith('data:')) {
+    // If it's base64 data, validate it's properly formatted
+    if (student.photo.startsWith('data:image')) {
+        // Check if base64 data is valid (not too short, has proper format)
+        if (student.photo.length < 100 || !student.photo.includes('base64,')) {
+            console.log('Invalid base64 data for student:', student.name, 'using placeholder');
+            return 'demo/images/student-photo.jpg';
+        }
         return student.photo;
     }
 
-    // If it's a relative path, prepend the server URL
-    if (student.photo.startsWith('/') || student.photo.startsWith('storage/')) {
-        return `http://localhost:8000/${student.photo}`;
-    }
-
-    // If it's already a full URL, return as is
+    // If it's a full URL, return as is
     if (student.photo.startsWith('http')) {
         return student.photo;
     }
 
+    // If it's a path starting with /, make it absolute with backend URL
+    if (student.photo.startsWith('/')) {
+        return `http://127.0.0.1:8000${student.photo}`;
+    }
+
+    // If it's just a filename in photos directory
+    if (student.photo.includes('photos/')) {
+        return `http://127.0.0.1:8000/${student.photo}`;
+    }
+
     // Default fallback
-    return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Using fallback placeholder for student:', student.name);
+    return 'demo/images/student-photo.jpg';
 };
 
 // Handle photo loading errors
 const handlePhotoError = (event) => {
     const img = event.target;
-    const student = selectedStudent.value;
-    if (student) {
-        img.src = `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
-    }
+    img.src = 'demo/images/student-photo.jpg';
 };
 
 // Generate QR code for specific student
