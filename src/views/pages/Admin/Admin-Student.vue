@@ -88,16 +88,19 @@ const student = ref({
     householdID: '',
     hasDisability: false,
     disabilities: [],
+    houseIncome: '',
 
     // Parent's/Guardian's Information
     fatherLastName: '',
     fatherFirstName: '',
     fatherMiddleName: '',
     fatherContactNumber: '',
+    fatherOccupation: '',
     motherMaidenLastName: '',
     motherMaidenFirstName: '',
     motherMaidenMiddleName: '',
-    motherContactNumber: ''
+    motherContactNumber: '',
+    motherOccupation: ''
 });
 
 const submitted = ref(false);
@@ -601,7 +604,30 @@ const saveStudent = async () => {
                 } catch (e) {
                     return new Date().toISOString().split('T')[0];
                 }
-            })()
+            })(),
+            
+            // Basic Education Fields
+            placeOfBirth: student.value.placeOfBirth || '',
+            motherTongue: student.value.motherTongue || '',
+            isIndigenous: student.value.isIndigenous || false,
+            indigenousCommunity: student.value.indigenousCommunity || '',
+            is4PsBeneficiary: student.value.is4PsBeneficiary || false,
+            householdID: student.value.householdID || '',
+            hasDisability: student.value.hasDisability || false,
+            disabilities: student.value.disabilities || [],
+            houseIncome: student.value.houseIncome || '',
+            
+            // Parent Information
+            fatherLastName: student.value.fatherLastName || '',
+            fatherFirstName: student.value.fatherFirstName || '',
+            fatherMiddleName: student.value.fatherMiddleName || '',
+            fatherContactNumber: student.value.fatherContactNumber || '',
+            fatherOccupation: student.value.fatherOccupation || '',
+            motherMaidenLastName: student.value.motherMaidenLastName || '',
+            motherMaidenFirstName: student.value.motherMaidenFirstName || '',
+            motherMaidenMiddleName: student.value.motherMaidenMiddleName || '',
+            motherContactNumber: student.value.motherContactNumber || '',
+            motherOccupation: student.value.motherOccupation || ''
         };
 
         console.log('Saving student data:', studentData);
@@ -756,7 +782,8 @@ function editStudent(studentData) {
         is4PsBeneficiary: studentData.is4PsBeneficiary || false,
         householdID: studentData.householdID || '',
         hasDisability: studentData.hasDisability || false,
-        disabilities: studentData.disabilities || []
+        disabilities: studentData.disabilities || [],
+        houseIncome: studentData.houseIncome || ''
     };
 
     // Update sections based on grade level
@@ -1392,7 +1419,12 @@ function openStudentDialog() {
         is4PsBeneficiary: false,
         householdID: '',
         hasDisability: false,
-        disabilities: []
+        disabilities: [],
+        houseIncome: '',
+        
+        // Parent Information
+        fatherOccupation: '',
+        motherOccupation: ''
     };
     studentDialog.value = true;
 }
@@ -1444,14 +1476,17 @@ function resetStudentForm() {
         householdID: '',
         hasDisability: false,
         disabilities: [],
+        houseIncome: '',
         fatherLastName: '',
         fatherFirstName: '',
         fatherMiddleName: '',
         fatherContactNumber: '',
+        fatherOccupation: '',
         motherMaidenLastName: '',
         motherMaidenFirstName: '',
         motherMaidenMiddleName: '',
-        motherContactNumber: ''
+        motherContactNumber: '',
+        motherOccupation: ''
     });
 }
 
@@ -1924,6 +1959,10 @@ onMounted(() => {
                                 <label>Mother Tongue</label>
                                 <InputText v-model="student.motherTongue" placeholder="Enter mother tongue" class="w-full" />
                             </div>
+                            <div class="form-group">
+                                <label>House Income (Monthly)</label>
+                                <InputText v-model="student.houseIncome" placeholder="Enter monthly house income" class="w-full" />
+                            </div>
                         </div>
 
                         <div class="form-row">
@@ -2034,6 +2073,13 @@ onMounted(() => {
                                     <InputText v-model="student.fatherContactNumber" placeholder="Enter father's contact number" class="w-full" />
                                 </div>
                             </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Occupation</label>
+                                    <InputText v-model="student.fatherOccupation" placeholder="Enter father's occupation" class="w-full" />
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Mother's Information -->
@@ -2059,6 +2105,13 @@ onMounted(() => {
                                 <div class="form-group">
                                     <label>Contact Number</label>
                                     <InputText v-model="student.motherContactNumber" placeholder="Enter mother's contact number" class="w-full" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Occupation</label>
+                                    <InputText v-model="student.motherOccupation" placeholder="Enter mother's occupation" class="w-full" />
                                 </div>
                             </div>
                         </div>
@@ -2272,6 +2325,10 @@ onMounted(() => {
                                     <span class="review-value">{{ student.motherTongue || 'N/A' }}</span>
                                 </div>
                                 <div class="review-item">
+                                    <span class="review-label">House Income (Monthly):</span>
+                                    <span class="review-value">{{ student.houseIncome || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
                                     <span class="review-label">Indigenous People:</span>
                                     <span class="review-value">{{ student.isIndigenous ? 'Yes' : 'No' }}</span>
                                 </div>
@@ -2332,6 +2389,10 @@ onMounted(() => {
                                     <span class="review-value">{{ student.fatherContactNumber || 'N/A' }}</span>
                                 </div>
                                 <div class="review-item">
+                                    <span class="review-label">Father's Occupation:</span>
+                                    <span class="review-value">{{ student.fatherOccupation || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
                                     <span class="review-label">Mother's Name:</span>
                                     <span class="review-value">
                                         {{ [student.motherMaidenFirstName, student.motherMaidenMiddleName, student.motherMaidenLastName].filter(Boolean).join(' ') || 'N/A' }}
@@ -2340,6 +2401,10 @@ onMounted(() => {
                                 <div class="review-item">
                                     <span class="review-label">Mother's Contact:</span>
                                     <span class="review-value">{{ student.motherContactNumber || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Mother's Occupation:</span>
+                                    <span class="review-value">{{ student.motherOccupation || 'N/A' }}</span>
                                 </div>
                             </div>
                         </div>
