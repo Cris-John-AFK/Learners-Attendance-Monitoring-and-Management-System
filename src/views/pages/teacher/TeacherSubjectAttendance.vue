@@ -1,6 +1,6 @@
 <script setup>
-import { AttendanceService } from '@/router/service/Estudyante';
 import { QRCodeService } from '@/router/service/QRCodeService';
+import { AttendanceService } from '@/router/service/Students';
 import { SubjectService } from '@/router/service/Subjects';
 import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
@@ -917,31 +917,35 @@ onMounted(async () => {
             }
         }
 
-        // Fetch students
-        const studentsData = await AttendanceService.getData();
-        if (studentsData && studentsData.length > 0) {
-            students.value = studentsData;
-        } else {
-            console.error('No students found in the database!');
+        // Fetch students from database
+        try {
+            const studentsData = await AttendanceService.getData();
+            if (studentsData && studentsData.length > 0) {
+                students.value = studentsData;
+                console.log('Loaded students from database:', studentsData.length);
+            } else {
+                console.warn('No students found in the database!');
+                students.value = [];
 
-            // Create sample students for testing
-            students.value = [
-                { id: '101', name: 'Student 1' },
-                { id: '102', name: 'Student 2' },
-                { id: '103', name: 'Student 3' },
-                { id: '104', name: 'Student 4' },
-                { id: '105', name: 'Student 5' },
-                { id: '106', name: 'Student 6' },
-                { id: '107', name: 'Student 7' },
-                { id: '108', name: 'Student 8' },
-                { id: '109', name: 'Student 9' },
-                { id: '110', name: 'Student 10' },
-                { id: '111', name: 'Student 11' },
-                { id: '112', name: 'Student 12' },
-                { id: '113', name: 'Student 13' },
-                { id: '114', name: 'Student 14' },
-                { id: '115', name: 'Student 15' }
-            ];
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Students Found',
+                    detail: 'No students are registered in the system. Please add students through the Admin panel.',
+                    life: 5000
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching students from database:', error);
+
+            toast.add({
+                severity: 'error',
+                summary: 'Database Error',
+                detail: 'Failed to load students from database. Please check your connection.',
+                life: 5000
+            });
+
+            // Set empty array instead of mock data
+            students.value = [];
         }
 
         // Initialize an empty seat plan for grid layout
@@ -1225,8 +1229,7 @@ const markStudentPresent = (student) => {
         seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
     };
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-
-    console.log(`Attendance for student ${student.name} marked as Present and saved to records and cache`);
+    console.log('Attendance for student marked as Present and saved to records and cache');
 };
 
 // Roll Call Methods
@@ -1756,24 +1759,36 @@ onMounted(async () => {
     }, 1000);
 
     try {
-        // Load mock students first
-        students.value = [
-            { id: '101', name: 'Student 1' },
-            { id: '102', name: 'Student 2' },
-            { id: '103', name: 'Student 3' },
-            { id: '104', name: 'Student 4' },
-            { id: '105', name: 'Student 5' },
-            { id: '106', name: 'Student 6' },
-            { id: '107', name: 'Student 7' },
-            { id: '108', name: 'Student 8' },
-            { id: '109', name: 'Student 9' },
-            { id: '110', name: 'Student 10' },
-            { id: '111', name: 'Student 11' },
-            { id: '112', name: 'Student 12' },
-            { id: '113', name: 'Student 13' },
-            { id: '114', name: 'Student 14' },
-            { id: '115', name: 'Student 15' }
-        ];
+        // Fetch students from database
+        try {
+            const studentsData = await AttendanceService.getData();
+            if (studentsData && studentsData.length > 0) {
+                students.value = studentsData;
+                console.log('Loaded students from database:', studentsData.length);
+            } else {
+                console.warn('No students found in the database!');
+                students.value = [];
+
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Students Found',
+                    detail: 'No students are registered in the system. Please add students through the Admin panel.',
+                    life: 5000
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching students from database:', error);
+
+            toast.add({
+                severity: 'error',
+                summary: 'Database Error',
+                detail: 'Failed to load students from database. Please check your connection.',
+                life: 5000
+            });
+
+            // Set empty array instead of mock data
+            students.value = [];
+        }
 
         // Always load saved templates first, so they're available for use
         await loadSavedTemplates();
