@@ -46,6 +46,12 @@ class StudentController extends Controller
 
         $data = $request->all();
 
+        // Set default placeholder photo if no photo provided
+        if (!$request->has('photo') || !$request->photo) {
+            $data['photo'] = '/demo/images/student-photo.jpg';
+            $data['profilePhoto'] = '/demo/images/student-photo.jpg';
+        }
+
         // Handle photo upload if base64 data is provided
         if ($request->has('photo') && $request->photo && strpos($request->photo, 'data:image') === 0) {
             $photoPath = $this->saveBase64Image($request->photo, 'photos');
@@ -83,8 +89,8 @@ class StudentController extends Controller
     public function update(Request $request, Student $student)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'gradeLevel' => 'required|string|max:50',
+            'name' => 'sometimes|required|string|max:255',
+            'gradeLevel' => 'sometimes|required|string|max:50',
             'section' => 'nullable|string|max:50',
             'studentId' => 'nullable|string|max:50',
             'email' => 'nullable|email|max:255',

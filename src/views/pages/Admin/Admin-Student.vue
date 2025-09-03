@@ -53,14 +53,59 @@ const student = ref({
     city: '',
     province: '',
 
+    // Current Address (Detailed)
+    currentHouseNo: '',
+    currentStreet: '',
+    currentBarangay: '',
+    currentCity: '',
+    currentProvince: '',
+    currentCountry: 'Philippines',
+    currentZipCode: '',
+
+    // Permanent Address
+    sameAsCurrentAddress: true,
+    permanentHouseNo: '',
+    permanentStreet: '',
+    permanentBarangay: '',
+    permanentCity: '',
+    permanentProvince: '',
+    permanentCountry: 'Philippines',
+    permanentZipCode: '',
+
     // Additional Information
     photo: null,
     profilephoto: null,
     enrollmentDate: new Date().toISOString().split('T')[0],
     status: 'Enrolled',
-    isActive: true
+    isActive: true,
+
+    // Basic Education Fields
+    placeOfBirth: '',
+    motherTongue: '',
+    isIndigenous: false,
+    indigenousCommunity: '',
+    is4PsBeneficiary: false,
+    householdID: '',
+    hasDisability: false,
+    disabilities: [],
+
+    // Parent's/Guardian's Information
+    fatherLastName: '',
+    fatherFirstName: '',
+    fatherMiddleName: '',
+    fatherContactNumber: '',
+    motherMaidenLastName: '',
+    motherMaidenFirstName: '',
+    motherMaidenMiddleName: '',
+    motherContactNumber: ''
 });
+
 const submitted = ref(false);
+const termsAccepted = ref(false);
+const currentStep = ref(1);
+const totalSteps = ref(2);
+const successDialog = ref(false);
+const showFireworks = ref(false);
 const filters = ref({
     grade: null,
     section: null,
@@ -100,6 +145,24 @@ const sectionsByGrade = {
     'Grade 5': ['Diligence', 'Creativity', 'Teamwork'],
     'Grade 6': ['Leadership', 'Perseverance', 'Responsibility']
 };
+
+// Disability types for learners with disabilities
+const disabilityTypes = [
+    'Visual Impairment',
+    'Hearing Impairment',
+    'Learning Disability',
+    'Intellectual Disability',
+    'Blind',
+    'Autism Spectrum Disorder',
+    'Low Vision',
+    'Speech/Language Disorder',
+    'Emotional-Behavioral Disorder',
+    'Cerebral Palsy',
+    'Orthopedic/Physical Handicap',
+    'Special Health Problem/Chronic Disease',
+    'Multiple Disorder',
+    'Cancer'
+];
 
 // Load all grade levels and sections
 const loadGradesAndSections = () => {
@@ -180,36 +243,47 @@ const generateAllQRCodes = async () => {
 
 // Get proper photo URL for student
 const getStudentPhotoUrl = (student) => {
-    if (!student.photo || student.photo === 'N/A') {
-        return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Student photo data length:', student.photo ? student.photo.length : 'null', 'for student:', student.name);
+
+    if (!student.photo || student.photo === 'N/A' || student.photo === '' || student.photo === null || student.photo === '/demo/images/student-photo.jpg') {
+        console.log('Using placeholder for student:', student.name);
+        return 'demo/images/student-photo.jpg';
     }
 
-    // If it's already a data URL (base64), return as is
-    if (student.photo.startsWith('data:')) {
+    // If it's base64 data, validate it's properly formatted
+    if (student.photo.startsWith('data:image')) {
+        // Check if base64 data is valid (not too short, has proper format)
+        if (student.photo.length < 100 || !student.photo.includes('base64,')) {
+            console.log('Invalid base64 data for student:', student.name, 'using placeholder');
+            return 'demo/images/student-photo.jpg';
+        }
         return student.photo;
     }
 
-    // If it's a relative path, prepend the server URL
-    if (student.photo.startsWith('/') || student.photo.startsWith('storage/')) {
-        return `http://localhost:8000/${student.photo}`;
-    }
-
-    // If it's already a full URL, return as is
+    // If it's a full URL, return as is
     if (student.photo.startsWith('http')) {
         return student.photo;
     }
 
+    // If it's a path starting with /, make it absolute with backend URL
+    if (student.photo.startsWith('/')) {
+        return `http://127.0.0.1:8000${student.photo}`;
+    }
+
+    // If it's just a filename in photos directory
+    if (student.photo.includes('photos/')) {
+        return `http://127.0.0.1:8000/${student.photo}`;
+    }
+
     // Default fallback
-    return `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
+    console.log('Using fallback placeholder for student:', student.name);
+    return 'demo/images/student-photo.jpg';
 };
 
 // Handle photo loading errors
 const handlePhotoError = (event) => {
     const img = event.target;
-    const student = selectedStudent.value;
-    if (student) {
-        img.src = `https://randomuser.me/api/portraits/${student.gender === 'Female' ? 'women' : 'men'}/${student.id || 1}.jpg`;
-    }
+    img.src = 'demo/images/student-photo.jpg';
 };
 
 // Generate QR code for specific student
@@ -424,6 +498,11 @@ const filteredStudents = computed(() => {
 const saveStudent = async () => {
     submitted.value = true;
 
+    // Check terms acceptance first
+    if (!termsAccepted.value) {
+        return;
+    }
+
     // Validation - only check for name and grade level
     const hasName = student.value.firstName?.trim() || student.value.name?.trim();
     if (!hasName) {
@@ -503,9 +582,6 @@ const saveStudent = async () => {
             status: student.value.status || 'Enrolled',
             isActive: student.value.isActive !== undefined ? student.value.isActive : true,
             enrollmentDate: (() => {
-                if (!student.value.enrollmentDate || student.value.enrollmentDate === 'N/A') {
-                    return new Date().toISOString().split('T')[0];
-                }
                 try {
                     const date = new Date(student.value.enrollmentDate);
                     if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
@@ -580,17 +656,28 @@ const saveStudent = async () => {
         // Reload students from database to get updated data
         await loadStudents();
 
-        // Close dialog and reset form
-        studentDialog.value = false;
-        student.value = {};
-        submitted.value = false;
+        // Show success dialog with fireworks for new enrollments FIRST
+        if (!result.id) {
+            successDialog.value = true;
+            showFireworks.value = true;
+            setTimeout(() => {
+                showFireworks.value = false;
+            }, 5000);
+        } else {
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Student updated successfully!',
+                life: 3000
+            });
+        }
 
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: result.id ? 'Student updated successfully!' : 'Student added successfully!',
-            life: 3000
-        });
+        // Close dialog and reset form AFTER showing success
+        studentDialog.value = false;
+        resetStudentForm();
+        currentStep.value = 1;
+        termsAccepted.value = false;
+        submitted.value = false;
     } catch (error) {
         console.error('Error saving student to database:', error);
 
@@ -660,7 +747,16 @@ function editStudent(studentData) {
         profilephoto: studentData.profilephoto || null,
         enrollmentDate: studentData.enrollmentDate || new Date().toISOString().split('T')[0],
         status: studentData.status || 'Enrolled',
-        isActive: studentData.isActive !== undefined ? studentData.isActive : true
+        isActive: studentData.isActive !== undefined ? studentData.isActive : true,
+
+        // Basic Education Fields
+        motherTongue: studentData.motherTongue || '',
+        isIndigenous: studentData.isIndigenous || false,
+        indigenousCommunity: studentData.indigenousCommunity || '',
+        is4PsBeneficiary: studentData.is4PsBeneficiary || false,
+        householdID: studentData.householdID || '',
+        hasDisability: studentData.hasDisability || false,
+        disabilities: studentData.disabilities || []
     };
 
     // Update sections based on grade level
@@ -1287,15 +1383,96 @@ function openStudentDialog() {
         photo: null,
         profilephoto: null,
         enrollmentDate: new Date().toISOString().split('T')[0],
-        status: 'Enrolled'
+        status: '',
+
+        // Basic Education Fields
+        motherTongue: '',
+        isIndigenous: false,
+        indigenousCommunity: '',
+        is4PsBeneficiary: false,
+        householdID: '',
+        hasDisability: false,
+        disabilities: []
     };
     studentDialog.value = true;
+}
+
+function resetStudentForm() {
+    Object.assign(student.value, {
+        name: '',
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        extensionName: '',
+        lrn: '',
+        gradeLevel: '',
+        section: '',
+        gender: '',
+        birthdate: null,
+        age: '',
+        email: '',
+        phone: '',
+        parentContact: '',
+        schoolYear: '2025-2026',
+        learnerType: 'New/Move In',
+        learnerStatus: 'WITHOUT LRN',
+        lastGradeCompleted: '',
+        lastSYAttended: '',
+        previousSchool: '',
+        schoolId: '',
+        psaBirthCert: '',
+        currentHouseNo: '',
+        currentStreet: '',
+        currentBarangay: '',
+        currentCity: '',
+        currentProvince: '',
+        currentCountry: 'Philippines',
+        currentZipCode: '',
+        sameAsCurrentAddress: true,
+        permanentHouseNo: '',
+        permanentStreet: '',
+        permanentBarangay: '',
+        permanentCity: '',
+        permanentProvince: '',
+        permanentCountry: 'Philippines',
+        permanentZipCode: '',
+        placeOfBirth: '',
+        motherTongue: '',
+        isIndigenous: false,
+        indigenousCommunity: '',
+        is4PsBeneficiary: false,
+        householdID: '',
+        hasDisability: false,
+        disabilities: [],
+        fatherLastName: '',
+        fatherFirstName: '',
+        fatherMiddleName: '',
+        fatherContactNumber: '',
+        motherMaidenLastName: '',
+        motherMaidenFirstName: '',
+        motherMaidenMiddleName: '',
+        motherContactNumber: ''
+    });
 }
 
 function cancelStudentDialog() {
     openStudentDialog();
     studentDialog.value = false;
+    currentStep.value = 1;
+    termsAccepted.value = false;
 }
+
+const nextStep = () => {
+    if (currentStep.value < totalSteps.value) {
+        currentStep.value++;
+    }
+};
+
+const previousStep = () => {
+    if (currentStep.value > 1) {
+        currentStep.value--;
+    }
+};
 
 // Initialize component
 onMounted(() => {
@@ -1602,188 +1779,581 @@ onMounted(() => {
                 </div>
             </template>
 
-            <div class="enrollment-form-container" style="padding: 20px">
-                <!-- LEARNER INFORMATION SECTION -->
-                <div class="form-section">
-                    <h3 class="section-title">LEARNER INFORMATION</h3>
+            <div class="enrollment-form-container">
+                <!-- Step 1: Form Fields -->
+                <div v-if="currentStep === 1">
+                    <!-- LEARNER INFORMATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">LEARNER INFORMATION</h3>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>School Year</label>
-                            <InputText v-model="student.schoolYear" readonly class="readonly-field" />
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>School Year</label>
+                                <InputText v-model="student.schoolYear" readonly class="readonly-field" />
+                            </div>
+                            <div class="form-group">
+                                <label>Grade Level</label>
+                                <Dropdown v-model="student.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="-- Please select --" class="w-full" @change="updateStudentSections" />
+                            </div>
+                            <div class="form-group">
+                                <label>Type</label>
+                                <div class="radio-group">
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.learnerType" inputId="oldStudent" value="Old Student" />
+                                        <label for="oldStudent">Old Student</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.learnerType" inputId="transferIn" value="Transfer In" />
+                                        <label for="transferIn">Transfer In</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.learnerType" inputId="newMoveIn" value="New/Move In" />
+                                        <label for="newMoveIn">New/Move In</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.learnerType" inputId="balikAral" value="Balik-Aral" />
+                                        <label for="balikAral">Balik-Aral</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Learner Status</label>
+                                <Dropdown
+                                    v-model="student.learnerStatus"
+                                    :options="[
+                                        { name: 'WITH LRN', value: 'WITH LRN' },
+                                        { name: 'WITHOUT LRN', value: 'WITHOUT LRN' }
+                                    ]"
+                                    optionLabel="name"
+                                    optionValue="value"
+                                    placeholder="Select Status"
+                                    class="w-full"
+                                />
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Grade Level</label>
-                            <Dropdown v-model="student.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="-- Please select --" class="w-full" @change="updateStudentSections" />
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Last Grade Level Completed</label>
+                                <Dropdown v-model="student.lastGradeCompleted" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="-- Please select --" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>Last S.Y. Attended</label>
+                                <InputText v-model="student.lastSYAttended" placeholder="e.g., 2023-2024" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>Name of Previous School</label>
+                                <InputText v-model="student.previousSchool" placeholder="Enter previous school name" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>School ID</label>
+                                <InputText v-model="student.schoolId" placeholder="Enter School ID" class="w-full" />
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Type</label>
-                            <div class="radio-group">
-                                <div class="radio-item">
-                                    <RadioButton v-model="student.learnerType" inputId="oldStudent" value="Old Student" />
-                                    <label for="oldStudent">Old Student</label>
-                                </div>
-                                <div class="radio-item">
-                                    <RadioButton v-model="student.learnerType" inputId="transferIn" value="Transfer In" />
-                                    <label for="transferIn">Transfer In</label>
-                                </div>
-                                <div class="radio-item">
-                                    <RadioButton v-model="student.learnerType" inputId="newMoveIn" value="New/Move In" />
-                                    <label for="newMoveIn">New/Move In</label>
-                                </div>
-                                <div class="radio-item">
-                                    <RadioButton v-model="student.learnerType" inputId="balikAral" value="Balik-Aral" />
-                                    <label for="balikAral">Balik-Aral</label>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>PSA Birth Cert. No. (if available upon registration)</label>
+                                <InputText v-model="student.psaBirthCert" placeholder="Enter PSA Birth Certificate Number" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>LRN</label>
+                                <InputText v-model="student.lrn" placeholder="Enter Learner Reference Number" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PERSONAL INFORMATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">PERSONAL INFORMATION</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>First Name</label>
+                                <InputText v-model="student.firstName" placeholder="Enter first name" class="w-full" @input="updateFullName" />
+                                <small v-if="!student.firstName" class="text-red-500">First Name is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Middle Name</label>
+                                <InputText v-model="student.middleName" placeholder="Enter middle name" class="w-full" @input="updateFullName" />
+                            </div>
+                            <div class="form-group">
+                                <label>Last Name</label>
+                                <InputText v-model="student.lastName" placeholder="Enter last name" class="w-full" @input="updateFullName" />
+                                <small v-if="!student.lastName" class="text-red-500">Last Name is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Extension Name</label>
+                                <InputText v-model="student.extensionName" placeholder="Jr., Sr., III, etc." class="w-full" @input="updateFullName" />
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date of Birth</label>
+                                <Calendar v-model="student.birthdate" showIcon dateFormat="mm/dd/yy" placeholder="Select date" class="w-full" @date-select="calculateStudentAge" />
+                                <small v-if="!student.birthdate" class="text-red-500">Date of Birth is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Place of Birth</label>
+                                <InputText v-model="student.placeOfBirth" placeholder="Enter place of birth" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>Sex</label>
+                                <Dropdown
+                                    v-model="student.gender"
+                                    :options="[
+                                        { name: 'Male', value: 'Male' },
+                                        { name: 'Female', value: 'Female' }
+                                    ]"
+                                    optionLabel="name"
+                                    optionValue="value"
+                                    placeholder="Select sex"
+                                    class="w-full"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BASIC EDUCATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">BASIC EDUCATION INFORMATION</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Mother Tongue</label>
+                                <InputText v-model="student.motherTongue" placeholder="Enter mother tongue" class="w-full" />
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Belonging to any Indigenous Peoples (IP) Community/Indigenous Cultural Community</label>
+                                <div class="radio-group">
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.isIndigenous" inputId="indigenousYes" :value="true" />
+                                        <label for="indigenousYes">Yes</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.isIndigenous" inputId="indigenousNo" :value="false" />
+                                        <label for="indigenousNo">No</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label>Learner Status</label>
-                            <Dropdown
-                                v-model="student.learnerStatus"
-                                :options="[
-                                    { name: 'WITH LRN', value: 'WITH LRN' },
-                                    { name: 'WITHOUT LRN', value: 'WITHOUT LRN' }
-                                ]"
-                                optionLabel="name"
-                                optionValue="value"
-                                placeholder="Select Status"
-                                class="w-full"
-                            />
+
+                        <div v-if="student.isIndigenous" class="form-row">
+                            <div class="form-group">
+                                <label>If Yes, please specify:</label>
+                                <InputText v-model="student.indigenousCommunity" placeholder="Please specify the indigenous community" class="w-full" />
+                                <small class="text-red-500">Please specify the indigenous community</small>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Is your family a beneficiary of 4Ps?</label>
+                                <div class="radio-group">
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.is4PsBeneficiary" inputId="fourPsYes" :value="true" />
+                                        <label for="fourPsYes">Yes</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.is4PsBeneficiary" inputId="fourPsNo" :value="false" />
+                                        <label for="fourPsNo">No</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="student.is4PsBeneficiary" class="form-row">
+                            <div class="form-group">
+                                <label>If Yes, write the 4Ps Household ID Number below:</label>
+                                <InputText v-model="student.householdID" placeholder="Enter 4Ps Household ID Number" class="w-full" />
+                                <small class="text-red-500">Household ID is required</small>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Is the child a Learner with Disability?</label>
+                                <div class="radio-group">
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.hasDisability" inputId="disabilityYes" :value="true" />
+                                        <label for="disabilityYes">Yes</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.hasDisability" inputId="disabilityNo" :value="false" />
+                                        <label for="disabilityNo">No</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="student.hasDisability" class="form-row">
+                            <div class="form-group">
+                                <label>If Yes, specify the type of disability:</label>
+                                <div class="disability-checkboxes">
+                                    <div v-for="disabilityType in disabilityTypes" :key="disabilityType" class="checkbox-item">
+                                        <Checkbox v-model="student.disabilities" :inputId="'disability_' + disabilityType.replace(/[^a-zA-Z0-9]/g, '_')" :value="disabilityType" />
+                                        <label :for="'disability_' + disabilityType.replace(/[^a-zA-Z0-9]/g, '_')" class="ml-2">{{ disabilityType }}</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Last Grade Level Completed</label>
-                            <Dropdown v-model="student.lastGradeCompleted" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="-- Please select --" class="w-full" />
+                    <!-- PARENT'S/GUARDIAN'S INFORMATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">PARENT'S/GUARDIAN'S INFORMATION</h3>
+
+                        <!-- Father's Information -->
+                        <div class="parent-subsection">
+                            <h4 class="subsection-title">Father's Name</h4>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Last Name</label>
+                                    <InputText v-model="student.fatherLastName" placeholder="Enter father's last name" class="w-full" />
+                                    <small v-if="!student.fatherLastName" class="text-red-500">Last Name is required</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>First Name</label>
+                                    <InputText v-model="student.fatherFirstName" placeholder="Enter father's first name" class="w-full" />
+                                    <small v-if="!student.fatherFirstName" class="text-red-500">First Name is required</small>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Middle Name</label>
+                                    <InputText v-model="student.fatherMiddleName" placeholder="Enter father's middle name" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Contact Number</label>
+                                    <InputText v-model="student.fatherContactNumber" placeholder="Enter father's contact number" class="w-full" />
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Last S.Y. Attended</label>
-                            <InputText v-model="student.lastSYAttended" placeholder="e.g., 2023-2024" class="w-full" />
-                        </div>
-                        <div class="form-group">
-                            <label>Name of Previous School</label>
-                            <InputText v-model="student.previousSchool" placeholder="Enter previous school name" class="w-full" />
-                        </div>
-                        <div class="form-group">
-                            <label>School ID</label>
-                            <InputText v-model="student.schoolId" placeholder="Enter School ID" class="w-full" />
+
+                        <!-- Mother's Information -->
+                        <div class="parent-subsection">
+                            <h4 class="subsection-title">Mother's Maiden Name</h4>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Last Name</label>
+                                    <InputText v-model="student.motherMaidenLastName" placeholder="Enter mother's maiden last name" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>First Name</label>
+                                    <InputText v-model="student.motherMaidenFirstName" placeholder="Enter mother's maiden first name" class="w-full" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Middle Name</label>
+                                    <InputText v-model="student.motherMaidenMiddleName" placeholder="Enter mother's maiden middle name" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Contact Number</label>
+                                    <InputText v-model="student.motherContactNumber" placeholder="Enter mother's contact number" class="w-full" />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>PSA Birth Cert. No. (if available upon registration)</label>
-                            <InputText v-model="student.psaBirthCert" placeholder="Enter PSA Birth Certificate Number" class="w-full" />
+                    <!-- CONTACT INFORMATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">CONTACT INFORMATION</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Email Address</label>
+                                <InputText v-model="student.email" placeholder="Enter email address" class="w-full" type="email" />
+                                <small v-if="!student.email" class="text-red-500">Email Address is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Number</label>
+                                <InputText v-model="student.phone" placeholder="Enter contact number" class="w-full" />
+                                <small v-if="!student.phone" class="text-red-500">Contact Number is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Parent/Guardian Contact</label>
+                                <InputText v-model="student.parentContact" placeholder="Enter parent/guardian contact" class="w-full" />
+                                <small v-if="!student.parentContact" class="text-red-500">Parent/Guardian Contact is required</small>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>LRN</label>
-                            <InputText v-model="student.lrn" placeholder="Enter Learner Reference Number" class="w-full" />
+                    </div>
+
+                    <!-- CURRENT ADDRESS SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">CURRENT ADDRESS</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>House No.</label>
+                                <InputText v-model="student.currentHouseNo" placeholder="Enter house number" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>Street/Sitio/Purok</label>
+                                <InputText v-model="student.currentStreet" placeholder="Enter street, sitio, or purok" class="w-full" />
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Barangay</label>
+                                <InputText v-model="student.currentBarangay" placeholder="Enter barangay" class="w-full" />
+                                <small v-if="!student.currentBarangay" class="text-red-500">Barangay is required</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Municipality/City</label>
+                                <InputText v-model="student.currentCity" placeholder="Enter municipality or city" class="w-full" />
+                                <small v-if="!student.currentCity" class="text-red-500">City is required</small>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Province</label>
+                                <InputText v-model="student.currentProvince" placeholder="Enter province" class="w-full" />
+                            </div>
+                            <div class="form-group">
+                                <label>Country</label>
+                                <InputText v-model="student.currentCountry" placeholder="Enter country" class="w-full" />
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Zip Code</label>
+                                <InputText v-model="student.currentZipCode" placeholder="Enter zip code" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PERMANENT ADDRESS SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">PERMANENT ADDRESS</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Same with your Current Address?</label>
+                                <div class="radio-group">
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.sameAsCurrentAddress" inputId="sameAddressYes" :value="true" />
+                                        <label for="sameAddressYes">Yes</label>
+                                    </div>
+                                    <div class="radio-item">
+                                        <RadioButton v-model="student.sameAsCurrentAddress" inputId="sameAddressNo" :value="false" />
+                                        <label for="sameAddressNo">No</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="!student.sameAsCurrentAddress">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>House No./Street</label>
+                                    <InputText v-model="student.permanentHouseNo" placeholder="Enter house number and street" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Street Name</label>
+                                    <InputText v-model="student.permanentStreet" placeholder="Enter street name" class="w-full" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Barangay</label>
+                                    <InputText v-model="student.permanentBarangay" placeholder="Enter barangay" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Municipality/City</label>
+                                    <InputText v-model="student.permanentCity" placeholder="Enter municipality or city" class="w-full" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Province</label>
+                                    <InputText v-model="student.permanentProvince" placeholder="Enter province" class="w-full" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Country</label>
+                                    <InputText v-model="student.permanentCountry" placeholder="Enter country" class="w-full" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Zip Code</label>
+                                    <InputText v-model="student.permanentZipCode" placeholder="Enter zip code" class="w-full" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION ASSIGNMENT -->
+                    <div class="form-section">
+                        <h3 class="section-title">SECTION ASSIGNMENT</h3>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Section</label>
+                                <Dropdown v-model="student.section" :options="sections" placeholder="Select Section" class="w-full" :disabled="!student.gradeLevel" />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- PERSONAL INFORMATION SECTION -->
-                <div class="form-section">
-                    <h3 class="section-title">PERSONAL INFORMATION</h3>
+                <!-- Step 2: Review Information -->
+                <div v-if="currentStep === 2">
+                    <!-- REVIEW INFORMATION SECTION -->
+                    <div class="form-section">
+                        <h3 class="section-title">REVIEW INFORMATION</h3>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>First Name</label>
-                            <InputText v-model="student.firstName" placeholder="Enter first name" class="w-full" @input="updateFullName" />
+                        <!-- Enrollment Information -->
+                        <div class="review-subsection">
+                            <h4 class="review-subsection-title">Enrollment Information</h4>
+                            <div class="review-grid">
+                                <div class="review-item">
+                                    <span class="review-label">School Year:</span>
+                                    <span class="review-value">{{ student.schoolYear || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Grade Level:</span>
+                                    <span class="review-value">{{ student.gradeLevel || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">With LRN:</span>
+                                    <span class="review-value">{{ student.learnerStatus === 'WITH LRN' ? 'Yes' : 'No' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Returning (Balik-Aral):</span>
+                                    <span class="review-value">{{ student.learnerType === 'Balik-Aral' ? 'Yes' : 'No' }}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Middle Name</label>
-                            <InputText v-model="student.middleName" placeholder="Enter middle name" class="w-full" @input="updateFullName" />
-                        </div>
-                        <div class="form-group">
-                            <label>Last Name</label>
-                            <InputText v-model="student.lastName" placeholder="Enter last name" class="w-full" @input="updateFullName" />
-                        </div>
-                        <div class="form-group">
-                            <label>Extension Name</label>
-                            <InputText v-model="student.extensionName" placeholder="Jr., Sr., III, etc." class="w-full" @input="updateFullName" />
-                        </div>
-                    </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Date of Birth</label>
-                            <Calendar v-model="student.birthdate" showIcon dateFormat="mm/dd/yy" placeholder="Select date" class="w-full" @date-select="calculateStudentAge" />
+                        <!-- Learner Information -->
+                        <div class="review-subsection">
+                            <h4 class="review-subsection-title">Learner Information</h4>
+                            <div class="review-grid">
+                                <div class="review-item">
+                                    <span class="review-label">Full Name:</span>
+                                    <span class="review-value">{{ student.name || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">PSA Birth Certificate No.:</span>
+                                    <span class="review-value">{{ student.psaBirthCert || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Birthdate:</span>
+                                    <span class="review-value">{{ student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Place of Birth:</span>
+                                    <span class="review-value">{{ student.placeOfBirth || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Sex:</span>
+                                    <span class="review-value">{{ student.gender || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Age:</span>
+                                    <span class="review-value">{{ student.age || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Mother Tongue:</span>
+                                    <span class="review-value">{{ student.motherTongue || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Indigenous People:</span>
+                                    <span class="review-value">{{ student.isIndigenous ? 'Yes' : 'No' }}</span>
+                                </div>
+                                <div class="review-item" v-if="student.isIndigenous">
+                                    <span class="review-label">Indigenous Community:</span>
+                                    <span class="review-value">{{ student.indigenousCommunity || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">4Ps Beneficiary:</span>
+                                    <span class="review-value">{{ student.is4PsBeneficiary ? 'Yes' : 'No' }}</span>
+                                </div>
+                                <div class="review-item" v-if="student.is4PsBeneficiary">
+                                    <span class="review-label">4Ps Household ID:</span>
+                                    <span class="review-value">{{ student.householdID || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Learner with Disability:</span>
+                                    <span class="review-value">{{ student.hasDisability ? 'Yes' : 'No' }}</span>
+                                </div>
+                                <div class="review-item" v-if="student.hasDisability && student.disabilities.length > 0">
+                                    <span class="review-label">Disability Types:</span>
+                                    <span class="review-value">{{ student.disabilities.join(', ') }}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Sex</label>
-                            <Dropdown
-                                v-model="student.gender"
-                                :options="[
-                                    { name: 'Male', value: 'Male' },
-                                    { name: 'Female', value: 'Female' }
-                                ]"
-                                optionLabel="name"
-                                optionValue="value"
-                                placeholder="Select sex"
-                                class="w-full"
-                            />
-                        </div>
-                    </div>
-                </div>
 
-                <!-- CONTACT INFORMATION SECTION -->
-                <div class="form-section">
-                    <h3 class="section-title">CONTACT INFORMATION</h3>
+                        <!-- Address Information -->
+                        <div class="review-subsection">
+                            <h4 class="review-subsection-title">Address Information</h4>
+                            <div class="review-grid">
+                                <div class="review-item">
+                                    <span class="review-label">Current Address:</span>
+                                    <span class="review-value">
+                                        {{ [student.currentHouseNo, student.currentStreet, student.currentBarangay, student.currentCity, student.currentProvince, student.currentZipCode].filter(Boolean).join(', ') || 'N/A' }}
+                                    </span>
+                                </div>
+                                <div class="review-item" v-if="!student.sameAsCurrentAddress">
+                                    <span class="review-label">Permanent Address:</span>
+                                    <span class="review-value">
+                                        {{ [student.permanentHouseNo, student.permanentStreet, student.permanentBarangay, student.permanentCity, student.permanentProvince, student.permanentZipCode].filter(Boolean).join(', ') || 'N/A' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Email Address</label>
-                            <InputText v-model="student.email" placeholder="Enter email address" class="w-full" type="email" />
+                        <!-- Parent/Guardian Information -->
+                        <div class="review-subsection">
+                            <h4 class="review-subsection-title">Parent/Guardian Information</h4>
+                            <div class="review-grid">
+                                <div class="review-item">
+                                    <span class="review-label">Father's Name:</span>
+                                    <span class="review-value">
+                                        {{ [student.fatherFirstName, student.fatherMiddleName, student.fatherLastName].filter(Boolean).join(' ') || 'N/A' }}
+                                    </span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Father's Contact:</span>
+                                    <span class="review-value">{{ student.fatherContactNumber || 'N/A' }}</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Mother's Name:</span>
+                                    <span class="review-value">
+                                        {{ [student.motherMaidenFirstName, student.motherMaidenMiddleName, student.motherMaidenLastName].filter(Boolean).join(' ') || 'N/A' }}
+                                    </span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">Mother's Contact:</span>
+                                    <span class="review-value">{{ student.motherContactNumber || 'N/A' }}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Contact Number</label>
-                            <InputText v-model="student.phone" placeholder="Enter contact number" class="w-full" />
-                        </div>
-                        <div class="form-group">
-                            <label>Parent/Guardian Contact</label>
-                            <InputText v-model="student.parentContact" placeholder="Enter parent/guardian contact" class="w-full" />
-                        </div>
-                    </div>
-                </div>
 
-                <!-- ADDRESS INFORMATION SECTION -->
-                <div class="form-section">
-                    <h3 class="section-title">ADDRESS INFORMATION</h3>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>House No./Street</label>
-                            <InputText v-model="student.houseNo" placeholder="Enter house number and street" class="w-full" @input="updateFullAddress" />
-                        </div>
-                        <div class="form-group">
-                            <label>Barangay</label>
-                            <InputText v-model="student.barangay" placeholder="Enter barangay" class="w-full" @input="updateFullAddress" />
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>City/Municipality</label>
-                            <InputText v-model="student.city" placeholder="Enter city/municipality" class="w-full" @input="updateFullAddress" />
-                        </div>
-                        <div class="form-group">
-                            <label>Province</label>
-                            <InputText v-model="student.province" placeholder="Enter province" class="w-full" @input="updateFullAddress" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SECTION ASSIGNMENT -->
-                <div class="form-section">
-                    <h3 class="section-title">SECTION ASSIGNMENT</h3>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Section</label>
-                            <Dropdown v-model="student.section" :options="sections" placeholder="Select Section" class="w-full" :disabled="!student.gradeLevel" />
+                        <!-- Terms and Conditions -->
+                        <div class="review-subsection">
+                            <div class="terms-checkbox">
+                                <Checkbox v-model="termsAccepted" inputId="termsAccepted" :binary="true" />
+                                <label for="termsAccepted" class="terms-label">
+                                    I hereby certify that the above information given are true and correct to the best of my knowledge and I allow the school to use my child's details to create and/or update his/her learner profile in the Learner
+                                    Information System.
+                                </label>
+                            </div>
+                            <div v-if="!termsAccepted && submitted" class="terms-error">You must accept the terms to continue</div>
                         </div>
                     </div>
                 </div>
@@ -1792,7 +2362,9 @@ onMounted(() => {
             <template #footer>
                 <div class="enrollment-footer">
                     <Button label="Cancel" class="p-button-text" @click="cancelStudentDialog" />
-                    <Button label="Save Student" icon="pi pi-check" class="p-button-success" @click="saveStudent" :loading="loading" />
+                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="previousStep" />
+                    <Button v-if="currentStep < totalSteps" label="Next" icon="pi pi-chevron-right" iconPos="right" class="p-button-primary" @click="nextStep" />
+                    <Button v-if="currentStep === totalSteps" label="Submit" icon="pi pi-check" class="p-button-success" @click="saveStudent" :loading="loading" :disabled="!termsAccepted" />
                 </div>
             </template>
         </Dialog>
@@ -1824,6 +2396,40 @@ onMounted(() => {
                     <Button label="Print" icon="pi pi-print" class="p-button-text p-button-success ml-2" @click="printQRCode" />
                 </div>
             </div>
+        </Dialog>
+
+        <!-- Success Dialog with Fireworks -->
+        <Dialog v-model:visible="successDialog" modal :closable="false" :style="{ width: '500px' }" class="success-dialog">
+            <template #header>
+                <div class="success-header">
+                    <i class="pi pi-check-circle success-icon"></i>
+                </div>
+            </template>
+
+            <div class="success-content">
+                <!-- Fireworks Animation -->
+                <div v-if="showFireworks" class="fireworks-container">
+                    <div class="firework firework-1"></div>
+                    <div class="firework firework-2"></div>
+                    <div class="firework firework-3"></div>
+                    <div class="firework firework-4"></div>
+                </div>
+
+                <div class="success-message">
+                    <h2 class="success-title">🎉 Thank You! 🎉</h2>
+                    <p class="success-subtitle">Student Enrolled Successfully!</p>
+                    <div class="success-details">
+                        <p>The new student has been successfully enrolled in the system.</p>
+                        <p>Welcome to <strong>Naawan Central School</strong>!</p>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="success-footer">
+                    <Button label="Continue" icon="pi pi-arrow-right" iconPos="right" class="p-button-success" @click="successDialog = false" />
+                </div>
+            </template>
         </Dialog>
     </div>
 </template>
@@ -1987,11 +2593,243 @@ onMounted(() => {
     color: white;
     font-size: 1rem;
     font-weight: 600;
-    margin: -20px -20px 20px -20px;
-    padding: 12px 20px;
-    border-radius: 8px 8px 0 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+}
+
+.parent-subsection {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.subsection-title {
+    color: #374151;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.review-subsection {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.review-subsection-title {
+    color: #1f2937;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.review-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.review-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.review-item:last-child {
+    border-bottom: none;
+}
+
+.review-label {
+    font-weight: 600;
+    color: #374151;
+    min-width: 200px;
+    flex-shrink: 0;
+}
+
+.review-value {
+    color: #6b7280;
+    text-align: right;
+    flex: 1;
+    margin-left: 16px;
+    word-break: break-word;
+}
+
+.terms-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.terms-label {
+    font-size: 0.875rem;
+    color: #374151;
+    line-height: 1.5;
+    cursor: pointer;
+    margin: 0;
+}
+
+.terms-error {
+    color: #dc2626;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+/* Success Dialog Styling */
+.success-dialog :deep(.p-dialog-header) {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+    text-align: center;
+    border-radius: 12px 12px 0 0;
+    padding: 20px;
+}
+
+.success-header {
+    width: 100%;
+    text-align: center;
+}
+
+.success-icon {
+    font-size: 3rem;
+    color: white;
+    animation: bounce 1s ease-in-out infinite alternate;
+}
+
+.success-content {
+    position: relative;
+    text-align: center;
+    padding: 30px 20px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    overflow: hidden;
+}
+
+.success-message {
+    position: relative;
+    z-index: 10;
+}
+
+.success-title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #16a34a;
+    margin: 0 0 10px 0;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.success-subtitle {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #15803d;
+    margin: 0 0 20px 0;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+}
+
+.success-details {
+    color: #374151;
+    line-height: 1.6;
+    animation: fadeInUp 0.8s ease-out 0.4s both;
+}
+
+.success-details p {
+    margin: 8px 0;
+}
+
+.success-footer {
+    text-align: center;
+    padding: 15px;
+    background: #f9fafb;
+}
+
+/* Fireworks Animation */
+.fireworks-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.firework {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    animation: firework 2s ease-out infinite;
+}
+
+.firework-1 {
+    top: 20%;
+    left: 20%;
+    background: #ff6b6b;
+    animation-delay: 0s;
+}
+
+.firework-2 {
+    top: 30%;
+    right: 20%;
+    background: #4ecdc4;
+    animation-delay: 0.5s;
+}
+
+.firework-3 {
+    top: 60%;
+    left: 30%;
+    background: #45b7d1;
+    animation-delay: 1s;
+}
+
+.firework-4 {
+    top: 50%;
+    right: 30%;
+    background: #f9ca24;
+    animation-delay: 1.5s;
+}
+
+/* Animations */
+@keyframes bounce {
+    0% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes firework {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
 }
 
 .form-row {
@@ -2037,6 +2875,39 @@ onMounted(() => {
     font-size: 0.875rem;
     margin: 0;
     cursor: pointer;
+}
+
+.disability-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.checkbox-item label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    margin: 0;
+    cursor: pointer;
+    color: #374151;
+}
+
+:deep(.p-checkbox .p-checkbox-box) {
+    border: 2px solid #d1d5db;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+}
+
+:deep(.p-checkbox .p-checkbox-box.p-highlight) {
+    border-color: #3b82f6;
+    background: #3b82f6;
 }
 
 .enrollment-footer {
