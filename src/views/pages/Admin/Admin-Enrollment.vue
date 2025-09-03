@@ -1,9 +1,12 @@
 <script setup>
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Checkbox from 'primevue/checkbox';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import RadioButton from 'primevue/radiobutton';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
@@ -19,13 +22,85 @@ const showStudentDetails = ref(false);
 const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
-// Removed activeTabIndex since we no longer use tabs
+
+// New enrollment form dialog
+const newStudentDialog = ref(false);
+const currentStep = ref(1);
+const totalSteps = ref(2);
+const termsAccepted = ref(false);
+
+// New student form data with comprehensive structure
+const newStudent = ref({
+    // Student Type
+    studentType: 'New',
+
+    // School Information
+    schoolYear: '2025-2026',
+    lrn: '',
+    gradeLevel: '',
+    serialNumber: '', // Auto-generated enrollment ID
+
+    // Student Information
+    lastName: '',
+    firstName: '',
+    middleName: '',
+    extensionName: '',
+    birthdate: null,
+    age: '',
+    sex: 'Male',
+    religion: '',
+    motherTongue: '',
+
+    // Address Information
+    houseNo: '',
+    street: '',
+    barangay: '',
+    cityMunicipality: '',
+    province: '',
+    country: 'Philippines',
+    zipCode: '',
+
+    // Parent/Guardian Information
+    fatherLastName: '',
+    fatherFirstName: '',
+    fatherMiddleName: '',
+    fatherContactNumber: '',
+
+    motherLastName: '',
+    motherFirstName: '',
+    motherMiddleName: '',
+    motherContactNumber: '',
+
+    // Previous School Information
+    lastGradeCompleted: '',
+    lastSchoolYearCompleted: '',
+    lastSchoolAttended: '',
+
+    // Contact Information
+    emailAddress: '',
+
+    // Health/Disability Information
+    hasDisability: false,
+    disabilities: [],
+
+    // Household Income
+    householdIncome: 'Below 10k'
+});
 
 // Initialize with empty array, will be loaded from localStorage
 const students = ref([]);
+const enrolledStudents = ref([]);
 
-// Grade levels and sections
-const gradeLevels = [
+// Student types
+const studentTypes = [
+    { name: 'New', value: 'New' },
+    { name: 'Old', value: 'Old' },
+    { name: 'Transfer', value: 'Transfer' },
+    { name: 'Balik-Aral', value: 'Balik-Aral' }
+];
+
+// Grade levels and sections - will be loaded from database
+const gradeLevels = ref([
     { name: 'Kinder', code: 'K' },
     { name: 'Grade 1', code: '1' },
     { name: 'Grade 2', code: '2' },
@@ -33,6 +108,16 @@ const gradeLevels = [
     { name: 'Grade 4', code: '4' },
     { name: 'Grade 5', code: '5' },
     { name: 'Grade 6', code: '6' }
+]);
+
+// Disability types
+const disabilityTypes = ['Visual Impairment', 'Hearing Impairment', 'Physical Disability', 'Intellectual Disability', 'Learning Disability', 'Speech/Language Impairment', 'Autism Spectrum Disorder', 'Multiple Disabilities', 'Other'];
+
+// Household income options
+const incomeOptions = [
+    { name: 'Below 10k', value: 'Below 10k' },
+    { name: 'Between 10k-15k', value: 'Between 10k-15k' },
+    { name: 'Above 15k', value: 'Above 15k' }
 ];
 
 const sections = {
@@ -87,7 +172,30 @@ const subjects = {
 // Load data on component mount
 onMounted(() => {
     loadAdmittedStudents();
+    loadGradesFromDatabase();
+    generateSerialNumber();
+    loadEnrolledStudents();
 });
+
+// Load grades from database
+async function loadGradesFromDatabase() {
+    try {
+        // This would typically fetch from your grades API
+        // For now, using the existing static data
+        console.log('Loading grades from database...');
+    } catch (error) {
+        console.error('Error loading grades:', error);
+    }
+}
+
+// Generate serial number for enrollment ID
+function generateSerialNumber() {
+    const currentYear = new Date().getFullYear();
+    const randomNum = Math.floor(Math.random() * 10000)
+        .toString()
+        .padStart(4, '0');
+    newStudent.value.serialNumber = `ENR${currentYear}${randomNum}`;
+}
 
 // Load admitted students from localStorage
 async function loadAdmittedStudents() {
@@ -96,13 +204,10 @@ async function loadAdmittedStudents() {
         // Load admitted students from localStorage where Admission Center saves them
         const enrollmentRegistrations = JSON.parse(localStorage.getItem('enrollmentRegistrations') || '[]');
         const pendingApplicants = JSON.parse(localStorage.getItem('pendingApplicants') || '[]');
-        
+
         // Combine both sources and filter for admitted students
         const allStudents = [...enrollmentRegistrations, ...pendingApplicants];
-        const admittedNotEnrolledStudents = allStudents.filter((student) => 
-            student.status === 'Admitted' && 
-            (student.enrollmentStatus === 'Not Enrolled' || !student.enrollmentStatus)
-        );
+        const admittedNotEnrolledStudents = allStudents.filter((student) => student.status === 'Admitted' && (student.enrollmentStatus === 'Not Enrolled' || !student.enrollmentStatus));
 
         // Format students for display
         const formattedStudents = admittedNotEnrolledStudents.map((student, index) => {
@@ -180,6 +285,10 @@ const selectedSubjects = computed(() => {
 
 const notEnrolledStudents = computed(() => {
     return students.value.filter((s) => s.enrollmentStatus === 'Not Enrolled');
+});
+
+const totalEnrolledStudents = computed(() => {
+    return enrolledStudents.value.length;
 });
 
 // Methods
@@ -288,25 +397,187 @@ async function confirmEnrollment() {
     }
 }
 
-// Remove localStorage function - now using direct database operations
+// New student enrollment functions
+function openNewStudentDialog() {
+    // Reset form
+    resetNewStudentForm();
+    generateSerialNumber();
+    newStudentDialog.value = true;
+    currentStep.value = 1;
+}
+
+function resetNewStudentForm() {
+    newStudent.value = {
+        studentType: 'New',
+        schoolYear: '2025-2026',
+        lrn: '',
+        gradeLevel: '',
+        serialNumber: '',
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        extensionName: '',
+        birthdate: null,
+        age: '',
+        sex: 'Male',
+        religion: '',
+        motherTongue: '',
+        houseNo: '',
+        street: '',
+        barangay: '',
+        cityMunicipality: '',
+        province: '',
+        country: 'Philippines',
+        zipCode: '',
+        fatherLastName: '',
+        fatherFirstName: '',
+        fatherMiddleName: '',
+        fatherContactNumber: '',
+        motherLastName: '',
+        motherFirstName: '',
+        motherMiddleName: '',
+        motherContactNumber: '',
+        lastGradeCompleted: '',
+        lastSchoolYearCompleted: '',
+        lastSchoolAttended: '',
+        emailAddress: '',
+        hasDisability: false,
+        disabilities: [],
+        householdIncome: 'Below 10k'
+    };
+    termsAccepted.value = false;
+}
+
+// Calculate age from birthdate
+function calculateAge() {
+    if (newStudent.value.birthdate) {
+        const today = new Date();
+        const birthDate = new Date(newStudent.value.birthdate);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+
+        newStudent.value.age = age.toString();
+    }
+}
+
+// Form navigation
+function nextStep() {
+    if (validateCurrentStep()) {
+        currentStep.value++;
+    }
+}
+
+function previousStep() {
+    if (currentStep.value > 1) {
+        currentStep.value--;
+    }
+}
+
+// Form validation
+function validateCurrentStep() {
+    if (currentStep.value === 1) {
+        // Validate required fields for step 1
+        if (!newStudent.value.firstName || !newStudent.value.lastName || !newStudent.value.gradeLevel) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Validation Error',
+                detail: 'Please fill in all required fields.',
+                life: 3000
+            });
+            return false;
+        }
+    }
+    return true;
+}
+
+// Submit new student enrollment
+async function submitNewStudent() {
+    if (!termsAccepted.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Terms Required',
+            detail: 'Please accept the terms and conditions.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // Prepare student data
+        const studentData = {
+            ...newStudent.value,
+            id: Date.now(),
+            studentId: newStudent.value.serialNumber,
+            name: `${newStudent.value.firstName} ${newStudent.value.middleName} ${newStudent.value.lastName}`.trim(),
+            enrollmentStatus: 'Enrolled',
+            enrollmentDate: new Date().toISOString().split('T')[0],
+            status: 'Active',
+            isActive: true
+        };
+
+        // Add to enrolled students list
+        enrolledStudents.value.push(studentData);
+
+        // Save to localStorage
+        const existingStudents = JSON.parse(localStorage.getItem('students') || '[]');
+        existingStudents.push(studentData);
+        localStorage.setItem('students', JSON.stringify(existingStudents));
+
+        // Close dialog and show success
+        newStudentDialog.value = false;
+
+        toast.add({
+            severity: 'success',
+            summary: 'Enrollment Successful',
+            detail: `${studentData.name} has been successfully enrolled!`,
+            life: 5000
+        });
+
+        // Reload data
+        await loadAdmittedStudents();
+    } catch (error) {
+        console.error('Error enrolling student:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Enrollment Error',
+            detail: 'Failed to enroll student. Please try again.',
+            life: 3000
+        });
+    }
+}
+
+// Load enrolled students for display
+function loadEnrolledStudents() {
+    try {
+        const students = JSON.parse(localStorage.getItem('students') || '[]');
+        enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+    } catch (error) {
+        console.error('Error loading enrolled students:', error);
+        enrolledStudents.value = [];
+    }
+}
 </script>
 
 <template>
-    <div class="card p-6 shadow-lg rounded-lg bg-white">
+    <div class="card p-8 shadow-xl rounded-xl bg-white border border-gray-100">
         <!-- Modern Gradient Header -->
-        <div class="modern-header-container mb-6">
+        <div class="modern-header-container mb-8">
             <div class="gradient-header">
                 <div class="header-content">
                     <div class="header-left">
                         <div class="header-icon">
-                            <i class="pi pi-users"></i>
+                            <i class="pi pi-graduation-cap"></i>
                         </div>
                         <div class="header-text">
-                            <h1 class="header-title">Enrollment Management</h1>
-                            <p class="header-subtitle">Naawan Central School - Class Assignments</p>
+                            <h1 class="header-title">Student Enrollment System</h1>
+                            <p class="header-subtitle">Naawan Central School</p>
                             <div class="student-count">
                                 <i class="pi pi-chart-bar mr-2"></i>
-                                Not Enrolled: <span class="count-badge">{{ notEnrolledStudents.length }}</span>
+                                Total Admitted: <span class="count-badge">{{ students.length }}</span>
                             </div>
                         </div>
                     </div>
@@ -317,47 +588,468 @@ async function confirmEnrollment() {
                                 <InputText v-model="search" placeholder="Search students..." class="search-input" />
                             </span>
                         </div>
+                        <Button label="Add New Student" icon="pi pi-plus" class="add-student-btn ml-4" @click="openNewStudentDialog" />
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="grid">
-            <!-- Student List Panel -->
-            <div class="col-12 md:col-5 lg:col-4">
-                <div class="card mb-0">
-                    <div class="flex align-items-center justify-content-between mb-3">
-                        <h5 class="m-0">Student List</h5>
-                        <div class="p-input-icon-left w-full md:w-10rem">
-                            <i class="pi pi-search" />
-                            <InputText v-model="search" placeholder="Search students..." class="w-full" />
-                        </div>
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8 px-6 py-8">
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-blue-100 text-sm font-medium uppercase tracking-wide mb-2">Total Admitted</p>
+                        <p class="text-3xl font-bold">{{ students.length }}</p>
+                    </div>
+                    <div class="bg-blue-400 bg-opacity-30 rounded-lg p-3">
+                        <i class="pi pi-users text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-green-100 text-sm font-medium uppercase tracking-wide mb-2">Enrolled</p>
+                        <p class="text-3xl font-bold">{{ totalEnrolledStudents }}</p>
+                    </div>
+                    <div class="bg-green-400 bg-opacity-30 rounded-lg p-3">
+                        <i class="pi pi-check-circle text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-orange-100 text-sm font-medium uppercase tracking-wide mb-2">Not Enrolled</p>
+                        <p class="text-3xl font-bold">{{ notEnrolledStudents.length }}</p>
+                    </div>
+                    <div class="bg-orange-400 bg-opacity-30 rounded-lg p-3">
+                        <i class="pi pi-chart-bar text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 px-6">
+            <!-- Enrolled Students Section -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-lg shadow-sm border">
+                    <div class="p-4 bg-gray-50 border-b">
+                        <h3 class="text-lg font-semibold text-gray-800">Enrolled Students</h3>
+                        <p class="text-sm text-gray-600 mt-1">Students who have completed the enrollment process</p>
                     </div>
 
-                    <!-- Not Enrolled Students -->
-                    <div class="p-2">
-                        <p v-if="notEnrolledStudents.length === 0" class="text-center text-color-secondary p-3">No students to enroll</p>
-                        <div v-else class="student-list">
-                            <div v-for="student in notEnrolledStudents" :key="student.id" class="student-item p-3 mb-2" :class="{ selected: selectedStudent && selectedStudent.id === student.id }" @click="openStudentModal(student)">
-                                <div class="flex align-items-center">
-                                    <Avatar :image="student.photo" shape="circle" size="large" class="mr-2" />
-                                    <div class="flex-1">
-                                        <div class="flex align-items-center justify-content-between">
-                                            <span class="font-medium">{{ student.name }}</span>
-                                            <Tag value="Not Enrolled" severity="warning" />
+                    <div v-if="enrolledStudents.length === 0" class="p-6 text-center">
+                        <i class="pi pi-users text-3xl text-gray-400 mb-3"></i>
+                        <h4 class="text-gray-600 mb-2 font-medium">No Enrolled Students Yet</h4>
+                        <p class="text-gray-500 text-sm mb-4">Start by adding new students to the enrollment system</p>
+                        <Button label="Add First Student" icon="pi pi-plus" class="p-button-sm" @click="openNewStudentDialog" />
+                    </div>
+
+                    <div v-else class="p-4">
+                        <div class="grid grid-cols-1 gap-3">
+                            <div v-for="student in enrolledStudents" :key="student.id" class="student-card p-3 border rounded-lg hover:shadow-sm transition-all bg-gray-50">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        <Avatar :image="student.photo || 'https://via.placeholder.com/32'" shape="circle" size="normal" class="mr-3" />
+                                        <div>
+                                            <h5 class="font-medium text-gray-800 text-sm">{{ student.name }}</h5>
+                                            <p class="text-xs text-gray-600">{{ student.studentId }}</p>
                                         </div>
-                                        <div class="text-color-secondary text-sm mt-1">{{ student.studentId }}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <Tag value="Enrolled" severity="success" class="text-xs" />
+                                        <p class="text-xs text-gray-500 mt-1">{{ student.gradeLevel }} - {{ student.section || 'No Section' }}</p>
                                     </div>
                                 </div>
                             </div>
-                            <div class="enrollment-stats text-sm text-color-secondary text-center mt-3">Total: {{ notEnrolledStudents.length }} not enrolled students</div>
+                        </div>
+                        <div class="mt-3 p-2 bg-blue-50 rounded text-center">
+                            <span class="text-sm font-medium text-blue-700">{{ totalEnrolledStudents }} Students Enrolled</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pending Enrollment Section -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-lg shadow-sm border">
+                    <div class="p-4 bg-gray-50 border-b">
+                        <h3 class="text-lg font-semibold text-gray-800">Pending Enrollment</h3>
+                        <p class="text-sm text-gray-600 mt-1">Students awaiting enrollment</p>
+                    </div>
+
+                    <div class="p-4">
+                        <div class="mb-3" id="search-container">
+                            <div class="p-input-icon-left w-full">
+                                <i class="pi pi-search" />
+                                <InputText v-model="search" placeholder="Search students..." class="w-full text-sm" />
+                            </div>
+                        </div>
+
+                        <div v-if="filteredStudents.length === 0" class="text-center p-4">
+                            <i class="pi pi-users text-2xl text-gray-400 mb-2"></i>
+                            <p class="text-gray-500 text-sm">No pending enrollments</p>
+                        </div>
+
+                        <div v-else class="space-y-2">
+                            <div
+                                v-for="student in filteredStudents.slice(0, 5)"
+                                :key="student.id"
+                                class="student-item p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                :class="{ 'bg-blue-50 border-blue-200': selectedStudent && selectedStudent.id === student.id }"
+                                @click="openStudentModal(student)"
+                            >
+                                <div class="flex items-center">
+                                    <Avatar :image="student.photo" shape="circle" size="normal" class="mr-3" />
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-medium text-sm text-gray-800 truncate">{{ student.name }}</span>
+                                            <Tag value="Pending" severity="warning" class="text-xs" />
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="filteredStudents.length > 5" class="text-center p-2">
+                                <span class="text-xs text-gray-500">+{{ filteredStudents.length - 5 }} more students</span>
+                            </div>
+
+                            <div class="mt-3 p-2 bg-orange-50 rounded text-center">
+                                <span class="text-sm font-medium text-orange-700">{{ filteredStudents.length }} Pending</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Enrollment Dialog -->
+        <!-- New Student Enrollment Dialog -->
+        <Dialog v-model:visible="newStudentDialog" modal :style="{ width: '900px', maxHeight: '85vh' }" :dismissableMask="true" :closable="true" class="enrollment-dialog">
+            <template #header>
+                <div class="flex items-center justify-between w-full">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800 mb-1">Student Enrollment Form</h2>
+                        <p class="text-sm text-gray-600">Naawan Central School • S.Y. 2025-2026</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step {{ currentStep }} of {{ totalSteps }}</span>
+                    </div>
+                </div>
+            </template>
+
+            <div class="p-6">
+                <!-- Progress Indicator -->
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Progress</span>
+                        <span class="text-sm text-gray-500">{{ Math.round((currentStep / totalSteps) * 100) }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: (currentStep / totalSteps) * 100 + '%' }"></div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Form Fields -->
+                <div v-if="currentStep === 1" class="space-y-8">
+                    <!-- Student Type Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Student Type</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div v-for="type in studentTypes" :key="type.value" class="flex items-center">
+                                <RadioButton v-model="newStudent.studentType" :inputId="type.value" :value="type.value" class="mr-2" />
+                                <label :for="type.value" class="text-sm font-medium text-gray-700 cursor-pointer">{{ type.name }}</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- School Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">School Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">School Year *</label>
+                                <InputText v-model="newStudent.schoolYear" class="w-full" readonly />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">LRN (Optional)</label>
+                                <InputText v-model="newStudent.lrn" placeholder="Leave blank if none" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Grade Level *</label>
+                                <Dropdown v-model="newStudent.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select Grade Level" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Enrollment ID</label>
+                                <InputText v-model="newStudent.serialNumber" class="w-full" readonly />
+                                <small class="text-xs text-gray-500">Auto-generated</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Student Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Student Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                                <InputText v-model="newStudent.lastName" placeholder="Enter last name" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                                <InputText v-model="newStudent.firstName" placeholder="Enter first name" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                                <InputText v-model="newStudent.middleName" placeholder="Enter middle name" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Extension Name</label>
+                                <InputText v-model="newStudent.extensionName" placeholder="Jr., Sr., III, etc." class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Birthdate *</label>
+                                <Calendar v-model="newStudent.birthdate" dateFormat="mm/dd/yy" placeholder="Select date" class="w-full" @date-select="calculateAge" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                                <InputText v-model="newStudent.age" class="w-full" readonly />
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Sex *</label>
+                                <div class="flex gap-4">
+                                    <div class="flex items-center">
+                                        <RadioButton v-model="newStudent.sex" inputId="male" value="Male" class="mr-2" />
+                                        <label for="male" class="text-sm cursor-pointer">Male</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <RadioButton v-model="newStudent.sex" inputId="female" value="Female" class="mr-2" />
+                                        <label for="female" class="text-sm cursor-pointer">Female</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Religion</label>
+                                <InputText v-model="newStudent.religion" placeholder="Enter religion" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Mother Tongue</label>
+                                <InputText v-model="newStudent.motherTongue" placeholder="Enter mother tongue" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Address Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Address Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">House No.</label>
+                                <InputText v-model="newStudent.houseNo" placeholder="Enter house number" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Street</label>
+                                <InputText v-model="newStudent.street" placeholder="Enter street" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Barangay *</label>
+                                <InputText v-model="newStudent.barangay" placeholder="Enter barangay" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">City/Municipality *</label>
+                                <InputText v-model="newStudent.cityMunicipality" placeholder="Enter city/municipality" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Province *</label>
+                                <InputText v-model="newStudent.province" placeholder="Enter province" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                                <InputText v-model="newStudent.country" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Parent/Guardian Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Parent/Guardian Information</h3>
+
+                        <!-- Guardian's Information -->
+                        <div class="mb-6">
+                            <h4 class="text-md font-medium text-gray-700 mb-3">Guardian's Information (if applicable)</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Full Name</label>
+                                    <InputText v-model="newStudent.fatherName" placeholder="Enter father's full name" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Occupation</label>
+                                    <InputText v-model="newStudent.fatherOccupation" placeholder="Enter father's occupation" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Contact Number</label>
+                                    <InputText v-model="newStudent.fatherContact" placeholder="Enter father's contact number" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Highest Educational Attainment</label>
+                                    <InputText v-model="newStudent.fatherEducation" placeholder="Enter father's education" class="w-full" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mother's Information -->
+                        <div class="mb-6">
+                            <h4 class="text-md font-medium text-gray-700 mb-3">Mother's Information</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Full Name</label>
+                                    <InputText v-model="newStudent.motherName" placeholder="Enter mother's full name" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Occupation</label>
+                                    <InputText v-model="newStudent.motherOccupation" placeholder="Enter mother's occupation" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Contact Number</label>
+                                    <InputText v-model="newStudent.motherContact" placeholder="Enter mother's contact number" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Highest Educational Attainment</label>
+                                    <InputText v-model="newStudent.motherEducation" placeholder="Enter mother's education" class="w-full" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Guardian Information (if different) -->
+                        <div>
+                            <h4 class="text-md font-medium text-gray-700 mb-2">Guardian Information (if different from parents)</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Full Name</label>
+                                    <InputText v-model="newStudent.guardianName" placeholder="Enter guardian's full name" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Relationship to Student</label>
+                                    <InputText v-model="newStudent.guardianRelationship" placeholder="Enter relationship" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Contact Number</label>
+                                    <InputText v-model="newStudent.guardianContact" placeholder="Enter guardian's contact number" class="w-full" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Address</label>
+                                    <InputText v-model="newStudent.guardianAddress" placeholder="Enter guardian's address" class="w-full" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Previous School Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Previous School Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Last Grade Completed</label>
+                                <Dropdown v-model="newStudent.lastGradeCompleted" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select last grade completed" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Last School Year Completed</label>
+                                <InputText v-model="newStudent.lastSchoolYear" placeholder="e.g., 2023-2024" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Last School Attended</label>
+                                <InputText v-model="newStudent.lastSchoolAttended" placeholder="Enter name of last school attended" class="w-full" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">School Address</label>
+                                <InputText v-model="newStudent.lastSchoolAddress" placeholder="Enter school address" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact & Additional Information Section -->
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Contact & Additional Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+                                <InputText v-model="newStudent.emailAddress" placeholder="Enter email address" class="w-full" type="email" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Zip Code</label>
+                                <InputText v-model="newStudent.zipCode" placeholder="Enter zip code" class="w-full" />
+                            </div>
+                        </div>
+
+                        <div class="mt-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Monthly Household Income *</label>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div v-for="income in incomeOptions" :key="income.value" class="flex items-center">
+                                    <RadioButton v-model="newStudent.householdIncome" :inputId="'income_' + income.value" :value="income.value" class="mr-2" />
+                                    <label :for="'income_' + income.value" class="text-sm cursor-pointer">{{ income.name }}</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Review and Submit -->
+                <div v-if="currentStep === 2" class="space-y-6">
+                    <div class="bg-blue-50 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Review Your Information</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="font-medium text-gray-700 mb-2">Student Information</h4>
+                                <div class="space-y-1 text-sm">
+                                    <p><span class="font-medium">Name:</span> {{ `${newStudent.firstName} ${newStudent.middleName} ${newStudent.lastName} ${newStudent.extensionName}`.trim() }}</p>
+                                    <p><span class="font-medium">Student Type:</span> {{ newStudent.studentType }}</p>
+                                    <p><span class="font-medium">Grade Level:</span> {{ gradeLevels.find((g) => g.code === newStudent.gradeLevel)?.name || newStudent.gradeLevel }}</p>
+                                    <p><span class="font-medium">Enrollment ID:</span> {{ newStudent.serialNumber }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="font-medium text-gray-700 mb-2">Contact Information</h4>
+                                <div class="space-y-1 text-sm">
+                                    <p><span class="font-medium">Email:</span> {{ newStudent.emailAddress }}</p>
+                                    <p><span class="font-medium">Address:</span> {{ `${newStudent.houseNo} ${newStudent.street}, ${newStudent.barangay}, ${newStudent.cityMunicipality}`.trim() }}</p>
+                                    <p><span class="font-medium">Province:</span> {{ newStudent.province }}</p>
+                                    <p><span class="font-medium">Household Income:</span> {{ newStudent.householdIncome }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-white rounded border">
+                            <div class="flex items-start">
+                                <Checkbox v-model="termsAccepted" inputId="termsAccepted" class="mr-3 mt-1" />
+                                <label for="termsAccepted" class="text-sm text-gray-700">
+                                    I hereby certify that the information provided above is true and correct to the best of my knowledge. I understand that any false information may result in the rejection of this enrollment application.
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Navigation Buttons -->
+                <div class="flex justify-between pt-6 border-t">
+                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="previousStep" />
+                    <div v-else></div>
+
+                    <div class="flex gap-2">
+                        <Button label="Cancel" class="p-button-outlined p-button-secondary" @click="newStudentDialog = false" />
+                        <Button v-if="currentStep < totalSteps" label="Next" icon="pi pi-chevron-right" iconPos="right" @click="nextStep" />
+                        <Button v-else label="Submit Enrollment" icon="pi pi-check" :disabled="!termsAccepted" @click="submitNewStudent" />
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- Enrollment Dialog (for existing students) -->
         <Dialog v-model:visible="enrollmentDialog" header="Enroll Student" :style="{ width: '450px', zIndex: '1100' }" :modal="true">
             <div class="enrollment-form p-fluid">
                 <div class="field">
@@ -716,7 +1408,7 @@ async function confirmEnrollment() {
 }
 
 .gradient-header {
-    background: linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
     position: relative;
     overflow: hidden;
 }
@@ -824,7 +1516,16 @@ async function confirmEnrollment() {
 }
 
 .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.7);
+    color: #64748b !important;
+}
+
+#search-container .pi-search {
+    color: #64748b !important;
+    left: 1rem !important;
+    z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
 }
 
 .search-input:focus {
@@ -833,9 +1534,31 @@ async function confirmEnrollment() {
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 
-.search-container .p-input-icon-left i {
-    color: rgba(255, 255, 255, 0.8);
-    left: 1rem;
+.search-container .pi-search {
+    color: #64748b !important;
+    left: 1rem !important;
+    z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.add-student-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 25px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.add-student-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Responsive Design */
