@@ -11,8 +11,10 @@ import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
+import { useRouter } from 'vue-router';
 
 const { layoutState, isSidebarActive } = useLayout();
+const router = useRouter();
 const outsideClickListener = ref(null);
 const scanning = ref(true); // Auto-start scanning
 const attendanceRecords = ref([]);
@@ -495,6 +497,15 @@ const submitGuestForm = () => {
     guestDialog.value = false;
     visitorType.value = 'learners';
 };
+
+const logout = () => {
+    // Clear user session data
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+
+    // Redirect to homepage
+    router.push('/');
+};
 </script>
 
 <template>
@@ -520,6 +531,10 @@ const submitGuestForm = () => {
                         <div class="guard-id">ID: {{ guardId }}</div>
                     </div>
                 </div>
+                <button @click="logout" class="logout-button">
+                    <i class="pi pi-sign-out"></i>
+                    Logout
+                </button>
             </div>
         </header>
 
@@ -916,6 +931,35 @@ const submitGuestForm = () => {
 .guard-id {
     font-size: 1.2rem;
     color: #64748b;
+}
+
+.logout-button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    border-radius: 0.75rem;
+    border: 3px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 55px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    &:hover {
+        background: #f8fafc;
+        border-color: #3b82f6;
+        color: #3b82f6;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    i {
+        font-size: 1.3rem;
+    }
 }
 
 /* Main Container Styles */
