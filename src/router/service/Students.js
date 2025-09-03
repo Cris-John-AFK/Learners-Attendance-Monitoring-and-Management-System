@@ -17,7 +17,7 @@ export const AttendanceService = {
             }
 
             // Get data from API
-            const response = await api.get('/api/students');
+            const response = await api.get('/api/student-details');
             state.students = response.data;
             state.loaded = true;
             return state.students;
@@ -30,7 +30,7 @@ export const AttendanceService = {
     // Get students by grade level
     async getStudentsByGrade(gradeLevel) {
         try {
-            const response = await api.get(`/api/students/grade/${gradeLevel}`);
+            const response = await api.get(`/api/student-details/grade/${gradeLevel}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for grade ${gradeLevel}:`, error);
@@ -41,7 +41,7 @@ export const AttendanceService = {
     // Get students by grade and section
     async getStudentsBySection(gradeLevel, section) {
         try {
-            const response = await api.get(`/api/students/grade/${gradeLevel}/section/${section}`);
+            const response = await api.get(`/api/student-details/grade/${gradeLevel}/section/${section}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for section ${section}:`, error);
@@ -52,7 +52,7 @@ export const AttendanceService = {
     // Add a new student
     async addStudent(student) {
         try {
-            const response = await api.post('/api/students', student);
+            const response = await api.post('/api/student-details', student);
             state.students.push(response.data);
             return response.data;
         } catch (error) {
@@ -64,7 +64,7 @@ export const AttendanceService = {
     // Update a student
     async updateStudent(id, data) {
         try {
-            const response = await api.put(`/api/students/${id}`, data);
+            const response = await api.put(`/api/student-details/${id}`, data);
 
             // Update the local state
             const index = state.students.findIndex((s) => s.id === id);
@@ -82,7 +82,7 @@ export const AttendanceService = {
     // Delete a student
     async deleteStudent(id) {
         try {
-            await api.delete(`/api/students/${id}`);
+            await api.delete(`/api/student-details/${id}`);
 
             // Remove from local state
             const index = state.students.findIndex((s) => s.id === id);

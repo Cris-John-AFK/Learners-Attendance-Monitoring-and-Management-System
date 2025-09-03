@@ -30,7 +30,7 @@ export const AttendanceService = {
             }
 
             // API call when backend is ready
-            const response = await axios.get(`${API_URL}/students`);
+            const response = await axios.get(`${API_URL}/student-details`);
             state.students = response.data;
             state.loaded = true;
             return [...state.students];
@@ -49,7 +49,7 @@ export const AttendanceService = {
         try {
             // Try to get from API first
             try {
-                const response = await axios.get(`${API_URL}/subjects/${subjectCode}/students`);
+                const response = await axios.get(`${API_URL}/subjects/${subjectCode}/student-details`);
                 return response.data;
             } catch (apiError) {
                 console.warn(`API not available for subject ${subjectCode} students:`, apiError);
@@ -72,7 +72,7 @@ export const AttendanceService = {
     // Get students by grade level
     async getStudentsByGrade(gradeLevel) {
         try {
-            const response = await axios.get(`${API_URL}/students/grade/${gradeLevel}`);
+            const response = await axios.get(`${API_URL}/student-details/grade/${gradeLevel}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for grade ${gradeLevel}:`, error);
@@ -83,7 +83,7 @@ export const AttendanceService = {
     // Get students by grade and section
     async getStudentsBySection(gradeLevel, section) {
         try {
-            const response = await axios.get(`${API_URL}/students/grade/${gradeLevel}/section/${section}`);
+            const response = await axios.get(`${API_URL}/student-details/grade/${gradeLevel}/section/${section}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for section ${section}:`, error);
@@ -94,7 +94,7 @@ export const AttendanceService = {
     // Add a new student
     async addStudent(student) {
         try {
-            const response = await axios.post(`${API_URL}/students`, student);
+            const response = await axios.post(`${API_URL}/student-details`, student);
             state.students.push(response.data);
             return response.data;
         } catch (error) {
@@ -106,7 +106,7 @@ export const AttendanceService = {
     // Update a student
     async updateStudent(id, data) {
         try {
-            const response = await axios.put(`${API_URL}/students/${id}`, data);
+            const response = await axios.put(`${API_URL}/student-details/${id}`, data);
 
             // Update the local state
             const index = state.students.findIndex((s) => s.id === id);
@@ -124,7 +124,7 @@ export const AttendanceService = {
     // Delete a student
     async deleteStudent(id) {
         try {
-            await axios.delete(`${API_URL}/students/${id}`);
+            await axios.delete(`${API_URL}/student-details/${id}`);
 
             // Remove from local state
             const index = state.students.findIndex((s) => s.id === id);

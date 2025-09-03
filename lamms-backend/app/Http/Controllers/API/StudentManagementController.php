@@ -135,7 +135,7 @@ class StudentManagementController extends Controller
     {
         $request->validate([
             'student_ids' => 'required|array',
-            'student_ids.*' => 'integer|exists:students,id',
+            'student_ids.*' => 'integer|exists:student_details,id',
             'teacher_id' => 'required|integer|exists:teachers,id'
         ]);
 
@@ -314,8 +314,8 @@ class StudentManagementController extends Controller
             'teacher_id' => 'required|integer|exists:teachers,id',
             'students' => 'required|array',
             'students.*.name' => 'required|string|max:255',
-            'students.*.student_id' => 'required|string|unique:students,student_id',
-            'students.*.email' => 'nullable|email|unique:students,email'
+            'students.*.student_id' => 'required|string|unique:student_details,student_id',
+            'students.*.email' => 'nullable|email|unique:student_details,email'
         ]);
 
         try {

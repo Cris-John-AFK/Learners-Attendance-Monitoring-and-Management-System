@@ -3,11 +3,13 @@
         <!-- Header Section -->
         <div class="header-section">
             <div class="welcome-header">
-                <h1 class="welcome-title">Welcome, Admin Maria Santos</h1>
-                <p class="welcome-date">Sunday, August 31, 2025</p>
+                <h1 class="welcome-title">Welcome, Admin</h1>
+                <p class="text-blue-100 font-normal">
+                    {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+                </p>
             </div>
         </div>
-        
+
         <!-- Statistics Cards -->
         <div class="stats-container">
             <div class="stat-card">
@@ -19,7 +21,7 @@
                     <p>Total Students</p>
                 </div>
             </div>
-            
+
             <div class="stat-card">
                 <div class="stat-icon green">
                     <i class="pi pi-check-circle"></i>
@@ -29,7 +31,7 @@
                     <p>Average Attendance</p>
                 </div>
             </div>
-            
+
             <div class="stat-card">
                 <div class="stat-icon yellow">
                     <i class="pi pi-exclamation-triangle"></i>
@@ -39,7 +41,7 @@
                     <p>Warning (5+ absences)</p>
                 </div>
             </div>
-            
+
             <div class="stat-card">
                 <div class="stat-icon red">
                     <i class="pi pi-times-circle"></i>
@@ -50,7 +52,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Main Content White Box -->
         <div class="content-box">
             <div v-if="loading" class="loading-container">
@@ -134,9 +136,9 @@ const loadGradeData = async () => {
         // Create dropdown options for grades
         gradeOptions.value = [
             { label: 'All Grades', value: 'all' },
-            ...gradesData.map((g) => ({ 
-                label: `${g.name} - Mathematics`, 
-                value: g.name 
+            ...gradesData.map((g) => ({
+                label: `${g.name} - Mathematics`,
+                value: g.name
             }))
         ];
 
@@ -220,10 +222,10 @@ const onGradeChange = () => {
 
 const filterByGrade = (gradeName) => {
     console.log('Filtering by grade:', gradeName);
-    
+
     // Find the index of the selected grade
     const gradeIndex = defaultGradeChartData.value.labels.indexOf(gradeName);
-    
+
     if (gradeIndex !== -1) {
         // Create filtered data with only the selected grade
         defaultGradeChartData.value.labels = [gradeName];
@@ -274,7 +276,9 @@ onMounted(async () => {
     align-items: center;
     gap: 16px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
 .stat-card:hover {
