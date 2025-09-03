@@ -1026,8 +1026,8 @@ function loadEnrolledStudents() {
 
                         <div class="mt-6 p-4 bg-white rounded border">
                             <div class="flex items-start">
-                                <Checkbox v-model="termsAccepted" inputId="termsAccepted" class="mr-3 mt-1" />
-                                <label for="termsAccepted" class="text-sm text-gray-700">
+                                <Checkbox v-model="termsAccepted" inputId="termsAccepted" :binary="true" class="mr-3 mt-1" />
+                                <label for="termsAccepted" class="text-sm text-gray-700 cursor-pointer">
                                     I hereby certify that the information provided above is true and correct to the best of my knowledge. I understand that any false information may result in the rejection of this enrollment application.
                                 </label>
                             </div>
@@ -1310,6 +1310,36 @@ function loadEnrolledStudents() {
     color: #3b82f6;
 }
 
+/* Checkbox styling */
+:deep(.p-checkbox) {
+    width: 18px;
+    height: 18px;
+}
+
+:deep(.p-checkbox .p-checkbox-box) {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #d1d5db;
+    border-radius: 4px;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+:deep(.p-checkbox .p-checkbox-box.p-highlight) {
+    border-color: #3b82f6;
+    background-color: #3b82f6;
+}
+
+:deep(.p-checkbox .p-checkbox-box .p-checkbox-icon) {
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+:deep(.p-checkbox:not(.p-checkbox-disabled) .p-checkbox-box:hover) {
+    border-color: #3b82f6;
+}
+
 .text-blue-700 {
     color: #1d4ed8;
 }
@@ -1402,13 +1432,14 @@ function loadEnrolledStudents() {
 
 /* Modern Header Styling - Matching Student Management System */
 .modern-header-container {
-    margin: -1.5rem -1.5rem 0 -1.5rem;
-    border-radius: 12px 12px 0 0;
-    overflow: hidden;
+    margin: -2rem -2rem 2rem -2rem;
 }
 
 .gradient-header {
     background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    border-radius: 12px 12px 0 0;
+    padding: 2rem;
+    color: white;
     position: relative;
     overflow: hidden;
 }
@@ -1425,12 +1456,12 @@ function loadEnrolledStudents() {
 }
 
 .header-content {
+    position: relative;
+    z-index: 1;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 2rem;
-    position: relative;
-    z-index: 1;
+    gap: 2rem;
 }
 
 .header-left {
@@ -1442,8 +1473,8 @@ function loadEnrolledStudents() {
 .header-icon {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
-    width: 60px;
-    height: 60px;
+    width: 4rem;
+    height: 4rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1452,52 +1483,59 @@ function loadEnrolledStudents() {
 }
 
 .header-icon i {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     color: white;
 }
 
+
 .header-text {
-    color: white;
+    flex: 1;
 }
 
 .header-title {
     font-size: 2rem;
     font-weight: 700;
     margin: 0 0 0.5rem 0;
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.025em;
+    color: white !important;
 }
 
 .header-subtitle {
-    font-size: 1rem;
+    font-size: 1.1rem;
     margin: 0 0 0.75rem 0;
-    color: rgba(255, 255, 255, 0.9);
+    opacity: 0.9;
     font-weight: 400;
+    color: white !important;
 }
 
 .student-count {
     display: flex;
     align-items: center;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.95);
+    font-size: 1rem;
     font-weight: 500;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: fit-content;
 }
 
 .count-badge {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.9);
+    color: #1e40af;
     padding: 0.25rem 0.75rem;
-    border-radius: 20px;
+    border-radius: 15px;
+    font-weight: 700;
     margin-left: 0.5rem;
-    font-weight: 600;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 0.9rem;
 }
 
 .header-actions {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 1rem;
-    align-items: flex-end;
 }
 
 .search-container {
@@ -1505,14 +1543,16 @@ function loadEnrolledStudents() {
 }
 
 .search-input {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-    border-radius: 25px;
-    padding: 0.75rem 1rem 0.75rem 2.5rem;
-    width: 300px;
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 25px !important;
+    padding: 0.75rem 1rem 0.75rem 2.75rem !important;
+    color: #1e40af !important;
+    font-weight: 500 !important;
+    width: 300px !important;
     backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
+    transition: all 0.3s ease !important;
+    height: 44px !important;
 }
 
 .search-input::placeholder {
@@ -1529,9 +1569,10 @@ function loadEnrolledStudents() {
 }
 
 .search-input:focus {
-    background: rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.5);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+    background: white !important;
+    border-color: rgba(255, 255, 255, 0.8) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2) !important;
+    outline: none !important;
 }
 
 .search-container .pi-search {
