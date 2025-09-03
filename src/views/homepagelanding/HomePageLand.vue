@@ -3,16 +3,10 @@
         <!-- Left side with background -->
         <div class="left-side">
             <div class="left-content">
-                <div class="back-button mb-6">
-                    <router-link to="/" class="back-link">
-                        <i class="pi pi-arrow-left" style="font-size: 2rem"></i>
-                        <span style="font-size: 1.5rem; margin-left: 0.5rem">Back</span>
-                    </router-link>
-                </div>
                 <div class="logo-text">NCS</div>
                 <h1 class="brand-title">LAMMS</h1>
                 <p class="brand-subtitle">Learners Attendance Monitoring and Management System</p>
-                <p class="brand-description">Learner’s Academy. A strong start for a lifetime of learning</p>
+                <p class="brand-description">Learner's Academy. A strong start for a lifetime of learning</p>
             </div>
             <div class="overlay"></div>
         </div>
@@ -20,12 +14,6 @@
         <!-- Right side with login form -->
         <div class="right-side">
             <div class="login-container">
-                <div class="back-button mb-6">
-                    <router-link to="/global" class="back-link">
-                        <i class="pi pi-arrow-left" style="font-size: 2rem"></i>
-                        <span style="font-size: 1.5rem; margin-left: 0.5rem">Back</span>
-                    </router-link>
-                </div>
                 <h2 class="welcome-text">Welcome</h2>
                 <p class="login-subtitle">Login with Email</p>
 
