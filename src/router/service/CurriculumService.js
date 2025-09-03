@@ -689,6 +689,7 @@ export const CurriculumService = {
                     params: {
                         curriculum_id: curriculumId,
                         grade_id: gradeId,
+                        user_added_only: true, // This ensures we get subjects with schedules loaded
                         force: true,
                         timestamp: Date.now() // Prevent any caching
                     },
@@ -701,6 +702,7 @@ export const CurriculumService = {
 
                 if (response.data && Array.isArray(response.data)) {
                     console.log(`SUCCESS: Found ${response.data.length} subjects for section ${sectionId}`);
+                    console.log('Raw API response data:', JSON.stringify(response.data, null, 2));
 
                     // Process the data to ensure it has all required fields
                     const processedSubjects = response.data.map((subject) => {
@@ -713,6 +715,8 @@ export const CurriculumService = {
                             grade_id: subject.grade_id || gradeId,
                             status: subject.status || 'Active',
                             is_active: subject.is_active !== undefined ? subject.is_active : true,
+                            // CRITICAL: Preserve the schedules array from API response
+                            schedules: subject.schedules || [],
                             // Make sure the pivot data is included
                             pivot: subject.pivot || {
                                 section_id: sectionId,
@@ -723,6 +727,7 @@ export const CurriculumService = {
                         };
                     });
 
+                    console.log('Processed subjects with schedules:', JSON.stringify(processedSubjects, null, 2));
                     return processedSubjects;
                 } else {
                     console.warn(`API returned empty data for section ${sectionId}, trying repair`);

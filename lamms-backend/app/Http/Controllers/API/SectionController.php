@@ -553,7 +553,6 @@ class SectionController extends Controller
                 $subjects = $subjects->map(function ($subject) use ($sectionId) {
                     $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
                         ->where('subject_id', $subject->id)
-                        ->where('is_active', true)
                         ->get();
                     $subject->schedules = $schedules;
                     return $subject;
