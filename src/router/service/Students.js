@@ -16,7 +16,7 @@ export const AttendanceService = {
                 return state.students;
             }
 
-            // Get data from API
+            // Get data from API using the correct endpoint
             const response = await api.get('/api/students');
             state.students = response.data;
             state.loaded = true;
@@ -170,6 +170,17 @@ export const AttendanceService = {
         } catch (error) {
             console.error('Error getting students in grade:', error);
             throw error;
+        }
+    },
+
+    // Get attendance records for a student
+    async getAttendanceRecords(studentId) {
+        try {
+            const response = await api.get(`/api/students/${studentId}/attendance`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error loading attendance records for student ${studentId}:`, error);
+            return [];
         }
     }
 };
