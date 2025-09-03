@@ -507,25 +507,98 @@ async function submitNewStudent() {
     }
 
     try {
-        // Prepare student data
-        const studentData = {
-            ...newStudent.value,
-            id: Date.now(),
-            studentId: newStudent.value.serialNumber,
-            name: `${newStudent.value.firstName} ${newStudent.value.middleName} ${newStudent.value.lastName}`.trim(),
-            enrollmentStatus: 'Enrolled',
-            enrollmentDate: new Date().toISOString().split('T')[0],
-            status: 'Active',
-            isActive: true
+        // Prepare student data for backend API
+        const enrollmentData = {
+            enrollment_id: newStudent.value.serialNumber,
+            student_type: newStudent.value.studentType,
+            school_year: newStudent.value.schoolYear,
+            lrn: newStudent.value.lrn,
+            grade_level: newStudent.value.gradeLevel,
+            
+            // Student Information
+            last_name: newStudent.value.lastName,
+            first_name: newStudent.value.firstName,
+            middle_name: newStudent.value.middleName,
+            extension_name: newStudent.value.extensionName,
+            birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
+            age: parseInt(newStudent.value.age) || null,
+            sex: newStudent.value.sex,
+            religion: newStudent.value.religion,
+            mother_tongue: newStudent.value.motherTongue,
+            
+            // Address Information
+            house_no: newStudent.value.houseNo,
+            street: newStudent.value.street,
+            barangay: newStudent.value.barangay,
+            city_municipality: newStudent.value.cityMunicipality,
+            province: newStudent.value.province,
+            country: newStudent.value.country,
+            zip_code: newStudent.value.zipCode,
+            
+            // Parent/Guardian Information
+            father_last_name: newStudent.value.fatherLastName,
+            father_first_name: newStudent.value.fatherFirstName,
+            father_middle_name: newStudent.value.fatherMiddleName,
+            father_contact_number: newStudent.value.fatherContactNumber,
+            mother_last_name: newStudent.value.motherLastName,
+            mother_first_name: newStudent.value.motherFirstName,
+            mother_middle_name: newStudent.value.motherMiddleName,
+            mother_contact_number: newStudent.value.motherContactNumber,
+            
+            // Previous School Information
+            last_grade_completed: newStudent.value.lastGradeCompleted,
+            last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
+            last_school_attended: newStudent.value.lastSchoolAttended,
+            
+            // Contact Information
+            email_address: newStudent.value.emailAddress,
+            
+            // Health/Disability Information
+            has_disability: newStudent.value.hasDisability,
+            disabilities: newStudent.value.disabilities.join(','),
+            
+            // Household Income
+            household_income: newStudent.value.householdIncome,
+            
+            // Status fields
+            enrollment_status: 'Enrolled',
+            enrollment_date: new Date().toISOString().split('T')[0],
+            is_active: true
         };
 
-        // Add to enrolled students list
-        enrolledStudents.value.push(studentData);
+        // Call backend API to save enrollment
+        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(enrollmentData)
+        });
 
-        // Save to localStorage
-        const existingStudents = JSON.parse(localStorage.getItem('students') || '[]');
-        existingStudents.push(studentData);
-        localStorage.setItem('students', JSON.stringify(existingStudents));
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to enroll student');
+        }
+
+        const savedStudent = await response.json();
+
+        // Add to enrolled students list for immediate UI update
+        const studentForDisplay = {
+            id: savedStudent.data.id,
+            studentId: savedStudent.data.enrollment_id,
+            name: `${newStudent.value.firstName} ${newStudent.value.middleName} ${newStudent.value.lastName}`.trim(),
+            firstName: newStudent.value.firstName,
+            lastName: newStudent.value.lastName,
+            email: newStudent.value.emailAddress || 'N/A',
+            birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toLocaleDateString() : 'N/A',
+            gradeLevel: newStudent.value.gradeLevel,
+            enrollmentStatus: 'Enrolled',
+            enrollmentDate: new Date().toISOString().split('T')[0],
+            status: 'Active'
+        };
+        
+        enrolledStudents.value.push(studentForDisplay);
 
         // Close dialog and show success
         newStudentDialog.value = false;
@@ -533,31 +606,71 @@ async function submitNewStudent() {
         toast.add({
             severity: 'success',
             summary: 'Enrollment Successful',
-            detail: `${studentData.name} has been successfully enrolled!`,
+            detail: `${studentForDisplay.name} has been successfully enrolled and saved to database!`,
             life: 5000
         });
 
         // Reload data
         await loadAdmittedStudents();
+        await loadEnrolledStudents();
     } catch (error) {
         console.error('Error enrolling student:', error);
         toast.add({
             severity: 'error',
             summary: 'Enrollment Error',
-            detail: 'Failed to enroll student. Please try again.',
+            detail: error.message || 'Failed to enroll student. Please try again.',
             life: 3000
         });
     }
 }
 
 // Load enrolled students for display
-function loadEnrolledStudents() {
+async function loadEnrolledStudents() {
     try {
-        const students = JSON.parse(localStorage.getItem('students') || '[]');
-        enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+        // Fetch enrolled students from backend API
+        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const apiStudents = result.data || [];
+            
+            // Format students for display
+            const formattedStudents = apiStudents.map(student => ({
+                id: student.id,
+                studentId: student.enrollment_id,
+                name: `${student.first_name || ''} ${student.middle_name || ''} ${student.last_name || ''}`.trim(),
+                firstName: student.first_name,
+                lastName: student.last_name,
+                email: student.email_address || 'N/A',
+                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
+                gradeLevel: student.grade_level,
+                enrollmentStatus: student.enrollment_status,
+                enrollmentDate: student.enrollment_date,
+                status: student.is_active ? 'Active' : 'Inactive'
+            }));
+            
+            enrolledStudents.value = formattedStudents.filter(s => s.enrollmentStatus === 'Enrolled');
+        } else {
+            console.warn('Failed to fetch from API, falling back to localStorage');
+            // Fallback to localStorage if API fails
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+        }
     } catch (error) {
         console.error('Error loading enrolled students:', error);
-        enrolledStudents.value = [];
+        // Fallback to localStorage on error
+        try {
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+        } catch (localError) {
+            console.error('Error loading from localStorage:', localError);
+            enrolledStudents.value = [];
+        }
     }
 }
 </script>

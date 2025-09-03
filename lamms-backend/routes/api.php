@@ -8,6 +8,7 @@ use App\Http\Controllers\API\TeacherController;
 use App\Http\Controllers\API\CurriculumController;
 use App\Http\Controllers\API\CurriculumGradeController;
 use App\Http\Controllers\API\ScheduleController;
+use App\Http\Controllers\API\EnrollmentController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -166,3 +167,11 @@ Route::get('/teachers', [TeacherController::class, 'index']);
 Route::post('/teachers', [TeacherController::class, 'store']);
 Route::get('/subjects', [SubjectController::class, 'index']);
 Route::get('/grades', [GradeController::class, 'index']);
+
+// Enrollment routes
+Route::get('enrollments', [EnrollmentController::class, 'index']);
+Route::post('enrollments', [EnrollmentController::class, 'store']);
+Route::get('enrollments/{id}', [EnrollmentController::class, 'show']);
+Route::put('enrollments/{id}', [EnrollmentController::class, 'update']);
+Route::delete('enrollments/{id}', [EnrollmentController::class, 'destroy']);
+Route::get('enrollments/grade/{gradeLevel}', [EnrollmentController::class, 'byGrade']);
