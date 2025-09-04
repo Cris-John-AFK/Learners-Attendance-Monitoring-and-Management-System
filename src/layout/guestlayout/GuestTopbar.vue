@@ -1,8 +1,18 @@
 <script setup>
-import Button from 'primevue/button';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
+const isProfileOpen = ref(false);
+
+const logout = () => {
+    // Clear user session data
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+
+    // Redirect to homepage
+    router.push('/');
+};
 </script>
 
 <template>
@@ -15,15 +25,18 @@ const router = useRouter();
                 </router-link>
             </div>
 
-            <div class="layout-topbar-center">
-                <Button class="back-button" @click="$router.push('/')">
-                    <i class="pi pi-arrow-left"></i>
-                    Back to Login
-                </Button>
-            </div>
-
             <div class="layout-topbar-right">
-                <!-- Empty placeholder to balance the layout -->
+                <!-- Profile Button with Dropdown -->
+                <div class="relative">
+                    <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
+                        <i class="pi pi-user"></i>
+                        <span>Profile</span>
+                    </button>
+                    <!-- Styled Dropdown Menu -->
+                    <div v-if="isProfileOpen" class="profile-dropdown">
+                        <button class="logout-button" @click="logout"><i class="pi pi-sign-out"></i> Log Out</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -62,101 +75,57 @@ const router = useRouter();
     height: 2.5rem;
 }
 
-.layout-topbar-center {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    transform: translateX(-50%);
-    height: 4rem;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .layout-topbar-right {
     margin-left: auto;
     min-width: 200px;
 }
 
-.back-button {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+.layout-topbar-action {
+    background: none;
     border: none;
-    padding: 0.75rem 1.5rem;
-    color: white;
-    border-radius: 8px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.back-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
-}
-
-.back-button:active {
-    transform: scale(0.98);
-}
-
-/* Search Section Styles */
-.search-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: calc(100vh - 4rem); /* Full height minus topbar */
-    padding-top: 4rem; /* Account for fixed topbar */
-    background-color: var(--surface-ground);
-}
-
-.search-title {
-    font-size: 1.5rem;
-    color: var(--text-color);
-    margin-bottom: 1.5rem;
-    font-weight: 600;
-}
-
-.search-container {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.search-input {
     padding: 0.75rem 1rem;
-    border: 1px solid var(--surface-border);
-    border-radius: 6px;
-    font-size: 1rem;
-    width: 300px;
-    transition: border-color 0.2s;
-}
-
-.search-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-.search-button {
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
+    color: var(--text-color);
     border-radius: 6px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
 }
 
-.search-button:hover {
+.layout-topbar-action:hover {
+    background-color: var(--surface-hover);
+}
+
+.layout-topbar-action:active {
+    transform: scale(0.98);
+}
+
+.profile-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: var(--surface-card);
+    padding: 0.5rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.logout-button {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.logout-button:hover {
     background: #059669;
     transform: translateY(-2px);
 }
 
-.search-button:active {
+.logout-button:active {
     transform: scale(0.98);
 }
 
@@ -175,16 +144,8 @@ const router = useRouter();
 }
 
 @media (max-width: 640px) {
-    .layout-topbar-center {
-        position: static;
-        transform: none;
-        margin: 0 auto;
-    }
-
     .layout-topbar-right {
         display: none;
     }
 }
 </style>
-
-display: none;

@@ -10,23 +10,20 @@ import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import LayoutPageGlobal from '../layout/landingpagegloballayout/LayoutPageGlobal.vue';
-import PageGlobal from '../views/landingpageglobal/PageGlobal.vue';
+
 const router = createRouter({
     history: createWebHistory(),
     routes: [
         {
-            path: '/global',
-            component: LayoutPageGlobal,
-            children: [
-                {
-                    path: '',
-                    component: PageGlobal
-                }
-            ]
+            path: '/',
+            name: 'homepage',
+            component: () => import('@/views/homepagelanding/HomePageLand.vue'),
+            meta: {
+                layout: () => import('@/layout/homepagelayout/LayoutHomePage.vue')
+            }
         },
         {
-            path: '/',
+            path: '/login',
             component: LoginLayout,
             children: [
                 {
@@ -183,12 +180,12 @@ const router = createRouter({
             component: EnrollmentLayout,
             children: [
                 {
-                    path: '', // Instead of '', now it's '/enrollment/page'
+                    path: '',
                     name: 'EnrollmentPage',
                     component: () => import('@/layout/enrollmentlayout/EnrollmentPage.vue')
                 },
                 {
-                    path: 'landing', // ✅ Changed from '/enrollment-landing' to 'landing'
+                    path: 'landing',
                     name: 'EnrollmentLanding',
                     component: () => import('@/views/Enrollment/EnrollmentLanding.vue')
                 },
@@ -223,14 +220,6 @@ const router = createRouter({
             component: () => import('@/views/Enrollment/RegistrationConfirmation.vue'),
             meta: {
                 layout: 'enrollment'
-            }
-        },
-        {
-            path: '/homepage',
-            name: 'homepage',
-            component: () => import('@/views/homepagelanding/HomePageLand.vue'),
-            meta: {
-                layout: () => import('@/layout/homepagelayout/LayoutHomePage.vue')
             }
         },
         {

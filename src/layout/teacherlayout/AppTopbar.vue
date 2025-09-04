@@ -1,9 +1,11 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
+
 const { toggleMenu } = useLayout();
+const router = useRouter();
 
 const isCalendarOpen = ref(false); // Modal control
 
@@ -58,7 +60,12 @@ const isProfileOpen = ref(false); // Controls dropdown visibility
 const isLogoutSuccess = ref(false); // Controls the log out confirmation modal
 
 const logout = () => {
-    isLogoutSuccess.value = true; // Show the success message
+    // Clear user session data
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+
+    // Redirect to homepage
+    router.push('/');
 };
 </script>
 
@@ -73,13 +80,6 @@ const logout = () => {
                     <img src="/demo/images/logo.png" alt="Logo" />
                     <span>NCS- for Teachers</span>
                 </router-link>
-            </div>
-
-            <div class="layout-topbar-center">
-                <Button class="back-button" @click="$router.push('/')">
-                    <i class="pi pi-arrow-left"></i>
-                    Back to Login
-                </Button>
             </div>
 
             <div class="layout-topbar-actions">
@@ -191,29 +191,6 @@ const logout = () => {
 
 .layout-topbar-action i {
     font-size: 1.25rem;
-}
-
-.back-button {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    border: none;
-    padding: 0.75rem 1.5rem;
-    color: white;
-    border-radius: 8px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.back-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
-}
-
-.back-button:active {
-    transform: scale(0.98);
 }
 
 .profile-dropdown {

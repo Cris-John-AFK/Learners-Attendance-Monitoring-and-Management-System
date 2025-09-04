@@ -605,7 +605,7 @@ const saveStudent = async () => {
                     return new Date().toISOString().split('T')[0];
                 }
             })(),
-            
+
             // Basic Education Fields
             placeOfBirth: student.value.placeOfBirth || '',
             motherTongue: student.value.motherTongue || '',
@@ -616,7 +616,7 @@ const saveStudent = async () => {
             hasDisability: student.value.hasDisability || false,
             disabilities: student.value.disabilities || [],
             houseIncome: student.value.houseIncome || '',
-            
+
             // Parent Information
             fatherLastName: student.value.fatherLastName || '',
             fatherFirstName: student.value.fatherFirstName || '',
@@ -1421,7 +1421,7 @@ function openStudentDialog() {
         hasDisability: false,
         disabilities: [],
         houseIncome: '',
-        
+
         // Parent Information
         fatherOccupation: '',
         motherOccupation: ''
@@ -1530,9 +1530,9 @@ onMounted(() => {
 
 <template>
     <input type="file" accept="image/*" ref="fileInput" class="hidden" @change="handlePhotoUpload" />
-    <div class="card p-6 shadow-lg rounded-lg bg-white">
+    <div class="card p-8 shadow-xl rounded-xl bg-white border border-gray-100">
         <!-- Modern Gradient Header -->
-        <div class="modern-header-container mb-6">
+        <div class="modern-header-container mb-8">
             <div class="gradient-header">
                 <div class="header-content">
                     <div class="header-left">
@@ -1541,7 +1541,7 @@ onMounted(() => {
                         </div>
                         <div class="header-text">
                             <h1 class="header-title">Student Management System</h1>
-                            <p class="header-subtitle">Naawan Central School - Learners Database</p>
+                            <p class="header-subtitle">Naawan Central School</p>
                             <div class="student-count">
                                 <i class="pi pi-chart-bar mr-2"></i>
                                 Total Enrolled Students: <span class="count-badge">{{ totalStudents }}</span>
@@ -1555,14 +1555,13 @@ onMounted(() => {
                                 <InputText v-model="filters.searchTerm" placeholder="Search students..." class="search-input" />
                             </span>
                         </div>
-                        <Button label="Add New Student" icon="pi pi-plus" class="add-student-btn" @click="openStudentDialog" />
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Filters -->
-        <div class="flex flex-wrap gap-3 mb-4">
+        <div class="flex flex-wrap gap-6 mb-8 p-4 bg-gray-50 rounded-lg border">
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-sm font-medium mb-1">Grade Level</label>
                 <Dropdown v-model="filters.grade" :options="grades" optionLabel="name" optionValue="code" placeholder="Select Grade" class="w-full" @change="updateSections" />
@@ -1599,12 +1598,26 @@ onMounted(() => {
                     class="w-full"
                 />
             </div>
+            <div class="flex flex-col justify-end min-w-[150px]">
+                <Button label="Reset Filters" icon="pi pi-refresh" class="p-button-outlined p-button-secondary h-[42px]" @click="resetFilters" />
+            </div>
         </div>
 
         <!-- Student List -->
-        <div class="grid">
-            <div class="col-12">
-                <DataTable :value="filteredStudents" dataKey="id" class="p-datatable-sm" :loading="loading" stripedRows responsiveLayout="scroll" :paginator="filteredStudents.length > 10" :rows="10" @rowClick="onRowClick">
+        <div class="mt-6">
+            <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <DataTable
+                    :value="filteredStudents"
+                    :paginator="true"
+                    :rows="10"
+                    :rowsPerPageOptions="[5, 10, 20, 50]"
+                    :loading="loading"
+                    stripedRows
+                    showGridlines
+                    responsiveLayout="scroll"
+                    class="p-datatable-sm modern-datatable"
+                    :globalFilterFields="['firstName', 'lastName', 'middleName', 'lrn', 'gradeLevel', 'section']"
+                >
                     <Column header="#" style="width: 3rem">
                         <template #body="slotProps">
                             <span>{{ slotProps.index + 1 }}</span>
@@ -1891,9 +1904,10 @@ onMounted(() => {
                                 <label>PSA Birth Cert. No. (if available upon registration)</label>
                                 <InputText v-model="student.psaBirthCert" placeholder="Enter PSA Birth Certificate Number" class="w-full" />
                             </div>
-                            <div class="form-group">
-                                <label>LRN</label>
+                            <div v-if="student.learnerStatus === 'WITH LRN'" class="form-group">
+                                <label>LRN <span class="text-red-500">*</span></label>
                                 <InputText v-model="student.lrn" placeholder="Enter Learner Reference Number" class="w-full" />
+                                <small v-if="!student.lrn" class="text-red-500">LRN is required for learners with LRN status</small>
                             </div>
                         </div>
                     </div>
@@ -1918,8 +1932,8 @@ onMounted(() => {
                                 <small v-if="!student.lastName" class="text-red-500">Last Name is required</small>
                             </div>
                             <div class="form-group">
-                                <label>Extension Name</label>
-                                <InputText v-model="student.extensionName" placeholder="Jr., Sr., III, etc." class="w-full" @input="updateFullName" />
+                                <label>Extension Name <span class="text-gray-400">(Optional)</span></label>
+                                <InputText v-model="student.extensionName" placeholder="Jr., Sr., III, etc. (Optional)" class="w-full" @input="updateFullName" />
                             </div>
                         </div>
 
@@ -2572,6 +2586,8 @@ onMounted(() => {
     padding: 0;
     width: calc(100% + 4rem);
     left: -2rem;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
 }
 
 .close-button {
@@ -2592,12 +2608,12 @@ onMounted(() => {
 }
 
 .enrollment-header {
-    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
     color: white;
     text-align: center;
-    padding: 17px 0;
+    padding: 24px 0;
     width: 100%;
-    border-radius: 12px 12px 0 0;
+    border-radius: inherit;
     position: relative;
     overflow: hidden;
 }
@@ -2648,9 +2664,10 @@ onMounted(() => {
 .form-section {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .section-title {
@@ -2658,6 +2675,11 @@ onMounted(() => {
     color: white;
     font-size: 1rem;
     font-weight: 600;
+    padding: 12px 20px;
+    margin: -24px -24px 20px -24px;
+    border-radius: 12px 12px 0 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .parent-subsection {
@@ -2754,7 +2776,7 @@ onMounted(() => {
     background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
     color: white;
     text-align: center;
-    border-radius: 12px 12px 0 0;
+    border-radius: 12px 12px 12px 0;
     padding: 20px;
 }
 
@@ -2899,21 +2921,24 @@ onMounted(() => {
 
 .form-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+    align-items: start;
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
+    min-height: 80px;
 }
 
 .form-group label {
     font-weight: 600;
     color: #374151;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     font-size: 0.875rem;
+    line-height: 1.4;
 }
 
 .readonly-field {
@@ -2989,10 +3014,45 @@ onMounted(() => {
 :deep(.p-dropdown),
 :deep(.p-calendar) {
     border: 1px solid #d1d5db;
-    border-radius: 6px;
-    padding: 8px 12px;
+    border-radius: 8px;
+    padding: 10px 14px;
     font-size: 0.875rem;
     transition: all 0.2s ease;
+    min-height: 42px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Modern DataTable Styling */
+.modern-datatable {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+:deep(.modern-datatable .p-datatable-header) {
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1rem;
+}
+
+:deep(.modern-datatable .p-datatable-thead > tr > th) {
+    background: #f1f5f9;
+    color: #374151;
+    font-weight: 600;
+    padding: 1rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+:deep(.modern-datatable .p-datatable-tbody > tr) {
+    transition: all 0.2s ease;
+}
+
+:deep(.modern-datatable .p-datatable-tbody > tr:hover) {
+    background: #f8fafc;
+}
+
+:deep(.modern-datatable .p-datatable-tbody > tr > td) {
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
 }
 
 :deep(.p-inputtext:focus),
@@ -3059,11 +3119,11 @@ onMounted(() => {
 
 /* Modern Header Styles */
 .modern-header-container {
-    margin: -1.5rem -1.5rem 1.5rem -1.5rem;
+    margin: -2rem -2rem 2rem -2rem;
 }
 
 .gradient-header {
-    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
     border-radius: 12px 12px 0 0;
     padding: 2rem;
     color: white;
@@ -3124,6 +3184,7 @@ onMounted(() => {
     margin: 0 0 0.5rem 0;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     letter-spacing: -0.025em;
+    color: white !important;
 }
 
 .header-subtitle {
@@ -3131,6 +3192,7 @@ onMounted(() => {
     margin: 0 0 0.75rem 0;
     opacity: 0.9;
     font-weight: 400;
+    color: white !important;
 }
 
 .student-count {
@@ -3170,12 +3232,13 @@ onMounted(() => {
     background: rgba(255, 255, 255, 0.95) !important;
     border: 1px solid rgba(255, 255, 255, 0.3) !important;
     border-radius: 25px !important;
-    padding: 0.75rem 1rem 0.75rem 2.5rem !important;
+    padding: 0.75rem 1rem 0.75rem 2.75rem !important;
     color: #1e40af !important;
     font-weight: 500 !important;
     width: 300px !important;
     backdrop-filter: blur(10px);
     transition: all 0.3s ease !important;
+    height: 44px !important;
 }
 
 .search-input:focus {
@@ -3193,6 +3256,9 @@ onMounted(() => {
     color: #64748b !important;
     left: 1rem !important;
     z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
 }
 
 .add-student-btn {

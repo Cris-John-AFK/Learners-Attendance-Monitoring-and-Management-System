@@ -14,8 +14,7 @@ const model = ref([
             { label: 'Curricula', icon: 'pi pi-fw pi-briefcase', to: '/curriculum' },
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
-            { label: 'Enrollment', icon: 'pi pi-fw pi-user-edit', to: '/admin-enrollment' },
-            { label: 'Admission', icon: 'pi pi-fw pi-user-edit', to: '/admin-admission' }
+            { label: 'Enrollment', icon: 'pi pi-fw pi-user-edit', to: '/admin-enrollment' }
         ]
     },
     {
