@@ -1012,23 +1012,23 @@ export const CurriculumService = {
     async assignHomeroomTeacher(sectionId, teacherId) {
         try {
             console.log('Assigning homeroom teacher:', { sectionId, teacherId });
-            
+
             // Get curriculum and section details to build the correct API path
             const curriculums = await this.getCurriculums();
             if (!curriculums || !Array.isArray(curriculums) || curriculums.length === 0) {
                 throw new Error('No curriculum found');
             }
-            
+
             // Get the first (and only) curriculum since system enforces single curriculum
             const curriculum = curriculums[0];
             if (!curriculum || !curriculum.id) {
                 throw new Error('Invalid curriculum data');
             }
-            
+
             // We need to get the section details directly from the API since we don't have a getSections method
             // Instead, we'll use the section ID directly and let the backend handle the relationship lookup
             const curriculumId = curriculum.id;
-            
+
             // Try to get section details from the API to find the grade
             let gradeId = null;
             try {
@@ -1045,20 +1045,20 @@ export const CurriculumService = {
                 console.error('Error fetching section details:', sectionError);
                 throw new Error('Could not fetch section details to determine grade');
             }
-            
+
             console.log('API call details:', { curriculumId, gradeId, sectionId, teacherId });
-            
+
             const response = await api.post(`/api/curriculums/${curriculumId}/grades/${gradeId}/sections/${sectionId}/teacher`, {
                 teacher_id: teacherId
             });
-            
+
             // Clear section cache to force refresh
             sectionCache.clear();
-            
+
             // Also clear localStorage cache
             const cacheKey = `sections_${curriculumId}_${gradeId}`;
             localStorage.removeItem(cacheKey);
-            
+
             return response.data;
         } catch (error) {
             console.error('Error assigning homeroom teacher:', error);

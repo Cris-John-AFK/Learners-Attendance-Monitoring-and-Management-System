@@ -28,7 +28,7 @@ class EnrollmentController extends Controller
                 $student->current_section_id = $currentSection ? $currentSection->id : null;
                 return $student;
             });
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $studentsWithSections
@@ -85,6 +85,7 @@ class EnrollmentController extends Controller
             $studentData = [
                 // Required fields that exist in database
                 'studentId' => $request->enrollment_id, // Map enrollment_id to studentId
+                'student_id' => $request->enrollment_id, // Also map to student_id column (NOT NULL constraint)
                 'firstName' => $request->first_name,
                 'lastName' => $request->last_name,
                 'middleName' => $request->middle_name,
@@ -103,7 +104,7 @@ class EnrollmentController extends Controller
                 'isActive' => $request->is_active ?? true,
                 'hasDisability' => $request->has_disability ?? false,
                 'disabilities' => $request->disabilities,
-                
+
                 // New enrollment fields
                 'student_type' => $request->student_type,
                 'school_year' => $request->school_year,
@@ -119,7 +120,7 @@ class EnrollmentController extends Controller
                 'last_grade_completed' => $request->last_grade_completed,
                 'last_school_attended' => $request->last_school_attended,
                 'household_income' => $request->household_income ?? 'Below 10k',
-                
+
                 // Parent information (map to existing columns)
                 'father' => trim($request->father_first_name . ' ' . $request->father_last_name),
                 'mother' => trim($request->mother_first_name . ' ' . $request->mother_last_name),
@@ -140,7 +141,7 @@ class EnrollmentController extends Controller
         } catch (\Exception $e) {
             Log::error('Error enrolling student: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to enroll student: ' . $e->getMessage()
@@ -155,7 +156,7 @@ class EnrollmentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $student
@@ -176,7 +177,7 @@ class EnrollmentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
-            
+
             $validator = Validator::make($request->all(), [
                 'firstName' => 'sometimes|required|string|max:255',
                 'lastName' => 'sometimes|required|string|max:255',
@@ -238,7 +239,7 @@ class EnrollmentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
-            
+
             $validator = Validator::make($request->all(), [
                 'section_id' => 'required|exists:sections,id',
                 'school_year' => 'string|nullable'
@@ -258,7 +259,7 @@ class EnrollmentController extends Controller
             // Verify the section matches the student's grade level
             $section = \App\Models\Section::with(['curriculumGrade.grade'])->findOrFail($sectionId);
             $sectionGrade = $section->curriculumGrade->grade ?? null;
-            
+
             if (!$sectionGrade || $sectionGrade->name !== $student->gradeLevel) {
                 return response()->json([
                     'success' => false,
@@ -309,7 +310,7 @@ class EnrollmentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
-            
+
             // Get sections that match the student's grade level
             $sections = \App\Models\Section::with(['curriculumGrade.grade'])
                 ->whereHas('curriculumGrade.grade', function ($query) use ($student) {
