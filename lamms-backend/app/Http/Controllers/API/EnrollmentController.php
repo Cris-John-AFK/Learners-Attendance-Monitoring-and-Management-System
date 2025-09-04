@@ -74,7 +74,7 @@ class EnrollmentController extends Controller
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'required|string|max:255',
                 'grade_level' => 'required|string|max:50',
-                'lrn' => 'required|string|unique:students,lrn',
+                'lrn' => 'nullable|string|unique:students,lrn',
             ]);
 
             if ($validator->fails()) {

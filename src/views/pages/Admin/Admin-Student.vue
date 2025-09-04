@@ -417,8 +417,8 @@ const updateFilterCounts = () => {
     });
 
     // Count students by gender
-    const maleCounts = students.value.filter((s) => s.gender.toLowerCase() === 'male').length;
-    const femaleCounts = students.value.filter((s) => s.gender.toLowerCase() === 'female').length;
+    const maleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'male').length;
+    const femaleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'female').length;
 
     console.log('Grade counts:', gradeCounts);
     console.log('Gender counts - Male:', maleCounts, 'Female:', femaleCounts);
@@ -460,6 +460,18 @@ function updateSections() {
     } else {
         sections.value = [];
     }
+}
+
+// Reset all filters
+function resetFilters() {
+    filters.value = {
+        grade: null,
+        section: null,
+        gender: null,
+        status: null,
+        searchTerm: ''
+    };
+    sections.value = [];
 }
 
 // Now the computed property will work properly with the import

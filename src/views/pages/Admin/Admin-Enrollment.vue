@@ -14,6 +14,7 @@ import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const search = ref('');
+const pendingSearch = ref('');
 const loading = ref(true);
 const enrollmentDialog = ref(false);
 const confirmationDialog = ref(false);
@@ -348,10 +349,45 @@ function formatAddress(student) {
 }
 
 // Computed properties
+const pendingEnrollmentStudents = computed(() => {
+    // Students who are enrolled but don't have sections assigned yet
+    const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    return allStudents.filter(student => 
+        !student.section && 
+        !student.sectionId && 
+        !student.current_section_name && 
+        !student.current_section_id
+    );
+});
+
+const fullyEnrolledStudents = computed(() => {
+    // Students who have sections assigned (should appear in Student Management)
+    const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    return allStudents.filter(student => 
+        student.section || 
+        student.sectionId || 
+        student.current_section_name || 
+        student.current_section_id
+    );
+});
+
 const filteredStudents = computed(() => {
-    const targetStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    // For the enrolled students section, show only those without sections
+    const targetStudents = pendingEnrollmentStudents.value;
     if (!search.value) return targetStudents;
     const searchTerm = search.value.toLowerCase();
+    return targetStudents.filter((s) => {
+        const displayName = getStudentDisplayName(s).toLowerCase();
+        const studentId = (s.studentId || s.enrollment_id || '').toLowerCase();
+        return displayName.includes(searchTerm) || studentId.includes(searchTerm);
+    });
+});
+
+const filteredPendingStudents = computed(() => {
+    // For the pending enrollment section, show only those without sections
+    const targetStudents = pendingEnrollmentStudents.value;
+    if (!pendingSearch.value) return targetStudents;
+    const searchTerm = pendingSearch.value.toLowerCase();
     return targetStudents.filter((s) => {
         const displayName = getStudentDisplayName(s).toLowerCase();
         const studentId = (s.studentId || s.enrollment_id || '').toLowerCase();
@@ -383,7 +419,11 @@ const notEnrolledStudents = computed(() => {
 });
 
 const totalEnrolledStudents = computed(() => {
-    return enrolledStudents.value.length;
+    return fullyEnrolledStudents.value.length;
+});
+
+const totalPendingStudents = computed(() => {
+    return pendingEnrollmentStudents.value.length;
 });
 
 // Methods
@@ -603,59 +643,65 @@ async function submitNewStudent() {
             enrollment_id: newStudent.value.serialNumber,
             student_type: newStudent.value.studentType,
             school_year: newStudent.value.schoolYear,
-            lrn: newStudent.value.lrn,
             grade_level: newStudent.value.gradeLevel,
 
             // Student Information
-            last_name: newStudent.value.lastName,
-            first_name: newStudent.value.firstName,
-            middle_name: newStudent.value.middleName,
-            extension_name: newStudent.value.extensionName,
+            last_name: newStudent.value.lastName || '',
+            first_name: newStudent.value.firstName || '',
+            middle_name: newStudent.value.middleName || null,
+            extension_name: newStudent.value.extensionName || null,
             birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
             age: parseInt(newStudent.value.age) || null,
-            sex: newStudent.value.sex,
-            religion: newStudent.value.religion,
-            mother_tongue: newStudent.value.motherTongue,
+            sex: newStudent.value.sex || 'Male',
+            religion: newStudent.value.religion || null,
+            mother_tongue: newStudent.value.motherTongue || null,
 
             // Address Information
-            house_no: newStudent.value.houseNo,
-            street: newStudent.value.street,
-            barangay: newStudent.value.barangay,
-            city_municipality: newStudent.value.cityMunicipality,
-            province: newStudent.value.province,
-            country: newStudent.value.country,
-            zip_code: newStudent.value.zipCode,
+            house_no: newStudent.value.houseNo || null,
+            street: newStudent.value.street || null,
+            barangay: newStudent.value.barangay || null,
+            city_municipality: newStudent.value.cityMunicipality || null,
+            province: newStudent.value.province || null,
+            country: newStudent.value.country || 'Philippines',
+            zip_code: newStudent.value.zipCode || null,
 
             // Parent/Guardian Information
-            father_last_name: newStudent.value.fatherLastName,
-            father_first_name: newStudent.value.fatherFirstName,
-            father_middle_name: newStudent.value.fatherMiddleName,
-            father_contact_number: newStudent.value.fatherContactNumber,
-            mother_last_name: newStudent.value.motherLastName,
-            mother_first_name: newStudent.value.motherFirstName,
-            mother_middle_name: newStudent.value.motherMiddleName,
-            mother_contact_number: newStudent.value.motherContactNumber,
+            father_last_name: newStudent.value.fatherLastName || null,
+            father_first_name: newStudent.value.fatherFirstName || null,
+            father_middle_name: newStudent.value.fatherMiddleName || null,
+            father_contact_number: newStudent.value.fatherContactNumber || null,
+            mother_last_name: newStudent.value.motherLastName || null,
+            mother_first_name: newStudent.value.motherFirstName || null,
+            mother_middle_name: newStudent.value.motherMiddleName || null,
+            mother_contact_number: newStudent.value.motherContactNumber || null,
 
             // Previous School Information
-            last_grade_completed: newStudent.value.lastGradeCompleted,
-            last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
-            last_school_attended: newStudent.value.lastSchoolAttended,
+            last_grade_completed: newStudent.value.lastGradeCompleted || null,
+            last_school_year_completed: newStudent.value.lastSchoolYearCompleted || null,
+            last_school_attended: newStudent.value.lastSchoolAttended || null,
 
             // Contact Information
-            email_address: newStudent.value.emailAddress,
+            email_address: newStudent.value.emailAddress || null,
 
             // Health/Disability Information
-            has_disability: newStudent.value.hasDisability,
-            disabilities: newStudent.value.disabilities.join(','),
+            has_disability: newStudent.value.hasDisability || false,
+            disabilities: newStudent.value.disabilities ? newStudent.value.disabilities.join(',') : null,
 
             // Household Income
-            household_income: newStudent.value.householdIncome,
+            household_income: newStudent.value.householdIncome || 'Below 10k',
 
             // Status fields
             enrollment_status: 'Enrolled',
             enrollment_date: new Date().toISOString().split('T')[0],
             is_active: true
         };
+
+        // Only add LRN if it has a value
+        if (newStudent.value.lrn && newStudent.value.lrn.trim()) {
+            enrollmentData.lrn = newStudent.value.lrn.trim();
+        }
+
+        console.log('Enrollment data being sent:', JSON.stringify(enrollmentData, null, 2));
 
         // Call backend API to save enrollment
         const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
@@ -669,7 +715,23 @@ async function submitNewStudent() {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to enroll student');
+            console.error('Validation errors:', errorData);
+            
+            // Show specific validation errors if available
+            if (errorData.errors) {
+                const errorMessages = Object.entries(errorData.errors)
+                    .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
+                    .join('\n');
+                
+                toast.add({
+                    severity: 'error',
+                    summary: 'Validation Failed',
+                    detail: errorMessages,
+                    life: 8000
+                });
+            }
+            
+            throw new Error(errorData.message || 'Validation failed');
         }
 
         const savedStudent = await response.json();
@@ -718,7 +780,7 @@ async function submitNewStudent() {
 // Load enrolled students for display
 async function loadEnrolledStudents() {
     try {
-        console.log('Loading enrolled students from API...');
+        console.log('Loaded enrolled students from API...');
         const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
             method: 'GET',
             headers: {
@@ -731,14 +793,12 @@ async function loadEnrolledStudents() {
             if (result.success && result.data) {
                 console.log('Backend student data:', result.data); // Debug log
                 enrolledStudents.value = result.data;
-                totalEnrolledStudents.value = result.data.length;
             }
         } else {
             console.warn('Failed to fetch from API, falling back to localStorage');
             // Fallback to localStorage if API fails
             const students = JSON.parse(localStorage.getItem('students') || '[]');
             enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
-            totalEnrolledStudents.value = enrolledStudents.value.length;
         }
     } catch (error) {
         console.error('Error loading enrolled students:', error);
@@ -787,22 +847,17 @@ async function assignStudentToSection() {
 
         const result = await response.json();
         
-        // Update local data
-        const studentIndex = enrolledStudents.value.findIndex(s => s.id === studentToAssign.value.id);
-        if (studentIndex !== -1) {
-            enrolledStudents.value[studentIndex].section = selectedSectionForAssignment.value.name;
-            enrolledStudents.value[studentIndex].current_section_name = selectedSectionForAssignment.value.name;
-            enrolledStudents.value[studentIndex].current_section_id = selectedSectionForAssignment.value.id;
-        }
-
         sectionAssignmentDialog.value = false;
         
         toast.add({
             severity: 'success',
             summary: 'Section Assigned',
-            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}`,
-            life: 3000
+            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}. Student moved to Student Management System.`,
+            life: 4000
         });
+
+        // Reload enrolled students from API to get updated section data
+        await loadEnrolledStudents();
 
     } catch (error) {
         console.error('Error assigning section:', error);
@@ -916,7 +971,11 @@ defineExpose({
     closeNewStudentDialog,
     submitNewStudent,
     confirmEnrollment,
-    viewStudentDetails
+    viewStudentDetails,
+    pendingEnrollmentStudents,
+    fullyEnrolledStudents,
+    filteredPendingStudents,
+    totalPendingStudents
 });
 </script>
 
@@ -933,10 +992,6 @@ defineExpose({
                         <div class="header-text">
                             <h1 class="header-title">Student Enrollment System</h1>
                             <p class="header-subtitle">Naawan Central School</p>
-                            <div class="student-count">
-                                <i class="pi pi-chart-bar mr-2"></i>
-                                Total Admitted: <span class="count-badge">{{ students.length }}</span>
-                            </div>
                         </div>
                     </div>
                     <div class="header-actions">
@@ -954,17 +1009,6 @@ defineExpose({
 
         <!-- Statistics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8 px-6 py-8">
-            <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-blue-100 text-sm font-medium uppercase tracking-wide mb-2">Total Admitted</p>
-                        <p class="text-3xl font-bold">{{ students.length }}</p>
-                    </div>
-                    <div class="bg-blue-400 bg-opacity-30 rounded-lg p-3">
-                        <i class="pi pi-users text-2xl"></i>
-                    </div>
-                </div>
-            </div>
             <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
                 <div class="flex items-center justify-between">
                     <div>
@@ -999,11 +1043,11 @@ defineExpose({
                         <p class="text-sm text-gray-600 mt-1">Students who have completed the enrollment process</p>
                     </div>
 
-                    <div v-if="enrolledStudents.length === 0" class="p-6 text-center">
+                    <div v-if="pendingEnrollmentStudents.length === 0" class="p-6 text-center">
                         <i class="pi pi-users text-3xl text-gray-400 mb-3"></i>
-                        <h4 class="text-gray-600 mb-2 font-medium">No Enrolled Students Yet</h4>
-                        <p class="text-gray-500 text-sm mb-4">Start by adding new students to the enrollment system</p>
-                        <Button label="Add First Student" icon="pi pi-plus" class="p-button-sm" @click="openNewStudentDialog" />
+                        <h4 class="text-gray-600 mb-2 font-medium">No Pending Students</h4>
+                        <p class="text-gray-500 text-sm mb-4">All students have been assigned sections</p>
+                        <Button label="Add New Student" icon="pi pi-plus" class="p-button-sm" @click="openNewStudentDialog" />
                     </div>
 
                     <div v-else class="p-4">
@@ -1020,17 +1064,16 @@ defineExpose({
                                     size="small" 
                                     class="p-button-sm p-button-outlined"
                                     @click="autoAssignAllStudents"
-                                    :disabled="enrolledStudents.filter(s => !s.section).length === 0"
+                                    :disabled="pendingEnrollmentStudents.length === 0"
                                 />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 gap-3">
                             <div 
-                                v-for="student in enrolledStudents" 
+                                v-for="student in filteredStudents" 
                                 :key="student.id" 
-                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer"
-                                :class="(student.current_section_name || student.section) ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'"
+                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
                                 @click="openSectionAssignment(student)"
                             >
                                 <div class="flex items-center justify-between">
@@ -1093,18 +1136,18 @@ defineExpose({
                         <div class="mb-3" id="search-container">
                             <div class="p-input-icon-left w-full">
                                 <i class="pi pi-search" />
-                                <InputText v-model="search" placeholder="Search students..." class="w-full text-sm" />
+                                <InputText v-model="pendingSearch" placeholder="Search students..." class="w-full text-sm" />
                             </div>
                         </div>
 
-                        <div v-if="filteredStudents.length === 0" class="text-center p-4">
+                        <div v-if="filteredPendingStudents.length === 0" class="text-center p-4">
                             <i class="pi pi-users text-2xl text-gray-400 mb-2"></i>
                             <p class="text-gray-500 text-sm">No pending enrollments</p>
                         </div>
 
                         <div v-else class="space-y-2">
                             <div
-                                v-for="student in filteredStudents.slice(0, 5)"
+                                v-for="student in filteredPendingStudents.slice(0, 5)"
                                 :key="student.id"
                                 class="student-item p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                                 :class="{ 'bg-blue-50 border-blue-200': selectedStudent && selectedStudent.id === student.id }"
@@ -1114,20 +1157,20 @@ defineExpose({
                                     <Avatar :image="student.photo" shape="circle" size="normal" class="mr-3" />
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
-                                            <span class="font-medium text-sm text-gray-800 truncate">{{ student.name }}</span>
+                                            <span class="font-medium text-sm text-gray-800 truncate">{{ getStudentDisplayName(student) }}</span>
                                             <Tag value="Pending" severity="warning" class="text-xs" />
                                         </div>
-                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId }}</div>
+                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId || student.enrollment_id }}</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div v-if="filteredStudents.length > 5" class="text-center p-2">
-                                <span class="text-xs text-gray-500">+{{ filteredStudents.length - 5 }} more students</span>
+                            <div v-if="filteredPendingStudents.length > 5" class="text-center p-2">
+                                <span class="text-xs text-gray-500">+{{ filteredPendingStudents.length - 5 }} more students</span>
                             </div>
 
                             <div class="mt-3 p-2 bg-orange-50 rounded text-center">
-                                <span class="text-sm font-medium text-orange-700">{{ filteredStudents.length }} Pending</span>
+                                <span class="text-sm font-medium text-orange-700">{{ totalPendingStudents }} Pending</span>
                             </div>
                         </div>
                     </div>

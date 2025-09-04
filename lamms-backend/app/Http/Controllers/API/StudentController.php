@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\ImagickImageBackEnd;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
@@ -15,7 +16,62 @@ class StudentController extends Controller
 {
     public function index()
     {
-        return Student::all();
+        return Student::with(['sections' => function($query) {
+            $query->wherePivot('is_active', true)
+                  ->wherePivot('school_year', '2025-2026');
+        }])->get()->map(function($student) {
+            $currentSection = $student->sections->first();
+            
+            return [
+                'id' => $student->id,
+                'name' => $student->name,
+                'firstName' => $student->firstName,
+                'lastName' => $student->lastName,
+                'middleName' => $student->middleName,
+                'extensionName' => $student->extensionName,
+                'email' => $student->email,
+                'gradeLevel' => $student->gradeLevel,
+                'section' => $currentSection ? $currentSection->name : null,
+                'current_section_name' => $currentSection ? $currentSection->name : null,
+                'current_section_id' => $currentSection ? $currentSection->id : null,
+                'sectionId' => $currentSection ? $currentSection->id : null,
+                'studentId' => $student->studentId,
+                'student_id' => $student->student_id,
+                'lrn' => $student->lrn,
+                'gender' => $student->gender,
+                'sex' => $student->sex,
+                'birthdate' => $student->birthdate,
+                'birthplace' => $student->birthplace,
+                'age' => $student->age,
+                'psaBirthCertNo' => $student->psaBirthCertNo,
+                'motherTongue' => $student->motherTongue,
+                'profilePhoto' => $student->profilePhoto,
+                'photo' => $student->photo,
+                'qr_code_path' => $student->qr_code_path,
+                'address' => $student->address,
+                'currentAddress' => $student->currentAddress,
+                'permanentAddress' => $student->permanentAddress,
+                'contactInfo' => $student->contactInfo,
+                'parentContact' => $student->parentContact,
+                'father' => $student->father,
+                'mother' => $student->mother,
+                'parentName' => $student->parentName,
+                'status' => $student->status,
+                'enrollmentDate' => $student->enrollmentDate,
+                'admissionDate' => $student->admissionDate,
+                'requirements' => $student->requirements,
+                'isIndigenous' => $student->isIndigenous,
+                'indigenousCommunity' => $student->indigenousCommunity,
+                'is4PsBeneficiary' => $student->is4PsBeneficiary,
+                'householdID' => $student->householdID,
+                'hasDisability' => $student->hasDisability,
+                'disabilities' => $student->disabilities,
+                'isActive' => $student->isActive,
+                'is_active' => $student->isActive,
+                'created_at' => $student->created_at,
+                'updated_at' => $student->updated_at,
+            ];
+        });
     }
 
     public function store(Request $request)
@@ -57,7 +113,7 @@ class StudentController extends Controller
             $photoPath = $this->saveBase64Image($request->photo, 'photos');
             $data['profilePhoto'] = $photoPath;
             $data['photo'] = $photoPath;
-            \Log::info('Photo saved to: ' . $photoPath);
+            Log::info('Photo saved to: ' . $photoPath);
         }
 
         // Generate and save QR code
@@ -67,14 +123,14 @@ class StudentController extends Controller
                 $studentIdForQR = $request->studentId ?: $request->lrn;
                 $qrPath = $this->generateAndSaveQRCode($request->lrn, $studentIdForQR);
                 $data['qr_code_path'] = $qrPath;
-                \Log::info('QR code saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
+                Log::info('QR code saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
             } catch (\Exception $e) {
-                \Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
-                \Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
+                Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
+                Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
                 // Continue without QR code if there's an error
             }
         } else {
-            \Log::info('No LRN provided, skipping QR code generation');
+            Log::info('No LRN provided, skipping QR code generation');
         }
 
         $student = Student::create($data);
@@ -120,9 +176,9 @@ class StudentController extends Controller
                 $photoPath = $this->saveBase64Image($request->photo, 'photos');
                 $data['profilePhoto'] = $photoPath;
                 $data['photo'] = $photoPath;
-                \Log::info('Photo updated and saved to: ' . $photoPath);
+                Log::info('Photo updated and saved to: ' . $photoPath);
             } catch (\Exception $e) {
-                \Log::error('Photo save error: ' . $e->getMessage());
+                Log::error('Photo save error: ' . $e->getMessage());
                 // Continue without photo if there's an error
                 unset($data['photo']);
                 unset($data['profilePhoto']);
@@ -136,14 +192,14 @@ class StudentController extends Controller
                 $studentIdForQR = $request->studentId ?: $request->lrn;
                 $qrPath = $this->generateAndSaveQRCode($request->lrn, $studentIdForQR);
                 $data['qr_code_path'] = $qrPath;
-                \Log::info('QR code updated and saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
+                Log::info('QR code updated and saved to: ' . $qrPath . ' for LRN: ' . $request->lrn);
             } catch (\Exception $e) {
-                \Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
-                \Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
+                Log::error('QR code generation error for LRN ' . $request->lrn . ': ' . $e->getMessage());
+                Log::error('QR code generation stack trace: ' . $e->getTraceAsString());
                 // Continue without QR code if there's an error
             }
         } else {
-            \Log::info('No LRN provided, skipping QR code generation');
+            Log::info('No LRN provided, skipping QR code generation');
         }
 
         $student->update($data);
@@ -220,11 +276,11 @@ class StudentController extends Controller
 
             file_put_contents($filePath, $qrCodeString);
 
-            \Log::info('QR code generated and saved: ' . $filePath);
+            Log::info('QR code generated and saved: ' . $filePath);
 
             return 'qr-codes/' . $fileName;
         } catch (\Exception $e) {
-            \Log::error('QR code generation failed: ' . $e->getMessage());
+            Log::error('QR code generation failed: ' . $e->getMessage());
 
             // Fallback to SVG if PNG fails
             try {
@@ -240,11 +296,11 @@ class StudentController extends Controller
 
                 file_put_contents($filePath, $qrCodeString);
 
-                \Log::info('QR code generated as SVG: ' . $filePath);
+                Log::info('QR code generated as SVG: ' . $filePath);
 
                 return 'qr-codes/' . $fileName;
             } catch (\Exception $svgError) {
-                \Log::error('SVG QR code generation also failed: ' . $svgError->getMessage());
+                Log::error('SVG QR code generation also failed: ' . $svgError->getMessage());
                 throw $e;
             }
         }
