@@ -5550,27 +5550,28 @@ watch(
 
                 <div v-else class="subject-grid" style="max-height: 500px; overflow-y: auto">
                     <div v-for="subject in selectedSubjects" :key="subject.id" class="dialog-subject-card p-3 border-round shadow-2 mb-3">
-                        <div class="flex justify-content-between align-items-start mb-3">
-                            <div>
-                                <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
-                                <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                                <div v-if="currentGradeHasSubjectTeachers">
-                                    <div v-if="subject.teacher" class="teacher-display mt-2">
-                                        <i class="pi pi-user mr-2"></i>
-                                        <span class="teacher-name">{{ subject.teacher.name }}</span>
-                                    </div>
-                                    <div v-else class="teacher-display mt-2">
-                                        <i class="pi pi-user mr-2"></i>
-                                        <span class="no-teacher-text">No teacher assigned</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex gap-2">
+                        <!-- Subject Header with Buttons -->
+                        <div class="flex justify-content-between align-items-center mb-3">
+                            <h4 class="m-0 text-xl flex-grow-1">{{ subject.name }}</h4>
+                            <!-- Action Buttons - pushed to far right -->
+                            <div class="flex gap-2 ml-auto">
                                 <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
-                                <Button v-if="currentGradeHasSubjectTeachers" label="Assign Teacher" icon="pi pi-user" class="p-button-sm p-button-outlined" @click="openAssignTeacherDialog(subject)" />
                                 <Button label="Remove" icon="pi pi-trash" class="p-button-sm p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" />
+                            </div>
+                        </div>
+                        
+                        <!-- Subject Details -->
+                        <div class="mb-3">
+                            <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
+                            <div v-if="currentGradeHasSubjectTeachers">
+                                <div v-if="subject.teacher" class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
+                                </div>
+                                <div v-else class="teacher-display mt-2">
+                                    <i class="pi pi-user mr-2"></i>
+                                    <span class="no-teacher-text">No teacher assigned</span>
+                                </div>
                             </div>
                         </div>
 
