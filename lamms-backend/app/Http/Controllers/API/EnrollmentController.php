@@ -39,17 +39,21 @@ class EnrollmentController extends Controller
     public function store(Request $request)
     {
         try {
+            // Clean email field if it's not a valid email before validation
+            if ($request->email_address && !filter_var($request->email_address, FILTER_VALIDATE_EMAIL)) {
+                $request->merge(['email_address' => null]);
+            }
+
             $validator = Validator::make($request->all(), [
-                'firstName' => 'required|string|max:255',
-                'lastName' => 'required|string|max:255',
-                'gradeLevel' => 'required|string',
-                'email' => 'required|email|unique:student_details,email',
-                'birthdate' => 'required|date',
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'grade_level' => 'required|string',
+                'email_address' => 'nullable|email|max:255',
+                'birthdate' => 'nullable|date',
                 'sex' => 'required|in:Male,Female',
-                'barangay' => 'required|string',
-                'city_municipality' => 'required|string',
-                'province' => 'required|string',
-                'household_income' => 'required|string'
+                'enrollment_id' => 'required|string|unique:student_details,enrollment_id',
+                'student_type' => 'required|string',
+                'school_year' => 'required|string'
             ]);
 
             if ($validator->fails()) {
@@ -68,67 +72,49 @@ class EnrollmentController extends Controller
                 $enrollmentId = "ENR{$currentYear}{$randomNum}";
             }
 
-            // Prepare student data
+            // Prepare student data mapping to existing database columns
             $studentData = [
-                // Basic Information
-                'firstName' => $request->firstName,
-                'lastName' => $request->lastName,
-                'middleName' => $request->middleName,
-                'extensionName' => $request->extensionName,
-                'name' => trim($request->firstName . ' ' . $request->middleName . ' ' . $request->lastName . ' ' . $request->extensionName),
-                'email' => $request->email,
+                // Required fields that exist in database
+                'studentId' => $request->enrollment_id, // Map enrollment_id to studentId
+                'firstName' => $request->first_name,
+                'lastName' => $request->last_name,
+                'middleName' => $request->middle_name,
+                'extensionName' => $request->extension_name,
+                'name' => trim($request->first_name . ' ' . ($request->middle_name ? $request->middle_name . ' ' : '') . $request->last_name . ($request->extension_name ? ' ' . $request->extension_name : '')),
+                'email' => $request->email_address,
+                'gradeLevel' => $request->grade_level,
                 'birthdate' => $request->birthdate,
                 'age' => $request->age,
                 'sex' => $request->sex,
-                'gender' => $request->sex, // Map sex to gender for compatibility
-                'gradeLevel' => $request->gradeLevel,
                 'lrn' => $request->lrn,
-                'motherTongue' => $request->motherTongue,
+                'motherTongue' => $request->mother_tongue,
                 'religion' => $request->religion,
-                
-                // Enrollment specific fields
-                'student_type' => $request->studentType ?? 'New',
-                'school_year' => $request->schoolYear ?? '2025-2026',
-                'enrollment_id' => $enrollmentId,
-                'enrollment_status' => 'Enrolled',
-                'enrollmentDate' => now(),
                 'status' => 'Enrolled',
-                'isActive' => true,
+                'enrollmentDate' => $request->enrollment_date,
+                'isActive' => $request->is_active ?? true,
+                'hasDisability' => $request->has_disability ?? false,
+                'disabilities' => $request->disabilities,
                 
-                // Address Information
-                'house_no' => $request->houseNo,
+                // New enrollment fields
+                'student_type' => $request->student_type,
+                'school_year' => $request->school_year,
+                'enrollment_id' => $request->enrollment_id,
+                'enrollment_status' => $request->enrollment_status ?? 'Enrolled',
+                'house_no' => $request->house_no,
                 'street' => $request->street,
                 'barangay' => $request->barangay,
-                'city_municipality' => $request->cityMunicipality,
+                'city_municipality' => $request->city_municipality,
                 'province' => $request->province,
                 'country' => $request->country ?? 'Philippines',
-                'zip_code' => $request->zipCode,
-                'address' => trim($request->houseNo . ' ' . $request->street . ', ' . $request->barangay . ', ' . $request->cityMunicipality),
+                'zip_code' => $request->zip_code,
+                'last_grade_completed' => $request->last_grade_completed,
+                'last_school_attended' => $request->last_school_attended,
+                'household_income' => $request->household_income ?? 'Below 10k',
                 
-                // Parent/Guardian Information
-                'father_name' => $request->fatherName,
-                'father_occupation' => $request->fatherOccupation,
-                'father_contact' => $request->fatherContact,
-                'father_education' => $request->fatherEducation,
-                'mother_name' => $request->motherName,
-                'mother_occupation' => $request->motherOccupation,
-                'mother_contact' => $request->motherContact,
-                'mother_education' => $request->motherEducation,
-                'guardian_name' => $request->guardianName,
-                'guardian_occupation' => $request->guardianOccupation,
-                'guardian_contact' => $request->guardianContact,
-                'guardian_address' => $request->guardianAddress,
-                
-                // Previous School Information
-                'last_grade_completed' => $request->lastGradeCompleted,
-                'last_school_year' => $request->lastSchoolYear,
-                'last_school_attended' => $request->lastSchoolAttended,
-                'last_school_address' => $request->lastSchoolAddress,
-                
-                // Additional Information
-                'household_income' => $request->householdIncome ?? 'Below 10k',
-                'hasDisability' => $request->hasDisability ?? false,
-                'disabilities' => $request->disabilities ?? [],
+                // Parent information (map to existing columns)
+                'father' => trim($request->father_first_name . ' ' . $request->father_last_name),
+                'mother' => trim($request->mother_first_name . ' ' . $request->mother_last_name),
+                'parentContact' => $request->father_contact_number ?: $request->mother_contact_number,
             ];
 
             // Create the student record
