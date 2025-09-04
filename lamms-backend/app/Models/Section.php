@@ -153,6 +153,21 @@ class Section extends Model
         return $this->belongsToMany(Subject::class, 'section_subject');
     }
 
+    public function students()
+    {
+        return $this->belongsToMany(Student::class, 'student_section')
+                    ->withPivot('school_year', 'is_active')
+                    ->withTimestamps();
+    }
+
+    public function activeStudents()
+    {
+        return $this->belongsToMany(Student::class, 'student_section')
+                    ->withPivot('school_year', 'is_active')
+                    ->wherePivot('is_active', true)
+                    ->withTimestamps();
+    }
+
     /**
      * Make sure we can always get the grade even if the relationship isn't perfect
      */

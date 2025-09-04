@@ -14,6 +14,7 @@ import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const search = ref('');
+const pendingSearch = ref('');
 const loading = ref(true);
 const enrollmentDialog = ref(false);
 const confirmationDialog = ref(false);
@@ -22,6 +23,96 @@ const showStudentDetails = ref(false);
 const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
+
+// Helper functions for student display
+function getStudentDisplayName(student) {
+    // Try different name field combinations based on backend data structure
+    if (student.name && student.name.trim()) {
+        return student.name.trim();
+    }
+    
+    const firstName = student.firstName || student.first_name || '';
+    const lastName = student.lastName || student.last_name || '';
+    const middleName = student.middleName || student.middle_name || '';
+    
+    if (firstName || lastName) {
+        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+    }
+    
+    return student.studentId || student.enrollment_id || 'Unknown Student';
+}
+
+function getStudentInitials(student) {
+    const displayName = getStudentDisplayName(student);
+    
+    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
+        return 'S';
+    }
+    
+    const nameParts = displayName.split(' ').filter(part => part.length > 0);
+    if (nameParts.length >= 2) {
+        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+    } else if (nameParts.length === 1) {
+        return nameParts[0].charAt(0).toUpperCase();
+    }
+    
+    return 'S';
+}
+
+function getGradeCode(gradeLevel) {
+    const gradeMap = {
+        'Kinder': 'K',
+        'Grade 1': '1',
+        'Grade 2': '2',
+        'Grade 3': '3',
+        'Grade 4': '4',
+        'Grade 5': '5',
+        'Grade 6': '6'
+    };
+    return gradeMap[gradeLevel] || gradeLevel;
+}
+
+// Section assignment functionality
+const sectionAssignmentDialog = ref(false);
+const studentToAssign = ref(null);
+const availableSectionsForAssignment = ref([]);
+const selectedSectionForAssignment = ref(null);
+
+// Section assignment functions
+async function openSectionAssignment(student) {
+    studentToAssign.value = student;
+    selectedSectionForAssignment.value = null;
+    availableSectionsForAssignment.value = [];
+    
+    try {
+        // Fetch available sections for this student's grade level from backend
+        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}/available-sections`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                availableSectionsForAssignment.value = result.data;
+            }
+        } else {
+            console.warn('Failed to fetch available sections, using fallback');
+            // Fallback to static sections if API fails
+            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+            availableSectionsForAssignment.value = sections[gradeCode] || [];
+        }
+    } catch (error) {
+        console.error('Error fetching available sections:', error);
+        // Fallback to static sections
+        const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+        availableSectionsForAssignment.value = sections[gradeCode] || [];
+    }
+    
+    sectionAssignmentDialog.value = true;
+}
 
 // New enrollment form dialog
 const newStudentDialog = ref(false);
@@ -258,10 +349,50 @@ function formatAddress(student) {
 }
 
 // Computed properties
+const pendingEnrollmentStudents = computed(() => {
+    // Students who are enrolled but don't have sections assigned yet
+    const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    return allStudents.filter(student => 
+        !student.section && 
+        !student.sectionId && 
+        !student.current_section_name && 
+        !student.current_section_id
+    );
+});
+
+const fullyEnrolledStudents = computed(() => {
+    // Students who have sections assigned (should appear in Student Management)
+    const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    return allStudents.filter(student => 
+        student.section || 
+        student.sectionId || 
+        student.current_section_name || 
+        student.current_section_id
+    );
+});
+
 const filteredStudents = computed(() => {
-    if (!search.value) return students.value;
+    // For the enrolled students section, show only those without sections
+    const targetStudents = pendingEnrollmentStudents.value;
+    if (!search.value) return targetStudents;
     const searchTerm = search.value.toLowerCase();
-    return students.value.filter((s) => s.name?.toLowerCase().includes(searchTerm) || s.studentId?.toLowerCase().includes(searchTerm) || s.firstName?.toLowerCase().includes(searchTerm) || s.lastName?.toLowerCase().includes(searchTerm));
+    return targetStudents.filter((s) => {
+        const displayName = getStudentDisplayName(s).toLowerCase();
+        const studentId = (s.studentId || s.enrollment_id || '').toLowerCase();
+        return displayName.includes(searchTerm) || studentId.includes(searchTerm);
+    });
+});
+
+const filteredPendingStudents = computed(() => {
+    // For the pending enrollment section, show only those without sections
+    const targetStudents = pendingEnrollmentStudents.value;
+    if (!pendingSearch.value) return targetStudents;
+    const searchTerm = pendingSearch.value.toLowerCase();
+    return targetStudents.filter((s) => {
+        const displayName = getStudentDisplayName(s).toLowerCase();
+        const studentId = (s.studentId || s.enrollment_id || '').toLowerCase();
+        return displayName.includes(searchTerm) || studentId.includes(searchTerm);
+    });
 });
 
 const availableSections = computed(() => {
@@ -288,7 +419,11 @@ const notEnrolledStudents = computed(() => {
 });
 
 const totalEnrolledStudents = computed(() => {
-    return enrolledStudents.value.length;
+    return fullyEnrolledStudents.value.length;
+});
+
+const totalPendingStudents = computed(() => {
+    return pendingEnrollmentStudents.value.length;
 });
 
 // Methods
@@ -471,11 +606,7 @@ function nextStep() {
     }
 }
 
-function previousStep() {
-    if (currentStep.value > 1) {
-        currentStep.value--;
-    }
-}
+// Renamed to prevStep to avoid duplication
 
 // Form validation
 function validateCurrentStep() {
@@ -512,73 +643,95 @@ async function submitNewStudent() {
             enrollment_id: newStudent.value.serialNumber,
             student_type: newStudent.value.studentType,
             school_year: newStudent.value.schoolYear,
-            lrn: newStudent.value.lrn,
             grade_level: newStudent.value.gradeLevel,
-            
+
             // Student Information
-            last_name: newStudent.value.lastName,
-            first_name: newStudent.value.firstName,
-            middle_name: newStudent.value.middleName,
-            extension_name: newStudent.value.extensionName,
+            last_name: newStudent.value.lastName || '',
+            first_name: newStudent.value.firstName || '',
+            middle_name: newStudent.value.middleName || null,
+            extension_name: newStudent.value.extensionName || null,
             birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
             age: parseInt(newStudent.value.age) || null,
-            sex: newStudent.value.sex,
-            religion: newStudent.value.religion,
-            mother_tongue: newStudent.value.motherTongue,
-            
+            sex: newStudent.value.sex || 'Male',
+            religion: newStudent.value.religion || null,
+            mother_tongue: newStudent.value.motherTongue || null,
+
             // Address Information
-            house_no: newStudent.value.houseNo,
-            street: newStudent.value.street,
-            barangay: newStudent.value.barangay,
-            city_municipality: newStudent.value.cityMunicipality,
-            province: newStudent.value.province,
-            country: newStudent.value.country,
-            zip_code: newStudent.value.zipCode,
-            
+            house_no: newStudent.value.houseNo || null,
+            street: newStudent.value.street || null,
+            barangay: newStudent.value.barangay || null,
+            city_municipality: newStudent.value.cityMunicipality || null,
+            province: newStudent.value.province || null,
+            country: newStudent.value.country || 'Philippines',
+            zip_code: newStudent.value.zipCode || null,
+
             // Parent/Guardian Information
-            father_last_name: newStudent.value.fatherLastName,
-            father_first_name: newStudent.value.fatherFirstName,
-            father_middle_name: newStudent.value.fatherMiddleName,
-            father_contact_number: newStudent.value.fatherContactNumber,
-            mother_last_name: newStudent.value.motherLastName,
-            mother_first_name: newStudent.value.motherFirstName,
-            mother_middle_name: newStudent.value.motherMiddleName,
-            mother_contact_number: newStudent.value.motherContactNumber,
-            
+            father_last_name: newStudent.value.fatherLastName || null,
+            father_first_name: newStudent.value.fatherFirstName || null,
+            father_middle_name: newStudent.value.fatherMiddleName || null,
+            father_contact_number: newStudent.value.fatherContactNumber || null,
+            mother_last_name: newStudent.value.motherLastName || null,
+            mother_first_name: newStudent.value.motherFirstName || null,
+            mother_middle_name: newStudent.value.motherMiddleName || null,
+            mother_contact_number: newStudent.value.motherContactNumber || null,
+
             // Previous School Information
-            last_grade_completed: newStudent.value.lastGradeCompleted,
-            last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
-            last_school_attended: newStudent.value.lastSchoolAttended,
-            
+            last_grade_completed: newStudent.value.lastGradeCompleted || null,
+            last_school_year_completed: newStudent.value.lastSchoolYearCompleted || null,
+            last_school_attended: newStudent.value.lastSchoolAttended || null,
+
             // Contact Information
-            email_address: newStudent.value.emailAddress,
-            
+            email_address: newStudent.value.emailAddress || null,
+
             // Health/Disability Information
-            has_disability: newStudent.value.hasDisability,
-            disabilities: newStudent.value.disabilities.join(','),
-            
+            has_disability: newStudent.value.hasDisability || false,
+            disabilities: newStudent.value.disabilities ? newStudent.value.disabilities.join(',') : null,
+
             // Household Income
-            household_income: newStudent.value.householdIncome,
-            
+            household_income: newStudent.value.householdIncome || 'Below 10k',
+
             // Status fields
             enrollment_status: 'Enrolled',
             enrollment_date: new Date().toISOString().split('T')[0],
             is_active: true
         };
 
+        // Only add LRN if it has a value
+        if (newStudent.value.lrn && newStudent.value.lrn.trim()) {
+            enrollmentData.lrn = newStudent.value.lrn.trim();
+        }
+
+        console.log('Enrollment data being sent:', JSON.stringify(enrollmentData, null, 2));
+
         // Call backend API to save enrollment
         const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             },
             body: JSON.stringify(enrollmentData)
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to enroll student');
+            console.error('Validation errors:', errorData);
+            
+            // Show specific validation errors if available
+            if (errorData.errors) {
+                const errorMessages = Object.entries(errorData.errors)
+                    .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
+                    .join('\n');
+                
+                toast.add({
+                    severity: 'error',
+                    summary: 'Validation Failed',
+                    detail: errorMessages,
+                    life: 8000
+                });
+            }
+            
+            throw new Error(errorData.message || 'Validation failed');
         }
 
         const savedStudent = await response.json();
@@ -597,7 +750,7 @@ async function submitNewStudent() {
             enrollmentDate: new Date().toISOString().split('T')[0],
             status: 'Active'
         };
-        
+
         enrolledStudents.value.push(studentForDisplay);
 
         // Close dialog and show success
@@ -627,34 +780,20 @@ async function submitNewStudent() {
 // Load enrolled students for display
 async function loadEnrolledStudents() {
     try {
-        // Fetch enrolled students from backend API
+        console.log('Loaded enrolled students from API...');
         const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
             method: 'GET',
             headers: {
-                'Accept': 'application/json'
+                Accept: 'application/json'
             }
         });
 
         if (response.ok) {
             const result = await response.json();
-            const apiStudents = result.data || [];
-            
-            // Format students for display
-            const formattedStudents = apiStudents.map(student => ({
-                id: student.id,
-                studentId: student.enrollment_id,
-                name: `${student.first_name || ''} ${student.middle_name || ''} ${student.last_name || ''}`.trim(),
-                firstName: student.first_name,
-                lastName: student.last_name,
-                email: student.email_address || 'N/A',
-                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                gradeLevel: student.grade_level,
-                enrollmentStatus: student.enrollment_status,
-                enrollmentDate: student.enrollment_date,
-                status: student.is_active ? 'Active' : 'Inactive'
-            }));
-            
-            enrolledStudents.value = formattedStudents.filter(s => s.enrollmentStatus === 'Enrolled');
+            if (result.success && result.data) {
+                console.log('Backend student data:', result.data); // Debug log
+                enrolledStudents.value = result.data;
+            }
         } else {
             console.warn('Failed to fetch from API, falling back to localStorage');
             // Fallback to localStorage if API fails
@@ -671,8 +810,173 @@ async function loadEnrolledStudents() {
             console.error('Error loading from localStorage:', localError);
             enrolledStudents.value = [];
         }
+    } finally {
+        loading.value = false;
     }
 }
+
+async function assignStudentToSection() {
+    if (!studentToAssign.value || !selectedSectionForAssignment.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Selection Required',
+            detail: 'Please select a section to assign the student.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // Use the new section assignment API endpoint
+        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${studentToAssign.value.id}/assign-section`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                section_id: selectedSectionForAssignment.value.id,
+                school_year: '2025-2026'
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to assign section');
+        }
+
+        const result = await response.json();
+        
+        sectionAssignmentDialog.value = false;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Section Assigned',
+            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}. Student moved to Student Management System.`,
+            life: 4000
+        });
+
+        // Reload enrolled students from API to get updated section data
+        await loadEnrolledStudents();
+
+    } catch (error) {
+        console.error('Error assigning section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Assignment Error',
+            detail: error.message || 'Failed to assign student to section. Please try again.',
+            life: 3000
+        });
+    }
+}
+
+async function autoAssignAllStudents() {
+    const unassignedStudents = enrolledStudents.value.filter(s => !s.section);
+    
+    if (unassignedStudents.length === 0) {
+        toast.add({
+            severity: 'info',
+            summary: 'No Students to Assign',
+            detail: 'All students are already assigned to sections.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        let assignedCount = 0;
+        
+        for (const student of unassignedStudents) {
+            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+            const sectionsForGrade = sections[gradeCode] || [];
+            
+            if (sectionsForGrade.length > 0) {
+                // Assign to first available section for the grade
+                const sectionToAssign = sectionsForGrade[0];
+                
+                const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        section: sectionToAssign.name
+                    })
+                });
+
+                if (response.ok) {
+                    // Update local data
+                    const studentIndex = enrolledStudents.value.findIndex(s => s.id === student.id);
+                    if (studentIndex !== -1) {
+                        enrolledStudents.value[studentIndex].section = sectionToAssign.name;
+                    }
+                    assignedCount++;
+                }
+            }
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Auto-Assignment Complete',
+            detail: `Successfully assigned ${assignedCount} students to sections.`,
+            life: 5000
+        });
+
+    } catch (error) {
+        console.error('Error in auto-assignment:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Auto-Assignment Error',
+            detail: 'Some students could not be assigned. Please try manual assignment.',
+            life: 3000
+        });
+    }
+}
+
+// Update existing filteredStudents to handle both students and enrolledStudents
+
+// Form navigation functions (using existing nextStep function)
+function prevStep() {
+    if (currentStep.value > 1) {
+        currentStep.value--;
+    }
+}
+
+// Additional functions needed for template
+function closeNewStudentDialog() {
+    newStudentDialog.value = false;
+    resetNewStudentForm();
+}
+
+function viewStudentDetails(student) {
+    selectedStudent.value = student;
+    showStudentDetails.value = true;
+}
+
+// Fix function name mismatch
+const assignSection = assignStudentToSection;
+
+// Expose functions for template usage
+defineExpose({
+    getStudentDisplayName,
+    getStudentInitials,
+    getGradeCode,
+    openSectionAssignment,
+    assignSection,
+    autoAssignAllStudents,
+    nextStep,
+    prevStep,
+    openNewStudentDialog,
+    closeNewStudentDialog,
+    submitNewStudent,
+    confirmEnrollment,
+    viewStudentDetails,
+    pendingEnrollmentStudents,
+    fullyEnrolledStudents,
+    filteredPendingStudents,
+    totalPendingStudents
+});
 </script>
 
 <template>
@@ -688,10 +992,6 @@ async function loadEnrolledStudents() {
                         <div class="header-text">
                             <h1 class="header-title">Student Enrollment System</h1>
                             <p class="header-subtitle">Naawan Central School</p>
-                            <div class="student-count">
-                                <i class="pi pi-chart-bar mr-2"></i>
-                                Total Admitted: <span class="count-badge">{{ students.length }}</span>
-                            </div>
                         </div>
                     </div>
                     <div class="header-actions">
@@ -709,17 +1009,6 @@ async function loadEnrolledStudents() {
 
         <!-- Statistics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8 px-6 py-8">
-            <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-blue-100 text-sm font-medium uppercase tracking-wide mb-2">Total Admitted</p>
-                        <p class="text-3xl font-bold">{{ students.length }}</p>
-                    </div>
-                    <div class="bg-blue-400 bg-opacity-30 rounded-lg p-3">
-                        <i class="pi pi-users text-2xl"></i>
-                    </div>
-                </div>
-            </div>
             <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
                 <div class="flex items-center justify-between">
                     <div>
@@ -754,33 +1043,82 @@ async function loadEnrolledStudents() {
                         <p class="text-sm text-gray-600 mt-1">Students who have completed the enrollment process</p>
                     </div>
 
-                    <div v-if="enrolledStudents.length === 0" class="p-6 text-center">
+                    <div v-if="pendingEnrollmentStudents.length === 0" class="p-6 text-center">
                         <i class="pi pi-users text-3xl text-gray-400 mb-3"></i>
-                        <h4 class="text-gray-600 mb-2 font-medium">No Enrolled Students Yet</h4>
-                        <p class="text-gray-500 text-sm mb-4">Start by adding new students to the enrollment system</p>
-                        <Button label="Add First Student" icon="pi pi-plus" class="p-button-sm" @click="openNewStudentDialog" />
+                        <h4 class="text-gray-600 mb-2 font-medium">No Pending Students</h4>
+                        <p class="text-gray-500 text-sm mb-4">All students have been assigned sections</p>
+                        <Button label="Add New Student" icon="pi pi-plus" class="p-button-sm" @click="openNewStudentDialog" />
                     </div>
 
                     <div v-else class="p-4">
+                        <!-- Bulk Assignment Controls -->
+                        <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
+                                    <p class="text-xs text-blue-600">Assign students to available sections</p>
+                                </div>
+                                <Button 
+                                    label="Auto-Assign All" 
+                                    icon="pi pi-bolt" 
+                                    size="small" 
+                                    class="p-button-sm p-button-outlined"
+                                    @click="autoAssignAllStudents"
+                                    :disabled="pendingEnrollmentStudents.length === 0"
+                                />
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 gap-3">
-                            <div v-for="student in enrolledStudents" :key="student.id" class="student-card p-3 border rounded-lg hover:shadow-sm transition-all bg-gray-50">
+                            <div 
+                                v-for="student in filteredStudents" 
+                                :key="student.id" 
+                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
+                                @click="openSectionAssignment(student)"
+                            >
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center">
-                                        <Avatar :image="student.photo || 'https://via.placeholder.com/32'" shape="circle" size="normal" class="mr-3" />
+                                        <Avatar 
+                                            :label="getStudentInitials(student)" 
+                                            shape="circle" 
+                                            size="normal" 
+                                            class="mr-3"
+                                            :style="{ backgroundColor: (student.current_section_name || student.section) ? '#10b981' : '#f59e0b', color: 'white' }"
+                                        />
                                         <div>
-                                            <h5 class="font-medium text-gray-800 text-sm">{{ student.name }}</h5>
-                                            <p class="text-xs text-gray-600">{{ student.studentId }}</p>
+                                            <h5 class="font-semibold text-gray-800 text-sm">
+                                                {{ getStudentDisplayName(student) }}
+                                            </h5>
+                                            <p class="text-xs text-gray-600">{{ student.studentId || student.enrollment_id || student.student_id }}</p>
+                                            <p class="text-xs font-medium text-blue-600">{{ student.gradeLevel || student.grade_level }}</p>
                                         </div>
                                     </div>
                                     <div class="text-right">
-                                        <Tag value="Enrolled" severity="success" class="text-xs" />
-                                        <p class="text-xs text-gray-500 mt-1">{{ student.gradeLevel }} - {{ student.section || 'No Section' }}</p>
+                                        <Tag 
+                                            :value="(student.current_section_name || student.section) ? 'Assigned' : 'No Section'" 
+                                            :severity="(student.current_section_name || student.section) ? 'success' : 'warning'" 
+                                            class="text-xs mb-1" 
+                                        />
+                                        <p class="text-xs text-gray-700 font-medium">
+                                            {{ student.current_section_name || student.section || 'Click to assign' }}
+                                        </p>
+                                        <Button 
+                                            icon="pi pi-cog" 
+                                            size="small" 
+                                            class="p-button-text p-button-sm mt-1"
+                                            @click.stop="openSectionAssignment(student)"
+                                        />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="mt-3 p-2 bg-blue-50 rounded text-center">
-                            <span class="text-sm font-medium text-blue-700">{{ totalEnrolledStudents }} Students Enrolled</span>
+                        <div class="mt-4 p-3 bg-blue-50 rounded text-center">
+                            <span class="text-sm font-medium text-blue-700">
+                                {{ totalEnrolledStudents }} Students Enrolled
+                                <span class="text-blue-500 ml-2">
+                                    ({{ enrolledStudents.filter(s => s.current_section_name || s.section).length }} assigned to sections)
+                                </span>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -798,18 +1136,18 @@ async function loadEnrolledStudents() {
                         <div class="mb-3" id="search-container">
                             <div class="p-input-icon-left w-full">
                                 <i class="pi pi-search" />
-                                <InputText v-model="search" placeholder="Search students..." class="w-full text-sm" />
+                                <InputText v-model="pendingSearch" placeholder="Search students..." class="w-full text-sm" />
                             </div>
                         </div>
 
-                        <div v-if="filteredStudents.length === 0" class="text-center p-4">
+                        <div v-if="filteredPendingStudents.length === 0" class="text-center p-4">
                             <i class="pi pi-users text-2xl text-gray-400 mb-2"></i>
                             <p class="text-gray-500 text-sm">No pending enrollments</p>
                         </div>
 
                         <div v-else class="space-y-2">
                             <div
-                                v-for="student in filteredStudents.slice(0, 5)"
+                                v-for="student in filteredPendingStudents.slice(0, 5)"
                                 :key="student.id"
                                 class="student-item p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                                 :class="{ 'bg-blue-50 border-blue-200': selectedStudent && selectedStudent.id === student.id }"
@@ -819,20 +1157,20 @@ async function loadEnrolledStudents() {
                                     <Avatar :image="student.photo" shape="circle" size="normal" class="mr-3" />
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
-                                            <span class="font-medium text-sm text-gray-800 truncate">{{ student.name }}</span>
+                                            <span class="font-medium text-sm text-gray-800 truncate">{{ getStudentDisplayName(student) }}</span>
                                             <Tag value="Pending" severity="warning" class="text-xs" />
                                         </div>
-                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId }}</div>
+                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId || student.enrollment_id }}</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div v-if="filteredStudents.length > 5" class="text-center p-2">
-                                <span class="text-xs text-gray-500">+{{ filteredStudents.length - 5 }} more students</span>
+                            <div v-if="filteredPendingStudents.length > 5" class="text-center p-2">
+                                <span class="text-xs text-gray-500">+{{ filteredPendingStudents.length - 5 }} more students</span>
                             </div>
 
                             <div class="mt-3 p-2 bg-orange-50 rounded text-center">
-                                <span class="text-sm font-medium text-orange-700">{{ filteredStudents.length }} Pending</span>
+                                <span class="text-sm font-medium text-orange-700">{{ totalPendingStudents }} Pending</span>
                             </div>
                         </div>
                     </div>
@@ -1150,7 +1488,7 @@ async function loadEnrolledStudents() {
 
                 <!-- Navigation Buttons -->
                 <div class="flex justify-between pt-6 border-t">
-                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="previousStep" />
+                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="prevStep" />
                     <div v-else></div>
 
                     <div class="flex gap-2">
@@ -1316,6 +1654,84 @@ async function loadEnrolledStudents() {
                     <Button icon="pi pi-times" label="Close" class="p-button-rounded p-button-secondary" @click="showStudentDetails = false" />
                 </div>
             </div>
+        </Dialog>
+
+        <!-- Section Assignment Dialog -->
+        <Dialog 
+            v-model:visible="sectionAssignmentDialog" 
+            modal 
+            :header="`Assign Section - ${studentToAssign ? getStudentDisplayName(studentToAssign) : ''}`"
+            :style="{ width: '500px' }"
+            class="p-fluid"
+        >
+            <div class="p-4">
+                <div class="mb-4">
+                    <div class="flex items-center mb-3">
+                        <Avatar 
+                            :label="studentToAssign ? getStudentInitials(studentToAssign) : 'S'" 
+                            shape="circle" 
+                            size="large" 
+                            class="mr-3"
+                            style="background-color: #f59e0b; color: white;"
+                        />
+                        <div>
+                            <h4 class="font-semibold text-gray-800">
+                                {{ studentToAssign ? getStudentDisplayName(studentToAssign) : '' }}
+                            </h4>
+                            <p class="text-sm text-gray-600">{{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}</p>
+                            <p class="text-xs text-gray-500">ID: {{ studentToAssign?.studentId || studentToAssign?.enrollment_id }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
+                    <Dropdown 
+                        id="sectionSelect"
+                        v-model="selectedSectionForAssignment" 
+                        :options="availableSectionsForAssignment" 
+                        optionLabel="name" 
+                        placeholder="Choose a section" 
+                        class="w-full mt-2"
+                        :disabled="!studentToAssign"
+                    >
+                        <template #option="slotProps">
+                            <div class="flex items-center">
+                                <i class="pi pi-users mr-2 text-blue-500"></i>
+                                <span>{{ slotProps.option.name }}</span>
+                            </div>
+                        </template>
+                    </Dropdown>
+                    <small class="text-gray-500 mt-1">
+                        Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}
+                    </small>
+                </div>
+
+                <div v-if="selectedSectionForAssignment" class="mt-4 p-3 bg-green-50 rounded-lg">
+                    <div class="flex items-center">
+                        <i class="pi pi-check-circle text-green-600 mr-2"></i>
+                        <span class="text-green-800 font-medium">
+                            Ready to assign to {{ selectedSectionForAssignment.name }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button 
+                    label="Cancel" 
+                    icon="pi pi-times" 
+                    class="p-button-text" 
+                    @click="sectionAssignmentDialog = false" 
+                />
+                <Button 
+                    label="Assign Section" 
+                    icon="pi pi-check" 
+                    class="p-button-primary" 
+                    @click="assignStudentToSection"
+                    :disabled="!selectedSectionForAssignment"
+                />
+            </template>
         </Dialog>
 
         <Toast />
@@ -1599,7 +2015,6 @@ async function loadEnrolledStudents() {
     font-size: 1.75rem;
     color: white;
 }
-
 
 .header-text {
     flex: 1;

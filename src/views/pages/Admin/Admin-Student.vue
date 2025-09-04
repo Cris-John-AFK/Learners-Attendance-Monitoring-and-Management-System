@@ -417,8 +417,8 @@ const updateFilterCounts = () => {
     });
 
     // Count students by gender
-    const maleCounts = students.value.filter((s) => s.gender.toLowerCase() === 'male').length;
-    const femaleCounts = students.value.filter((s) => s.gender.toLowerCase() === 'female').length;
+    const maleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'male').length;
+    const femaleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'female').length;
 
     console.log('Grade counts:', gradeCounts);
     console.log('Gender counts - Male:', maleCounts, 'Female:', femaleCounts);
@@ -460,6 +460,18 @@ function updateSections() {
     } else {
         sections.value = [];
     }
+}
+
+// Reset all filters
+function resetFilters() {
+    filters.value = {
+        grade: null,
+        section: null,
+        gender: null,
+        status: null,
+        searchTerm: ''
+    };
+    sections.value = [];
 }
 
 // Now the computed property will work properly with the import
@@ -1555,6 +1567,7 @@ onMounted(() => {
                                 <InputText v-model="filters.searchTerm" placeholder="Search students..." class="search-input" />
                             </span>
                         </div>
+                        <Button label="Add New Student" icon="pi pi-plus" class="add-student-btn" @click="openStudentDialog" />
                     </div>
                 </div>
             </div>
@@ -2587,7 +2600,6 @@ onMounted(() => {
     width: calc(100% + 4rem);
     left: -2rem;
     border-radius: 12px 12px 0 0;
-    overflow: hidden;
 }
 
 .close-button {
@@ -2613,7 +2625,7 @@ onMounted(() => {
     text-align: center;
     padding: 24px 0;
     width: 100%;
-    border-radius: inherit;
+    border-radius: 12px 12px 0 0;
     position: relative;
     overflow: hidden;
 }
