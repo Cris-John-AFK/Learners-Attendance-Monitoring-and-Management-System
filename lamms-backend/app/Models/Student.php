@@ -98,4 +98,86 @@ class Student extends Model
                     ->wherePivot('is_active', true)
                     ->first();
     }
+
+    // New attendance-related relationships
+    public function attendanceRecords()
+    {
+        return $this->hasMany(AttendanceRecord::class);
+    }
+
+    public function enrollmentHistory()
+    {
+        return $this->hasMany(StudentEnrollmentHistory::class);
+    }
+
+    public function qrCode()
+    {
+        return $this->hasOne(StudentQRCode::class);
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('isActive', true);
+    }
+
+    public function scopeForGrade($query, $gradeLevel)
+    {
+        return $query->where('gradeLevel', $gradeLevel);
+    }
+
+    public function scopeInSection($query, $sectionId)
+    {
+        return $query->whereHas('sections', function($q) use ($sectionId) {
+            $q->where('sections.id', $sectionId)->wherePivot('is_active', true);
+        });
+    }
+
+    // Helper methods for attendance
+    public function getAttendanceForDate($date, $sessionId = null)
+    {
+        $query = $this->attendanceRecords()
+            ->whereHas('attendanceSession', function($q) use ($date) {
+                $q->where('session_date', $date);
+            });
+
+        if ($sessionId) {
+            $query->where('attendance_session_id', $sessionId);
+        }
+
+        return $query->first();
+    }
+
+    public function getAttendanceForDateRange($startDate, $endDate)
+    {
+        return $this->attendanceRecords()
+            ->whereHas('attendanceSession', function($q) use ($startDate, $endDate) {
+                $q->whereBetween('session_date', [$startDate, $endDate]);
+            })
+            ->with(['attendanceSession', 'attendanceStatus'])
+            ->get();
+    }
+
+    public function getAttendanceStats($startDate, $endDate)
+    {
+        $records = $this->getAttendanceForDateRange($startDate, $endDate);
+        
+        return [
+            'total_days' => $records->count(),
+            'present' => $records->where('attendanceStatus.code', 'P')->count(),
+            'absent' => $records->where('attendanceStatus.code', 'A')->count(),
+            'late' => $records->where('attendanceStatus.code', 'L')->count(),
+            'excused' => $records->where('attendanceStatus.code', 'E')->count(),
+            'attendance_rate' => $records->count() > 0 ? 
+                ($records->whereIn('attendanceStatus.code', ['P', 'L'])->count() / $records->count()) * 100 : 0
+        ];
+    }
+
+    public function getCurrentEnrollment()
+    {
+        return $this->enrollmentHistory()
+            ->active()
+            ->forSchoolYear(now()->year . '-' . (now()->year + 1))
+            ->first();
+    }
 }

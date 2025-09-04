@@ -4,443 +4,463 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\AttendanceStatus;
 use App\Models\Student;
-use App\Models\TeacherSectionSubject;
+use App\Models\Section;
+use App\Models\Subject;
+use App\Models\Teacher;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
 {
     /**
-     * Get attendance records for a specific date and subject
+     * Get attendance statuses
      */
-    public function getAttendanceByDateAndSubject(Request $request)
+    public function getAttendanceStatuses()
     {
-        $request->validate([
-            'date' => 'required|date',
-            'subject_id' => 'required|integer',
-            'section_id' => 'required|integer',
-            'teacher_id' => 'required|integer'
-        ]);
-
         try {
-            // Verify teacher has access to this section/subject
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id,
-                'subject_id' => $request->subject_id
-            ])->first();
-
-            if (!$teacherAssignment) {
-                return response()->json([
-                    'error' => 'Unauthorized access to this section/subject'
-                ], 403);
-            }
-
-            // Get students in the section
-            $students = Student::where('section_id', $request->section_id)
-                ->select('id', 'name', 'student_id', 'qr_code')
-                ->get();
-
-            // Get attendance records for the date
-            $attendanceRecords = Attendance::where([
-                'date' => $request->date,
-                'subject_id' => $request->subject_id
-            ])
-            ->whereIn('student_id', $students->pluck('id'))
-            ->get()
-            ->keyBy('student_id');
-
-            // Combine student data with attendance
-            $attendanceData = $students->map(function ($student) use ($attendanceRecords) {
-                $attendance = $attendanceRecords->get($student->id);
-                
-                return [
-                    'id' => $student->id,
-                    'name' => $student->name,
-                    'studentId' => $student->student_id,
-                    'qrCode' => $student->qr_code,
-                    'status' => $attendance ? $attendance->status : 'unmarked',
-                    'timeIn' => $attendance ? $attendance->time_in : null,
-                    'remarks' => $attendance ? $attendance->remarks : null,
-                    'attendanceId' => $attendance ? $attendance->id : null
-                ];
-            });
-
-            return response()->json([
-                'students' => $attendanceData,
-                'date' => $request->date,
-                'subject_id' => $request->subject_id,
-                'section_id' => $request->section_id
-            ]);
-
+            $statuses = AttendanceStatus::active()->ordered()->get();
+            return response()->json($statuses);
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Failed to load attendance data',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Error fetching attendance statuses: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch attendance statuses'], 500);
         }
     }
 
     /**
-     * Mark attendance for a student
+     * Get attendance for a specific section, subject and date
+     */
+    public function getAttendance(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'section_id' => 'required|exists:sections,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'date' => 'required|date'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $sectionId = $request->section_id;
+            $subjectId = $request->subject_id;
+            $date = $request->date;
+
+            // Get all students in the section
+            $section = Section::with(['activeStudents'])->findOrFail($sectionId);
+            $students = $section->activeStudents;
+
+            // Get existing attendance records for this date, section, and subject
+            $existingAttendance = Attendance::with(['attendanceStatus'])
+                ->forDate($date)
+                ->forSection($sectionId)
+                ->forSubject($subjectId)
+                ->get()
+                ->keyBy('student_id');
+
+            // Prepare attendance data
+            $attendanceData = [];
+            foreach ($students as $student) {
+                $attendance = $existingAttendance->get($student->id);
+                
+                $attendanceData[] = [
+                    'id' => $attendance ? $attendance->id : null,
+                    'student_id' => $student->id,
+                    'student' => [
+                        'id' => $student->id,
+                        'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
+                        'firstName' => $student->firstName,
+                        'lastName' => $student->lastName,
+                        'studentId' => $student->studentId ?? $student->student_id
+                    ],
+                    'section_id' => $sectionId,
+                    'subject_id' => $subjectId,
+                    'date' => $date,
+                    'status' => $attendance ? $attendance->status : null,
+                    'attendance_status' => $attendance && $attendance->attendanceStatus ? [
+                        'id' => $attendance->attendanceStatus->id,
+                        'code' => $attendance->attendanceStatus->code,
+                        'name' => $attendance->attendanceStatus->name,
+                        'color' => $attendance->attendanceStatus->color,
+                        'background_color' => $attendance->attendanceStatus->background_color
+                    ] : null,
+                    'time_in' => $attendance ? $attendance->time_in : null,
+                    'remarks' => $attendance ? $attendance->remarks : null,
+                    'marked_at' => $attendance ? $attendance->marked_at : null
+                ];
+            }
+
+            return response()->json([
+                'section' => [
+                    'id' => $section->id,
+                    'name' => $section->name
+                ],
+                'subject' => Subject::find($subjectId),
+                'date' => $date,
+                'attendance' => $attendanceData
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch attendance'], 500);
+        }
+    }
+
+    /**
+     * Mark attendance for multiple students
      */
     public function markAttendance(Request $request)
     {
-        $request->validate([
-            'student_id' => 'required|integer|exists:students,id',
-            'subject_id' => 'required|integer|exists:subjects,id',
+        $validator = Validator::make($request->all(), [
+            'section_id' => 'required|exists:sections,id',
+            'subject_id' => 'nullable|exists:subjects,id',  // Made nullable for homeroom/general attendance
+            'teacher_id' => 'required|exists:teachers,id',
             'date' => 'required|date',
-            'status' => ['required', Rule::in(['present', 'absent', 'late', 'excused'])],
-            'teacher_id' => 'required|integer|exists:teachers,id',
-            'time_in' => 'nullable|date_format:H:i:s',
+            'attendance' => 'required|array',
+            'attendance.*.student_id' => 'required|exists:student_details,id',
+            'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
+            'attendance.*.remarks' => 'nullable|string|max:255'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $sectionId = $request->section_id;
+            $subjectId = $request->subject_id;
+            $teacherId = $request->teacher_id;
+            $date = $request->date;
+            $attendanceData = $request->attendance;
+
+            $savedAttendance = [];
+
+            foreach ($attendanceData as $attendance) {
+                $attendanceStatus = AttendanceStatus::find($attendance['attendance_status_id']);
+                
+                // Map status codes to enum values for backward compatibility
+                $statusMapping = [
+                    'P' => 'present',
+                    'A' => 'absent', 
+                    'L' => 'late',
+                    'E' => 'excused'
+                ];
+                $enumStatus = $statusMapping[$attendanceStatus->code] ?? 'present';
+                
+                $attendanceRecord = Attendance::updateOrCreate(
+                    [
+                        'student_id' => $attendance['student_id'],
+                        'section_id' => $sectionId,
+                        'subject_id' => $subjectId,
+                        'date' => $date
+                    ],
+                    [
+                        'teacher_id' => $teacherId,
+                        'status' => $enumStatus, // Use enum value for constraint compatibility
+                        'attendance_status_id' => $attendance['attendance_status_id'],
+                        'time_in' => now(),
+                        'remarks' => $attendance['remarks'] ?? null,
+                        'marked_at' => now()
+                    ]
+                );
+
+                $savedAttendance[] = $attendanceRecord->load(['student', 'attendanceStatus']);
+            }
+
+            return response()->json([
+                'message' => 'Attendance marked successfully',
+                'attendance' => $savedAttendance
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error marking attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to mark attendance'], 500);
+        }
+    }
+
+    /**
+     * Mark single student attendance
+     */
+    public function markSingleAttendance(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|exists:student_details,id',
+            'section_id' => 'required|exists:sections,id',
+            'subject_id' => 'nullable|exists:subjects,id',  // Made nullable for homeroom/general attendance
+            'teacher_id' => 'required|exists:teachers,id',
+            'attendance_status_id' => 'required|exists:attendance_statuses,id',
+            'date' => 'required|date',
             'remarks' => 'nullable|string|max:255'
         ]);
 
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
         try {
-            // Verify teacher has access
-            $student = Student::findOrFail($request->student_id);
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $student->section_id,
-                'subject_id' => $request->subject_id
-            ])->first();
-
-            if (!$teacherAssignment) {
-                return response()->json([
-                    'error' => 'Unauthorized access to mark attendance for this student'
-                ], 403);
-            }
-
-            // Create or update attendance record
+            $attendanceStatus = AttendanceStatus::find($request->attendance_status_id);
+            
+            // Map status codes to enum values for backward compatibility
+            $statusMapping = [
+                'P' => 'present',
+                'A' => 'absent', 
+                'L' => 'late',
+                'E' => 'excused'
+            ];
+            $enumStatus = $statusMapping[$attendanceStatus->code] ?? 'present';
+            
             $attendance = Attendance::updateOrCreate(
                 [
                     'student_id' => $request->student_id,
+                    'section_id' => $request->section_id,
                     'subject_id' => $request->subject_id,
                     'date' => $request->date
                 ],
                 [
-                    'status' => $request->status,
-                    'time_in' => $request->time_in ?: ($request->status === 'present' ? now()->format('H:i:s') : null),
+                    'teacher_id' => $request->teacher_id,
+                    'status' => $enumStatus, // Use enum value for constraint compatibility
+                    'attendance_status_id' => $request->attendance_status_id,
+                    'time_in' => now(),
                     'remarks' => $request->remarks,
-                    'teacher_id' => $request->teacher_id
+                    'marked_at' => now()
                 ]
             );
 
             return response()->json([
                 'message' => 'Attendance marked successfully',
-                'attendance' => [
-                    'id' => $attendance->id,
-                    'student_id' => $attendance->student_id,
-                    'status' => $attendance->status,
-                    'time_in' => $attendance->time_in,
-                    'remarks' => $attendance->remarks,
-                    'date' => $attendance->date
-                ]
-            ]);
+                'attendance' => $attendance->load(['student', 'attendanceStatus'])
+            ], 200);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Failed to mark attendance',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Error marking single attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to mark attendance'], 500);
         }
     }
 
     /**
-     * Bulk mark attendance for multiple students
+     * Get attendance reports for a section
      */
-    public function bulkMarkAttendance(Request $request)
+    public function getAttendanceReport(Request $request, $sectionId)
     {
-        $request->validate([
-            'attendances' => 'required|array',
-            'attendances.*.student_id' => 'required|integer|exists:students,id',
-            'attendances.*.status' => ['required', Rule::in(['present', 'absent', 'late', 'excused'])],
-            'subject_id' => 'required|integer|exists:subjects,id',
-            'date' => 'required|date',
-            'teacher_id' => 'required|integer|exists:teachers,id'
-        ]);
-
-        try {
-            $results = [];
-            $errors = [];
-
-            DB::beginTransaction();
-
-            foreach ($request->attendances as $attendanceData) {
-                try {
-                    // Verify teacher access for each student
-                    $student = Student::findOrFail($attendanceData['student_id']);
-                    $teacherAssignment = TeacherSectionSubject::where([
-                        'teacher_id' => $request->teacher_id,
-                        'section_id' => $student->section_id,
-                        'subject_id' => $request->subject_id
-                    ])->first();
-
-                    if (!$teacherAssignment) {
-                        $errors[] = "Unauthorized access for student ID: {$attendanceData['student_id']}";
-                        continue;
-                    }
-
-                    $attendance = Attendance::updateOrCreate(
-                        [
-                            'student_id' => $attendanceData['student_id'],
-                            'subject_id' => $request->subject_id,
-                            'date' => $request->date
-                        ],
-                        [
-                            'status' => $attendanceData['status'],
-                            'time_in' => $attendanceData['time_in'] ?? ($attendanceData['status'] === 'present' ? now()->format('H:i:s') : null),
-                            'remarks' => $attendanceData['remarks'] ?? null,
-                            'teacher_id' => $request->teacher_id
-                        ]
-                    );
-
-                    $results[] = [
-                        'student_id' => $attendance->student_id,
-                        'status' => $attendance->status,
-                        'success' => true
-                    ];
-
-                } catch (\Exception $e) {
-                    $errors[] = "Failed to mark attendance for student ID {$attendanceData['student_id']}: " . $e->getMessage();
-                }
-            }
-
-            if (empty($errors)) {
-                DB::commit();
-                return response()->json([
-                    'message' => 'Bulk attendance marked successfully',
-                    'results' => $results
-                ]);
-            } else {
-                DB::rollback();
-                return response()->json([
-                    'error' => 'Some attendance records failed to save',
-                    'errors' => $errors,
-                    'successful' => $results
-                ], 422);
-            }
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json([
-                'error' => 'Failed to process bulk attendance',
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get attendance history for a student
-     */
-    public function getStudentAttendanceHistory($studentId, Request $request)
-    {
-        $request->validate([
-            'subject_id' => 'nullable|integer|exists:subjects,id',
+        $validator = Validator::make($request->all(), [
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
-            'limit' => 'nullable|integer|min:1|max:100'
+            'subject_id' => 'nullable|exists:subjects,id'
         ]);
 
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
         try {
-            $query = Attendance::with(['subject:id,name'])
-                ->where('student_id', $studentId);
+            $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->toDateString();
+            $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->toDateString();
+            $subjectId = $request->subject_id;
 
-            if ($request->subject_id) {
-                $query->where('subject_id', $request->subject_id);
+            $query = Attendance::with(['student', 'subject', 'attendanceStatus'])
+                ->forSection($sectionId)
+                ->whereBetween('date', [$startDate, $endDate]);
+
+            if ($subjectId) {
+                $query->forSubject($subjectId);
             }
 
-            if ($request->start_date) {
-                $query->where('date', '>=', $request->start_date);
-            }
-
-            if ($request->end_date) {
-                $query->where('date', '<=', $request->end_date);
-            }
-
-            $limit = $request->limit ?? 50;
-            $attendanceHistory = $query->orderBy('date', 'desc')
-                ->limit($limit)
+            $attendances = $query->orderBy('date')
+                ->orderBy('student_id')
                 ->get();
 
+            // Group by student
+            $reportData = $attendances->groupBy('student_id')->map(function ($studentAttendances) {
+                $student = $studentAttendances->first()->student;
+                $attendanceRecords = $studentAttendances->groupBy('date')->map(function ($dateAttendances) {
+                    return $dateAttendances->groupBy('subject_id');
+                });
+
+                return [
+                    'student' => $student,
+                    'attendance_records' => $attendanceRecords
+                ];
+            });
+
             return response()->json([
-                'student_id' => $studentId,
-                'attendance_history' => $attendanceHistory->map(function ($record) {
-                    return [
-                        'id' => $record->id,
-                        'date' => $record->date,
-                        'subject' => $record->subject->name ?? 'Unknown Subject',
-                        'status' => $record->status,
-                        'time_in' => $record->time_in,
-                        'remarks' => $record->remarks
-                    ];
-                })
+                'section_id' => $sectionId,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'subject_id' => $subjectId,
+                'report' => $reportData
             ]);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Failed to load attendance history',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Error generating attendance report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to generate attendance report'], 500);
         }
     }
 
     /**
-     * QR Code attendance scanning
+     * Get teacher assignments (sections and subjects)
      */
-    public function scanQRAttendance(Request $request)
+    public function getTeacherAssignments($teacherId)
     {
-        $request->validate([
-            'qr_code' => 'required|string',
-            'subject_id' => 'required|integer|exists:subjects,id',
-            'teacher_id' => 'required|integer|exists:teachers,id',
-            'date' => 'nullable|date'
-        ]);
-
         try {
-            // Find student by QR code
-            $student = Student::where('qr_code', $request->qr_code)->first();
+            $teacher = Teacher::findOrFail($teacherId);
             
-            if (!$student) {
-                return response()->json([
-                    'error' => 'Invalid QR code - student not found'
-                ], 404);
+            // Get teacher assignments from teacher_section_subject table
+            $assignments = DB::table('teacher_section_subject')
+                ->join('sections', 'teacher_section_subject.section_id', '=', 'sections.id')
+                ->join('subjects', 'teacher_section_subject.subject_id', '=', 'subjects.id')
+                ->leftJoin('curriculum_grade', 'sections.curriculum_grade_id', '=', 'curriculum_grade.id')
+                ->leftJoin('grades', 'curriculum_grade.grade_id', '=', 'grades.id')
+                ->where('teacher_section_subject.teacher_id', $teacherId)
+                ->where('teacher_section_subject.is_active', true)
+                ->select(
+                    'teacher_section_subject.id as assignment_id',
+                    'sections.id as section_id',
+                    'sections.name as section_name',
+                    'subjects.id as subject_id', 
+                    'subjects.name as subject_name',
+                    'grades.id as grade_id',
+                    'grades.name as grade_name',
+                    'teacher_section_subject.role',
+                    'teacher_section_subject.is_primary'
+                )
+                ->get()
+                ->groupBy('section_id');
+
+            $result = [];
+            foreach ($assignments as $sectionId => $sectionAssignments) {
+                $firstAssignment = $sectionAssignments->first();
+                
+                $sectionData = [
+                    'section_id' => $sectionId,
+                    'section_name' => $firstAssignment->section_name,
+                    'grade_id' => $firstAssignment->grade_id,
+                    'grade_name' => $firstAssignment->grade_name,
+                    'is_homeroom_teacher' => $sectionAssignments->contains('role', 'homeroom'),
+                    'subjects' => []
+                ];
+
+                foreach ($sectionAssignments as $assignment) {
+                    $sectionData['subjects'][] = [
+                        'assignment_id' => $assignment->assignment_id,
+                        'subject_id' => $assignment->subject_id,
+                        'subject_name' => $assignment->subject_name,
+                        'role' => $assignment->role,
+                        'is_primary' => $assignment->is_primary
+                    ];
+                }
+
+                $result[] = $sectionData;
             }
-
-            // Verify teacher has access to this student's section
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $student->section_id,
-                'subject_id' => $request->subject_id
-            ])->first();
-
-            if (!$teacherAssignment) {
-                return response()->json([
-                    'error' => 'Unauthorized - teacher does not have access to this student\'s section'
-                ], 403);
-            }
-
-            $date = $request->date ?? now()->format('Y-m-d');
-            $currentTime = now()->format('H:i:s');
-
-            // Check if attendance already marked for today
-            $existingAttendance = Attendance::where([
-                'student_id' => $student->id,
-                'subject_id' => $request->subject_id,
-                'date' => $date
-            ])->first();
-
-            if ($existingAttendance) {
-                return response()->json([
-                    'message' => 'Attendance already marked for this student today',
-                    'student' => [
-                        'id' => $student->id,
-                        'name' => $student->name,
-                        'student_id' => $student->student_id
-                    ],
-                    'attendance' => [
-                        'status' => $existingAttendance->status,
-                        'time_in' => $existingAttendance->time_in,
-                        'already_marked' => true
-                    ]
-                ]);
-            }
-
-            // Mark as present
-            $attendance = Attendance::create([
-                'student_id' => $student->id,
-                'subject_id' => $request->subject_id,
-                'date' => $date,
-                'status' => 'present',
-                'time_in' => $currentTime,
-                'teacher_id' => $request->teacher_id,
-                'remarks' => 'QR Code scan'
-            ]);
 
             return response()->json([
-                'message' => 'Attendance marked successfully via QR scan',
-                'student' => [
-                    'id' => $student->id,
-                    'name' => $student->name,
-                    'student_id' => $student->student_id
+                'teacher' => [
+                    'id' => $teacher->id,
+                    'name' => $teacher->firstName . ' ' . $teacher->lastName,
+                    'email' => $teacher->email
                 ],
-                'attendance' => [
-                    'id' => $attendance->id,
-                    'status' => $attendance->status,
-                    'time_in' => $attendance->time_in,
-                    'date' => $attendance->date
-                ]
+                'assignments' => $result
             ]);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Failed to process QR attendance',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Error fetching teacher assignments: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch teacher assignments'], 500);
         }
     }
 
     /**
-     * Get attendance statistics for a teacher's classes
+     * Get students for a specific teacher, section, and subject
      */
-    public function getAttendanceStats($teacherId, Request $request)
+    public function getStudentsForTeacherSubject($teacherId, $sectionId, $subjectId)
     {
-        $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'subject_id' => 'nullable|integer|exists:subjects,id'
-        ]);
-
         try {
-            $startDate = $request->start_date ?? Carbon::now()->subDays(30)->format('Y-m-d');
-            $endDate = $request->end_date ?? Carbon::now()->format('Y-m-d');
+            // Verify teacher has assignment to this section and subject
+            $assignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $teacherId)
+                ->where('section_id', $sectionId)
+                ->where(function($query) use ($subjectId) {
+                    $query->where('subject_id', $subjectId)
+                          ->orWhere('role', 'homeroom'); // Allow homeroom teachers to access any subject
+                })
+                ->where('is_active', true)
+                ->first();
 
-            $query = DB::table('teacher_section_subjects')
-                ->join('sections', 'teacher_section_subjects.section_id', '=', 'sections.id')
-                ->join('students', 'students.section_id', '=', 'sections.id')
-                ->join('attendances', 'students.id', '=', 'attendances.student_id')
-                ->where('teacher_section_subjects.teacher_id', $teacherId)
-                ->whereBetween('attendances.date', [$startDate, $endDate]);
-
-            if ($request->subject_id) {
-                $query->where('teacher_section_subjects.subject_id', $request->subject_id);
+            if (!$assignment) {
+                return response()->json(['error' => 'Teacher not assigned to this section and subject'], 403);
             }
 
-            $stats = $query->select(
-                DB::raw('COUNT(*) as total_records'),
-                DB::raw('SUM(CASE WHEN attendances.status = "present" THEN 1 ELSE 0 END) as present_count'),
-                DB::raw('SUM(CASE WHEN attendances.status = "absent" THEN 1 ELSE 0 END) as absent_count'),
-                DB::raw('SUM(CASE WHEN attendances.status = "late" THEN 1 ELSE 0 END) as late_count'),
-                DB::raw('SUM(CASE WHEN attendances.status = "excused" THEN 1 ELSE 0 END) as excused_count')
-            )->first();
+            // Get students in the section
+            $section = Section::with(['activeStudents'])->findOrFail($sectionId);
+            $students = $section->activeStudents;
 
-            $totalRecords = $stats->total_records ?? 0;
-            $attendanceRate = $totalRecords > 0 ? 
-                round(($stats->present_count / $totalRecords) * 100, 2) : 0;
+            $studentsData = $students->map(function ($student) {
+                return [
+                    'id' => $student->id,
+                    'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
+                    'firstName' => $student->firstName,
+                    'lastName' => $student->lastName,
+                    'studentId' => $student->studentId ?? $student->student_id
+                ];
+            });
 
             return response()->json([
-                'period' => [
-                    'start_date' => $startDate,
-                    'end_date' => $endDate
+                'section' => [
+                    'id' => $section->id,
+                    'name' => $section->name
                 ],
-                'statistics' => [
-                    'total_records' => $totalRecords,
-                    'present_count' => $stats->present_count ?? 0,
-                    'absent_count' => $stats->absent_count ?? 0,
-                    'late_count' => $stats->late_count ?? 0,
-                    'excused_count' => $stats->excused_count ?? 0,
-                    'attendance_rate' => $attendanceRate
-                ]
+                'subject' => Subject::find($subjectId),
+                'students' => $studentsData
             ]);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Failed to load attendance statistics',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Error fetching students for teacher subject: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch students'], 500);
+        }
+    }
+
+    /**
+     * Mark attendance for teacher-specific endpoint
+     */
+    public function markTeacherAttendance(Request $request, $teacherId)
+    {
+        $validator = Validator::make($request->all(), [
+            'section_id' => 'required|exists:sections,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'date' => 'required|date',
+            'attendance' => 'required|array',
+            'attendance.*.student_id' => 'required|exists:student_details,id',
+            'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
+            'attendance.*.remarks' => 'nullable|string|max:255'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            // Verify teacher has assignment to this section and subject
+            $assignment = \DB::table('teacher_section_subject')
+                ->where('teacher_id', $teacherId)
+                ->where('section_id', $request->section_id)
+                ->where('subject_id', $request->subject_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$assignment) {
+                return response()->json(['error' => 'Teacher not assigned to this section and subject'], 403);
+            }
+
+            // Call the regular mark attendance method
+            $request->merge(['teacher_id' => $teacherId]);
+            return $this->markAttendance($request);
+
+        } catch (\Exception $e) {
+            Log::error('Error marking teacher attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to mark attendance'], 500);
         }
     }
 }

@@ -1,7 +1,10 @@
 <script setup>
-import { QRCodeService } from '@/router/service/QRCodeService';
+import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import { SubjectService } from '@/router/service/Subjects';
+import SeatingService from '@/services/SeatingService';
+import AttendanceSessionService from '@/services/AttendanceSessionService';
 import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -17,8 +20,16 @@ const router = useRouter();
 const toast = useToast();
 const subjectName = ref('Subject');
 const subjectId = ref('');
+const sectionId = ref('');
+const teacherId = ref(1); // Static teacher ID for now (Maria Santos)
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
+
+// Attendance Session Management
+const currentSession = ref(null);
+const attendanceStatuses = ref([]);
+const sessionActive = ref(false);
+const sessionSummary = ref(null);
 
 // Watch for date changes and update attendance display
 watch(currentDate, (newDate) => {
@@ -85,13 +96,115 @@ const showRollCallRemarksDialog = ref(false);
 const rollCallRemarks = ref('');
 const pendingRollCallStatus = ref('');
 
+// Initialize attendance session system
+const initializeAttendanceSession = async () => {
+    try {
+        // Load attendance statuses
+        attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
+        console.log('Loaded attendance statuses:', attendanceStatuses.value);
+        
+        // Check for active sessions
+        const activeSessions = await AttendanceSessionService.getActiveSessionsForTeacher(teacherId.value);
+        if (activeSessions && activeSessions.length > 0) {
+            // Find session for current subject/section
+            const matchingSession = activeSessions.find(session => 
+                session.section_id == sectionId.value && 
+                session.subject_id == subjectId.value
+            );
+            
+            if (matchingSession) {
+                currentSession.value = matchingSession;
+                sessionActive.value = true;
+                console.log('Found active session:', matchingSession);
+            }
+        }
+    } catch (error) {
+        console.error('Error initializing attendance session:', error);
+    }
+};
+
+// Function to load students data from database
+const loadStudentsData = async () => {
+    try {
+        console.log('Loading students from database...');
+        
+        // First get teacher assignments to determine section/subject
+        const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
+        console.log('Teacher assignments:', assignments);
+        
+        if (!assignments || assignments.length === 0 || !assignments.assignments || assignments.assignments.length === 0) {
+            console.warn('No assignments found for teacher, falling back to Grade 3 students');
+            // Fallback to Grade 3 students if no assignments
+            const studentsData = await AttendanceService.getStudentsByGrade(3);
+            students.value = studentsData || [];
+            
+            if (students.value.length > 0) {
+                const firstStudent = students.value[0];
+                sectionId.value = firstStudent.current_section_id || 13;
+                subjectName.value = 'Mathematics (Grade 3)';
+                subjectId.value = 1;
+            }
+        } else {
+            // Use the first assignment from the assignments array
+            const assignmentData = assignments.assignments[0];
+            const firstSubject = assignmentData.subjects[0];
+            
+            sectionId.value = assignmentData.section_id;
+            subjectId.value = firstSubject.subject_id;
+            subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
+            
+            // Load students for this specific assignment
+            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(
+                teacherId.value,
+                sectionId.value,
+                subjectId.value
+            );
+            
+            if (studentsResponse && studentsResponse.students) {
+                students.value = studentsResponse.students.map(student => ({
+                    id: student.id,
+                    name: student.name || `${student.firstName} ${student.lastName}`,
+                    firstName: student.firstName,
+                    lastName: student.lastName,
+                    current_section_id: sectionId.value,
+                    studentId: student.studentId || student.id,
+                    student_id: student.studentId || student.id
+                }));
+            } else {
+                students.value = [];
+            }
+        }
+        
+        console.log('Loaded students for attendance:', students.value.length);
+        console.log('Student names:', students.value.map(s => `${s.name} (ID: ${s.id})`));
+        
+        // Initialize attendance session system after we have section/subject info
+        await initializeAttendanceSession();
+        
+        // Update unassigned students list
+        calculateUnassignedStudents();
+        
+        return true;
+    } catch (error) {
+        console.error('Error loading students:', error);
+        students.value = [];
+        toast.add({
+            severity: 'error',
+            summary: 'Error Loading Students',
+            detail: 'Could not load students for attendance.',
+            life: 5000
+        });
+        return false;
+    }
+};
+
 // Toggle edit mode
 const toggleEditMode = () => {
     isEditMode.value = !isEditMode.value;
 
     if (isEditMode.value) {
-        // Entering edit mode
-        calculateUnassignedStudents();
+        // Entering edit mode - refresh students data and calculate unassigned
+        loadStudentsData();
     } else {
         // Exiting edit mode - save the current layout
         saveCurrentLayout(false);
@@ -99,28 +212,103 @@ const toggleEditMode = () => {
 };
 
 // Save current layout
-const saveCurrentLayout = (showToast = true) => {
-    // Implementation depends on your storage mechanism
-    console.log('Saving current layout');
+const saveCurrentLayout = async (showToast = true) => {
+    console.log('Saving current layout to database');
 
-    // Example: save to local storage
-    const layout = {
-        rows: rows.value,
-        columns: columns.value,
-        seatPlan: seatPlan.value,
-        showTeacherDesk: showTeacherDesk.value,
-        showStudentIds: showStudentIds.value
-    };
+    try {
+        // Prepare the layout data for the API
+        const layout = {
+            rows: rows.value,
+            columns: columns.value,
+            seatPlan: seatPlan.value,
+            showTeacherDesk: showTeacherDesk.value,
+            showStudentIds: showStudentIds.value
+        };
 
-    localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        // Save to database via API
+        await SeatingService.saveSeatingArrangement(
+            sectionId.value,
+            subjectId.value,
+            teacherId.value,
+            layout
+        );
 
-    if (showToast) {
-        toast.add({
-            severity: 'success',
-            summary: 'Layout Saved',
-            detail: 'Seating arrangement has been saved',
-            life: 3000
-        });
+        // Also save to localStorage as backup
+        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+
+        if (showToast) {
+            toast.add({
+                severity: 'success',
+                summary: 'Layout Saved',
+                detail: 'Seating arrangement has been saved to database',
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error saving layout to database:', error);
+        
+        // Fallback to localStorage only
+        const layout = {
+            rows: rows.value,
+            columns: columns.value,
+            seatPlan: seatPlan.value,
+            showTeacherDesk: showTeacherDesk.value,
+            showStudentIds: showStudentIds.value
+        };
+        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        
+        if (showToast) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Saved Locally',
+                detail: 'Layout saved to local storage only (database error)',
+                life: 5000
+            });
+        }
+    }
+};
+
+// Load seating arrangement from database
+const loadSeatingArrangementFromDatabase = async () => {
+    try {
+        console.log('Loading seating arrangement from database...');
+        
+        if (!sectionId.value || !teacherId.value) {
+            console.log('Missing sectionId or teacherId, falling back to localStorage');
+            return loadSavedLayout();
+        }
+
+        const response = await SeatingService.getSeatingArrangement(
+            sectionId.value,
+            teacherId.value,
+            subjectId.value
+        );
+
+        if (response && response.seating_layout) {
+            const layout = response.seating_layout;
+            
+            // Apply the loaded layout
+            rows.value = layout.rows || rows.value;
+            columns.value = layout.columns || columns.value;
+            showTeacherDesk.value = layout.showTeacherDesk !== undefined ? layout.showTeacherDesk : showTeacherDesk.value;
+            showStudentIds.value = layout.showStudentIds !== undefined ? layout.showStudentIds : showStudentIds.value;
+
+            // Set the seat plan with deep copy to avoid reference issues
+            if (layout.seatPlan) {
+                seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
+                console.log('Loaded seating arrangement from database');
+                return true;
+            }
+        }
+        
+        // Fallback to localStorage if database doesn't have data
+        console.log('No seating arrangement in database, trying localStorage...');
+        return loadSavedLayout();
+        
+    } catch (error) {
+        console.error('Error loading seating arrangement from database:', error);
+        console.log('Falling back to localStorage...');
+        return loadSavedLayout();
     }
 };
 
@@ -318,7 +506,7 @@ const dropOnSeat = (rowIndex, colIndex) => {
 };
 
 // Save attendance with remarks
-const saveAttendanceWithRemarks = (status, remarks = '') => {
+const saveAttendanceWithRemarks = async (status, remarks = '') => {
     const { rowIndex, colIndex } = selectedSeat.value;
     const seat = seatPlan.value[rowIndex][colIndex];
 
@@ -382,6 +570,13 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
     console.log('Updated attendance cache with latest status changes');
 
+    // Save to database via API
+    try {
+        await saveAttendanceRecord(seat.studentId, status, remarks);
+    } catch (error) {
+        console.error('Failed to save to database, but local changes preserved:', error);
+    }
+
     // Show success message
     toast.add({
         severity: 'success',
@@ -398,27 +593,71 @@ const saveAttendanceWithRemarks = (status, remarks = '') => {
     pendingStatus.value = '';
 };
 
-// Update the saveAttendanceRecord function to include remarks
+// Enhanced save attendance using session system
 const saveAttendanceRecord = async (studentId, status, remarks = '') => {
     try {
-        // Implement API call to save attendance record
-        console.log('Saving attendance record:', { studentId, status, remarks, date: currentDate.value });
+        // If we have an active session, use the session system
+        if (sessionActive.value && currentSession.value && attendanceStatuses.value.length > 0) {
+            try {
+                // Map status to attendance status ID
+                let statusId;
+                const statusLower = status.toLowerCase();
+                
+                if (statusLower === 'present' || status === 1) {
+                    statusId = attendanceStatuses.value.find(s => s.code === 'P')?.id;
+                } else if (statusLower === 'absent' || status === 2) {
+                    statusId = attendanceStatuses.value.find(s => s.code === 'A')?.id;
+                } else if (statusLower === 'late' || status === 3) {
+                    statusId = attendanceStatuses.value.find(s => s.code === 'L')?.id;
+                } else if (statusLower === 'excused' || status === 4) {
+                    statusId = attendanceStatuses.value.find(s => s.code === 'E')?.id;
+                } else {
+                    statusId = attendanceStatuses.value.find(s => s.code === 'P')?.id; // Default to Present
+                }
 
-        // Show success message
-        toast.add({
-            severity: 'success',
-            summary: 'Attendance Saved',
-            detail: `Marked student ${studentId} as ${status}`,
-            life: 3000
-        });
+                if (statusId) {
+                    const attendanceData = AttendanceSessionService.formatAttendanceForAPI(
+                        studentId,
+                        statusId,
+                        remarks
+                    );
+                    
+                    const response = await AttendanceSessionService.markSessionAttendance(
+                        currentSession.value.id,
+                        [attendanceData]
+                    );
+                    
+                    console.log('Attendance saved via session system:', response);
+                    return response;
+                }
+            } catch (sessionError) {
+                console.warn('Session attendance save failed, falling back to legacy:', sessionError);
+            }
+        }
+        
+        // Fallback to legacy system
+        const attendanceData = {
+            student_id: studentId,
+            teacher_id: teacherId.value,
+            section_id: sectionId.value,
+            subject_id: subjectId.value,
+            date: currentDate.value,
+            status: typeof status === 'number' ? 
+                (status === 1 ? 'present' : status === 2 ? 'absent' : status === 3 ? 'late' : 'present') : 
+                status.toLowerCase(),
+            time_in: new Date().toTimeString().split(' ')[0],
+            remarks: remarks,
+            marked_at: new Date().toISOString()
+        };
+
+        console.log('Saving attendance record (legacy):', attendanceData);
+        const response = await TeacherAttendanceService.markAttendance(attendanceData);
+        console.log('Attendance saved successfully (legacy):', response);
+        
+        return response;
     } catch (error) {
         console.error('Error saving attendance record:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to save attendance record',
-            life: 3000
-        });
+        throw error;
     }
 };
 
@@ -551,24 +790,28 @@ const loadSavedTemplates = async () => {
     }
 };
 
-// Calculate unassigned students based on seating assignment
+// Calculate which students are not assigned to seats
 const calculateUnassignedStudents = () => {
-    // Get all assigned student IDs
-    const assignedIds = new Set();
+    const assignedStudentIds = new Set();
 
-    for (const row of seatPlan.value) {
-        for (let j = 0; j < row.length; j++) {
-            if (row[j].isOccupied && row[j].studentId) {
-                assignedIds.add(row[j].studentId);
+    // Collect all assigned student IDs from the seat plan
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
+            if (seat.isOccupied && seat.studentId) {
+                assignedStudentIds.add(seat.studentId);
             }
-        }
-    }
+        });
+    });
 
-    // Filter students not in assigned set
-    unassignedStudents.value = students.value.filter((student) => !assignedIds.has(student.id));
+    // Filter out assigned students from the full student list
+    unassignedStudents.value = students.value.filter((student) => !assignedStudentIds.has(student.id));
+
+    console.log('Total students:', students.value.length);
+    console.log('Assigned students:', assignedStudentIds.size);
+    console.log('Unassigned students:', unassignedStudents.value.length);
+    console.log('Unassigned student names:', unassignedStudents.value.map(s => s.name));
 };
 
-// Filter unassigned students by search query
 const filteredUnassignedStudents = computed(() => {
     if (!searchQuery.value) return unassignedStudents.value;
     const query = searchQuery.value.toLowerCase();
@@ -667,37 +910,59 @@ const formatDate = (dateString) => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-// Mark all students as present
-const markAllPresent = () => {
-    // Add a timestamp for this bulk update
+// Add function to save roll call attendance with remarks
+const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
+    if (!currentStudent.value) return;
+
+    // Add a timestamp for this attendance record
     const timestamp = new Date().toISOString();
-    const today = currentDate.value;
 
-    // Mark all seats in the grid as Present
-    for (let i = 0; i < seatPlan.value.length; i++) {
-        for (let j = 0; j < seatPlan.value[i].length; j++) {
-            if (seatPlan.value[i][j].isOccupied) {
-                const studentId = seatPlan.value[i][j].studentId;
+    // Save to attendance records
+    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: currentStudent.value.id,
+        date: currentDate.value,
+        status,
+        remarks: remarks || '',
+        timestamp
+    };
 
-                // Update seat status
-                seatPlan.value[i][j].status = 'Present';
+    // Update seat status if student is assigned to a seat
+    const foundSeat = findSeatByStudentId(currentStudent.value.id);
+    if (foundSeat) {
+        // Update seat status
+        foundSeat.status = status;
 
-                // Save attendance record with timestamp
-                const recordKey = `${studentId}-${today}`;
-                attendanceRecords.value[recordKey] = {
-                    studentId: studentId,
-                    date: today,
-                    status: 'Present',
-                    remarks: '',
-                    timestamp: timestamp
-                };
+        // Save attendance with remarks
+        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+        attendanceRecords.value[recordKey] = {
+            studentId: currentStudent.value.id,
+            date: currentDate.value,
+            status,
+            remarks: remarks || '',
+            timestamp
+        };
+    }
 
-                // Remove from remarks panel if exists
-                remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== studentId);
+    // Handle remarks panel for Absent/Excused status
+    if (status === 'Present' || status === 'Late') {
+        // Remove from remarks panel if exists
+        remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== currentStudent.value.id);
+    } else if (remarks) {
+        // Update or add to remarks panel for Absent/Excused
+        const remarkItem = {
+            studentId: currentStudent.value.id,
+            studentName: currentStudent.value.name,
+            status,
+            remarks,
+            timestamp
+        };
 
-                // Also save to service if needed
-                saveAttendanceRecord(studentId, 'Present');
-            }
+        const existingIndex = remarksPanel.value.findIndex((r) => r.studentId === currentStudent.value.id);
+        if (existingIndex >= 0) {
+            remarksPanel.value[existingIndex] = remarkItem;
+        } else {
+            remarksPanel.value.push(remarkItem);
         }
     }
 
@@ -705,24 +970,152 @@ const markAllPresent = () => {
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
-    // Update the cache
+    // Update cache
+    const today = currentDate.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp,
         seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
     };
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    console.log('Updated attendance cache with all students marked present');
 
+    // Save to database via API
+    try {
+        await saveAttendanceRecord(currentStudent.value.id, status, remarks);
+    } catch (error) {
+        console.error('Failed to save roll call attendance to database, but local changes preserved:', error);
+    }
+
+    // Show success message
     toast.add({
         severity: 'success',
-        summary: 'Attendance Updated',
-        detail: 'All students marked as present',
+        summary: 'Attendance Marked',
+        detail: `${currentStudent.value.name} marked as ${status}`,
         life: 3000
     });
+
+    // Move to next student
+    nextStudent();
 };
 
-// Update resetAllAttendance function
+// Start new attendance session
+const startAttendanceSession = async () => {
+    try {
+        if (sessionActive.value) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Session Active',
+                detail: 'An attendance session is already active for this subject.',
+                life: 3000
+            });
+            return;
+        }
+        
+        const sessionData = {
+            teacherId: teacherId.value,
+            sectionId: sectionId.value,
+            subjectId: subjectId.value,
+            date: currentDate.value,
+            startTime: new Date().toTimeString().split(' ')[0],
+            type: 'regular',
+            metadata: {
+                seatingArrangement: true,
+                qrCodeEnabled: true
+            }
+        };
+        
+        const response = await AttendanceSessionService.createSession(sessionData);
+        currentSession.value = response.session;
+        sessionActive.value = true;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Session Started',
+            detail: 'Attendance session started successfully',
+            life: 3000
+        });
+        
+        console.log('Started attendance session:', response.session);
+    } catch (error) {
+        console.error('Error starting attendance session:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Session Error',
+            detail: 'Failed to start attendance session',
+            life: 5000
+        });
+    }
+};
+
+// Complete attendance session
+const completeAttendanceSession = async () => {
+    try {
+        if (!sessionActive.value || !currentSession.value) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Active Session',
+                detail: 'No active attendance session to complete.',
+                life: 3000
+            });
+            return;
+        }
+        
+        const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+        sessionSummary.value = response.summary;
+        sessionActive.value = false;
+        currentSession.value = null;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Session Completed',
+            detail: `Attendance session completed. ${response.summary?.total_students || 0} students processed.`,
+            life: 5000
+        });
+        
+        console.log('Completed attendance session:', response);
+    } catch (error) {
+        console.error('Error completing attendance session:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Session Error',
+            detail: 'Failed to complete attendance session',
+            life: 5000
+        });
+    }
+};
+
+const markAllPresent = () => {
+    if (confirm('Are you sure you want to mark all students as present?')) {
+        // Mark all occupied seats as present
+        seatPlan.value.forEach((row) => {
+            row.forEach((seat) => {
+                if (seat.isOccupied && seat.studentId) {
+                    seat.status = 1; // Present status
+                    
+                    // Update attendance records
+                    const recordKey = `${seat.studentId}-${currentDate.value}`;
+                    attendanceRecords.value[recordKey] = {
+                        studentId: seat.studentId,
+                        date: currentDate.value,
+                        status: 1,
+                        timestamp: new Date().toISOString()
+                    };
+                }
+            });
+        });
+
+        // Save to localStorage
+        localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+
+        toast.add({
+            severity: 'success',
+            summary: 'All Present',
+            detail: 'All students have been marked as present',
+            life: 3000
+        });
+    }
+};
+
 const resetAllAttendance = () => {
     if (confirm('Are you sure you want to reset all attendance statuses?')) {
         // Reset all seat statuses to null
@@ -896,6 +1289,9 @@ watch(
     { immediate: true }
 );
 
+// Store interval reference for cleanup
+let refreshInterval = null;
+
 // Initialize data on component mount
 onMounted(async () => {
     try {
@@ -917,42 +1313,25 @@ onMounted(async () => {
             }
         }
 
-        // Fetch students from database
-        try {
-            const studentsData = await AttendanceService.getData();
-            if (studentsData && studentsData.length > 0) {
-                students.value = studentsData;
-                console.log('Loaded students from database:', studentsData.length);
-            } else {
-                console.warn('No students found in the database!');
-                students.value = [];
-
-                toast.add({
-                    severity: 'warn',
-                    summary: 'No Students Found',
-                    detail: 'No students are registered in the system. Please add students through the Admin panel.',
-                    life: 5000
-                });
-            }
-        } catch (error) {
-            console.error('Error fetching students from database:', error);
-
-            toast.add({
-                severity: 'error',
-                summary: 'Database Error',
-                detail: 'Failed to load students from database. Please check your connection.',
-                life: 5000
-            });
-
-            // Set empty array instead of mock data
-            students.value = [];
-        }
+        // Load students directly from Grade 3 API to match dashboard
+        await loadStudentsData();
+        
+        // Set up auto-refresh to catch new enrollments (store reference for cleanup)
+        refreshInterval = setInterval(async () => {
+            console.log('Auto-refreshing student data...');
+            await loadStudentsData();
+        }, 30000); // Refresh every 30 seconds (reduced frequency)
 
         // Initialize an empty seat plan for grid layout
         initializeSeatPlan();
 
-        // Set all students as unassigned initially
-        unassignedStudents.value = [...students.value];
+        // Try to load seating arrangement from database first
+        await loadSeatingArrangementFromDatabase();
+
+        // Update time every second
+        timeInterval.value = setInterval(() => {
+            currentDateTime.value = new Date();
+        }, 1000);
 
         // Always load saved templates first, so they're available for use
         await loadSavedTemplates();
@@ -973,32 +1352,14 @@ onMounted(async () => {
             console.warn('Error loading attendance records from localStorage:', err);
         }
 
+        // Fetch attendance history
+        await fetchAttendanceHistory();
+
         // First try to load the saved layout
         const layoutLoaded = loadSavedLayout();
 
-        if (layoutLoaded) {
-            toast.add({
-                severity: 'info',
-                summary: 'Layout Loaded',
-                detail: 'Previous seat plan layout has been restored',
-                life: 3000
-            });
-
-            // After layout is loaded, prioritize checking for cached attendance data
-            // This ensures the most recent attendance statuses are applied
-            const cachedDataLoaded = loadCachedAttendanceData();
-
-            if (!cachedDataLoaded) {
-                // If no cached data, apply attendance statuses from the records
-                applyAttendanceStatusesToSeatPlan();
-            }
-
-            // Fetch attendance history in the background (but don't apply it directly)
-            fetchAttendanceHistory().then(() => {
-                console.log('Background attendance history fetch completed');
-            });
-        } else {
-            // If no saved layout, use templates
+        if (!layoutLoaded) {
+            // Use default layout if no templates exist
             if (savedTemplates.value.length === 0) {
                 toast.add({
                     severity: 'info',
@@ -1018,6 +1379,20 @@ onMounted(async () => {
                     // Apply attendance statuses after loading template
                     applyAttendanceStatusesToSeatPlan();
                 }
+            }
+        } else {
+            toast.add({
+                severity: 'info',
+                summary: 'Layout Loaded',
+                detail: 'Previous seat plan layout has been restored',
+                life: 3000
+            });
+
+            // Load cached attendance data after loading layout
+            const cachedDataLoaded = loadCachedAttendanceData();
+            if (!cachedDataLoaded) {
+                // If no cached data, apply attendance statuses from records
+                applyAttendanceStatusesToSeatPlan();
             }
         }
     } catch (error) {
@@ -1434,18 +1809,21 @@ const processQRCode = async (qrData) => {
     try {
         console.log('Processing QR code:', qrData);
 
-        // Use QRCodeService to get the student ID from the QR code
-        const studentId = QRCodeService.getStudentIdFromQR(qrData.trim());
-
-        if (!studentId) {
+        // Validate QR code using the backend API
+        const validationResponse = await QRCodeAPIService.validateQRCode(qrData.trim());
+        
+        if (!validationResponse.valid) {
             throw new Error('Invalid QR code or QR code not registered');
         }
 
-        // Find the student
+        const studentData = validationResponse.student;
+        const studentId = studentData.id;
+
+        // Find the student in our current student list
         const student = getStudentById(studentId);
 
         if (!student) {
-            throw new Error(`Student with ID ${studentId} not found`);
+            throw new Error(`Student ${studentData.firstName} ${studentData.lastName} is not in this class`);
         }
 
         // Check if already scanned
@@ -1468,7 +1846,7 @@ const processQRCode = async (qrData) => {
         toast.add({
             severity: 'success',
             summary: 'Student Present',
-            detail: `${student.name} marked as present`,
+            detail: `${student.name} marked as present via QR code`,
             life: 2000
         });
 
@@ -1556,52 +1934,43 @@ const markRollCallAttendance = (status) => {
     }
 
     // For Present or Late, mark directly
-    saveRollCallAttendanceWithRemarks(status);
+    // Call the existing function from earlier in the file
+    const foundSeat = findSeatByStudentId(currentStudent.value.id);
+    if (foundSeat) {
+        foundSeat.status = status;
+    }
+    
+    // Save attendance record
+    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: currentStudent.value.id,
+        date: currentDate.value,
+        status,
+        remarks: '',
+        timestamp: new Date().toISOString()
+    };
+    
+    // Save to localStorage and database
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+    saveAttendanceRecord(currentStudent.value.id, status, '');
+    
+    nextStudent();
 };
 
-// Add function to save roll call attendance with remarks
-const saveRollCallAttendanceWithRemarks = (status, remarks = '') => {
-    if (!currentStudent.value) return;
-
-    // Find student's seat in the grid
-    let foundSeat = null;
-    let rowIndex = -1;
-    let colIndex = -1;
-
-    seatPlan.value.forEach((row, rIndex) => {
-        row.forEach((seat, cIndex) => {
-            if (seat.studentId === currentStudent.value.id) {
-                foundSeat = seat;
-                rowIndex = rIndex;
-                colIndex = cIndex;
+// Helper function to find seat by student ID
+const findSeatByStudentId = (studentId) => {
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            if (seatPlan.value[i][j].studentId === studentId) {
+                return seatPlan.value[i][j];
             }
-        });
-    });
-
-    if (foundSeat) {
-        // Update seat status
-        foundSeat.status = status;
-
-        // Save attendance with remarks
-        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
-        attendanceRecords.value[recordKey] = {
-            studentId: currentStudent.value.id,
-            date: currentDate.value,
-            status,
-            remarks,
-            timestamp: new Date().toISOString()
-        };
-
-        // Update remarks panel if needed
-        if (status === 'Absent' || status === 'Excused') {
-            updateRemarksPanel(currentStudent.value.id, status, remarks);
-        } else {
-            // Remove from remarks panel if exists
-            remarksPanel.value = remarksPanel.value.filter((r) => r.studentId !== currentStudent.value.id);
         }
     }
+    return null;
+};
 
-    // Move to next student
+// Helper function to move to next student in roll call
+const nextStudent = () => {
     currentStudentIndex.value++;
     if (currentStudentIndex.value < students.value.length) {
         currentStudent.value = students.value[currentStudentIndex.value];
@@ -1615,11 +1984,6 @@ const saveRollCallAttendanceWithRemarks = (status, remarks = '') => {
             life: 3000
         });
     }
-
-    // Reset remarks dialog
-    showRollCallRemarksDialog.value = false;
-    rollCallRemarks.value = '';
-    pendingRollCallStatus.value = '';
 };
 
 // Add function to save roll call remarks
@@ -1634,7 +1998,37 @@ const saveRollCallRemarks = () => {
         return;
     }
 
-    saveRollCallAttendanceWithRemarks(pendingRollCallStatus.value, rollCallRemarks.value);
+    // Save roll call attendance with remarks
+    const foundSeat = findSeatByStudentId(currentStudent.value.id);
+    if (foundSeat) {
+        foundSeat.status = pendingRollCallStatus.value;
+    }
+    
+    // Save attendance record
+    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    attendanceRecords.value[recordKey] = {
+        studentId: currentStudent.value.id,
+        date: currentDate.value,
+        status: pendingRollCallStatus.value,
+        remarks: rollCallRemarks.value,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Update remarks panel if needed
+    if (pendingRollCallStatus.value === 'Absent' || pendingRollCallStatus.value === 'Excused') {
+        updateRemarksPanel(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
+    }
+    
+    // Save to localStorage and database
+    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+    saveAttendanceRecord(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
+    
+    // Reset dialog values
+    showRollCallRemarksDialog.value = false;
+    rollCallRemarks.value = '';
+    pendingRollCallStatus.value = '';
+    
+    nextStudent();
 };
 
 // Add this function for the updateRemarksPanel
@@ -1751,109 +2145,13 @@ const viewAttendanceRecords = () => {
     router.push('/teacher/attendance-records');
 };
 
-// Update onMounted to load attendance records first, before loading the layout
-onMounted(async () => {
-    // Update time every second
-    timeInterval.value = setInterval(() => {
-        currentDateTime.value = new Date();
-    }, 1000);
-
-    try {
-        // Fetch students from database
-        try {
-            const studentsData = await AttendanceService.getData();
-            if (studentsData && studentsData.length > 0) {
-                students.value = studentsData;
-                console.log('Loaded students from database:', studentsData.length);
-            } else {
-                console.warn('No students found in the database!');
-                students.value = [];
-
-                toast.add({
-                    severity: 'warn',
-                    summary: 'No Students Found',
-                    detail: 'No students are registered in the system. Please add students through the Admin panel.',
-                    life: 5000
-                });
-            }
-        } catch (error) {
-            console.error('Error fetching students from database:', error);
-
-            toast.add({
-                severity: 'error',
-                summary: 'Database Error',
-                detail: 'Failed to load students from database. Please check your connection.',
-                life: 5000
-            });
-
-            // Set empty array instead of mock data
-            students.value = [];
-        }
-
-        // Always load saved templates first, so they're available for use
-        await loadSavedTemplates();
-        console.log('Templates loaded, count:', savedTemplates.value.length);
-
-        // Load attendance records from localStorage if available
-        try {
-            const savedAttendanceRecords = localStorage.getItem('attendanceRecords');
-            if (savedAttendanceRecords) {
-                attendanceRecords.value = JSON.parse(savedAttendanceRecords);
-            }
-
-            const savedRemarksPanel = localStorage.getItem('remarksPanel');
-            if (savedRemarksPanel) {
-                remarksPanel.value = JSON.parse(savedRemarksPanel);
-            }
-        } catch (err) {
-            console.warn('Error loading attendance records from localStorage:', err);
-        }
-
-        // Fetch attendance history
-        await fetchAttendanceHistory();
-
-        // First try to load the saved layout
-        const layoutLoaded = loadSavedLayout();
-
-        if (!layoutLoaded) {
-            // Use default layout if no templates exist
-            if (savedTemplates.value.length === 0) {
-                toast.add({
-                    severity: 'info',
-                    summary: 'Welcome to Seat Plan Attendance',
-                    detail: 'Create your own classroom layout using the Edit Seats button',
-                    life: 5000
-                });
-            } else {
-                // Load the most recently created template
-                const defaultTemplate = savedTemplates.value.sort((a, b) => {
-                    return new Date(b.createdAt) - new Date(a.createdAt);
-                })[0];
-
-                if (defaultTemplate) {
-                    loadTemplate(defaultTemplate);
-
-                    // Apply attendance statuses after loading template
-                    applyAttendanceStatusesToSeatPlan();
-                }
-            }
-        } else {
-            toast.add({
-                severity: 'info',
-                summary: 'Layout Loaded',
-                detail: 'Previous seat plan layout has been restored',
-                life: 3000
-            });
-
-            // Load cached attendance data after loading layout
-            const cachedDataLoaded = loadCachedAttendanceData();
-            if (!cachedDataLoaded) {
-                // If no cached data, apply attendance statuses from records
-                applyAttendanceStatusesToSeatPlan();
-            }
-        }
-    } catch (error) {
-        console.error('Error initializing data:', error);
+// Cleanup function for intervals
+onUnmounted(() => {
+    if (timeInterval.value) {
+        clearInterval(timeInterval.value);
+    }
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
     }
 });
 
@@ -1894,16 +2192,29 @@ const isDropTarget = ref(false);
 
 <template>
     <div class="attendance-container p-4">
-        <!-- Header with subject name and date -->
-        <div class="flex justify-between items-center mb-4">
-            <h5 class="text-xl font-semibold">{{ subjectName }} Attendance</h5>
-            <div class="flex gap-2 align-items-center">
-                <div class="date-time-display mr-3">
-                    <div class="date">{{ currentDateTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</div>
-                    <div class="time">{{ currentDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}</div>
+        <!-- Header with title and date/time -->
+        <div class="header-section flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">{{ subjectName }} Attendance</h2>
+                <div class="text-sm text-gray-600 flex align-items-center gap-3">
+                    <div class="flex align-items-center">
+                        <i class="pi pi-calendar mr-2"></i>
+                        <Calendar v-model="currentDate" dateFormat="yy-mm-dd" :showIcon="true" />
+                    </div>
+                    <!-- Session Status Indicator -->
+                    <div v-if="sessionActive" class="flex align-items-center text-green-600">
+                        <i class="pi pi-circle-fill mr-1 text-xs"></i>
+                        <span class="text-sm font-semibold">Session Active</span>
+                    </div>
+                    <div v-else class="flex align-items-center text-gray-500">
+                        <i class="pi pi-circle mr-1 text-xs"></i>
+                        <span class="text-sm">No Active Session</span>
+                    </div>
                 </div>
-                <Calendar v-model="currentDate" dateFormat="yy-mm-dd" class="mr-2" />
-                <Button icon="pi pi-list-check" label="Take Attendance" class="p-button-primary" @click="openAttendanceMethodDialog" />
+            </div>
+            <div class="date-time-display">
+                <div class="date">{{ new Date().toLocaleDateString() }}</div>
+                <div class="time">{{ currentDateTime.toLocaleTimeString() }}</div>
             </div>
         </div>
 
@@ -1915,7 +2226,11 @@ const isDropTarget = ref(false);
 
             <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
 
+            <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" />
+            
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
+            
+            <Button icon="pi pi-stop" label="Complete Session" class="p-button-warning" @click="completeAttendanceSession" v-if="sessionActive" />
 
             <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" />
 

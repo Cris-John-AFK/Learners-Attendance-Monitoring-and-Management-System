@@ -291,38 +291,35 @@ const handlePhotoError = (event) => {
 
 // Generate QR code for specific student
 const generateStudentQR = async (student) => {
-    if (student.lrn) {
+    if (student.id) {
         try {
-            // Call backend API to generate QR code
-            const response = await fetch(`http://127.0.0.1:8000/api/generate-qr/${student.lrn}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
+            // Import QRCodeAPIService
+            const { QRCodeAPIService } = await import('@/router/service/QRCodeAPIService');
+            
+            // Generate QR code using new API
+            const result = await QRCodeAPIService.generateQRCode(student.id);
+            console.log('QR code generated:', result);
 
-            if (response.ok) {
-                const result = await response.json();
-                console.log('QR code generated:', result);
-
-                // Update the QR code path for this student
-                const qrPath = `http://127.0.0.1:8000/${result.qr_path}`;
-                qrCodes.value[student.lrn] = qrPath;
-
-                // Update student data with QR code path
-                const studentIndex = students.value.findIndex((s) => s.id === student.id);
+            if (result.success) {
+                // Update the student's QR code path to use the new API endpoint
+                const qrImageUrl = QRCodeAPIService.getQRCodeImageURL(student.id);
+                qrCodes.value[student.lrn || student.id] = qrImageUrl;
+                
+                // Update the student object if needed
+                const studentIndex = students.value.findIndex(s => s.id === student.id);
                 if (studentIndex !== -1) {
-                    students.value[studentIndex].qrCodePath = qrPath;
+                    students.value[studentIndex].qrCodePath = qrImageUrl;
                 }
 
                 toast.add({
                     severity: 'success',
-                    summary: 'QR Code Generated',
-                    detail: `QR code saved for LRN: ${student.lrn}`,
+                    summary: 'Success',
+                    detail: `QR code generated for ${student.firstName} ${student.lastName}`,
                     life: 3000
                 });
+
+                // Navigate to Student QR Codes page to show the generated QR code
+                router.push('/teacher/student-qrcodes');
             } else {
                 throw new Error('Failed to generate QR code');
             }
@@ -1567,7 +1564,6 @@ onMounted(() => {
                                 <InputText v-model="filters.searchTerm" placeholder="Search students..." class="search-input" />
                             </span>
                         </div>
-                        <Button label="Add New Student" icon="pi pi-plus" class="add-student-btn" @click="openStudentDialog" />
                     </div>
                 </div>
             </div>

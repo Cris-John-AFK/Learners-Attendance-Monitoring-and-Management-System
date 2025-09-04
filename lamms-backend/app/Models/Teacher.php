@@ -137,4 +137,51 @@ class Teacher extends Authenticatable
     {
         return $this->user->is_active ? 'active' : 'inactive';
     }
+
+    // Attendance-related relationships
+    public function attendanceSessions()
+    {
+        return $this->hasMany(AttendanceSession::class);
+    }
+
+    public function attendanceRecordsMarked()
+    {
+        return $this->hasMany(AttendanceRecord::class, 'marked_by_teacher_id');
+    }
+
+    public function attendanceRecordsVerified()
+    {
+        return $this->hasMany(AttendanceRecord::class, 'verified_by_teacher_id');
+    }
+
+    public function attendanceModifications()
+    {
+        return $this->hasMany(AttendanceModification::class, 'modified_by_teacher_id');
+    }
+
+    public function classSchedules()
+    {
+        return $this->hasMany(ClassSchedule::class);
+    }
+
+    // Helper methods for attendance
+    public function canTakeAttendanceFor($sectionId, $subjectId = null)
+    {
+        $query = $this->assignments()->where('section_id', $sectionId)->where('is_active', true);
+        
+        if ($subjectId) {
+            $query->where('subject_id', $subjectId);
+        }
+        
+        return $query->exists();
+    }
+
+    public function getActiveSessionsForToday()
+    {
+        return $this->attendanceSessions()
+            ->active()
+            ->forDate(now()->toDateString())
+            ->with(['section', 'subject'])
+            ->get();
+    }
 }

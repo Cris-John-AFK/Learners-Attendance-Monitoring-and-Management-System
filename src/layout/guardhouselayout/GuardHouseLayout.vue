@@ -1,5 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
+import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import axios from 'axios';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -140,12 +141,12 @@ const onDetect = async (detectedCodes) => {
             // Pause scanning while processing to avoid multiple scans of the same code
             scanning.value = false;
 
-            const studentId = detectedCodes[0].rawValue;
-            console.log('Detected Student ID:', studentId);
+            const qrData = detectedCodes[0].rawValue;
+            console.log('Detected QR Data:', qrData);
 
-            // Process student scan in a microtask to avoid blocking the message channel
+            // Process QR code scan in a microtask to avoid blocking the message channel
             await new Promise((resolve) => setTimeout(resolve, 10));
-            await processStudentScan(studentId);
+            await processStudentScan(qrData);
 
             // Wait a moment before restarting the scanner to avoid rapid scanning
             setTimeout(() => {
@@ -189,78 +190,85 @@ const restartCamera = () => {
     }, 500);
 };
 
-const processStudentScan = async (scannedId) => {
+const processStudentScan = async (qrData) => {
     try {
-        console.log('Processing student scan for ID:', scannedId);
-        console.log('All students:', allStudents.value);
+        console.log('Processing QR code:', qrData);
 
-        // Find the student in our allStudents array
-        // Handle both string and number IDs - search by studentId to match QR code data
-        const student = allStudents.value.find((s) => s.studentId === scannedId || s.id.toString() === scannedId.toString());
-
-        console.log('Found student:', student);
-
-        if (student) {
-            // Get today's records for this student
-            const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === student.id.toString() && record.date === new Date().toLocaleDateString());
-
-            console.log("Today's records for this student:", todaysRecords);
-
-            // Determine record type based on the pattern of previous records
-            let recordType;
-
-            if (todaysRecords.length === 0) {
-                // First scan of the day - always a check-in
-                recordType = 'check-in';
-            } else {
-                // Get the most recent record for this student
-                const latestRecord = [...todaysRecords].sort((a, b) => {
-                    // Convert timestamps to Date objects for proper comparison
-                    const timeA = new Date(`1/1/2023 ${a.timestamp}`);
-                    const timeB = new Date(`1/1/2023 ${b.timestamp}`);
-                    return timeB - timeA; // Sort in descending order (newest first)
-                })[0];
-
-                console.log('Latest record:', latestRecord);
-
-                // If the latest record is a check-in, this should be a check-out
-                // If the latest record is a check-out, this should be a check-in
-                recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
-            }
-
-            console.log('Determined record type:', recordType);
-
-            // Create record with unique ID
-            const record = {
-                ...student,
-                timestamp: new Date().toLocaleTimeString(),
-                date: new Date().toLocaleDateString(),
-                recordType: recordType,
-                recordId: `${student.id}-${Date.now()}` // Unique ID for each record
-            };
-
-            // Show feedback
-            showScanFeedback(recordType);
-
-            // Play sound based on record type
-            await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
-
-            // Add to records and show details
-            attendanceRecords.value.unshift(record); // Add to beginning
-            selectedStudent.value = record;
-
-            console.log('Student record created:', record);
-            return true;
-        } else {
-            // Invalid QR code
-            console.log('Invalid student ID:', scannedId);
-            showScanFeedback('error', null, 'Invalid student ID');
+        // Validate QR code using the backend API
+        const validationResponse = await QRCodeAPIService.validateQRCode(qrData.trim());
+        
+        if (!validationResponse.valid) {
+            console.log('Invalid QR code:', qrData);
+            showScanFeedback('error', null, 'Invalid QR code or QR code not registered');
             await playStatusSound('error');
             return false;
         }
+
+        const studentData = validationResponse.student;
+        console.log('QR code validated for student:', studentData);
+
+        // Get today's records for this student
+        const todaysRecords = attendanceRecords.value.filter((record) => 
+            record.id.toString() === studentData.id.toString() && 
+            record.date === new Date().toLocaleDateString()
+        );
+
+        console.log("Today's records for this student:", todaysRecords);
+
+        // Determine record type based on the pattern of previous records
+        let recordType;
+
+        if (todaysRecords.length === 0) {
+            // First scan of the day - always a check-in
+            recordType = 'check-in';
+        } else {
+            // Get the most recent record for this student
+            const latestRecord = [...todaysRecords].sort((a, b) => {
+                // Convert timestamps to Date objects for proper comparison
+                const timeA = new Date(`1/1/2023 ${a.timestamp}`);
+                const timeB = new Date(`1/1/2023 ${b.timestamp}`);
+                return timeB - timeA; // Sort in descending order (newest first)
+            })[0];
+
+            console.log('Latest record:', latestRecord);
+
+            // If the latest record is a check-in, this should be a check-out
+            // If the latest record is a check-out, this should be a check-in
+            recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
+        }
+
+        console.log('Determined record type:', recordType);
+
+        // Create record with student data from QR validation
+        const record = {
+            id: studentData.id,
+            name: `${studentData.firstName} ${studentData.lastName}`,
+            gradeLevel: studentData.gradeLevel,
+            section: studentData.section,
+            photo: studentData.photo || '/demo/images/avatar/default-student.png',
+            contact: studentData.contact,
+            timestamp: new Date().toLocaleTimeString(),
+            date: new Date().toLocaleDateString(),
+            recordType: recordType,
+            recordId: `${studentData.id}-${Date.now()}` // Unique ID for each record
+        };
+
+        // Show feedback
+        showScanFeedback(recordType);
+
+        // Play sound based on record type
+        await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
+
+        // Add to records and show details
+        attendanceRecords.value.unshift(record); // Add to beginning
+        selectedStudent.value = record;
+
+        console.log('Student record created:', record);
+        return true;
     } catch (error) {
-        console.error('Error processing student scan:', error);
-        showScanFeedback('error', null, 'An error occurred while processing the scan');
+        console.error('Error processing QR code:', error);
+        showScanFeedback('error', null, 'Error validating QR code');
+        await playStatusSound('error');
         return false;
     }
 };

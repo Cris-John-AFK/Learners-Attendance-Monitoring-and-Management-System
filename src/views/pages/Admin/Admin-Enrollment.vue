@@ -30,38 +30,38 @@ function getStudentDisplayName(student) {
     if (student.name && student.name.trim()) {
         return student.name.trim();
     }
-    
+
     const firstName = student.firstName || student.first_name || '';
     const lastName = student.lastName || student.last_name || '';
     const middleName = student.middleName || student.middle_name || '';
-    
+
     if (firstName || lastName) {
         return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
     }
-    
+
     return student.studentId || student.enrollment_id || 'Unknown Student';
 }
 
 function getStudentInitials(student) {
     const displayName = getStudentDisplayName(student);
-    
+
     if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
         return 'S';
     }
-    
-    const nameParts = displayName.split(' ').filter(part => part.length > 0);
+
+    const nameParts = displayName.split(' ').filter((part) => part.length > 0);
     if (nameParts.length >= 2) {
         return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
     } else if (nameParts.length === 1) {
         return nameParts[0].charAt(0).toUpperCase();
     }
-    
+
     return 'S';
 }
 
 function getGradeCode(gradeLevel) {
     const gradeMap = {
-        'Kinder': 'K',
+        Kinder: 'K',
         'Grade 1': '1',
         'Grade 2': '2',
         'Grade 3': '3',
@@ -83,13 +83,13 @@ async function openSectionAssignment(student) {
     studentToAssign.value = student;
     selectedSectionForAssignment.value = null;
     availableSectionsForAssignment.value = [];
-    
+
     try {
         // Fetch available sections for this student's grade level from backend
         const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}/available-sections`, {
             method: 'GET',
             headers: {
-                'Accept': 'application/json'
+                Accept: 'application/json'
             }
         });
 
@@ -110,7 +110,7 @@ async function openSectionAssignment(student) {
         const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
         availableSectionsForAssignment.value = sections[gradeCode] || [];
     }
-    
+
     sectionAssignmentDialog.value = true;
 }
 
@@ -352,23 +352,13 @@ function formatAddress(student) {
 const pendingEnrollmentStudents = computed(() => {
     // Students who are enrolled but don't have sections assigned yet
     const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
-    return allStudents.filter(student => 
-        !student.section && 
-        !student.sectionId && 
-        !student.current_section_name && 
-        !student.current_section_id
-    );
+    return allStudents.filter((student) => !student.section && !student.sectionId && !student.current_section_name && !student.current_section_id);
 });
 
 const fullyEnrolledStudents = computed(() => {
     // Students who have sections assigned (should appear in Student Management)
     const allStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
-    return allStudents.filter(student => 
-        student.section || 
-        student.sectionId || 
-        student.current_section_name || 
-        student.current_section_id
-    );
+    return allStudents.filter((student) => student.section || student.sectionId || student.current_section_name || student.current_section_id);
 });
 
 const filteredStudents = computed(() => {
@@ -716,13 +706,13 @@ async function submitNewStudent() {
         if (!response.ok) {
             const errorData = await response.json();
             console.error('Validation errors:', errorData);
-            
+
             // Show specific validation errors if available
             if (errorData.errors) {
                 const errorMessages = Object.entries(errorData.errors)
                     .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
                     .join('\n');
-                
+
                 toast.add({
                     severity: 'error',
                     summary: 'Validation Failed',
@@ -730,7 +720,7 @@ async function submitNewStudent() {
                     life: 8000
                 });
             }
-            
+
             throw new Error(errorData.message || 'Validation failed');
         }
 
@@ -832,7 +822,7 @@ async function assignStudentToSection() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             },
             body: JSON.stringify({
                 section_id: selectedSectionForAssignment.value.id,
@@ -846,9 +836,9 @@ async function assignStudentToSection() {
         }
 
         const result = await response.json();
-        
+
         sectionAssignmentDialog.value = false;
-        
+
         toast.add({
             severity: 'success',
             summary: 'Section Assigned',
@@ -858,7 +848,6 @@ async function assignStudentToSection() {
 
         // Reload enrolled students from API to get updated section data
         await loadEnrolledStudents();
-
     } catch (error) {
         console.error('Error assigning section:', error);
         toast.add({
@@ -871,8 +860,8 @@ async function assignStudentToSection() {
 }
 
 async function autoAssignAllStudents() {
-    const unassignedStudents = enrolledStudents.value.filter(s => !s.section);
-    
+    const unassignedStudents = enrolledStudents.value.filter((s) => !s.section);
+
     if (unassignedStudents.length === 0) {
         toast.add({
             severity: 'info',
@@ -885,20 +874,20 @@ async function autoAssignAllStudents() {
 
     try {
         let assignedCount = 0;
-        
+
         for (const student of unassignedStudents) {
             const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
             const sectionsForGrade = sections[gradeCode] || [];
-            
+
             if (sectionsForGrade.length > 0) {
                 // Assign to first available section for the grade
                 const sectionToAssign = sectionsForGrade[0];
-                
+
                 const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        Accept: 'application/json'
                     },
                     body: JSON.stringify({
                         section: sectionToAssign.name
@@ -907,7 +896,7 @@ async function autoAssignAllStudents() {
 
                 if (response.ok) {
                     // Update local data
-                    const studentIndex = enrolledStudents.value.findIndex(s => s.id === student.id);
+                    const studentIndex = enrolledStudents.value.findIndex((s) => s.id === student.id);
                     if (studentIndex !== -1) {
                         enrolledStudents.value[studentIndex].section = sectionToAssign.name;
                     }
@@ -922,7 +911,6 @@ async function autoAssignAllStudents() {
             detail: `Successfully assigned ${assignedCount} students to sections.`,
             life: 5000
         });
-
     } catch (error) {
         console.error('Error in auto-assignment:', error);
         toast.add({
@@ -1058,33 +1046,15 @@ defineExpose({
                                     <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
                                     <p class="text-xs text-blue-600">Assign students to available sections</p>
                                 </div>
-                                <Button 
-                                    label="Auto-Assign All" 
-                                    icon="pi pi-bolt" 
-                                    size="small" 
-                                    class="p-button-sm p-button-outlined"
-                                    @click="autoAssignAllStudents"
-                                    :disabled="pendingEnrollmentStudents.length === 0"
-                                />
+                                <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="pendingEnrollmentStudents.length === 0" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 gap-3">
-                            <div 
-                                v-for="student in filteredStudents" 
-                                :key="student.id" 
-                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
-                                @click="openSectionAssignment(student)"
-                            >
+                            <div v-for="student in filteredStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200" @click="openSectionAssignment(student)">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center">
-                                        <Avatar 
-                                            :label="getStudentInitials(student)" 
-                                            shape="circle" 
-                                            size="normal" 
-                                            class="mr-3"
-                                            :style="{ backgroundColor: (student.current_section_name || student.section) ? '#10b981' : '#f59e0b', color: 'white' }"
-                                        />
+                                        <Avatar :label="getStudentInitials(student)" shape="circle" size="normal" class="mr-3" :style="{ backgroundColor: student.current_section_name || student.section ? '#10b981' : '#f59e0b', color: 'white' }" />
                                         <div>
                                             <h5 class="font-semibold text-gray-800 text-sm">
                                                 {{ getStudentDisplayName(student) }}
@@ -1094,20 +1064,11 @@ defineExpose({
                                         </div>
                                     </div>
                                     <div class="text-right">
-                                        <Tag 
-                                            :value="(student.current_section_name || student.section) ? 'Assigned' : 'No Section'" 
-                                            :severity="(student.current_section_name || student.section) ? 'success' : 'warning'" 
-                                            class="text-xs mb-1" 
-                                        />
+                                        <Tag :value="student.current_section_name || student.section ? 'Assigned' : 'No Section'" :severity="student.current_section_name || student.section ? 'success' : 'warning'" class="text-xs mb-1" />
                                         <p class="text-xs text-gray-700 font-medium">
                                             {{ student.current_section_name || student.section || 'Click to assign' }}
                                         </p>
-                                        <Button 
-                                            icon="pi pi-cog" 
-                                            size="small" 
-                                            class="p-button-text p-button-sm mt-1"
-                                            @click.stop="openSectionAssignment(student)"
-                                        />
+                                        <Button icon="pi pi-cog" size="small" class="p-button-text p-button-sm mt-1" @click.stop="openSectionAssignment(student)" />
                                     </div>
                                 </div>
                             </div>
@@ -1115,9 +1076,7 @@ defineExpose({
                         <div class="mt-4 p-3 bg-blue-50 rounded text-center">
                             <span class="text-sm font-medium text-blue-700">
                                 {{ totalEnrolledStudents }} Students Enrolled
-                                <span class="text-blue-500 ml-2">
-                                    ({{ enrolledStudents.filter(s => s.current_section_name || s.section).length }} assigned to sections)
-                                </span>
+                                <span class="text-blue-500 ml-2"> ({{ enrolledStudents.filter((s) => s.current_section_name || s.section).length }} assigned to sections) </span>
                             </span>
                         </div>
                     </div>
@@ -1657,23 +1616,11 @@ defineExpose({
         </Dialog>
 
         <!-- Section Assignment Dialog -->
-        <Dialog 
-            v-model:visible="sectionAssignmentDialog" 
-            modal 
-            :header="`Assign Section - ${studentToAssign ? getStudentDisplayName(studentToAssign) : ''}`"
-            :style="{ width: '500px' }"
-            class="p-fluid"
-        >
+        <Dialog v-model:visible="sectionAssignmentDialog" modal :header="`Assign Section - ${studentToAssign ? getStudentDisplayName(studentToAssign) : ''}`" :style="{ width: '500px' }" class="p-fluid">
             <div class="p-4">
                 <div class="mb-4">
                     <div class="flex items-center mb-3">
-                        <Avatar 
-                            :label="studentToAssign ? getStudentInitials(studentToAssign) : 'S'" 
-                            shape="circle" 
-                            size="large" 
-                            class="mr-3"
-                            style="background-color: #f59e0b; color: white;"
-                        />
+                        <Avatar :label="studentToAssign ? getStudentInitials(studentToAssign) : 'S'" shape="circle" size="large" class="mr-3" style="background-color: #f59e0b; color: white" />
                         <div>
                             <h4 class="font-semibold text-gray-800">
                                 {{ studentToAssign ? getStudentDisplayName(studentToAssign) : '' }}
@@ -1686,15 +1633,7 @@ defineExpose({
 
                 <div class="field">
                     <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
-                    <Dropdown 
-                        id="sectionSelect"
-                        v-model="selectedSectionForAssignment" 
-                        :options="availableSectionsForAssignment" 
-                        optionLabel="name" 
-                        placeholder="Choose a section" 
-                        class="w-full mt-2"
-                        :disabled="!studentToAssign"
-                    >
+                    <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSectionsForAssignment" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
                         <template #option="slotProps">
                             <div class="flex items-center">
                                 <i class="pi pi-users mr-2 text-blue-500"></i>
@@ -1702,35 +1641,20 @@ defineExpose({
                             </div>
                         </template>
                     </Dropdown>
-                    <small class="text-gray-500 mt-1">
-                        Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}
-                    </small>
+                    <small class="text-gray-500 mt-1"> Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }} </small>
                 </div>
 
                 <div v-if="selectedSectionForAssignment" class="mt-4 p-3 bg-green-50 rounded-lg">
                     <div class="flex items-center">
                         <i class="pi pi-check-circle text-green-600 mr-2"></i>
-                        <span class="text-green-800 font-medium">
-                            Ready to assign to {{ selectedSectionForAssignment.name }}
-                        </span>
+                        <span class="text-green-800 font-medium"> Ready to assign to {{ selectedSectionForAssignment.name }} </span>
                     </div>
                 </div>
             </div>
 
             <template #footer>
-                <Button 
-                    label="Cancel" 
-                    icon="pi pi-times" 
-                    class="p-button-text" 
-                    @click="sectionAssignmentDialog = false" 
-                />
-                <Button 
-                    label="Assign Section" 
-                    icon="pi pi-check" 
-                    class="p-button-primary" 
-                    @click="assignStudentToSection"
-                    :disabled="!selectedSectionForAssignment"
-                />
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="sectionAssignmentDialog = false" />
+                <Button label="Assign Section" icon="pi pi-check" class="p-button-primary" @click="assignStudentToSection" :disabled="!selectedSectionForAssignment" />
             </template>
         </Dialog>
 
