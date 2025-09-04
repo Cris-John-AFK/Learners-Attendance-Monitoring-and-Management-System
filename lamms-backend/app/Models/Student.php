@@ -104,4 +104,28 @@ class Student extends Model
     {
         return $this->hasMany(Attendance::class);
     }
+
+    public function sections()
+    {
+        return $this->belongsToMany(Section::class, 'student_section')
+                    ->withPivot('school_year', 'is_active')
+                    ->withTimestamps();
+    }
+
+    public function currentSection()
+    {
+        return $this->belongsToMany(Section::class, 'student_section')
+                    ->withPivot('school_year', 'is_active')
+                    ->wherePivot('is_active', true)
+                    ->withTimestamps()
+                    ->latest('student_section.created_at');
+    }
+
+    public function getSectionForYear($schoolYear = '2025-2026')
+    {
+        return $this->sections()
+                    ->wherePivot('school_year', $schoolYear)
+                    ->wherePivot('is_active', true)
+                    ->first();
+    }
 }

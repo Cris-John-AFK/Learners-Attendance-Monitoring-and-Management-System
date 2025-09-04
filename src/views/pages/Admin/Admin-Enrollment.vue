@@ -23,6 +23,12 @@ const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
 
+// Section assignment functionality
+const sectionAssignmentDialog = ref(false);
+const studentToAssign = ref(null);
+const availableSections = ref([]);
+const selectedSectionForAssignment = ref(null);
+
 // New enrollment form dialog
 const newStudentDialog = ref(false);
 const currentStep = ref(1);
@@ -264,7 +270,7 @@ const filteredStudents = computed(() => {
     return students.value.filter((s) => s.name?.toLowerCase().includes(searchTerm) || s.studentId?.toLowerCase().includes(searchTerm) || s.firstName?.toLowerCase().includes(searchTerm) || s.lastName?.toLowerCase().includes(searchTerm));
 });
 
-const availableSections = computed(() => {
+const availableSectionsForForm = computed(() => {
     if (!selectedGradeLevel.value) return [];
     return sections[selectedGradeLevel.value.code] || [];
 });
@@ -624,6 +630,213 @@ async function submitNewStudent() {
     }
 }
 
+// Section assignment functions
+async function openSectionAssignment(student) {
+    studentToAssign.value = student;
+    selectedSectionForAssignment.value = null;
+    availableSections.value = [];
+    
+    try {
+        // Fetch available sections for this student's grade level from backend
+        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}/available-sections`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                availableSections.value = result.data;
+            }
+        } else {
+            console.warn('Failed to fetch available sections, using fallback');
+            // Fallback to static sections if API fails
+            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+            availableSections.value = sections[gradeCode] || [];
+        }
+    } catch (error) {
+        console.error('Error fetching available sections:', error);
+        // Fallback to static sections
+        const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+        availableSections.value = sections[gradeCode] || [];
+    }
+    
+    sectionAssignmentDialog.value = true;
+}
+
+function getGradeCode(gradeLevel) {
+    const gradeMap = {
+        'Kinder': 'K',
+        'Grade 1': '1',
+        'Grade 2': '2',
+        'Grade 3': '3',
+        'Grade 4': '4',
+        'Grade 5': '5',
+        'Grade 6': '6'
+    };
+    return gradeMap[gradeLevel] || gradeLevel;
+}
+
+function getStudentDisplayName(student) {
+    // Try different name field combinations based on backend data structure
+    if (student.name && student.name.trim()) {
+        return student.name.trim();
+    }
+    
+    const firstName = student.firstName || student.first_name || '';
+    const lastName = student.lastName || student.last_name || '';
+    const middleName = student.middleName || student.middle_name || '';
+    
+    if (firstName || lastName) {
+        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+    }
+    
+    return student.studentId || student.enrollment_id || 'Unknown Student';
+}
+
+function getStudentInitials(student) {
+    const displayName = getStudentDisplayName(student);
+    
+    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
+        return 'S';
+    }
+    
+    const nameParts = displayName.split(' ').filter(part => part.length > 0);
+    if (nameParts.length >= 2) {
+        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+    } else if (nameParts.length === 1) {
+        return nameParts[0].charAt(0).toUpperCase();
+    }
+    
+    return 'S';
+}
+
+async function assignStudentToSection() {
+    if (!studentToAssign.value || !selectedSectionForAssignment.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Selection Required',
+            detail: 'Please select a section to assign the student.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // Use the new section assignment API endpoint
+        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${studentToAssign.value.id}/assign-section`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                section_id: selectedSectionForAssignment.value.id,
+                school_year: '2025-2026'
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to assign section');
+        }
+
+        const result = await response.json();
+        
+        // Update local data
+        const studentIndex = enrolledStudents.value.findIndex(s => s.id === studentToAssign.value.id);
+        if (studentIndex !== -1) {
+            enrolledStudents.value[studentIndex].section = selectedSectionForAssignment.value.name;
+            enrolledStudents.value[studentIndex].current_section_name = selectedSectionForAssignment.value.name;
+            enrolledStudents.value[studentIndex].current_section_id = selectedSectionForAssignment.value.id;
+        }
+
+        sectionAssignmentDialog.value = false;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Section Assigned',
+            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}`,
+            life: 3000
+        });
+
+    } catch (error) {
+        console.error('Error assigning section:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Assignment Error',
+            detail: error.message || 'Failed to assign student to section. Please try again.',
+            life: 3000
+        });
+    }
+}
+
+async function autoAssignAllStudents() {
+    const unassignedStudents = enrolledStudents.value.filter(s => !s.section);
+    
+    if (unassignedStudents.length === 0) {
+        toast.add({
+            severity: 'info',
+            summary: 'No Students to Assign',
+            detail: 'All students are already assigned to sections.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        let assignedCount = 0;
+        
+        for (const student of unassignedStudents) {
+            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+            const sectionsForGrade = sections[gradeCode] || [];
+            
+            if (sectionsForGrade.length > 0) {
+                // Assign to first available section for the grade
+                const sectionToAssign = sectionsForGrade[0];
+                
+                const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        section: sectionToAssign.name
+                    })
+                });
+
+                if (response.ok) {
+                    // Update local data
+                    const studentIndex = enrolledStudents.value.findIndex(s => s.id === student.id);
+                    if (studentIndex !== -1) {
+                        enrolledStudents.value[studentIndex].section = sectionToAssign.name;
+                    }
+                    assignedCount++;
+                }
+            }
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Auto-Assignment Complete',
+            detail: `Successfully assigned ${assignedCount} students to sections.`,
+            life: 5000
+        });
+
+    } catch (error) {
+        console.error('Error in auto-assignment:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Auto-Assignment Error',
+            detail: 'Some students could not be assigned. Please try manual assignment.',
+            life: 3000
+        });
+    }
+}
+
 // Load enrolled students for display
 async function loadEnrolledStudents() {
     try {
@@ -637,24 +850,11 @@ async function loadEnrolledStudents() {
 
         if (response.ok) {
             const result = await response.json();
-            const apiStudents = result.data || [];
-            
-            // Format students for display
-            const formattedStudents = apiStudents.map(student => ({
-                id: student.id,
-                studentId: student.enrollment_id,
-                name: `${student.first_name || ''} ${student.middle_name || ''} ${student.last_name || ''}`.trim(),
-                firstName: student.first_name,
-                lastName: student.last_name,
-                email: student.email_address || 'N/A',
-                birthdate: student.birthdate ? new Date(student.birthdate).toLocaleDateString() : 'N/A',
-                gradeLevel: student.grade_level,
-                enrollmentStatus: student.enrollment_status,
-                enrollmentDate: student.enrollment_date,
-                status: student.is_active ? 'Active' : 'Inactive'
-            }));
-            
-            enrolledStudents.value = formattedStudents.filter(s => s.enrollmentStatus === 'Enrolled');
+            if (result.success && result.data) {
+                console.log('Backend student data:', result.data); // Debug log
+                enrolledStudents.value = result.data;
+                totalEnrolledStudents.value = result.data.length;
+            }
         } else {
             console.warn('Failed to fetch from API, falling back to localStorage');
             // Fallback to localStorage if API fails
@@ -762,25 +962,75 @@ async function loadEnrolledStudents() {
                     </div>
 
                     <div v-else class="p-4">
+                        <!-- Bulk Assignment Controls -->
+                        <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
+                                    <p class="text-xs text-blue-600">Assign students to available sections</p>
+                                </div>
+                                <Button 
+                                    label="Auto-Assign All" 
+                                    icon="pi pi-bolt" 
+                                    size="small" 
+                                    class="p-button-sm p-button-outlined"
+                                    @click="autoAssignAllStudents"
+                                    :disabled="enrolledStudents.filter(s => !s.section).length === 0"
+                                />
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 gap-3">
-                            <div v-for="student in enrolledStudents" :key="student.id" class="student-card p-3 border rounded-lg hover:shadow-sm transition-all bg-gray-50">
+                            <div 
+                                v-for="student in enrolledStudents" 
+                                :key="student.id" 
+                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer"
+                                :class="(student.current_section_name || student.section) ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'"
+                                @click="openSectionAssignment(student)"
+                            >
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center">
-                                        <Avatar :image="student.photo || 'https://via.placeholder.com/32'" shape="circle" size="normal" class="mr-3" />
+                                        <Avatar 
+                                            :label="getStudentInitials(student)" 
+                                            shape="circle" 
+                                            size="normal" 
+                                            class="mr-3"
+                                            :style="{ backgroundColor: (student.current_section_name || student.section) ? '#10b981' : '#f59e0b', color: 'white' }"
+                                        />
                                         <div>
-                                            <h5 class="font-medium text-gray-800 text-sm">{{ student.name }}</h5>
-                                            <p class="text-xs text-gray-600">{{ student.studentId }}</p>
+                                            <h5 class="font-semibold text-gray-800 text-sm">
+                                                {{ getStudentDisplayName(student) }}
+                                            </h5>
+                                            <p class="text-xs text-gray-600">{{ student.studentId || student.enrollment_id || student.student_id }}</p>
+                                            <p class="text-xs font-medium text-blue-600">{{ student.gradeLevel || student.grade_level }}</p>
                                         </div>
                                     </div>
                                     <div class="text-right">
-                                        <Tag value="Enrolled" severity="success" class="text-xs" />
-                                        <p class="text-xs text-gray-500 mt-1">{{ student.gradeLevel }} - {{ student.section || 'No Section' }}</p>
+                                        <Tag 
+                                            :value="(student.current_section_name || student.section) ? 'Assigned' : 'No Section'" 
+                                            :severity="(student.current_section_name || student.section) ? 'success' : 'warning'" 
+                                            class="text-xs mb-1" 
+                                        />
+                                        <p class="text-xs text-gray-700 font-medium">
+                                            {{ student.current_section_name || student.section || 'Click to assign' }}
+                                        </p>
+                                        <Button 
+                                            icon="pi pi-cog" 
+                                            size="small" 
+                                            class="p-button-text p-button-sm mt-1"
+                                            @click.stop="openSectionAssignment(student)"
+                                        />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="mt-3 p-2 bg-blue-50 rounded text-center">
-                            <span class="text-sm font-medium text-blue-700">{{ totalEnrolledStudents }} Students Enrolled</span>
+                        <div class="mt-4 p-3 bg-blue-50 rounded text-center">
+                            <span class="text-sm font-medium text-blue-700">
+                                {{ totalEnrolledStudents }} Students Enrolled
+                                <span class="text-blue-500 ml-2">
+                                    ({{ enrolledStudents.filter(s => s.current_section_name || s.section).length }} assigned to sections)
+                                </span>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1172,7 +1422,7 @@ async function loadEnrolledStudents() {
 
                 <div class="field">
                     <label for="section">Section</label>
-                    <Dropdown id="section" v-model="selectedSection" :options="availableSections" optionLabel="name" placeholder="Select Section" class="w-full" :disabled="!selectedGradeLevel" />
+                    <Dropdown id="section" v-model="selectedSection" :options="availableSectionsForForm" optionLabel="name" placeholder="Select Section" class="w-full" :disabled="!selectedGradeLevel" />
                 </div>
             </div>
 
@@ -1316,6 +1566,84 @@ async function loadEnrolledStudents() {
                     <Button icon="pi pi-times" label="Close" class="p-button-rounded p-button-secondary" @click="showStudentDetails = false" />
                 </div>
             </div>
+        </Dialog>
+
+        <!-- Section Assignment Dialog -->
+        <Dialog 
+            v-model:visible="sectionAssignmentDialog" 
+            modal 
+            :header="`Assign Section - ${studentToAssign ? getStudentDisplayName(studentToAssign) : ''}`"
+            :style="{ width: '500px' }"
+            class="p-fluid"
+        >
+            <div class="p-4">
+                <div class="mb-4">
+                    <div class="flex items-center mb-3">
+                        <Avatar 
+                            :label="studentToAssign ? getStudentInitials(studentToAssign) : 'S'" 
+                            shape="circle" 
+                            size="large" 
+                            class="mr-3"
+                            style="background-color: #f59e0b; color: white;"
+                        />
+                        <div>
+                            <h4 class="font-semibold text-gray-800">
+                                {{ studentToAssign ? getStudentDisplayName(studentToAssign) : '' }}
+                            </h4>
+                            <p class="text-sm text-gray-600">{{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}</p>
+                            <p class="text-xs text-gray-500">ID: {{ studentToAssign?.studentId || studentToAssign?.enrollment_id }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
+                    <Dropdown 
+                        id="sectionSelect"
+                        v-model="selectedSectionForAssignment" 
+                        :options="availableSections" 
+                        optionLabel="name" 
+                        placeholder="Choose a section" 
+                        class="w-full mt-2"
+                        :disabled="!studentToAssign"
+                    >
+                        <template #option="slotProps">
+                            <div class="flex items-center">
+                                <i class="pi pi-users mr-2 text-blue-500"></i>
+                                <span>{{ slotProps.option.name }}</span>
+                            </div>
+                        </template>
+                    </Dropdown>
+                    <small class="text-gray-500 mt-1">
+                        Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}
+                    </small>
+                </div>
+
+                <div v-if="selectedSectionForAssignment" class="mt-4 p-3 bg-green-50 rounded-lg">
+                    <div class="flex items-center">
+                        <i class="pi pi-check-circle text-green-600 mr-2"></i>
+                        <span class="text-green-800 font-medium">
+                            Ready to assign to {{ selectedSectionForAssignment.name }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button 
+                    label="Cancel" 
+                    icon="pi pi-times" 
+                    class="p-button-text" 
+                    @click="sectionAssignmentDialog = false" 
+                />
+                <Button 
+                    label="Assign Section" 
+                    icon="pi pi-check" 
+                    class="p-button-primary" 
+                    @click="assignStudentToSection"
+                    :disabled="!selectedSectionForAssignment"
+                />
+            </template>
         </Dialog>
 
         <Toast />

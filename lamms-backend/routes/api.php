@@ -169,8 +169,10 @@ Route::get('/subjects', [SubjectController::class, 'index']);
 Route::get('/grades', [GradeController::class, 'index']);
 
 // Enrollment routes
-Route::get('enrollments', [EnrollmentController::class, 'index']);
-Route::post('enrollments', [EnrollmentController::class, 'store']);
+Route::apiResource('enrollments', EnrollmentController::class);
+Route::get('enrollments/stats', [EnrollmentController::class, 'getStats']);
+Route::post('enrollments/{id}/assign-section', [EnrollmentController::class, 'assignSection']);
+Route::get('enrollments/{id}/available-sections', [EnrollmentController::class, 'getAvailableSections']);
 Route::get('enrollments/{id}', [EnrollmentController::class, 'show']);
 Route::put('enrollments/{id}', [EnrollmentController::class, 'update']);
 Route::delete('enrollments/{id}', [EnrollmentController::class, 'destroy']);

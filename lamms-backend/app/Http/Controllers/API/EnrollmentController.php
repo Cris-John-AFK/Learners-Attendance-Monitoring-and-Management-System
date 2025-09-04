@@ -17,12 +17,21 @@ class EnrollmentController extends Controller
     {
         try {
             $students = Student::where('enrollment_status', 'Enrolled')
+                             ->with(['currentSection.curriculumGrade.grade'])
                              ->orderBy('created_at', 'desc')
                              ->get();
+
+            // Add section information to each student
+            $studentsWithSections = $students->map(function ($student) {
+                $currentSection = $student->getSectionForYear('2025-2026');
+                $student->current_section_name = $currentSection ? $currentSection->name : null;
+                $student->current_section_id = $currentSection ? $currentSection->id : null;
+                return $student;
+            });
             
             return response()->json([
                 'success' => true,
-                'data' => $students
+                'data' => $studentsWithSections
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching enrolled students: ' . $e->getMessage());
@@ -218,6 +227,108 @@ class EnrollmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete student'
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign student to section
+     */
+    public function assignSection(Request $request, $id)
+    {
+        try {
+            $student = Student::findOrFail($id);
+            
+            $validator = Validator::make($request->all(), [
+                'section_id' => 'required|exists:sections,id',
+                'school_year' => 'string|nullable'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $sectionId = $request->section_id;
+            $schoolYear = $request->school_year ?? '2025-2026';
+
+            // Verify the section matches the student's grade level
+            $section = \App\Models\Section::with(['curriculumGrade.grade'])->findOrFail($sectionId);
+            $sectionGrade = $section->curriculumGrade->grade ?? null;
+            
+            if (!$sectionGrade || $sectionGrade->name !== $student->gradeLevel) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Section grade level does not match student grade level'
+                ], 422);
+            }
+
+            // Remove existing section assignment for this school year
+            $student->sections()->wherePivot('school_year', $schoolYear)->detach();
+
+            // Assign to new section
+            $student->sections()->attach($sectionId, [
+                'school_year' => $schoolYear,
+                'is_active' => true
+            ]);
+
+            // Update the legacy section field for backward compatibility
+            $student->update(['section' => $section->name]);
+
+            Log::info('Student assigned to section', [
+                'student_id' => $student->id,
+                'section_id' => $sectionId,
+                'school_year' => $schoolYear
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Student assigned to section successfully',
+                'data' => [
+                    'student' => $student->fresh(),
+                    'section' => $section
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error assigning student to section: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign student to section'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get available sections for a student's grade level
+     */
+    public function getAvailableSections($id)
+    {
+        try {
+            $student = Student::findOrFail($id);
+            
+            // Get sections that match the student's grade level
+            $sections = \App\Models\Section::with(['curriculumGrade.grade'])
+                ->whereHas('curriculumGrade.grade', function ($query) use ($student) {
+                    $query->where('name', $student->gradeLevel);
+                })
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $sections
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching available sections: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch available sections'
             ], 500);
         }
     }
