@@ -33,8 +33,9 @@ class NaawaanCurriculumSeeder extends Seeder
             'is_active' => true
         ]);
 
-        // Get all grades and associate them with the curriculum
-        $grades = Grade::orderBy('display_order')->get();
+        // Get only elementary grades (Kindergarten to Grade 6) - no Grade 7-12
+        $elementaryGrades = ['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
+        $grades = Grade::whereIn('name', $elementaryGrades)->orderBy('display_order')->get();
         
         foreach ($grades as $grade) {
             CurriculumGrade::create([

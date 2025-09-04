@@ -13,6 +13,7 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
+import TabMenu from 'primevue/tabmenu';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -3319,6 +3320,26 @@ const sectionSchedules = ref([]);
 const sectionManagementHub = ref(false);
 const selectedSectionForHub = ref(null);
 const activeManagementTab = ref('schedules'); // schedules, subjects, details
+const activeManagementTabIndex = ref(0);
+
+// Tab menu items for section management
+const managementTabItems = ref([
+    { label: '📅 Schedules' },
+    { label: '📚 Subjects' },
+    { label: '⚙️ Section Details' }
+]);
+
+// Watch for tab index changes to update the active tab
+watch(activeManagementTabIndex, (newIndex) => {
+    const tabMap = ['schedules', 'subjects', 'details'];
+    activeManagementTab.value = tabMap[newIndex] || 'schedules';
+});
+
+// Watch for active tab changes to update the index
+watch(activeManagementTab, (newTab) => {
+    const indexMap = { 'schedules': 0, 'subjects': 1, 'details': 2 };
+    activeManagementTabIndex.value = indexMap[newTab] || 0;
+});
 
 // Open section edit dialog
 const openSectionEditDialog = (section) => {
@@ -3409,11 +3430,7 @@ const refreshSectionSchedules = async () => {
     try {
         loading.value = true;
         const gradeId = selectedSectionForHub.value.grade_id || selectedGradeForSections.value?.id || 1;
-        const subjectsResponse = await CurriculumService.getSubjectsBySection(
-            curriculum.value.id, 
-            gradeId, 
-            selectedSectionForHub.value.id
-        );
+        const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, gradeId, selectedSectionForHub.value.id);
         selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
         // Use the same data for schedules tab
         sectionSchedules.value = selectedSubjects.value;
@@ -3447,19 +3464,15 @@ const openHomeroomTeacherDialog = (section) => {
 // Refresh subjects for the hub dialog - unified with schedules
 const refreshSubjectsForHub = async () => {
     if (!selectedSectionForHub.value) return;
-    
+
     loading.value = true;
     try {
         // Get grade ID from section's grade_id property or fallback to 1
         const gradeId = selectedSectionForHub.value.grade_id || selectedGradeForSections.value?.id || 1;
-        
-        const subjects = await CurriculumService.getSubjectsBySection(
-            curriculum.value.id,
-            gradeId,
-            selectedSectionForHub.value.id
-        );
+
+        const subjects = await CurriculumService.getSubjectsBySection(curriculum.value.id, gradeId, selectedSectionForHub.value.id);
         selectedSubjects.value = Array.isArray(subjects) ? subjects : [];
-        
+
         // Keep schedules tab synchronized
         sectionSchedules.value = selectedSubjects.value;
     } catch (error) {
@@ -3490,7 +3503,7 @@ const openSectionManagementHub = async (section) => {
         const gradeId = section.grade_id || selectedGradeForSections.value?.id || 1;
         const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, gradeId, section.id);
         selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
-        
+
         // Use the same data for schedules tab (subjects with schedules)
         sectionSchedules.value = selectedSubjects.value;
 
@@ -3813,7 +3826,7 @@ const deleteSchedule = async (scheduleId) => {
             try {
                 loading.value = true;
                 await api.delete(`/api/schedules/${scheduleId}`);
-                
+
                 // Refresh unified data for both tabs
                 await refreshSectionSchedules();
 
@@ -3841,7 +3854,7 @@ const deleteSchedule = async (scheduleId) => {
 // Delete all schedules for a subject
 const deleteSubjectSchedules = async (subject) => {
     if (!subject.schedules || subject.schedules.length === 0) return;
-    
+
     confirmDialog.require({
         message: `Are you sure you want to delete all schedules for ${subject.name}?`,
         header: 'Delete All Schedules',
@@ -3849,12 +3862,12 @@ const deleteSubjectSchedules = async (subject) => {
         accept: async () => {
             try {
                 loading.value = true;
-                
+
                 // Delete all schedules for this subject
                 for (const schedule of subject.schedules) {
                     await api.delete(`/api/schedules/${schedule.id}`);
                 }
-                
+
                 // Refresh unified data for both tabs
                 await refreshSectionSchedules();
 
@@ -4786,13 +4799,6 @@ watch(
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
                 <div v-for="grade in grades" :key="grade.id" class="subject-card clickable-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }" @click="openSectionManagement(grade)">
-                    <!-- Floating symbols -->
-                    <span class="symbol"></span>
-                    <span class="symbol"></span>
-                    <span class="symbol"></span>
-                    <span class="symbol"></span>
-                    <span class="symbol"></span>
-
                     <div class="card-content">
                         <h1 class="subject-title">{{ grade.name }}</h1>
                     </div>
@@ -5521,20 +5527,18 @@ watch(
         <Dialog v-model:visible="sectionManagementHub" :header="'Section Management - ' + (selectedSectionForHub?.name || '')" modal class="p-fluid section-management-hub" :style="{ width: '95vw', maxWidth: '1200px', height: '90vh' }">
             <!-- Tab Navigation -->
             <div class="management-tabs mb-4">
-                <div class="flex gap-2 border-bottom-1 surface-border pb-2">
-                    <Button :class="activeManagementTab === 'schedules' ? 'p-button-primary' : 'p-button-outlined'" label="📅 Schedules" @click="activeManagementTab = 'schedules'" />
-                    <Button :class="activeManagementTab === 'subjects' ? 'p-button-primary' : 'p-button-outlined'" label="📚 Subjects" @click="activeManagementTab = 'subjects'" />
-                    <Button :class="activeManagementTab === 'details' ? 'p-button-primary' : 'p-button-outlined'" label="⚙️ Section Details" @click="activeManagementTab = 'details'" />
-                </div>
+                <TabMenu :model="managementTabItems" v-model:activeIndex="activeManagementTabIndex" />
             </div>
 
             <!-- Schedules Tab -->
             <div v-if="activeManagementTab === 'schedules'" class="tab-content">
-                <div class="flex justify-content-between align-items-center mb-4">
-                    <h3 class="m-0">📅 All Schedules for Section {{ selectedSectionForHub?.name }}</h3>
-                    <div class="flex gap-2">
-                        <Button label="Create Homeroom Schedule" icon="pi pi-plus" class="p-button-success" @click="createHomeroomSchedule" v-if="!hasHomeroomSchedule" />
-                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSchedules" v-tooltip.top="'Refresh Schedules'" />
+                <div class="schedule-header-container">
+                    <div class="schedule-header-content">
+                        <h3 class="m-0">📅 All Schedules for Section {{ selectedSectionForHub?.name }}</h3>
+                        <div class="flex gap-2">
+                            <Button label="Create Homeroom Schedule" icon="pi pi-plus" class="p-button-success" @click="createHomeroomSchedule" v-if="!hasHomeroomSchedule" />
+                            <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSchedules" v-tooltip.top="'Refresh Schedules'" />
+                        </div>
                     </div>
                 </div>
 
@@ -5559,7 +5563,7 @@ watch(
                                             {{ subject.name }}
                                         </h4>
                                         <p v-if="subject.description" class="mt-0 mb-2 text-sm text-600">{{ subject.description }}</p>
-                                        
+
                                         <!-- Schedule Display -->
                                         <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-details mt-2">
                                             <div v-for="schedule in subject.schedules" :key="schedule.id" class="schedule-item mb-2 p-2 border-round" style="background: var(--surface-100)">
@@ -5588,7 +5592,13 @@ watch(
                                     </div>
                                     <div class="flex flex-column gap-2">
                                         <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
-                                        <Button v-if="subject.schedules && subject.schedules.length > 0" icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="deleteSubjectSchedules(subject)" v-tooltip.top="'Delete All Schedules'" />
+                                        <Button
+                                            v-if="subject.schedules && subject.schedules.length > 0"
+                                            icon="pi pi-trash"
+                                            class="p-button-rounded p-button-danger p-button-outlined p-button-sm"
+                                            @click="deleteSubjectSchedules(subject)"
+                                            v-tooltip.top="'Delete All Schedules'"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -5599,11 +5609,13 @@ watch(
 
             <!-- Subjects Tab -->
             <div v-if="activeManagementTab === 'subjects'" class="tab-content">
-                <div class="flex justify-content-between align-items-center mb-4">
-                    <h3 class="m-0">📚 Subjects for Section {{ selectedSectionForHub?.name }}</h3>
-                    <div class="flex gap-2">
-                        <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
-                        <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSubjectsForHub" v-tooltip.top="'Refresh Subjects'" />
+                <div class="schedule-header-container">
+                    <div class="schedule-header-content">
+                        <h3 class="m-0">📚 Subjects for Section {{ selectedSectionForHub?.name }}</h3>
+                        <div class="flex gap-2">
+                            <Button label="Add Subject" icon="pi pi-plus" class="p-button-success" @click="openAddSubjectDialog" />
+                            <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSubjectsForHub" v-tooltip.top="'Refresh Subjects'" />
+                        </div>
                     </div>
                 </div>
 
@@ -5634,7 +5646,7 @@ watch(
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <!-- Action Buttons -->
                             <div class="flex gap-2">
                                 <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
@@ -5642,7 +5654,7 @@ watch(
                                 <Button label="Remove" icon="pi pi-trash" class="p-button-sm p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" />
                             </div>
                         </div>
-                        
+
                         <!-- Schedule Display -->
                         <div class="schedule-section mt-3">
                             <div v-if="subject.schedules && subject.schedules.length > 0" class="schedules-list">
@@ -5673,8 +5685,10 @@ watch(
 
             <!-- Section Details Tab -->
             <div v-if="activeManagementTab === 'details'" class="tab-content">
-                <div class="flex justify-content-between align-items-center mb-4">
-                    <h3 class="m-0">⚙️ Section Details for {{ selectedSectionForHub?.name }}</h3>
+                <div class="schedule-header-container">
+                    <div class="schedule-header-content">
+                        <h3 class="m-0">⚙️ Section Details for {{ selectedSectionForHub?.name }}</h3>
+                    </div>
                 </div>
 
                 <div class="section-details-form">
@@ -6630,8 +6644,34 @@ body > .p-dialog-mask {
 }
 
 /* Fix dialog stacking */
-:deep(.p-dialog.schedule-dialog) {
-    z-index: 99999 !important;
+:deep(.p-dialog-header .p-dialog-header-icon) {
+    color: white !important;
+}
+
+/* Expand section management dialog */
+:deep(.p-dialog) {
+    width: 90vw !important;
+    max-width: 1200px !important;
+    height: 80vh !important;
+    max-height: 800px !important;
+}
+
+:deep(.p-dialog-content) {
+    height: calc(100% - 120px) !important;
+    overflow-y: auto !important;
+}
+
+/* Schedule header styling with black border */
+.schedule-header-container {
+    border-bottom: 2px solid #000 !important;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.schedule-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 :deep(.p-dialog-mask.p-component-overlay) {
