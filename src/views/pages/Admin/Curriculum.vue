@@ -3489,7 +3489,7 @@ const openSectionManagementHub = async (section) => {
     selectedSectionForHub.value = { ...section }; // Create a copy for editing
     selectedSectionForSchedule.value = section;
     selectedSection.value = section;
-    activeManagementTab.value = 'schedules';
+    activeManagementTab.value = 'subjects';
 
     // Load all necessary data - use unified subjects with schedules for both tabs
     try {
