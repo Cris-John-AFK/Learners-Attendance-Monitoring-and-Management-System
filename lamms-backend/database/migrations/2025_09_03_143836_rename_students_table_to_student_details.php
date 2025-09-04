@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::rename('students', 'student_details');
+        // This migration is no longer needed as student_details table
+        // already exists and students table was never created
+        // Removing to avoid conflicts
     }
 
     /**
@@ -19,6 +21,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::rename('student_details', 'students');
+        // No action needed
     }
 };

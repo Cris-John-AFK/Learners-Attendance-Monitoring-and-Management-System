@@ -11,21 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('student_section', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('student_id')->constrained('student_details')->onDelete('cascade');
-            $table->foreignId('section_id')->constrained('sections')->onDelete('cascade');
-            $table->string('school_year')->default('2025-2026');
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-
-            // Ensure a student can only be in one section per school year
-            $table->unique(['student_id', 'school_year']);
-            
-            // Index for performance
-            $table->index(['section_id', 'is_active']);
-            $table->index(['student_id', 'is_active']);
-        });
+        // Skip this migration - replaced by 2025_04_22_144310_create_student_section_table.php
+        // This migration was running before student_details table was created
+        return;
     }
 
     /**
@@ -33,6 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('student_section');
+        // Skip - handled by newer migration
+        return;
     }
 };

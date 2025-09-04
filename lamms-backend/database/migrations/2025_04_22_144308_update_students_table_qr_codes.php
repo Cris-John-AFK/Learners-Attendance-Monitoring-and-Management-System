@@ -11,19 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('students', function (Blueprint $table) {
+        Schema::table('student_details', function (Blueprint $table) {
             // Add QR code column if it doesn't exist
-            if (!Schema::hasColumn('students', 'qr_code')) {
+            if (!Schema::hasColumn('student_details', 'qr_code')) {
                 $table->string('qr_code')->unique()->nullable();
             }
-            
+
             // Add status column if it doesn't exist
-            if (!Schema::hasColumn('students', 'status')) {
+            if (!Schema::hasColumn('student_details', 'status')) {
                 $table->enum('status', ['active', 'inactive', 'transferred', 'graduated'])->default('active');
             }
-            
+
             // Ensure student_id is unique
-            if (!Schema::hasColumn('students', 'student_id')) {
+            if (!Schema::hasColumn('student_details', 'student_id')) {
                 $table->string('student_id')->unique();
             }
         });
@@ -34,7 +34,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('students', function (Blueprint $table) {
+        Schema::table('student_details', function (Blueprint $table) {
             $table->dropColumn(['qr_code', 'status']);
         });
     }

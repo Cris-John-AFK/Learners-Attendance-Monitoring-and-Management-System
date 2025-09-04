@@ -11,18 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('students', function (Blueprint $table) {
+        Schema::table('student_details', function (Blueprint $table) {
             // Add missing columns if they don't exist
-            if (!Schema::hasColumn('students', 'address')) {
+            if (!Schema::hasColumn('student_details', 'address')) {
                 $table->text('address')->nullable();
             }
-            if (!Schema::hasColumn('students', 'qr_code_path')) {
+            if (!Schema::hasColumn('student_details', 'qr_code_path')) {
                 $table->string('qr_code_path')->nullable();
             }
-            if (!Schema::hasColumn('students', 'photo')) {
+            if (!Schema::hasColumn('student_details', 'photo')) {
                 $table->string('photo')->nullable();
             }
-            if (!Schema::hasColumn('students', 'is_active')) {
+            if (!Schema::hasColumn('student_details', 'is_active')) {
                 $table->boolean('is_active')->default(true);
             }
         });
@@ -33,7 +33,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('students', function (Blueprint $table) {
+        Schema::table('student_details', function (Blueprint $table) {
             $table->dropColumn(['address', 'qr_code_path', 'photo', 'is_active']);
         });
     }
