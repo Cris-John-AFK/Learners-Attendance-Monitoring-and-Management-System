@@ -905,6 +905,7 @@ const logout = () => {
 .header-right {
     display: flex;
     align-items: center;
+    gap: 1rem;
 }
 
 .guard-info {
@@ -1022,17 +1023,17 @@ const logout = () => {
 .visitor-toggle-button {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1.5rem 2.5rem;
-    border-radius: 0.75rem;
+    gap: 1rem;
+    padding: 2rem 3rem;
+    border-radius: 1rem;
     border: 3px solid #e2e8f0;
     background: white;
     color: #64748b;
-    font-size: 1.4rem;
+    font-size: 1.6rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 65px;
+    min-height: 75px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
     &:hover {
@@ -1051,7 +1052,7 @@ const logout = () => {
     }
 
     i {
-        font-size: 1.5rem;
+        font-size: 1.8rem;
     }
 }
 
@@ -1059,16 +1060,16 @@ const logout = () => {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.5rem 2.5rem;
+    padding: 2rem 3rem;
     background-color: #10b981;
     color: white;
     border: none;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     font-weight: 700;
-    font-size: 1.4rem;
+    font-size: 1.6rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 65px;
+    min-height: 75px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
@@ -1078,7 +1079,7 @@ const logout = () => {
     }
 
     i {
-        font-size: 1.5rem;
+        font-size: 1.8rem;
     }
 }
 
@@ -1132,7 +1133,7 @@ const logout = () => {
     border: 3px solid #d1d5db;
     border-radius: 0.75rem;
     font-weight: 700;
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     cursor: pointer;
     transition: all 0.2s;
     min-height: 60px;
@@ -1160,16 +1161,16 @@ const logout = () => {
     border: none;
     border-radius: 0.75rem;
     font-weight: 700;
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     cursor: pointer;
     transition: all 0.2s;
     min-height: 60px;
-    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
         background-color: #059669;
         transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(16, 185, 129, 0.5);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
     }
 
     i {
@@ -1215,17 +1216,17 @@ const logout = () => {
 .action-button {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1.5rem 2.5rem;
-    border-radius: 0.75rem;
+    gap: 1rem;
+    padding: 2rem 3rem;
+    border-radius: 1rem;
     border: 3px solid #3b82f6;
     background: white;
     color: #3b82f6;
-    font-size: 1.4rem;
+    font-size: 1.6rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 65px;
+    min-height: 75px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 
     &:hover {
@@ -1236,7 +1237,7 @@ const logout = () => {
     }
 
     i {
-        font-size: 1.5rem;
+        font-size: 1.8rem;
     }
 }
 
@@ -1244,12 +1245,12 @@ const logout = () => {
     background-color: #ef4444;
     color: white;
     border-color: #ef4444;
-    box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
 
     &:hover {
         background-color: #dc2626;
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(239, 68, 68, 0.5);
+        box-shadow: 0 4px 8px rgba(239, 68, 68, 0.5);
     }
 }
 
@@ -1257,12 +1258,12 @@ const logout = () => {
     background-color: #10b981;
     color: white;
     border-color: #10b981;
-    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.4);
 
     &:hover {
         background-color: #059669;
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(16, 185, 129, 0.5);
+        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.5);
     }
 }
 
@@ -1270,12 +1271,12 @@ const logout = () => {
     background-color: #8b5cf6;
     color: white;
     border-color: #8b5cf6;
-    box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.4);
 
     &:hover {
         background-color: #7c3aed;
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(139, 92, 246, 0.5);
+        box-shadow: 0 4px 8px rgba(139, 92, 246, 0.5);
     }
 }
 
@@ -1284,10 +1285,10 @@ const logout = () => {
     height: 400px;
     width: 400px;
     margin: 0 auto;
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     overflow: hidden;
     background: #0f172a;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .qr-scanner {
@@ -1420,9 +1421,9 @@ const logout = () => {
 
 .student-preview {
     background: white;
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .preview-header {
@@ -1560,8 +1561,8 @@ const logout = () => {
     display: flex;
     flex-direction: column;
     background: white;
-    border-radius: 0.75rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
     overflow: hidden;
     flex: 1;
     min-height: 0;
@@ -1585,10 +1586,10 @@ const logout = () => {
 
 .search-input {
     width: 100%;
-    padding: 1rem 1rem 1rem 3rem;
+    padding: 0.75rem 1rem;
     border-radius: 0.375rem;
     border: 1px solid #e2e8f0;
-    font-size: 1.1rem;
+    font-size: 1rem;
     transition: all 0.2s;
 
     &:focus {
@@ -1608,7 +1609,7 @@ const logout = () => {
         top: 50%;
         transform: translateY(-50%);
         color: #94a3b8;
-        font-size: 1.2rem;
+        font-size: 1rem;
     }
 }
 
@@ -1623,35 +1624,35 @@ const logout = () => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 1rem 2rem;
-    border-radius: 0.75rem;
-    border: 3px solid #e2e8f0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 2px solid #e2e8f0;
     background: white;
     color: #64748b;
-    font-size: 1.2rem;
-    font-weight: 700;
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    min-height: 55px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 40px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
     &:hover {
         background: #f8fafc;
         border-color: #3b82f6;
         color: #3b82f6;
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
     }
 
     &.active {
         background: #3b82f6;
         color: white;
         border-color: #3b82f6;
-        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.4);
     }
 
     i {
-        font-size: 1.3rem;
+        font-size: 1rem;
     }
 }
 
@@ -1745,17 +1746,17 @@ const logout = () => {
     .export-button {
         display: flex;
         align-items: center;
-        gap: 1rem;
-        padding: 1.5rem 3rem;
+        gap: 1.25rem;
+        padding: 2rem 3.5rem;
         background: #8b5cf6;
         color: white;
         border: none;
-        border-radius: 0.75rem;
+        border-radius: 1rem;
         font-weight: 700;
-        font-size: 1.4rem;
+        font-size: 1.6rem;
         cursor: pointer;
         transition: all 0.2s;
-        min-height: 65px;
+        min-height: 75px;
         box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
 
         &:hover {
@@ -1765,7 +1766,7 @@ const logout = () => {
         }
 
         i {
-            font-size: 1.5rem;
+            font-size: 1.8rem;
         }
     }
 }
@@ -1779,80 +1780,347 @@ const logout = () => {
 
 /* Responsive Adjustments */
 @media (max-width: 1024px) {
+    .dashboard-header {
+        padding: 1rem;
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .dashboard-header h1 {
+        font-size: 1.25rem;
+        line-height: 1.2;
+    }
+
+    .date-time .date {
+        font-size: 0.875rem;
+    }
+
+    .date-time .time {
+        font-size: 1.25rem;
+    }
+
+    .guard-info {
+        font-size: 0.75rem;
+    }
+
+    .logout-button {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
     .main-content-columns {
-        grid-template-columns: 1fr;
+        flex-direction: column;
         gap: 1.5rem;
     }
 
-    .scanner-container {
-        height: 350px;
+    .left-column,
+    .right-column {
+        width: 100%;
     }
-}
 
-@media (max-width: 768px) {
-    .dashboard-header {
+    .scanner-actions {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .action-button {
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        width: 100%;
+        min-height: 40px;
+        border-radius: 0.5rem;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    .visitor-toggle-buttons {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .visitor-toggle-button {
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        width: 100%;
+        min-height: 40px;
+        border-radius: 0.5rem;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    .guest-register-button {
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        width: 100%;
+        margin-top: 0.5rem;
+        min-height: 40px;
+        border-radius: 0.5rem;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    .filter-buttons {
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .filter-button {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        width: 100%;
+        min-height: 40px;
+        border-radius: 0.5rem;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    .section-header {
         flex-direction: column;
         gap: 1rem;
-        padding: 1rem;
+        align-items: stretch;
     }
 
-    .header-left,
-    .header-center,
-    .header-right {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .dashboard-container {
-        padding: 1rem;
+    .section-header h2 {
+        font-size: 1rem;
+        text-align: center;
     }
 
     .feed-actions {
         flex-direction: column;
         align-items: stretch;
+        gap: 1rem;
     }
 
     .search-input {
         width: 100%;
+        padding: 0.75rem;
+        font-size: 0.875rem;
+    }
+
+    .scanner-container {
+        height: 200px;
+    }
+
+    .student-preview {
+        padding: 0.75rem;
+    }
+
+    .student-info h3 {
+        font-size: 0.875rem;
+    }
+
+    .info-row {
+        font-size: 0.75rem;
+    }
+
+    .stat-item {
+        min-width: 60px;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+    }
+
+    .export-button {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.75rem !important;
+        width: 100% !important;
+        min-height: 40px !important;
+        border-radius: 0.5rem !important;
+        gap: 0.75rem !important;
+
+        i {
+            font-size: 1rem !important;
+        }
     }
 
     .dashboard-footer {
-        flex-direction: column;
-        gap: 1.5rem;
-        padding: 1.5rem 1rem;
+        padding: 1rem 0.75rem;
     }
 
     .footer-stats {
-        width: 100%;
-        justify-content: space-between;
+        gap: 0.5rem;
     }
 }
 
-/* Record Type Styling */
-.preview-header.record-checkin {
-    background: rgba(16, 185, 129, 0.1);
+@media (max-width: 768px) {
+    .dashboard-header h1 {
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+
+    .date-time .date {
+        font-size: 0.75rem;
+    }
+
+    .date-time .time {
+        font-size: 1rem;
+    }
+
+    .scanner-container {
+        height: 250px;
+    }
+
+    .student-preview {
+        padding: 1rem;
+    }
+
+    .student-info h3 {
+        font-size: 0.875rem;
+    }
+
+    .info-row {
+        font-size: 0.75rem;
+    }
+
+    .attendance-table {
+        font-size: 0.75rem;
+    }
+
+    .visitor-toggle-container {
+        padding: 1rem;
+    }
+
+    .guest-dialog {
+        width: 95% !important;
+        margin: 1rem;
+    }
 }
 
-.preview-header.record-checkout {
-    background: rgba(59, 130, 246, 0.1);
-}
+@media (max-width: 480px) {
+    .dashboard-header {
+        padding: 0.75rem;
+    }
 
-.record-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.375rem;
-}
+    .dashboard-header h1 {
+        font-size: 0.875rem;
+        line-height: 1.2;
+    }
 
-.record-badge.record-checkin {
-    background: rgba(16, 185, 129, 0.2);
-    color: #10b981;
-}
+    .school-logo {
+        width: 30px;
+        height: 30px;
+    }
 
-.record-badge.record-checkout {
-    background: rgba(59, 130, 246, 0.2);
-    color: #3b82f6;
+    .date-time .date {
+        font-size: 0.625rem;
+    }
+
+    .date-time .time {
+        font-size: 0.875rem;
+    }
+
+    .guard-info {
+        font-size: 0.625rem;
+    }
+
+    .guard-name {
+        font-size: 0.75rem;
+    }
+
+    .guard-id {
+        font-size: 0.625rem;
+    }
+
+    .logout-button {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.625rem;
+    }
+
+    .section-header h2 {
+        font-size: 0.875rem;
+    }
+
+    .action-button,
+    .visitor-toggle-button,
+    .guest-register-button {
+        padding: 0.625rem 0.875rem;
+        font-size: 0.625rem;
+        min-height: 35px;
+        border-radius: 0.375rem;
+
+        i {
+            font-size: 0.875rem;
+        }
+    }
+
+    .filter-button {
+        padding: 0.5rem;
+        font-size: 0.625rem;
+        min-height: 35px;
+        border-radius: 0.375rem;
+
+        i {
+            font-size: 0.875rem;
+        }
+    }
+
+    .search-input {
+        padding: 0.625rem;
+        font-size: 0.75rem;
+    }
+
+    .scanner-container {
+        height: 200px;
+    }
+
+    .student-preview {
+        padding: 0.75rem;
+    }
+
+    .student-info h3 {
+        font-size: 0.75rem;
+    }
+
+    .info-row {
+        font-size: 0.625rem;
+    }
+
+    .stat-item {
+        min-width: 60px;
+    }
+
+    .stat-label {
+        font-size: 0.625rem;
+    }
+
+    .stat-value {
+        font-size: 1rem;
+    }
+
+    .export-button {
+        padding: 0.625rem 1rem !important;
+        font-size: 0.625rem !important;
+        width: 100%;
+        min-height: 35px !important;
+        border-radius: 0.375rem !important;
+        gap: 0.5rem !important;
+
+        i {
+            font-size: 0.875rem !important;
+        }
+    }
+
+    .dashboard-footer {
+        padding: 1rem 0.75rem;
+    }
+
+    .footer-stats {
+        gap: 0.5rem;
+    }
 }
 </style>

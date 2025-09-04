@@ -3319,25 +3319,21 @@ const selectedSectionForSchedule = ref(null);
 const sectionSchedules = ref([]);
 const sectionManagementHub = ref(false);
 const selectedSectionForHub = ref(null);
-const activeManagementTab = ref('schedules'); // schedules, subjects, details
+const activeManagementTab = ref('subjects'); // subjects, details
 const activeManagementTabIndex = ref(0);
 
 // Tab menu items for section management
-const managementTabItems = ref([
-    { label: '📅 Schedules' },
-    { label: '📚 Subjects' },
-    { label: '⚙️ Section Details' }
-]);
+const managementTabItems = ref([{ label: '📚 Subjects' }, { label: '⚙️ Section Details' }]);
 
 // Watch for tab index changes to update the active tab
 watch(activeManagementTabIndex, (newIndex) => {
-    const tabMap = ['schedules', 'subjects', 'details'];
-    activeManagementTab.value = tabMap[newIndex] || 'schedules';
+    const tabMap = ['subjects', 'details'];
+    activeManagementTab.value = tabMap[newIndex] || 'subjects';
 });
 
 // Watch for active tab changes to update the index
 watch(activeManagementTab, (newTab) => {
-    const indexMap = { 'schedules': 0, 'subjects': 1, 'details': 2 };
+    const indexMap = { subjects: 0, details: 1 };
     activeManagementTabIndex.value = indexMap[newTab] || 0;
 });
 
@@ -3493,7 +3489,7 @@ const openSectionManagementHub = async (section) => {
     selectedSectionForHub.value = { ...section }; // Create a copy for editing
     selectedSectionForSchedule.value = section;
     selectedSection.value = section;
-    activeManagementTab.value = 'schedules';
+    activeManagementTab.value = 'subjects';
 
     // Load all necessary data - use unified subjects with schedules for both tabs
     try {
@@ -4617,7 +4613,6 @@ watch(
 }
 
 .modern-section-card:hover {
-    transform: translateY(-4px);
     border-color: #4a87d5;
     box-shadow:
         0 20px 25px -5px rgba(0, 0, 0, 0.1),
@@ -4798,7 +4793,7 @@ watch(
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="grade in grades" :key="grade.id" class="subject-card clickable-card" :style="{ background: 'linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9))' }" @click="openSectionManagement(grade)">
+                <div v-for="grade in grades" :key="grade.id" class="subject-card clickable-card" @click="openSectionManagement(grade)">
                     <div class="card-content">
                         <h1 class="subject-title">{{ grade.name }}</h1>
                     </div>
@@ -5344,7 +5339,7 @@ watch(
                 </div>
 
                 <div v-else class="subject-grid">
-                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="dialog-subject-card p-3 border-round shadow-2">
                         <div class="flex justify-content-between align-items-start mb-3">
                             <div>
                                 <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
@@ -5530,82 +5525,6 @@ watch(
                 <TabMenu :model="managementTabItems" v-model:activeIndex="activeManagementTabIndex" />
             </div>
 
-            <!-- Schedules Tab -->
-            <div v-if="activeManagementTab === 'schedules'" class="tab-content">
-                <div class="schedule-header-container">
-                    <div class="schedule-header-content">
-                        <h3 class="m-0">📅 All Schedules for Section {{ selectedSectionForHub?.name }}</h3>
-                        <div class="flex gap-2">
-                            <Button label="Create Homeroom Schedule" icon="pi pi-plus" class="p-button-success" @click="createHomeroomSchedule" v-if="!hasHomeroomSchedule" />
-                            <Button icon="pi pi-refresh" class="p-button-outlined" @click="refreshSectionSchedules" v-tooltip.top="'Refresh Schedules'" />
-                        </div>
-                    </div>
-                </div>
-
-                <div v-if="loading" class="flex justify-content-center">
-                    <ProgressSpinner />
-                </div>
-
-                <div v-else-if="selectedSubjects.length === 0" class="text-center p-4">
-                    <i class="pi pi-calendar-times text-5xl text-primary mb-3"></i>
-                    <p class="text-lg font-semibold">No subjects found for this section.</p>
-                    <p>Add subjects first to create schedules.</p>
-                </div>
-
-                <div v-else class="schedule-management-grid" style="max-height: 500px; overflow-y: auto">
-                    <div class="grid">
-                        <div v-for="subject in selectedSubjects" :key="subject.id" class="col-12 md:col-6 lg:col-4">
-                            <div class="schedule-management-card p-3 border-round shadow-2">
-                                <div class="flex justify-content-between align-items-start mb-3">
-                                    <div>
-                                        <h4 class="m-0 mb-1 text-lg">
-                                            <i class="pi pi-book mr-2"></i>
-                                            {{ subject.name }}
-                                        </h4>
-                                        <p v-if="subject.description" class="mt-0 mb-2 text-sm text-600">{{ subject.description }}</p>
-
-                                        <!-- Schedule Display -->
-                                        <div v-if="subject.schedules && subject.schedules.length > 0" class="schedule-details mt-2">
-                                            <div v-for="schedule in subject.schedules" :key="schedule.id" class="schedule-item mb-2 p-2 border-round" style="background: var(--surface-100)">
-                                                <div class="flex align-items-center gap-2 mb-1">
-                                                    <i class="pi pi-calendar text-primary"></i>
-                                                    <span class="font-semibold">{{ schedule.day }}</span>
-                                                </div>
-                                                <div class="flex align-items-center gap-2 mb-1">
-                                                    <i class="pi pi-clock text-primary"></i>
-                                                    <span>{{ schedule.start_time }} - {{ schedule.end_time }}</span>
-                                                </div>
-                                                <div v-if="schedule.teacher_id" class="flex align-items-center gap-2 mb-1">
-                                                    <i class="pi pi-user text-primary"></i>
-                                                    <span>{{ getTeacherName(schedule.teacher_id) }}</span>
-                                                </div>
-                                                <div v-if="schedule.room_number" class="flex align-items-center gap-2">
-                                                    <i class="pi pi-map-marker text-primary"></i>
-                                                    <span>Room {{ schedule.room_number }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div v-else class="no-schedules text-center mt-3 p-2 border-round" style="background: var(--surface-50)">
-                                            <i class="pi pi-calendar-times text-2xl text-400"></i>
-                                            <p class="m-0 text-sm text-600">No schedule set</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex flex-column gap-2">
-                                        <Button label="Set Schedule" icon="pi pi-calendar" class="p-button-sm p-button-outlined" @click="openScheduleDialog(subject)" />
-                                        <Button
-                                            v-if="subject.schedules && subject.schedules.length > 0"
-                                            icon="pi pi-trash"
-                                            class="p-button-rounded p-button-danger p-button-outlined p-button-sm"
-                                            @click="deleteSubjectSchedules(subject)"
-                                            v-tooltip.top="'Delete All Schedules'"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- Subjects Tab -->
             <div v-if="activeManagementTab === 'subjects'" class="tab-content">
@@ -5630,7 +5549,7 @@ watch(
                 </div>
 
                 <div v-else class="subject-grid" style="max-height: 500px; overflow-y: auto">
-                    <div v-for="subject in selectedSubjects" :key="subject.id" class="subject-card p-3 border-round shadow-2 mb-3">
+                    <div v-for="subject in selectedSubjects" :key="subject.id" class="dialog-subject-card p-3 border-round shadow-2 mb-3">
                         <div class="flex justify-content-between align-items-start mb-3">
                             <div>
                                 <h4 class="m-0 mb-1 text-xl">{{ subject.name }}</h4>
@@ -6350,13 +6269,6 @@ watch(
     min-height: 140px;
 }
 
-.grade-card:hover,
-.section-card:hover,
-.subject-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-}
-
 .empty-grades,
 .empty-sections,
 .empty-subjects {
@@ -6587,8 +6499,9 @@ watch(
 }
 
 .no-schedules {
-    background: var(--surface-50);
-    border: 1px dashed var(--surface-300);
+    background: linear-gradient(135deg, #fef7f0, #fed7aa) !important;
+    border: 1px solid #fdba74 !important;
+    color: #9a3412 !important;
     border-radius: 8px;
     padding: 1.5rem;
 }
@@ -6646,6 +6559,152 @@ body > .p-dialog-mask {
 /* Fix dialog stacking */
 :deep(.p-dialog-header .p-dialog-header-icon) {
     color: white !important;
+}
+
+/* Schedule Management Card Styling */
+.schedule-management-card {
+    background: linear-gradient(135deg, #ffffff, #f8fafc) !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+    min-height: auto !important;
+    height: auto !important;
+    width: 100% !important;
+    min-width: 350px !important;
+}
+
+.schedule-management-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+    border-color: #4a87d5 !important;
+}
+
+.schedule-management-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(135deg, #4a87d5, #6366f1);
+}
+
+.schedule-management-card h4 {
+    color: #2d3748 !important;
+    font-weight: 600 !important;
+}
+
+.schedule-management-card .schedule-item {
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+    border: 1px solid #bae6fd !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+    padding: 0.25rem 0.5rem !important;
+    margin-bottom: 0.25rem !important;
+}
+
+.schedule-management-card .schedule-item:hover {
+    background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+    transform: translateX(2px) !important;
+}
+
+.schedule-management-card .no-schedules {
+    background: linear-gradient(135deg, #fef7f0, #fed7aa) !important;
+    border: 1px solid #fdba74 !important;
+    color: #9a3412 !important;
+    padding: 0.5rem !important;
+    margin: 0.25rem 0 !important;
+}
+
+/* Compact schedule card layout */
+.schedule-management-card .flex.justify-content-between {
+    align-items: flex-start !important;
+    gap: 1rem !important;
+}
+
+.schedule-management-card .flex.flex-column.gap-2 {
+    min-width: auto !important;
+    flex-shrink: 0 !important;
+}
+
+.schedule-management-card .p-button-sm {
+    padding: 0.375rem 0.75rem !important;
+    font-size: 0.875rem !important;
+}
+
+.schedule-management-card .p-button-outlined {
+    border-color: #4a87d5 !important;
+    color: #4a87d5 !important;
+}
+
+.schedule-management-card .p-button-outlined:hover {
+    background: #4a87d5 !important;
+    color: white !important;
+}
+
+/* Subject Card Styling for main curriculum cards */
+.subject-card {
+    background: linear-gradient(135deg, rgba(211, 233, 255, 0.9), rgba(233, 244, 255, 0.9)) !important;
+    border: 1px solid rgba(74, 135, 213, 0.3) !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+    overflow: hidden !important;
+    position: relative !important;
+    height: 220px !important;
+    border-radius: 16px !important;
+    transition: all 0.4s ease !important;
+    backdrop-filter: blur(5px) !important;
+    cursor: pointer !important;
+}
+
+/* Dialog Subject Card Styling - white background for dialog cards */
+.dialog-subject-card {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 12px !important;
+    transition: all 0.3s ease !important;
+    cursor: default !important;
+}
+
+.dialog-subject-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15) !important;
+    border-color: #4a87d5 !important;
+}
+
+.subject-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+    border-color: #6366f1 !important;
+}
+
+.subject-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.subject-card h4 {
+    color: #2d3748 !important;
+    font-weight: 600 !important;
+}
+
+.subject-card .teacher-display {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7) !important;
+    padding: 0.5rem !important;
+    border-radius: 6px !important;
+    border: 1px solid #bbf7d0 !important;
+}
+
+.subject-card .no-teacher-text {
+    color: #dc2626 !important;
+    font-style: italic !important;
 }
 
 /* Expand section management dialog */

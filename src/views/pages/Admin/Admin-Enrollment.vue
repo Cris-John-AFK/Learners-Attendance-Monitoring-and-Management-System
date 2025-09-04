@@ -642,6 +642,45 @@ async function submitNewStudent() {
             extension_name: newStudent.value.extensionName || null,
             birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
             age: parseInt(newStudent.value.age) || null,
+<<<<<<< HEAD
+            sex: newStudent.value.sex,
+            religion: newStudent.value.religion,
+            mother_tongue: newStudent.value.motherTongue,
+
+            // Address Information
+            house_no: newStudent.value.houseNo,
+            street: newStudent.value.street,
+            barangay: newStudent.value.barangay,
+            city_municipality: newStudent.value.cityMunicipality,
+            province: newStudent.value.province,
+            country: newStudent.value.country,
+            zip_code: newStudent.value.zipCode,
+
+            // Parent/Guardian Information
+            father_last_name: newStudent.value.fatherLastName,
+            father_first_name: newStudent.value.fatherFirstName,
+            father_middle_name: newStudent.value.fatherMiddleName,
+            father_contact_number: newStudent.value.fatherContactNumber,
+            mother_last_name: newStudent.value.motherLastName,
+            mother_first_name: newStudent.value.motherFirstName,
+            mother_middle_name: newStudent.value.motherMiddleName,
+            mother_contact_number: newStudent.value.motherContactNumber,
+
+            // Previous School Information
+            last_grade_completed: newStudent.value.lastGradeCompleted,
+            last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
+            last_school_attended: newStudent.value.lastSchoolAttended,
+
+            // Contact Information
+            email_address: newStudent.value.emailAddress,
+
+            // Health/Disability Information
+            has_disability: newStudent.value.hasDisability,
+            disabilities: newStudent.value.disabilities.join(','),
+
+            // Household Income
+            household_income: newStudent.value.householdIncome,
+=======
             sex: newStudent.value.sex || 'Male',
             religion: newStudent.value.religion || null,
             mother_tongue: newStudent.value.motherTongue || null,
@@ -679,6 +718,7 @@ async function submitNewStudent() {
 
             // Household Income
             household_income: newStudent.value.householdIncome || 'Below 10k',
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
             // Status fields
             enrollment_status: 'Enrolled',
@@ -767,8 +807,17 @@ async function submitNewStudent() {
     }
 }
 
+<<<<<<< HEAD
+// Section assignment functions
+async function openSectionAssignment(student) {
+    studentToAssign.value = student;
+    selectedSectionForAssignment.value = null;
+    availableSections.value = [];
+
+=======
 // Load enrolled students for display
 async function loadEnrolledStudents() {
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
     try {
         console.log('Loaded enrolled students from API...');
         const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
@@ -803,6 +852,58 @@ async function loadEnrolledStudents() {
     } finally {
         loading.value = false;
     }
+<<<<<<< HEAD
+
+    sectionAssignmentDialog.value = true;
+}
+
+function getGradeCode(gradeLevel) {
+    const gradeMap = {
+        Kinder: 'K',
+        'Grade 1': '1',
+        'Grade 2': '2',
+        'Grade 3': '3',
+        'Grade 4': '4',
+        'Grade 5': '5',
+        'Grade 6': '6'
+    };
+    return gradeMap[gradeLevel] || gradeLevel;
+}
+
+function getStudentDisplayName(student) {
+    // Try different name field combinations based on backend data structure
+    if (student.name && student.name.trim()) {
+        return student.name.trim();
+    }
+
+    const firstName = student.firstName || student.first_name || '';
+    const lastName = student.lastName || student.last_name || '';
+    const middleName = student.middleName || student.middle_name || '';
+
+    if (firstName || lastName) {
+        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+    }
+
+    return student.studentId || student.enrollment_id || 'Unknown Student';
+}
+
+function getStudentInitials(student) {
+    const displayName = getStudentDisplayName(student);
+
+    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
+        return 'S';
+    }
+
+    const nameParts = displayName.split(' ').filter((part) => part.length > 0);
+    if (nameParts.length >= 2) {
+        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+    } else if (nameParts.length === 1) {
+        return nameParts[0].charAt(0).toUpperCase();
+    }
+
+    return 'S';
+=======
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 }
 
 async function assignStudentToSection() {
@@ -836,7 +937,23 @@ async function assignStudentToSection() {
         }
 
         const result = await response.json();
+<<<<<<< HEAD
 
+=======
+<<<<<<< HEAD
+
+        // Update local data
+        const studentIndex = enrolledStudents.value.findIndex((s) => s.id === studentToAssign.value.id);
+        if (studentIndex !== -1) {
+            enrolledStudents.value[studentIndex].section = selectedSectionForAssignment.value.name;
+            enrolledStudents.value[studentIndex].current_section_name = selectedSectionForAssignment.value.name;
+            enrolledStudents.value[studentIndex].current_section_id = selectedSectionForAssignment.value.id;
+        }
+
+=======
+        
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
+>>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
         sectionAssignmentDialog.value = false;
 
         toast.add({
@@ -845,9 +962,16 @@ async function assignStudentToSection() {
             detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}. Student moved to Student Management System.`,
             life: 4000
         });
+<<<<<<< HEAD
+=======
 
         // Reload enrolled students from API to get updated section data
         await loadEnrolledStudents();
+<<<<<<< HEAD
+=======
+
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
+>>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
     } catch (error) {
         console.error('Error assigning section:', error);
         toast.add({
@@ -922,7 +1046,20 @@ async function autoAssignAllStudents() {
     }
 }
 
+<<<<<<< HEAD
+// Load enrolled students for display
+async function loadEnrolledStudents() {
+    try {
+        // Fetch enrolled students from backend API
+        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json'
+            }
+        });
+=======
 // Update existing filteredStudents to handle both students and enrolledStudents
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
 // Form navigation functions (using existing nextStep function)
 function prevStep() {
@@ -1046,12 +1183,44 @@ defineExpose({
                                     <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
                                     <p class="text-xs text-blue-600">Assign students to available sections</p>
                                 </div>
+<<<<<<< HEAD
                                 <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="pendingEnrollmentStudents.length === 0" />
+=======
+<<<<<<< HEAD
+                                <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="enrolledStudents.filter((s) => !s.section).length === 0" />
+=======
+                                <Button 
+                                    label="Auto-Assign All" 
+                                    icon="pi pi-bolt" 
+                                    size="small" 
+                                    class="p-button-sm p-button-outlined"
+                                    @click="autoAssignAllStudents"
+                                    :disabled="pendingEnrollmentStudents.length === 0"
+                                />
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
+>>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 gap-3">
+<<<<<<< HEAD
                             <div v-for="student in filteredStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200" @click="openSectionAssignment(student)">
+=======
+<<<<<<< HEAD
+                            <div
+                                v-for="student in enrolledStudents"
+                                :key="student.id"
+                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer"
+                                :class="student.current_section_name || student.section ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'"
+=======
+                            <div 
+                                v-for="student in filteredStudents" 
+                                :key="student.id" 
+                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
+                                @click="openSectionAssignment(student)"
+                            >
+>>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center">
                                         <Avatar :label="getStudentInitials(student)" shape="circle" size="normal" class="mr-3" :style="{ backgroundColor: student.current_section_name || student.section ? '#10b981' : '#f59e0b', color: 'white' }" />
@@ -1633,7 +1802,23 @@ defineExpose({
 
                 <div class="field">
                     <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
+<<<<<<< HEAD
                     <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSectionsForAssignment" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
+=======
+<<<<<<< HEAD
+                    <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSections" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
+=======
+                    <Dropdown 
+                        id="sectionSelect"
+                        v-model="selectedSectionForAssignment" 
+                        :options="availableSectionsForAssignment" 
+                        optionLabel="name" 
+                        placeholder="Choose a section" 
+                        class="w-full mt-2"
+                        :disabled="!studentToAssign"
+                    >
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
+>>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
                         <template #option="slotProps">
                             <div class="flex items-center">
                                 <i class="pi pi-users mr-2 text-blue-500"></i>

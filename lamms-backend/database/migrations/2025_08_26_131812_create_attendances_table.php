@@ -21,12 +21,12 @@ return new class extends Migration
             $table->enum('status', ['present', 'absent', 'late', 'excused'])->default('present');
             $table->string('remarks')->nullable();
             $table->timestamps();
-            
+
             // Foreign key constraints
-            $table->foreign('student_id')->references('id')->on('students')->onDelete('cascade');
+            $table->foreign('student_id')->references('id')->on('student_details')->onDelete('cascade');
             $table->foreign('subject_id')->references('id')->on('subjects')->onDelete('set null');
             $table->foreign('teacher_id')->references('id')->on('teachers')->onDelete('set null');
-            
+
             // Unique constraint to prevent duplicate attendance records
             $table->unique(['student_id', 'subject_id', 'date']);
         });

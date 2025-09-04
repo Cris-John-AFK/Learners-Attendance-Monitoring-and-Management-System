@@ -85,8 +85,24 @@ class EnrollmentController extends Controller
                 ], 422);
             }
 
+<<<<<<< HEAD
+            // Generate enrollment ID if not provided
+            $enrollmentId = $request->enrollment_id;
+            if (!$enrollmentId) {
+                $currentYear = date('Y');
+                $randomNum = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+                $enrollmentId = "ENR{$currentYear}{$randomNum}";
+            }
+
+            // Prepare student data mapping to existing database columns
+            $studentData = [
+                // Required fields that exist in database
+                'studentId' => $request->enrollment_id, // Map enrollment_id to studentId
+                'student_id' => $request->enrollment_id, // Also map to student_id column (NOT NULL constraint)
+=======
             $student = Student::create([
                 'name' => trim($request->first_name . ' ' . ($request->middle_name ?? '') . ' ' . $request->last_name),
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
                 'firstName' => $request->first_name,
                 'lastName' => $request->last_name,
                 'middleName' => $request->middle_name,
@@ -99,8 +115,44 @@ class EnrollmentController extends Controller
                 'age' => $request->age,
                 'sex' => $request->sex,
                 'motherTongue' => $request->mother_tongue,
+<<<<<<< HEAD
+                'religion' => $request->religion,
+                'status' => 'Enrolled',
+                'enrollmentDate' => $request->enrollment_date,
+                'isActive' => $request->is_active ?? true,
+                'hasDisability' => $request->has_disability ?? false,
+                'disabilities' => $request->disabilities,
+
+                // New enrollment fields
+                'student_type' => $request->student_type,
+                'school_year' => $request->school_year,
+                'enrollment_id' => $request->enrollment_id,
+                'enrollment_status' => $request->enrollment_status ?? 'Enrolled',
+                'house_no' => $request->house_no,
+                'street' => $request->street,
+                'barangay' => $request->barangay,
+                'city_municipality' => $request->city_municipality,
+                'province' => $request->province,
+                'country' => $request->country ?? 'Philippines',
+                'zip_code' => $request->zip_code,
+                'last_grade_completed' => $request->last_grade_completed,
+                'last_school_attended' => $request->last_school_attended,
+                'household_income' => $request->household_income ?? 'Below 10k',
+
+                // Parent information (map to existing columns)
+                'father' => trim($request->father_first_name . ' ' . $request->father_last_name),
+                'mother' => trim($request->mother_first_name . ' ' . $request->mother_last_name),
+                'parentContact' => $request->father_contact_number ?: $request->mother_contact_number,
+            ];
+
+            // Create the student record
+            $student = Student::create($studentData);
+
+            Log::info('Student enrolled successfully', ['student_id' => $student->id, 'enrollment_id' => $enrollmentId]);
+=======
                 'isActive' => true,
             ]);
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
             return response()->json([
                 'success' => true,
@@ -109,7 +161,13 @@ class EnrollmentController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+<<<<<<< HEAD
+            Log::error('Error enrolling student: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+
+=======
             Log::error('Error creating student enrollment: ' . $e->getMessage());
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create student enrollment'
@@ -123,6 +181,9 @@ class EnrollmentController extends Controller
     public function show($id)
     {
         try {
+<<<<<<< HEAD
+            $student = Student::findOrFail($id);
+=======
             $student = Student::with(['sections' => function($query) {
                 $query->wherePivot('is_active', true);
             }])->findOrFail($id);
@@ -141,6 +202,7 @@ class EnrollmentController extends Controller
                 'current_section_name' => $currentSection ? $currentSection->name : null,
                 'current_section_id' => $currentSection ? $currentSection->id : null,
             ];
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
             return response()->json([
                 'success' => true,
@@ -227,6 +289,9 @@ class EnrollmentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
+<<<<<<< HEAD
+
+=======
             
             if (!$student->gradeLevel) {
                 return response()->json([
@@ -300,6 +365,7 @@ class EnrollmentController extends Controller
     public function assignSection(Request $request, $id)
     {
         try {
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
             $validator = Validator::make($request->all(), [
                 'section_id' => 'required|exists:sections,id',
                 'school_year' => 'sometimes|string'
@@ -328,8 +394,13 @@ class EnrollmentController extends Controller
             // Verify the section matches the student's grade level
             $section = \App\Models\Section::with(['curriculumGrade.grade'])->findOrFail($sectionId);
             $sectionGrade = $section->curriculumGrade->grade ?? null;
+<<<<<<< HEAD
+
+            if (!$sectionGrade || $sectionGrade->name !== $student->gradeLevel) {
+=======
             
             if (!$sectionGrade) {
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
                 return response()->json([
                     'success' => false,
                     'message' => 'Section grade level not found'
@@ -405,7 +476,42 @@ class EnrollmentController extends Controller
     }
 
     /**
+<<<<<<< HEAD
+     * Get available sections for a student's grade level
+     */
+    public function getAvailableSections($id)
+    {
+        try {
+            $student = Student::findOrFail($id);
+
+            // Get sections that match the student's grade level
+            $sections = \App\Models\Section::with(['curriculumGrade.grade'])
+                ->whereHas('curriculumGrade.grade', function ($query) use ($student) {
+                    $query->where('name', $student->gradeLevel);
+                })
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $sections
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching available sections: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch available sections'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get enrollment statistics
+=======
      * Get enrollment statistics.
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
      */
     public function getStats()
     {
