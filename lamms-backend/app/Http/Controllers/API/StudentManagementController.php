@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Models\Section;
-use App\Models\TeacherSectionSubject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -25,10 +24,11 @@ class StudentManagementController extends Controller
 
         try {
             // Verify teacher has access to this section
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $sectionId
-            ])->first();
+            $teacherAssignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $sectionId)
+                ->where('is_active', true)
+                ->first();
 
             if (!$teacherAssignment) {
                 return response()->json([
@@ -36,26 +36,24 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            $students = Student::with(['section.grade'])
-                ->where('section_id', $sectionId)
-                ->orderBy('name')
-                ->get()
-                ->map(function ($student) {
-                    return [
-                        'id' => $student->id,
-                        'name' => $student->name,
-                        'studentId' => $student->student_id,
-                        'email' => $student->email,
-                        'qrCode' => $student->qr_code,
-                        'gradeLevel' => $student->section->grade->name ?? 'Unknown',
-                        'section' => $student->section->name ?? 'Unknown',
-                        'status' => $student->status ?? 'active',
-                        'enrollmentDate' => $student->created_at->format('Y-m-d')
-                    ];
-                });
+            // Get students assigned to this section through the pivot table
+            $section = Section::findOrFail($sectionId);
+            $students = $section->activeStudents()->get();
 
             return response()->json([
-                'students' => $students,
+                'students' => $students->map(function($student) {
+                    return [
+                        'id' => $student->id,
+                        'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
+                        'firstName' => $student->firstName,
+                        'lastName' => $student->lastName,
+                        'studentId' => $student->studentId ?? $student->student_id,
+                        'email' => $student->email,
+                        'qrCode' => $student->qr_code,
+                        'status' => $student->status ?? 'active',
+                        'enrollmentDate' => $student->created_at ? $student->created_at->format('Y-m-d') : null
+                    ];
+                }),
                 'section_id' => $sectionId,
                 'total_count' => $students->count()
             ]);
@@ -80,9 +78,10 @@ class StudentManagementController extends Controller
 
         try {
             // Get sections where teacher teaches this subject
-            $query = TeacherSectionSubject::with(['section.students.section.grade'])
+            $query = DB::table('teacher_section_subject')
                 ->where('teacher_id', $request->teacher_id)
-                ->where('subject_id', $subjectId);
+                ->where('subject_id', $subjectId)
+                ->where('is_active', true);
 
             if ($request->section_id) {
                 $query->where('section_id', $request->section_id);
@@ -98,20 +97,23 @@ class StudentManagementController extends Controller
 
             $students = collect();
             foreach ($assignments as $assignment) {
-                $sectionStudents = $assignment->section->students->map(function ($student) {
-                    return [
-                        'id' => $student->id,
-                        'name' => $student->name,
-                        'studentId' => $student->student_id,
-                        'email' => $student->email,
-                        'qrCode' => $student->qr_code,
-                        'gradeLevel' => $student->section->grade->name ?? 'Unknown',
-                        'section' => $student->section->name ?? 'Unknown',
-                        'sectionId' => $student->section_id,
-                        'status' => $student->status ?? 'active'
-                    ];
-                });
-                $students = $students->merge($sectionStudents);
+                $section = Section::with(['activeStudents', 'grade'])->find($assignment->section_id);
+                if ($section && $section->activeStudents) {
+                    $sectionStudents = $section->activeStudents->map(function ($student) use ($section) {
+                        return [
+                            'id' => $student->id,
+                            'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
+                            'studentId' => $student->studentId ?? $student->student_id,
+                            'email' => $student->email,
+                            'qrCode' => $student->qr_code,
+                            'gradeLevel' => $section->grade->name ?? 'Unknown',
+                            'section' => $section->name ?? 'Unknown',
+                            'sectionId' => $section->id,
+                            'status' => $student->status ?? 'active'
+                        ];
+                    });
+                    $students = $students->merge($sectionStudents);
+                }
             }
 
             return response()->json([
@@ -147,11 +149,23 @@ class StudentManagementController extends Controller
                 try {
                     $student = Student::findOrFail($studentId);
 
+                    // Get the student's section through the pivot table
+                    $studentSection = DB::table('student_section')
+                        ->where('student_id', $studentId)
+                        ->where('is_active', true)
+                        ->first();
+
+                    if (!$studentSection) {
+                        $errors[] = "Student ID {$studentId} not found in any active section";
+                        continue;
+                    }
+
                     // Verify teacher has access to this student's section
-                    $teacherAssignment = TeacherSectionSubject::where([
-                        'teacher_id' => $request->teacher_id,
-                        'section_id' => $student->section_id
-                    ])->first();
+                    $teacherAssignment = DB::table('teacher_section_subject')
+                        ->where('teacher_id', $request->teacher_id)
+                        ->where('section_id', $studentSection->section_id)
+                        ->where('is_active', true)
+                        ->first();
 
                     if (!$teacherAssignment) {
                         $errors[] = "Unauthorized access to student: {$student->name}";
@@ -209,10 +223,11 @@ class StudentManagementController extends Controller
 
         try {
             // Verify teacher access
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $sectionId
-            ])->first();
+            $teacherAssignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $sectionId)
+                ->where('is_active', true)
+                ->first();
 
             if (!$teacherAssignment) {
                 return response()->json([
@@ -230,8 +245,9 @@ class StudentManagementController extends Controller
                 $seatingLayout = json_decode($seatingData->layout, true);
             } else {
                 // Create default seating arrangement
-                $students = Student::where('section_id', $sectionId)
-                    ->select('id', 'name', 'student_id')
+                $section = Section::findOrFail($sectionId);
+                $students = $section->activeStudents()
+                    ->select('student_details.id', 'student_details.firstName', 'student_details.lastName', 'student_details.name', 'student_details.studentId')
                     ->get();
 
                 $seatingLayout = $this->createDefaultSeatingLayout($students);
@@ -266,10 +282,11 @@ class StudentManagementController extends Controller
 
         try {
             // Verify teacher access
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id
-            ])->first();
+            $teacherAssignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $request->section_id)
+                ->where('is_active', true)
+                ->first();
 
             if (!$teacherAssignment) {
                 return response()->json([
@@ -305,6 +322,52 @@ class StudentManagementController extends Controller
     }
 
     /**
+     * Reset/clear student seating arrangement
+     */
+    public function resetSeatingArrangement(Request $request)
+    {
+        $request->validate([
+            'section_id' => 'required|integer|exists:sections,id',
+            'subject_id' => 'nullable|integer|exists:subjects,id',
+            'teacher_id' => 'required|integer|exists:teachers,id'
+        ]);
+
+        try {
+            // Verify teacher access
+            $teacherAssignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $request->section_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$teacherAssignment) {
+                return response()->json([
+                    'error' => 'Unauthorized access to this section'
+                ], 403);
+            }
+
+            // Delete seating arrangement from database
+            $deleted = DB::table('seating_arrangements')
+                ->where('section_id', $request->section_id)
+                ->where('subject_id', $request->subject_id)
+                ->delete();
+
+            return response()->json([
+                'message' => 'Seating arrangement reset successfully',
+                'section_id' => $request->section_id,
+                'subject_id' => $request->subject_id,
+                'deleted_records' => $deleted
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to reset seating arrangement',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Import students to section
      */
     public function importStudents(Request $request)
@@ -320,10 +383,11 @@ class StudentManagementController extends Controller
 
         try {
             // Verify teacher access
-            $teacherAssignment = TeacherSectionSubject::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id
-            ])->first();
+            $teacherAssignment = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $request->section_id)
+                ->where('is_active', true)
+                ->first();
 
             if (!$teacherAssignment) {
                 return response()->json([
@@ -429,35 +493,50 @@ class StudentManagementController extends Controller
      */
     private function createDefaultSeatingLayout($students)
     {
-        $rows = 6;
-        $cols = 6;
-        $layout = [];
+        $rows = 9;
+        $cols = 9;
+        $seatPlan = [];
 
         // Initialize empty layout
         for ($row = 0; $row < $rows; $row++) {
-            $layout[$row] = [];
+            $seatPlan[$row] = [];
             for ($col = 0; $col < $cols; $col++) {
-                $layout[$row][$col] = null;
+                $seatPlan[$row][$col] = [
+                    'id' => null,
+                    'name' => null,
+                    'studentId' => null,
+                    'isOccupied' => false,
+                    'status' => null
+                ];
             }
         }
 
-        // Place students in layout
+        // Place students in layout (start from row 1, leave first row empty for spacing)
         $studentIndex = 0;
         foreach ($students as $student) {
-            if ($studentIndex >= $rows * $cols) break;
+            if ($studentIndex >= ($rows - 1) * $cols) break; // Leave space
 
-            $row = intval($studentIndex / $cols);
+            $row = intval($studentIndex / $cols) + 1; // Start from row 1
             $col = $studentIndex % $cols;
 
-            $layout[$row][$col] = [
+            $seatPlan[$row][$col] = [
                 'id' => $student->id,
-                'name' => $student->name,
-                'studentId' => $student->student_id
+                'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
+                'studentId' => $student->studentId,
+                'isOccupied' => true,
+                'status' => null
             ];
 
             $studentIndex++;
         }
 
-        return $layout;
+        // Return in the format expected by frontend
+        return [
+            'rows' => $rows,
+            'columns' => $cols,
+            'seatPlan' => $seatPlan,
+            'showTeacherDesk' => true,
+            'showStudentIds' => true
+        ];
     }
 }

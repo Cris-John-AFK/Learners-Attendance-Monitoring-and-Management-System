@@ -12,8 +12,8 @@ class TeacherSectionSubject extends Model
 
     protected $table = 'teacher_section_subject';
 
-    // Ensure Laravel knows there are timestamps in this table
-    public $timestamps = true;
+    // Disable timestamps as they don't exist in this table
+    public $timestamps = false;
 
     protected $fillable = [
         'teacher_id',

@@ -1,25 +1,63 @@
 <template>
     <div class="student-qr-code">
-        <div class="qr-image" v-if="qrPath">
-            <img :src="qrPath" alt="Student QR Code" />
-        </div>
-        <div v-else-if="qrValue" class="qr-generated">
-            <qrcode-vue :value="qrValue" :size="size" level="H" />
-        </div>
-        <div v-else class="qr-error">
-            <p>No QR code available for this student</p>
-        </div>
-        <div class="qr-info">
+        <div class="qr-header">
+            <h3 class="student-name">{{ studentName }}</h3>
             <p class="student-id">ID: {{ studentId }}</p>
-            <p class="student-name">{{ studentName }}</p>
+        </div>
+        
+        <div class="qr-container">
+            <div v-if="loading" class="qr-loading">
+                <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
+                <p>Loading QR Code...</p>
+            </div>
+            <div v-else-if="qrImageUrl" class="qr-image">
+                <img :src="qrImageUrl" alt="Student QR Code" />
+            </div>
+            <div v-else-if="qrValue" class="qr-generated">
+                <qrcode-vue :value="qrValue" :size="size" level="H" />
+            </div>
+            <div v-else class="qr-error">
+                <p>No QR code available</p>
+                <Button 
+                    label="Generate QR Code" 
+                    icon="pi pi-qrcode" 
+                    @click="generateQRCode"
+                    class="p-button-sm p-button-outlined"
+                />
+            </div>
+        </div>
+
+        <div class="qr-actions">
+            <div class="download-buttons">
+                <Button 
+                    label="PNG" 
+                    icon="pi pi-download" 
+                    @click="downloadAsPNG"
+                    class="p-button-sm"
+                    :disabled="!hasQRCode"
+                />
+                <Button 
+                    label="SVG" 
+                    icon="pi pi-download" 
+                    @click="downloadAsSVG"
+                    class="p-button-sm p-button-outlined"
+                    :disabled="!hasQRCode"
+                />
+            </div>
+            <Button 
+                label="Regenerate" 
+                icon="pi pi-refresh" 
+                @click="generateQRCode"
+                class="p-button-sm p-button-secondary"
+            />
         </div>
     </div>
 </template>
 
 <script setup>
-import { QRCodeService } from '@/router/service/QRCodeService';
+import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import QrcodeVue from 'qrcode.vue';
-import { ref } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 
 const props = defineProps({
     studentId: {
@@ -36,28 +74,73 @@ const props = defineProps({
     }
 });
 
-// Get the QR code path or generate QR code value
-const qrPath = ref(null);
+// State variables
+const loading = ref(false);
+const qrImageUrl = ref(null);
 const qrValue = ref(null);
+const qrData = ref(null);
 
-// Find the QR code for this student
-qrPath.value = QRCodeService.getQRPathForStudent(props.studentId);
+// Computed property to check if QR code exists
+const hasQRCode = computed(() => {
+    return !!(qrImageUrl.value || qrValue.value || qrData.value);
+});
 
-// If no existing QR code image, generate one on the fly
-if (!qrPath.value) {
-    // Find what QR content maps to this student
-    const qrMapping = QRCodeService.getAllQRCodes().find((mapping) => mapping.studentId === props.studentId);
+// Load QR code on component mount
+onMounted(async () => {
+    await loadQRCode();
+});
 
-    if (qrMapping) {
-        qrValue.value = qrMapping.qrCode;
-    } else {
-        // If no mapping exists, use the student ID directly
-        qrValue.value = props.studentId;
-
-        // Register this mapping for future use
-        QRCodeService.registerQRCodeMapping(props.studentId, props.studentId);
+// Load existing QR code for student
+const loadQRCode = async () => {
+    try {
+        loading.value = true;
+        const response = await QRCodeAPIService.getStudentQRCode(props.studentId);
+        
+        if (response.has_qr_code) {
+            qrData.value = response.qr_code_data;
+            qrImageUrl.value = QRCodeAPIService.getQRCodeImageURL(props.studentId);
+        }
+    } catch (error) {
+        console.error('Error loading QR code:', error);
+    } finally {
+        loading.value = false;
     }
-}
+};
+
+// Generate new QR code
+const generateQRCode = async () => {
+    try {
+        loading.value = true;
+        const response = await QRCodeAPIService.generateQRCode(props.studentId);
+        
+        if (response.success) {
+            qrData.value = response.qr_code_data;
+            qrImageUrl.value = QRCodeAPIService.getQRCodeImageURL(props.studentId);
+        }
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+    } finally {
+        loading.value = false;
+    }
+};
+
+// Download QR code as SVG
+const downloadAsSVG = async () => {
+    try {
+        await QRCodeAPIService.downloadQRCode(props.studentId, props.studentName);
+    } catch (error) {
+        console.error('Error downloading QR code as SVG:', error);
+    }
+};
+
+// Download QR code as PNG
+const downloadAsPNG = async () => {
+    try {
+        await QRCodeAPIService.downloadQRCodeAsPNG(props.studentId, props.studentName);
+    } catch (error) {
+        console.error('Error downloading QR code as PNG:', error);
+    }
+};
 </script>
 
 <style scoped>
@@ -65,49 +148,89 @@ if (!qrPath.value) {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1rem;
+    padding: 1.5rem;
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    max-width: 250px;
+    border-radius: 12px;
+    max-width: 280px;
     margin: 0 auto;
     background-color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.student-qr-code:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+}
+
+.qr-header {
+    text-align: center;
+    margin-bottom: 1rem;
+    width: 100%;
+}
+
+.student-name {
+    font-weight: 600;
+    font-size: 1.2rem;
+    margin: 0 0 0.25rem 0;
+    color: #333;
+}
+
+.student-id {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.qr-container {
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    background-color: #fafafa;
 }
 
 .qr-image img {
     width: 200px;
     height: 200px;
     object-fit: contain;
+    border-radius: 4px;
+}
+
+.qr-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: #666;
 }
 
 .qr-error {
-    width: 200px;
-    height: 200px;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    background-color: #f5f5f5;
-    border-radius: 4px;
+    gap: 1rem;
     color: #666;
     text-align: center;
     padding: 1rem;
 }
 
-.qr-info {
-    margin-top: 1rem;
-    text-align: center;
+.qr-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
     width: 100%;
 }
 
-.student-id {
-    color: #666;
-    margin-bottom: 0.25rem;
-    font-size: 0.9rem;
+.download-buttons {
+    display: flex;
+    gap: 0.5rem;
 }
 
-.student-name {
-    font-weight: 600;
-    font-size: 1.1rem;
-    margin: 0;
+.download-buttons .p-button {
+    flex: 1;
 }
 </style>

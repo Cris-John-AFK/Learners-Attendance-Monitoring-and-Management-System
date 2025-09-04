@@ -30,7 +30,7 @@ export const AttendanceService = {
     // Get students by grade level
     async getStudentsByGrade(gradeLevel) {
         try {
-            const response = await api.get(`/api/student-details/grade/${gradeLevel}`);
+            const response = await api.get(`/api/students/grade/${gradeLevel}`);
             return response.data;
         } catch (error) {
             console.error(`Error loading students for grade ${gradeLevel}:`, error);

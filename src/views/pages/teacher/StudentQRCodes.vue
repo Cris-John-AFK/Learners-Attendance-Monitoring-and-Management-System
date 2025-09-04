@@ -41,8 +41,8 @@
 
 <script setup>
 import StudentQRCode from '@/components/StudentQRCode.vue';
-import { AttendanceService } from '@/router/service/Estudyante';
-import { QRCodeService } from '@/router/service/QRCodeService';
+import { AttendanceService } from '@/router/service/Attendance';
+import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { computed, onMounted, ref } from 'vue';
 
 // State variables
@@ -54,29 +54,19 @@ const searchQuery = ref('');
 onMounted(async () => {
     try {
         loading.value = true;
-        const studentsData = await AttendanceService.getData();
+        // Load Grade 3 students for QR code generation
+        const studentsData = await AttendanceService.getStudentsByGrade(3);
 
         if (studentsData && studentsData.length > 0) {
             students.value = studentsData;
+            console.log('Loaded students for QR codes:', students.value.length);
         } else {
-            console.warn('No students found, using mock data');
-            // Mock data if no students found
-            students.value = [
-                { id: '101', name: 'Student 1' },
-                { id: '102', name: 'Student 2' },
-                { id: '103', name: 'Student 3' },
-                { id: '104', name: 'Student 4' },
-                { id: '105', name: 'Student 5' },
-                { id: '106', name: 'Student 6' }
-            ];
+            console.warn('No Grade 3 students found');
+            students.value = [];
         }
-
-        // Create default QR code mappings for students 1-3
-        QRCodeService.registerQRCodeMapping('1', '101');
-        QRCodeService.registerQRCodeMapping('2', '102');
-        QRCodeService.registerQRCodeMapping('3', '103');
     } catch (error) {
         console.error('Error loading students:', error);
+        students.value = [];
     } finally {
         loading.value = false;
     }
@@ -96,15 +86,19 @@ const printQRCodes = () => {
 };
 
 // Regenerate all QR codes
-const regenerateQRCodes = () => {
-    students.value.forEach((student) => {
-        // Generate a unique code for each student (in a real app, this would be more secure)
-        const uniqueCode = `${Date.now()}_${student.id}`;
-        QRCodeService.registerQRCodeMapping(uniqueCode, student.id);
-    });
-
-    // Force refresh
-    students.value = [...students.value];
+const regenerateQRCodes = async () => {
+    try {
+        loading.value = true;
+        for (const student of students.value) {
+            await QRCodeAPIService.generateQRCode(student.id);
+        }
+        // Force refresh of the component
+        students.value = [...students.value];
+    } catch (error) {
+        console.error('Error regenerating QR codes:', error);
+    } finally {
+        loading.value = false;
+    }
 };
 </script>
 

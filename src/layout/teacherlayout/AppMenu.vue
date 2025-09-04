@@ -56,7 +56,7 @@ const model = ref([
             {
                 label: 'Student QR Codes',
                 icon: 'pi pi-fw pi-qrcode',
-                to: '/pages/student-qrcodes'
+                to: '/teacher/student-qrcodes'
             }
         ]
     }

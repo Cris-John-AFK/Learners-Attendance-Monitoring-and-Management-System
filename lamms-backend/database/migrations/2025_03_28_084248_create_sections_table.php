@@ -11,16 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('sections', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->foreignId('grade_id')->constrained('grades')->onDelete('cascade');
-            $table->text('description')->nullable();
-            $table->integer('capacity')->default(40);
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            $table->softDeletes();
-        });
+        // Skip this migration - sections table already created by 2024_12_26_180000_create_sections_table.php
+        return;
     }
 
     /**
@@ -28,6 +20,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('sections');
+        // Skip - handled by earlier migration
+        return;
     }
 };
