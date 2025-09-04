@@ -1555,6 +1555,7 @@ onMounted(() => {
                                 <InputText v-model="filters.searchTerm" placeholder="Search students..." class="search-input" />
                             </span>
                         </div>
+                        <Button label="Add New Student" icon="pi pi-plus" class="add-student-btn" @click="openStudentDialog" />
                     </div>
                 </div>
             </div>
@@ -2587,7 +2588,6 @@ onMounted(() => {
     width: calc(100% + 4rem);
     left: -2rem;
     border-radius: 12px 12px 0 0;
-    overflow: hidden;
 }
 
 .close-button {
@@ -2613,7 +2613,7 @@ onMounted(() => {
     text-align: center;
     padding: 24px 0;
     width: 100%;
-    border-radius: inherit;
+    border-radius: 12px 12px 0 0;
     position: relative;
     overflow: hidden;
 }

@@ -19,12 +19,8 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            // Ensure a student can only be in one section per school year
-            $table->unique(['student_id', 'school_year']);
-            
-            // Index for performance
-            $table->index(['section_id', 'is_active']);
-            $table->index(['student_id', 'is_active']);
+            // Ensure a student can only be in one active section per school year
+            $table->unique(['student_id', 'school_year', 'is_active']);
         });
     }
 

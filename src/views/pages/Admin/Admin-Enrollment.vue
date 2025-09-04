@@ -23,11 +23,95 @@ const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
 
+// Helper functions for student display
+function getStudentDisplayName(student) {
+    // Try different name field combinations based on backend data structure
+    if (student.name && student.name.trim()) {
+        return student.name.trim();
+    }
+    
+    const firstName = student.firstName || student.first_name || '';
+    const lastName = student.lastName || student.last_name || '';
+    const middleName = student.middleName || student.middle_name || '';
+    
+    if (firstName || lastName) {
+        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+    }
+    
+    return student.studentId || student.enrollment_id || 'Unknown Student';
+}
+
+function getStudentInitials(student) {
+    const displayName = getStudentDisplayName(student);
+    
+    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
+        return 'S';
+    }
+    
+    const nameParts = displayName.split(' ').filter(part => part.length > 0);
+    if (nameParts.length >= 2) {
+        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+    } else if (nameParts.length === 1) {
+        return nameParts[0].charAt(0).toUpperCase();
+    }
+    
+    return 'S';
+}
+
+function getGradeCode(gradeLevel) {
+    const gradeMap = {
+        'Kinder': 'K',
+        'Grade 1': '1',
+        'Grade 2': '2',
+        'Grade 3': '3',
+        'Grade 4': '4',
+        'Grade 5': '5',
+        'Grade 6': '6'
+    };
+    return gradeMap[gradeLevel] || gradeLevel;
+}
+
 // Section assignment functionality
 const sectionAssignmentDialog = ref(false);
 const studentToAssign = ref(null);
-const availableSections = ref([]);
+const availableSectionsForAssignment = ref([]);
 const selectedSectionForAssignment = ref(null);
+
+// Section assignment functions
+async function openSectionAssignment(student) {
+    studentToAssign.value = student;
+    selectedSectionForAssignment.value = null;
+    availableSectionsForAssignment.value = [];
+    
+    try {
+        // Fetch available sections for this student's grade level from backend
+        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}/available-sections`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                availableSectionsForAssignment.value = result.data;
+            }
+        } else {
+            console.warn('Failed to fetch available sections, using fallback');
+            // Fallback to static sections if API fails
+            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+            availableSectionsForAssignment.value = sections[gradeCode] || [];
+        }
+    } catch (error) {
+        console.error('Error fetching available sections:', error);
+        // Fallback to static sections
+        const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
+        availableSectionsForAssignment.value = sections[gradeCode] || [];
+    }
+    
+    sectionAssignmentDialog.value = true;
+}
 
 // New enrollment form dialog
 const newStudentDialog = ref(false);
@@ -265,12 +349,17 @@ function formatAddress(student) {
 
 // Computed properties
 const filteredStudents = computed(() => {
-    if (!search.value) return students.value;
+    const targetStudents = enrolledStudents.value.length > 0 ? enrolledStudents.value : students.value;
+    if (!search.value) return targetStudents;
     const searchTerm = search.value.toLowerCase();
-    return students.value.filter((s) => s.name?.toLowerCase().includes(searchTerm) || s.studentId?.toLowerCase().includes(searchTerm) || s.firstName?.toLowerCase().includes(searchTerm) || s.lastName?.toLowerCase().includes(searchTerm));
+    return targetStudents.filter((s) => {
+        const displayName = getStudentDisplayName(s).toLowerCase();
+        const studentId = (s.studentId || s.enrollment_id || '').toLowerCase();
+        return displayName.includes(searchTerm) || studentId.includes(searchTerm);
+    });
 });
 
-const availableSectionsForForm = computed(() => {
+const availableSections = computed(() => {
     if (!selectedGradeLevel.value) return [];
     return sections[selectedGradeLevel.value.code] || [];
 });
@@ -477,11 +566,7 @@ function nextStep() {
     }
 }
 
-function previousStep() {
-    if (currentStep.value > 1) {
-        currentStep.value--;
-    }
-}
+// Renamed to prevStep to avoid duplication
 
 // Form validation
 function validateCurrentStep() {
@@ -520,7 +605,7 @@ async function submitNewStudent() {
             school_year: newStudent.value.schoolYear,
             lrn: newStudent.value.lrn,
             grade_level: newStudent.value.gradeLevel,
-            
+
             // Student Information
             last_name: newStudent.value.lastName,
             first_name: newStudent.value.firstName,
@@ -531,7 +616,7 @@ async function submitNewStudent() {
             sex: newStudent.value.sex,
             religion: newStudent.value.religion,
             mother_tongue: newStudent.value.motherTongue,
-            
+
             // Address Information
             house_no: newStudent.value.houseNo,
             street: newStudent.value.street,
@@ -540,7 +625,7 @@ async function submitNewStudent() {
             province: newStudent.value.province,
             country: newStudent.value.country,
             zip_code: newStudent.value.zipCode,
-            
+
             // Parent/Guardian Information
             father_last_name: newStudent.value.fatherLastName,
             father_first_name: newStudent.value.fatherFirstName,
@@ -550,22 +635,22 @@ async function submitNewStudent() {
             mother_first_name: newStudent.value.motherFirstName,
             mother_middle_name: newStudent.value.motherMiddleName,
             mother_contact_number: newStudent.value.motherContactNumber,
-            
+
             // Previous School Information
             last_grade_completed: newStudent.value.lastGradeCompleted,
             last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
             last_school_attended: newStudent.value.lastSchoolAttended,
-            
+
             // Contact Information
             email_address: newStudent.value.emailAddress,
-            
+
             // Health/Disability Information
             has_disability: newStudent.value.hasDisability,
             disabilities: newStudent.value.disabilities.join(','),
-            
+
             // Household Income
             household_income: newStudent.value.householdIncome,
-            
+
             // Status fields
             enrollment_status: 'Enrolled',
             enrollment_date: new Date().toISOString().split('T')[0],
@@ -577,7 +662,7 @@ async function submitNewStudent() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             },
             body: JSON.stringify(enrollmentData)
         });
@@ -603,7 +688,7 @@ async function submitNewStudent() {
             enrollmentDate: new Date().toISOString().split('T')[0],
             status: 'Active'
         };
-        
+
         enrolledStudents.value.push(studentForDisplay);
 
         // Close dialog and show success
@@ -630,87 +715,44 @@ async function submitNewStudent() {
     }
 }
 
-// Section assignment functions
-async function openSectionAssignment(student) {
-    studentToAssign.value = student;
-    selectedSectionForAssignment.value = null;
-    availableSections.value = [];
-    
+// Load enrolled students for display
+async function loadEnrolledStudents() {
     try {
-        // Fetch available sections for this student's grade level from backend
-        const response = await fetch(`http://127.0.0.1:8000/api/enrollments/${student.id}/available-sections`, {
+        console.log('Loading enrolled students from API...');
+        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
             method: 'GET',
             headers: {
-                'Accept': 'application/json'
+                Accept: 'application/json'
             }
         });
 
         if (response.ok) {
             const result = await response.json();
             if (result.success && result.data) {
-                availableSections.value = result.data;
+                console.log('Backend student data:', result.data); // Debug log
+                enrolledStudents.value = result.data;
+                totalEnrolledStudents.value = result.data.length;
             }
         } else {
-            console.warn('Failed to fetch available sections, using fallback');
-            // Fallback to static sections if API fails
-            const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
-            availableSections.value = sections[gradeCode] || [];
+            console.warn('Failed to fetch from API, falling back to localStorage');
+            // Fallback to localStorage if API fails
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+            totalEnrolledStudents.value = enrolledStudents.value.length;
         }
     } catch (error) {
-        console.error('Error fetching available sections:', error);
-        // Fallback to static sections
-        const gradeCode = getGradeCode(student.gradeLevel || student.grade_level);
-        availableSections.value = sections[gradeCode] || [];
+        console.error('Error loading enrolled students:', error);
+        // Fallback to localStorage on error
+        try {
+            const students = JSON.parse(localStorage.getItem('students') || '[]');
+            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
+        } catch (localError) {
+            console.error('Error loading from localStorage:', localError);
+            enrolledStudents.value = [];
+        }
+    } finally {
+        loading.value = false;
     }
-    
-    sectionAssignmentDialog.value = true;
-}
-
-function getGradeCode(gradeLevel) {
-    const gradeMap = {
-        'Kinder': 'K',
-        'Grade 1': '1',
-        'Grade 2': '2',
-        'Grade 3': '3',
-        'Grade 4': '4',
-        'Grade 5': '5',
-        'Grade 6': '6'
-    };
-    return gradeMap[gradeLevel] || gradeLevel;
-}
-
-function getStudentDisplayName(student) {
-    // Try different name field combinations based on backend data structure
-    if (student.name && student.name.trim()) {
-        return student.name.trim();
-    }
-    
-    const firstName = student.firstName || student.first_name || '';
-    const lastName = student.lastName || student.last_name || '';
-    const middleName = student.middleName || student.middle_name || '';
-    
-    if (firstName || lastName) {
-        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
-    }
-    
-    return student.studentId || student.enrollment_id || 'Unknown Student';
-}
-
-function getStudentInitials(student) {
-    const displayName = getStudentDisplayName(student);
-    
-    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
-        return 'S';
-    }
-    
-    const nameParts = displayName.split(' ').filter(part => part.length > 0);
-    if (nameParts.length >= 2) {
-        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
-    } else if (nameParts.length === 1) {
-        return nameParts[0].charAt(0).toUpperCase();
-    }
-    
-    return 'S';
 }
 
 async function assignStudentToSection() {
@@ -837,42 +879,45 @@ async function autoAssignAllStudents() {
     }
 }
 
-// Load enrolled students for display
-async function loadEnrolledStudents() {
-    try {
-        // Fetch enrolled students from backend API
-        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
+// Update existing filteredStudents to handle both students and enrolledStudents
 
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-                console.log('Backend student data:', result.data); // Debug log
-                enrolledStudents.value = result.data;
-                totalEnrolledStudents.value = result.data.length;
-            }
-        } else {
-            console.warn('Failed to fetch from API, falling back to localStorage');
-            // Fallback to localStorage if API fails
-            const students = JSON.parse(localStorage.getItem('students') || '[]');
-            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
-        }
-    } catch (error) {
-        console.error('Error loading enrolled students:', error);
-        // Fallback to localStorage on error
-        try {
-            const students = JSON.parse(localStorage.getItem('students') || '[]');
-            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
-        } catch (localError) {
-            console.error('Error loading from localStorage:', localError);
-            enrolledStudents.value = [];
-        }
+// Form navigation functions (using existing nextStep function)
+function prevStep() {
+    if (currentStep.value > 1) {
+        currentStep.value--;
     }
 }
+
+// Additional functions needed for template
+function closeNewStudentDialog() {
+    newStudentDialog.value = false;
+    resetNewStudentForm();
+}
+
+function viewStudentDetails(student) {
+    selectedStudent.value = student;
+    showStudentDetails.value = true;
+}
+
+// Fix function name mismatch
+const assignSection = assignStudentToSection;
+
+// Expose functions for template usage
+defineExpose({
+    getStudentDisplayName,
+    getStudentInitials,
+    getGradeCode,
+    openSectionAssignment,
+    assignSection,
+    autoAssignAllStudents,
+    nextStep,
+    prevStep,
+    openNewStudentDialog,
+    closeNewStudentDialog,
+    submitNewStudent,
+    confirmEnrollment,
+    viewStudentDetails
+});
 </script>
 
 <template>
@@ -1400,7 +1445,7 @@ async function loadEnrolledStudents() {
 
                 <!-- Navigation Buttons -->
                 <div class="flex justify-between pt-6 border-t">
-                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="previousStep" />
+                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="prevStep" />
                     <div v-else></div>
 
                     <div class="flex gap-2">
@@ -1422,7 +1467,7 @@ async function loadEnrolledStudents() {
 
                 <div class="field">
                     <label for="section">Section</label>
-                    <Dropdown id="section" v-model="selectedSection" :options="availableSectionsForForm" optionLabel="name" placeholder="Select Section" class="w-full" :disabled="!selectedGradeLevel" />
+                    <Dropdown id="section" v-model="selectedSection" :options="availableSections" optionLabel="name" placeholder="Select Section" class="w-full" :disabled="!selectedGradeLevel" />
                 </div>
             </div>
 
@@ -1601,7 +1646,7 @@ async function loadEnrolledStudents() {
                     <Dropdown 
                         id="sectionSelect"
                         v-model="selectedSectionForAssignment" 
-                        :options="availableSections" 
+                        :options="availableSectionsForAssignment" 
                         optionLabel="name" 
                         placeholder="Choose a section" 
                         class="w-full mt-2"
@@ -1927,7 +1972,6 @@ async function loadEnrolledStudents() {
     font-size: 1.75rem;
     color: white;
 }
-
 
 .header-text {
     flex: 1;
