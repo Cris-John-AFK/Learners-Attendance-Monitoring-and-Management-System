@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use App\Models\Section;
+use App\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -11,28 +13,48 @@ use Illuminate\Support\Facades\Validator;
 class EnrollmentController extends Controller
 {
     /**
-     * Get all enrolled students
+     * Display a listing of enrolled students.
      */
     public function index()
     {
         try {
-            $students = Student::where('enrollment_status', 'Enrolled')
-                             ->with(['currentSection.curriculumGrade.grade'])
-                             ->orderBy('created_at', 'desc')
-                             ->get();
+            $students = Student::with(['sections' => function($query) {
+                $query->wherePivot('is_active', true);
+            }])->get();
 
-            // Add section information to each student
-            $studentsWithSections = $students->map(function ($student) {
-                $currentSection = $student->getSectionForYear('2025-2026');
-                $student->current_section_name = $currentSection ? $currentSection->name : null;
-                $student->current_section_id = $currentSection ? $currentSection->id : null;
-                return $student;
+            $formattedStudents = $students->map(function ($student) {
+                $currentSection = $student->sections->first();
+                
+                return [
+                    'id' => $student->id,
+                    'name' => $student->name,
+                    'firstName' => $student->firstName,
+                    'lastName' => $student->lastName,
+                    'middleName' => $student->middleName,
+                    'email' => $student->email,
+                    'gradeLevel' => $student->gradeLevel,
+                    'enrollment_id' => $student->studentId,
+                    'student_id' => $student->studentId,
+                    'grade_level' => $student->gradeLevel,
+                    'first_name' => $student->firstName,
+                    'last_name' => $student->lastName,
+                    'middle_name' => $student->middleName,
+                    'email_address' => $student->email,
+                    'birthdate' => $student->birthdate,
+                    'enrollment_status' => 'Enrolled',
+                    'enrollment_date' => $student->created_at->format('Y-m-d'),
+                    'is_active' => $student->isActive ?? true,
+                    'current_section_name' => $currentSection ? $currentSection->name : null,
+                    'current_section_id' => $currentSection ? $currentSection->id : null,
+                    'section' => $currentSection ? $currentSection->name : null,
+                ];
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $studentsWithSections
+                'data' => $formattedStudents
             ]);
+
         } catch (\Exception $e) {
             Log::error('Error fetching enrolled students: ' . $e->getMessage());
             return response()->json([
@@ -43,26 +65,16 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Store a new student enrollment
+     * Store a newly created student enrollment.
      */
     public function store(Request $request)
     {
         try {
-            // Clean email field if it's not a valid email before validation
-            if ($request->email_address && !filter_var($request->email_address, FILTER_VALIDATE_EMAIL)) {
-                $request->merge(['email_address' => null]);
-            }
-
             $validator = Validator::make($request->all(), [
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'required|string|max:255',
-                'grade_level' => 'required|string',
-                'email_address' => 'nullable|email|max:255',
-                'birthdate' => 'nullable|date',
-                'sex' => 'required|in:Male,Female',
-                'enrollment_id' => 'required|string|unique:student_details,enrollment_id',
-                'student_type' => 'required|string',
-                'school_year' => 'required|string'
+                'grade_level' => 'required|string|max:50',
+                'lrn' => 'nullable|string|unique:students,lrn',
             ]);
 
             if ($validator->fails()) {
@@ -73,6 +85,7 @@ class EnrollmentController extends Controller
                 ], 422);
             }
 
+<<<<<<< HEAD
             // Generate enrollment ID if not provided
             $enrollmentId = $request->enrollment_id;
             if (!$enrollmentId) {
@@ -86,18 +99,23 @@ class EnrollmentController extends Controller
                 // Required fields that exist in database
                 'studentId' => $request->enrollment_id, // Map enrollment_id to studentId
                 'student_id' => $request->enrollment_id, // Also map to student_id column (NOT NULL constraint)
+=======
+            $student = Student::create([
+                'name' => trim($request->first_name . ' ' . ($request->middle_name ?? '') . ' ' . $request->last_name),
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
                 'firstName' => $request->first_name,
                 'lastName' => $request->last_name,
                 'middleName' => $request->middle_name,
                 'extensionName' => $request->extension_name,
-                'name' => trim($request->first_name . ' ' . ($request->middle_name ? $request->middle_name . ' ' : '') . $request->last_name . ($request->extension_name ? ' ' . $request->extension_name : '')),
                 'email' => $request->email_address,
                 'gradeLevel' => $request->grade_level,
+                'lrn' => $request->lrn,
+                'studentId' => $request->enrollment_id ?? 'ENR' . time(),
                 'birthdate' => $request->birthdate,
                 'age' => $request->age,
                 'sex' => $request->sex,
-                'lrn' => $request->lrn,
                 'motherTongue' => $request->mother_tongue,
+<<<<<<< HEAD
                 'religion' => $request->religion,
                 'status' => 'Enrolled',
                 'enrollmentDate' => $request->enrollment_date,
@@ -131,36 +149,66 @@ class EnrollmentController extends Controller
             $student = Student::create($studentData);
 
             Log::info('Student enrolled successfully', ['student_id' => $student->id, 'enrollment_id' => $enrollmentId]);
+=======
+                'isActive' => true,
+            ]);
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
             return response()->json([
                 'success' => true,
-                'message' => 'Student enrolled successfully',
-                'data' => $student
+                'data' => $student,
+                'message' => 'Student enrolled successfully'
             ], 201);
 
         } catch (\Exception $e) {
+<<<<<<< HEAD
             Log::error('Error enrolling student: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
 
+=======
+            Log::error('Error creating student enrollment: ' . $e->getMessage());
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to enroll student: ' . $e->getMessage()
+                'message' => 'Failed to create student enrollment'
             ], 500);
         }
     }
 
     /**
-     * Get a specific enrolled student
+     * Display the specified student.
      */
     public function show($id)
     {
         try {
+<<<<<<< HEAD
             $student = Student::findOrFail($id);
+=======
+            $student = Student::with(['sections' => function($query) {
+                $query->wherePivot('is_active', true);
+            }])->findOrFail($id);
+
+            $currentSection = $student->sections->first();
+
+            $formattedStudent = [
+                'id' => $student->id,
+                'name' => $student->name,
+                'firstName' => $student->firstName,
+                'lastName' => $student->lastName,
+                'middleName' => $student->middleName,
+                'email' => $student->email,
+                'gradeLevel' => $student->gradeLevel,
+                'enrollment_id' => $student->studentId,
+                'current_section_name' => $currentSection ? $currentSection->name : null,
+                'current_section_id' => $currentSection ? $currentSection->id : null,
+            ];
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
             return response()->json([
                 'success' => true,
-                'data' => $student
+                'data' => $formattedStudent
             ]);
+
         } catch (\Exception $e) {
             Log::error('Error fetching student: ' . $e->getMessage());
             return response()->json([
@@ -171,7 +219,7 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Update an enrolled student
+     * Update the specified student.
      */
     public function update(Request $request, $id)
     {
@@ -179,9 +227,9 @@ class EnrollmentController extends Controller
             $student = Student::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
-                'firstName' => 'sometimes|required|string|max:255',
-                'lastName' => 'sometimes|required|string|max:255',
-                'email' => 'sometimes|required|email|unique:student_details,email,' . $id,
+                'first_name' => 'sometimes|string|max:255',
+                'last_name' => 'sometimes|string|max:255',
+                'grade_level' => 'sometimes|string|max:50',
             ]);
 
             if ($validator->fails()) {
@@ -192,12 +240,14 @@ class EnrollmentController extends Controller
                 ], 422);
             }
 
-            $student->update($request->all());
+            $student->update($request->only([
+                'firstName', 'lastName', 'middleName', 'email', 'gradeLevel'
+            ]));
 
             return response()->json([
                 'success' => true,
-                'message' => 'Student updated successfully',
-                'data' => $student
+                'data' => $student,
+                'message' => 'Student updated successfully'
             ]);
 
         } catch (\Exception $e) {
@@ -210,7 +260,7 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Delete an enrolled student
+     * Remove the specified student.
      */
     public function destroy($id)
     {
@@ -233,16 +283,92 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Assign student to section
+     * Get available sections for a student based on their grade level.
+     */
+    public function getAvailableSections($id)
+    {
+        try {
+            $student = Student::findOrFail($id);
+<<<<<<< HEAD
+
+=======
+            
+            if (!$student->gradeLevel) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student grade level not set'
+                ], 422);
+            }
+
+            Log::info('Finding sections for student grade level: ' . $student->gradeLevel);
+
+            $studentGrade = $student->gradeLevel;
+            $gradeVariations = [$studentGrade];
+            
+            // Handle different grade formats
+            if (is_numeric($studentGrade)) {
+                // If it's just a number like "2", add "Grade 2" format
+                $gradeVariations[] = "Grade " . $studentGrade;
+            } elseif (preg_match('/^Grade (\d+)$/', $studentGrade, $matches)) {
+                // If it's "Grade 2" format, add just the number
+                $gradeVariations[] = $matches[1];
+            } elseif ($studentGrade === 'K') {
+                // Handle Kinder variations
+                $gradeVariations[] = 'Kinder 1';
+                $gradeVariations[] = 'Kinder 2';
+                $gradeVariations[] = 'Kinder';
+            } elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2'])) {
+                // Handle specific Kinder levels
+                $gradeVariations[] = 'K';
+                $gradeVariations[] = 'Kinder';
+                $gradeVariations[] = 'Kinder 1';
+                $gradeVariations[] = 'Kinder 2';
+            }
+            
+            Log::info('Searching for sections with grade variations: ' . json_encode($gradeVariations));
+            
+            // Get sections that match any of the grade variations
+            $sections = \App\Models\Section::with(['curriculumGrade.grade'])
+                ->whereHas('curriculumGrade.grade', function ($query) use ($gradeVariations) {
+                    $query->whereIn('name', $gradeVariations);
+                })
+                ->where('is_active', true)
+                ->get();
+
+            Log::info('Found sections: ' . $sections->count());
+
+            $availableSections = $sections->map(function ($section) {
+                return [
+                    'id' => $section->id,
+                    'name' => $section->name,
+                    'grade' => $section->curriculumGrade->grade->name ?? 'Unknown'
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $availableSections
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching available sections: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch available sections'
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign a student to a section.
      */
     public function assignSection(Request $request, $id)
     {
         try {
-            $student = Student::findOrFail($id);
-
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
             $validator = Validator::make($request->all(), [
                 'section_id' => 'required|exists:sections,id',
-                'school_year' => 'string|nullable'
+                'school_year' => 'sometimes|string'
             ]);
 
             if ($validator->fails()) {
@@ -253,17 +379,65 @@ class EnrollmentController extends Controller
                 ], 422);
             }
 
+            $student = Student::findOrFail($id);
+            
+            if (!$student->gradeLevel) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student grade level not set'
+                ], 422);
+            }
+
             $sectionId = $request->section_id;
             $schoolYear = $request->school_year ?? '2025-2026';
 
             // Verify the section matches the student's grade level
             $section = \App\Models\Section::with(['curriculumGrade.grade'])->findOrFail($sectionId);
             $sectionGrade = $section->curriculumGrade->grade ?? null;
+<<<<<<< HEAD
 
             if (!$sectionGrade || $sectionGrade->name !== $student->gradeLevel) {
+=======
+            
+            if (!$sectionGrade) {
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
                 return response()->json([
                     'success' => false,
-                    'message' => 'Section grade level does not match student grade level'
+                    'message' => 'Section grade level not found'
+                ], 422);
+            }
+            
+            // Normalize grade level to handle different formats for comparison
+            $studentGrade = $student->gradeLevel;
+            $sectionGradeName = $sectionGrade->name;
+            
+            $gradeMatch = false;
+            
+            // Direct match
+            if ($studentGrade === $sectionGradeName) {
+                $gradeMatch = true;
+            }
+            // Check if student grade is numeric and section is "Grade X" format
+            elseif (is_numeric($studentGrade) && $sectionGradeName === "Grade " . $studentGrade) {
+                $gradeMatch = true;
+            }
+            // Check if student grade is "Grade X" and section is numeric
+            elseif (preg_match('/^Grade (\d+)$/', $studentGrade, $matches) && $sectionGradeName === $matches[1]) {
+                $gradeMatch = true;
+            }
+            // Handle Kinder variations
+            elseif ($studentGrade === 'K' && in_array($sectionGradeName, ['Kinder', 'Kinder 1', 'Kinder 2'])) {
+                $gradeMatch = true;
+            }
+            elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2']) && 
+                    (in_array($sectionGradeName, ['K', 'Kinder', 'Kinder 1', 'Kinder 2']))) {
+                $gradeMatch = true;
+            }
+            
+            if (!$gradeMatch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Section grade level ({$sectionGradeName}) does not match student grade level ({$studentGrade})"
                 ], 422);
             }
 
@@ -276,21 +450,19 @@ class EnrollmentController extends Controller
                 'is_active' => true
             ]);
 
-            // Update the legacy section field for backward compatibility
-            $student->update(['section' => $section->name]);
-
-            Log::info('Student assigned to section', [
-                'student_id' => $student->id,
-                'section_id' => $sectionId,
-                'school_year' => $schoolYear
-            ]);
+            // Load the updated student with section
+            $student->load(['sections' => function($query) use ($schoolYear) {
+                $query->wherePivot('school_year', $schoolYear)->wherePivot('is_active', true);
+            }]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Student assigned to section successfully',
                 'data' => [
-                    'student' => $student->fresh(),
-                    'section' => $section
+                    'student_id' => $student->id,
+                    'section_id' => $sectionId,
+                    'section_name' => $section->name,
+                    'school_year' => $schoolYear
                 ]
             ]);
 
@@ -304,6 +476,7 @@ class EnrollmentController extends Controller
     }
 
     /**
+<<<<<<< HEAD
      * Get available sections for a student's grade level
      */
     public function getAvailableSections($id)
@@ -336,20 +509,26 @@ class EnrollmentController extends Controller
 
     /**
      * Get enrollment statistics
+=======
+     * Get enrollment statistics.
+>>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
      */
     public function getStats()
     {
         try {
-            $totalEnrolled = Student::where('enrollment_status', 'Enrolled')->count();
-            $totalAdmitted = Student::count();
-            $notEnrolled = $totalAdmitted - $totalEnrolled;
+            $totalStudents = Student::count();
+            $activeStudents = Student::where('isActive', true)->count();
+            $studentsWithSections = Student::whereHas('sections', function($query) {
+                $query->wherePivot('is_active', true);
+            })->count();
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'total_admitted' => $totalAdmitted,
-                    'total_enrolled' => $totalEnrolled,
-                    'not_enrolled' => $notEnrolled
+                    'total_students' => $totalStudents,
+                    'active_students' => $activeStudents,
+                    'students_with_sections' => $studentsWithSections,
+                    'students_without_sections' => $activeStudents - $studentsWithSections
                 ]
             ]);
 
@@ -358,6 +537,32 @@ class EnrollmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch enrollment statistics'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get students by grade level.
+     */
+    public function byGrade($gradeLevel)
+    {
+        try {
+            $students = Student::where('gradeLevel', $gradeLevel)
+                ->with(['sections' => function($query) {
+                    $query->wherePivot('is_active', true);
+                }])
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $students
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching students by grade: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch students by grade level'
             ], 500);
         }
     }

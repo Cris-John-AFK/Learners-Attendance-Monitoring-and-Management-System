@@ -14,7 +14,7 @@ class Student extends Model
     protected $fillable = [
         'name',
         'firstName',
-        'lastName', 
+        'lastName',
         'middleName',
         'extensionName',
         'email',
@@ -30,7 +30,6 @@ class Student extends Model
         'age',
         'psaBirthCertNo',
         'motherTongue',
-        'religion',
         'profilePhoto',
         'photo',
         'qr_code_path',
@@ -52,36 +51,7 @@ class Student extends Model
         'householdID',
         'hasDisability',
         'disabilities',
-        'isActive',
-        // Enrollment form fields
-        'student_type',
-        'school_year',
-        'enrollment_id',
-        'house_no',
-        'street',
-        'barangay',
-        'city_municipality',
-        'province',
-        'country',
-        'zip_code',
-        'father_name',
-        'father_occupation',
-        'father_contact',
-        'father_education',
-        'mother_name',
-        'mother_occupation',
-        'mother_contact',
-        'mother_education',
-        'guardian_name',
-        'guardian_occupation',
-        'guardian_contact',
-        'guardian_address',
-        'last_grade_completed',
-        'last_school_year',
-        'last_school_attended',
-        'last_school_address',
-        'household_income',
-        'enrollment_status'
+        'isActive'
     ];
 
     protected $casts = [
@@ -100,7 +70,7 @@ class Student extends Model
         'isActive' => 'boolean'
     ];
 
-    public function attendance()
+    public function attendances()
     {
         return $this->hasMany(Attendance::class);
     }
