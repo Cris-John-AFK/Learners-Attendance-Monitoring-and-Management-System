@@ -15,7 +15,10 @@
             <div class="reports-header">
                 <div class="header-content">
                     <div class="title-section">
-                        <h1 class="page-title">📊 Collected Reports</h1>
+                        <h1 class="page-title">
+                            <span class="emoji-icon">📊</span>
+                            <span class="text-gradient">Collected Reports</span>
+                        </h1>
                         <p class="page-subtitle">Manage and view all system reports</p>
                     </div>
                     <div class="header-actions">
@@ -137,6 +140,282 @@
             </template>
         </Dialog>
 
+        <!-- Detailed Section Attendance Dialog -->
+        <Dialog
+            v-model:visible="showSectionDetailsDialog"
+            :header="getSectionDialogTitle()"
+            modal
+            class="p-fluid section-details-overlay"
+            :style="{ width: '95vw', maxWidth: '1400px', height: '90vh' }"
+            :appendTo="'body'"
+            :blockScroll="true"
+            :baseZIndex="1000"
+            :closable="true"
+            :dismissableMask="true"
+            @hide="backToMainReport"
+        >
+            <div v-if="selectedSectionDetails" class="section-attendance-details">
+                <!-- Section Header Info -->
+                <div class="section-info-header">
+                    <div class="section-basic-info">
+                        <h3 class="section-title">{{ selectedSectionDetails.name }}</h3>
+                        <p class="teacher-name">{{ selectedSectionDetails.teacher }}</p>
+                        <div class="attendance-summary">
+                            <div class="summary-item">
+                                <span class="summary-label">Total Students:</span>
+                                <span class="summary-value">{{ selectedSectionDetails.studentCount }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Present Today:</span>
+                                <span class="summary-value present">{{ selectedSectionDetails.presentCount }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Absent Today:</span>
+                                <span class="summary-value absent">{{ selectedSectionDetails.absentCount }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Attendance Rate:</span>
+                                <span class="summary-value" :class="getRateClass(selectedSectionDetails.attendanceRate)">{{ selectedSectionDetails.attendanceRate }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="report-period-info">
+                        <div class="period-badge">
+                            <i class="pi pi-calendar"></i>
+                            <span>September 2025</span>
+                        </div>
+                        <div class="school-info">
+                            <strong>Kagawasan Elementary School</strong>
+                            <p>School Form 2 (SF2) Daily Attendance Report</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month Navigation -->
+                <div class="month-navigation">
+                    <Button 
+                        icon="pi pi-chevron-left" 
+                        class="p-button-text p-button-sm" 
+                        @click="previousMonth()"
+                        :disabled="!canGoPreviousMonth()"
+                    />
+                    <div class="month-selector">
+                        <h4>{{ getCurrentMonthDisplay() }}</h4>
+                        <p class="teacher-info">{{ getCurrentTeacher() }}</p>
+                    </div>
+                    <Button 
+                        icon="pi pi-chevron-right" 
+                        class="p-button-text p-button-sm" 
+                        @click="nextMonth()"
+                        :disabled="!canGoNextMonth()"
+                    />
+                </div>
+
+                <!-- Attendance Grid -->
+                <div class="attendance-grid-container">
+                    <div class="grid-header">
+                        <h4>Daily Attendance Record - {{ getCurrentMonthDisplay() }}</h4>
+                        <div class="legend">
+                            <div class="legend-item">
+                                <span class="legend-symbol present-symbol">✓</span>
+                                <span>Present</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-symbol absent-symbol">✗</span>
+                                <span>Absent</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-symbol late-symbol">L</span>
+                                <span>Late</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="attendance-table-wrapper">
+                        <table class="attendance-table">
+                            <thead>
+                                <tr>
+                                    <th class="student-name-header">Learner's Name<br /><small>(Last Name, First Name, Middle Name)</small></th>
+                                    <th v-for="day in attendanceDays" :key="day.date" class="day-header">
+                                        <div class="day-info">
+                                            <span class="day-number">{{ day.day }}</span>
+                                            <span class="day-name">{{ day.dayName }}</span>
+                                        </div>
+                                    </th>
+                                    <th class="summary-header">Total<br />Present</th>
+                                    <th class="summary-header">Total<br />Absent</th>
+                                    <th class="summary-header">Attendance<br />Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- MALE Students Section -->
+                                <tr class="gender-header-row">
+                                    <td class="gender-header" colspan="25">
+                                        <div class="gender-section">
+                                            <span class="gender-label">👨 MALE</span>
+                                            <span class="gender-total">TOTAL Per Day</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-for="student in getMaleStudents(selectedSectionDetails.name)" :key="student.id" class="student-row">
+                                    <td class="student-name-cell">
+                                        <div class="student-info">
+                                            <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
+                                            <span class="student-lrn">LRN: {{ student.lrn }}</span>
+                                        </div>
+                                    </td>
+                                    <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
+                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance[day.date])]">
+                                            {{ getAttendanceMark(student.attendance[day.date]) }}
+                                        </span>
+                                    </td>
+                                    <td class="summary-cell present-count">{{ student.totalPresent }}</td>
+                                    <td class="summary-cell absent-count">{{ student.totalAbsent }}</td>
+                                    <td class="summary-cell rate-cell">
+                                        <span :class="['rate-badge', getRateClass(student.attendanceRate)]">{{ student.attendanceRate }}%</span>
+                                    </td>
+                                </tr>
+
+                                <!-- MALE TOTAL Per Day Row -->
+                                <tr class="gender-total-row male-total">
+                                    <td class="gender-total-label">
+                                        <strong>👨 MALE | TOTAL Per Day</strong>
+                                    </td>
+                                    <td v-for="day in attendanceDays" :key="day.date" class="gender-total-cell">
+                                        <strong>{{ getMaleDayTotal(selectedSectionDetails.name, day.date) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getMaleTotalPresent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getMaleTotalAbsent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</strong>
+                                    </td>
+                                </tr>
+
+                                <!-- FEMALE Students Section -->
+                                <tr class="gender-header-row">
+                                    <td class="gender-header" colspan="25">
+                                        <div class="gender-section">
+                                            <span class="gender-label">👩 FEMALE</span>
+                                            <span class="gender-total">TOTAL Per Day</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-for="student in getFemaleStudents(selectedSectionDetails.name)" :key="student.id" class="student-row">
+                                    <td class="student-name-cell">
+                                        <div class="student-info">
+                                            <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
+                                            <span class="student-lrn">LRN: {{ student.lrn }}</span>
+                                        </div>
+                                    </td>
+                                    <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
+                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance[day.date])]">
+                                            {{ getAttendanceMark(student.attendance[day.date]) }}
+                                        </span>
+                                    </td>
+                                    <td class="summary-cell present-count">{{ student.totalPresent }}</td>
+                                    <td class="summary-cell absent-count">{{ student.totalAbsent }}</td>
+                                    <td class="summary-cell rate-cell">
+                                        <span :class="['rate-badge', getRateClass(student.attendanceRate)]">{{ student.attendanceRate }}%</span>
+                                    </td>
+                                </tr>
+
+                                <!-- FEMALE TOTAL Per Day Row -->
+                                <tr class="gender-total-row female-total">
+                                    <td class="gender-total-label">
+                                        <strong>👩 FEMALE | TOTAL Per Day</strong>
+                                    </td>
+                                    <td v-for="day in attendanceDays" :key="day.date" class="gender-total-cell">
+                                        <strong>{{ getFemaleDayTotal(selectedSectionDetails.name, day.date) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getFemaleTotalPresent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getFemaleTotalAbsent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="gender-total-cell">
+                                        <strong>{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</strong>
+                                    </td>
+                                </tr>
+
+                                <!-- Combined TOTAL PER DAY Row -->
+                                <tr class="combined-total-row">
+                                    <td class="total-label-cell">
+                                        <strong>Combined TOTAL PER DAY</strong>
+                                    </td>
+                                    <td v-for="day in attendanceDays" :key="day.date" class="total-cell">
+                                        <strong>{{ getDayTotal(selectedSectionDetails.name, day.date) }}</strong>
+                                    </td>
+                                    <td class="total-cell">
+                                        <strong>{{ getTotalPresent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="total-cell">
+                                        <strong>{{ getTotalAbsent(selectedSectionDetails.name) }}</strong>
+                                    </td>
+                                    <td class="total-cell">
+                                        <strong>{{ getOverallAttendanceRate(selectedSectionDetails.name) }}%</strong>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Monthly Statistics -->
+                <div class="monthly-statistics">
+                    <h4>Monthly Statistics</h4>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="pi pi-users"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ selectedSectionDetails.studentCount }}</span>
+                                <span class="stat-label">Total Students</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon present">
+                                <i class="pi pi-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ calculateTotalPresent() }}</span>
+                                <span class="stat-label">Total Present Days</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon absent">
+                                <i class="pi pi-times-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ calculateTotalAbsent() }}</span>
+                                <span class="stat-label">Total Absent Days</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon rate">
+                                <i class="pi pi-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ selectedSectionDetails.attendanceRate }}%</span>
+                                <span class="stat-label">Average Attendance</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Back to Reports" icon="pi pi-arrow-left" class="p-button-text" @click="backToMainReport()" />
+                <Button label="Download SF2 Report" icon="pi pi-download" class="p-button-primary" @click="downloadSF2Report()" />
+                <Button label="Print Report" icon="pi pi-print" class="p-button-success" @click="printReport()" />
+            </template>
+        </Dialog>
+
         <!-- View Report Dialog -->
         <Dialog v-model:visible="showViewDialog" :header="selectedReport?.title || 'Report Details'" modal class="p-fluid" :style="{ width: '80vw', maxWidth: '1000px' }">
             <div v-if="selectedReport" class="report-preview">
@@ -186,8 +465,8 @@
                                     </div>
                                 </div>
                                 <div class="section-actions">
-                                    <Button label="View Details" size="small" class="p-button-outlined p-button-sm" />
-                                    <Button icon="pi pi-download" size="small" class="p-button-text p-button-sm" />
+                                    <Button label="View Details" size="small" class="p-button-outlined p-button-sm" @click="viewSectionDetails(section)" />
+                                    <Button icon="pi pi-download" size="small" class="p-button-text p-button-sm" @click="downloadSectionReport(section)" />
                                 </div>
                             </div>
                         </div>
@@ -226,18 +505,154 @@ const loading = ref(false);
 const generating = ref(false);
 const showGenerateDialog = ref(false);
 const showViewDialog = ref(false);
+const showSectionDetailsDialog = ref(false);
 const selectedReport = ref(null);
+const selectedSectionDetails = ref(null);
 const searchQuery = ref('');
 const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
 const selectedStatus = ref(null);
+
+// Month navigation
+const currentMonth = ref(8); // September = 8 (0-based index)
+const currentYear = ref(2025);
+const availableMonths = ref([
+    { month: 7, year: 2025, name: 'August 2025' },
+    { month: 8, year: 2025, name: 'September 2025' },
+    { month: 9, year: 2025, name: 'October 2025' }
+]);
+
+// Historical section data with different teachers per month
+const historicalSectionData = ref({
+    'Kinder A': {
+        'August 2025': {
+            teacher: 'Ms. Maria Santos',
+            students: [
+                {
+                    id: 1,
+                    firstName: 'Juan',
+                    middleName: 'Carlos',
+                    lastName: 'Dela Cruz',
+                    gender: 'Male',
+                    lrn: '123456789010',
+                    attendance: {
+                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
+                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
+                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'absent',
+                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
+                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
+                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
+                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-30': 'present'
+                    },
+                    totalPresent: 21,
+                    totalAbsent: 1,
+                    attendanceRate: 95
+                },
+                {
+                    id: 2,
+                    firstName: 'Maria',
+                    middleName: 'Elena',
+                    lastName: 'Rodriguez',
+                    gender: 'Female',
+                    lrn: '123456789011',
+                    attendance: {
+                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
+                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
+                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
+                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
+                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
+                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
+                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-30': 'present'
+                    },
+                    totalPresent: 22,
+                    totalAbsent: 0,
+                    attendanceRate: 100
+                },
+                {
+                    id: 3,
+                    firstName: 'Carlos',
+                    middleName: 'Antonio',
+                    lastName: 'Martinez',
+                    gender: 'Male',
+                    lrn: '123456789012',
+                    attendance: {
+                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
+                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'absent',
+                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
+                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
+                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
+                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
+                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-30': 'present'
+                    },
+                    totalPresent: 21,
+                    totalAbsent: 1,
+                    attendanceRate: 95
+                },
+                {
+                    id: 4,
+                    firstName: 'Ana',
+                    middleName: 'Isabel',
+                    lastName: 'Garcia',
+                    gender: 'Female',
+                    lrn: '123456789013',
+                    attendance: {
+                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
+                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
+                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
+                        '2025-08-14': 'present', '2025-08-15': 'absent', '2025-08-16': 'present',
+                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
+                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
+                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-30': 'present'
+                    },
+                    totalPresent: 21,
+                    totalAbsent: 1,
+                    attendanceRate: 95
+                }
+            ]
+        },
+        'September 2025': {
+            teacher: 'Ms. Lisa Chen',
+            students: [] // Will use existing sectionStudents data
+        },
+        'October 2025': {
+            teacher: 'Ms. Lisa Chen',
+            students: [
+                {
+                    id: 1,
+                    firstName: 'Juan',
+                    middleName: 'Carlos',
+                    lastName: 'Dela Cruz',
+                    gender: 'Male',
+                    lrn: '123456789010',
+                    attendance: {
+                        '2025-10-01': 'present', '2025-10-02': 'present', '2025-10-03': 'present',
+                        '2025-10-04': 'present', '2025-10-07': 'present', '2025-10-08': 'present',
+                        '2025-10-09': 'present', '2025-10-10': 'present', '2025-10-11': 'present',
+                        '2025-10-14': 'present', '2025-10-15': 'present', '2025-10-16': 'present',
+                        '2025-10-17': 'present', '2025-10-18': 'present', '2025-10-21': 'present',
+                        '2025-10-22': 'present', '2025-10-23': 'present', '2025-10-24': 'present',
+                        '2025-10-25': 'present', '2025-10-28': 'present', '2025-10-29': 'present',
+                        '2025-10-30': 'present', '2025-10-31': 'present'
+                    },
+                    totalPresent: 23,
+                    totalAbsent: 0,
+                    attendanceRate: 100
+                }
+            ]
+        }
+    }
+});
 
 // Kinder sections data
 const kinderSections = ref([
     {
         id: 1,
         name: 'Kinder A',
-        teacher: 'Ms. Sarah Johnson',
+        teacher: 'Ms. Lisa Chen',
         studentCount: 25,
         presentCount: 23,
         absentCount: 2,
@@ -449,6 +864,884 @@ const grade4Sections = ref([
         statusClass: 'status-excellent'
     }
 ]);
+
+// Attendance days for September 2025
+const attendanceDays = ref([
+    { date: '2025-09-01', day: 1, dayName: 'M' },
+    { date: '2025-09-02', day: 2, dayName: 'T' },
+    { date: '2025-09-03', day: 3, dayName: 'W' },
+    { date: '2025-09-04', day: 4, dayName: 'Th' },
+    { date: '2025-09-05', day: 5, dayName: 'F' },
+    { date: '2025-09-08', day: 8, dayName: 'M' },
+    { date: '2025-09-09', day: 9, dayName: 'T' },
+    { date: '2025-09-10', day: 10, dayName: 'W' },
+    { date: '2025-09-11', day: 11, dayName: 'Th' },
+    { date: '2025-09-12', day: 12, dayName: 'F' },
+    { date: '2025-09-15', day: 15, dayName: 'M' },
+    { date: '2025-09-16', day: 16, dayName: 'T' },
+    { date: '2025-09-17', day: 17, dayName: 'W' },
+    { date: '2025-09-18', day: 18, dayName: 'Th' },
+    { date: '2025-09-19', day: 19, dayName: 'F' },
+    { date: '2025-09-22', day: 22, dayName: 'M' },
+    { date: '2025-09-23', day: 23, dayName: 'T' },
+    { date: '2025-09-24', day: 24, dayName: 'W' },
+    { date: '2025-09-25', day: 25, dayName: 'Th' },
+    { date: '2025-09-26', day: 26, dayName: 'F' },
+    { date: '2025-09-29', day: 29, dayName: 'M' },
+    { date: '2025-09-30', day: 30, dayName: 'T' }
+]);
+
+// Sample student data for each section
+const sectionStudents = ref({
+    'Kinder A': [
+        // MALE STUDENTS
+        {
+            id: 1,
+            firstName: 'Juan',
+            middleName: 'Dela',
+            lastName: 'Reyes',
+            gender: 'Male',
+            lrn: '123456789013',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'absent',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'absent',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 2,
+            firstName: 'Pedro',
+            middleName: 'Jose',
+            lastName: 'Martinez',
+            gender: 'Male',
+            lrn: '123456789015',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 3,
+            firstName: 'Carlos',
+            middleName: 'Antonio',
+            lastName: 'Santos',
+            gender: 'Male',
+            lrn: '123456789020',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'absent',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'absent',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 4,
+            firstName: 'Miguel',
+            middleName: 'Angel',
+            lastName: 'Rodriguez',
+            gender: 'Male',
+            lrn: '123456789019',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'late',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        // FEMALE STUDENTS
+        {
+            id: 5,
+            firstName: 'Maria',
+            middleName: 'Santos',
+            lastName: 'Cruz',
+            gender: 'Female',
+            lrn: '123456789012',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'absent',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'absent',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 6,
+            firstName: 'Ana',
+            middleName: 'Marie',
+            lastName: 'Garcia',
+            gender: 'Female',
+            lrn: '123456789014',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'absent',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'absent',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 7,
+            firstName: 'Sofia',
+            middleName: 'Isabel',
+            lastName: 'Lopez',
+            gender: 'Female',
+            lrn: '123456789016',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'absent',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'absent',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 8,
+            firstName: 'Isabella',
+            middleName: 'Grace',
+            lastName: 'Dela Cruz',
+            gender: 'Female',
+            lrn: '123456789021',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'absent',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 9,
+            firstName: 'Gabriel',
+            middleName: 'Luis',
+            lastName: 'Mendoza',
+            gender: 'Male',
+            lrn: '123456789022',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'absent',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 10,
+            firstName: 'Camila',
+            middleName: 'Rose',
+            lastName: 'Villanueva',
+            gender: 'Female',
+            lrn: '123456789023',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'absent',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 11,
+            firstName: 'Diego',
+            middleName: 'Carlos',
+            lastName: 'Ramos',
+            gender: 'Male',
+            lrn: '123456789024',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 12,
+            firstName: 'Valentina',
+            middleName: 'Joy',
+            lastName: 'Santos',
+            gender: 'Female',
+            lrn: '123456789025',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'absent',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'absent',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        }
+    ],
+    'Kinder B': [
+        {
+            id: 6,
+            firstName: 'Carlos',
+            middleName: 'Antonio',
+            lastName: 'Fernandez',
+            gender: 'Male',
+            lrn: '123456789017',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 7,
+            firstName: 'Isabella',
+            middleName: 'Grace',
+            lastName: 'Morales',
+            gender: 'Female',
+            lrn: '123456789018',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'absent',
+                '2025-09-30': 'absent'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 13,
+            firstName: 'Sebastian',
+            middleName: 'Miguel',
+            lastName: 'Torres',
+            gender: 'Male',
+            lrn: '123456789026',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 14,
+            firstName: 'Lucia',
+            middleName: 'Carmen',
+            lastName: 'Herrera',
+            gender: 'Female',
+            lrn: '123456789027',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'absent',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 15,
+            firstName: 'Mateo',
+            middleName: 'Jose',
+            lastName: 'Castillo',
+            gender: 'Male',
+            lrn: '123456789028',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'absent',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 16,
+            firstName: 'Emilia',
+            middleName: 'Faith',
+            lastName: 'Jimenez',
+            gender: 'Female',
+            lrn: '123456789029',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        }
+    ],
+    'Grade 1-A': [
+        {
+            id: 8,
+            firstName: 'Miguel',
+            middleName: 'Angel',
+            lastName: 'Rodriguez',
+            gender: 'Male',
+            lrn: '123456789019',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 17,
+            firstName: 'Adriana',
+            middleName: 'Nicole',
+            lastName: 'Vargas',
+            gender: 'Female',
+            lrn: '123456789030',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'absent',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 18,
+            firstName: 'Leonardo',
+            middleName: 'David',
+            lastName: 'Gutierrez',
+            gender: 'Male',
+            lrn: '123456789031',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'absent',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 19,
+            firstName: 'Natalia',
+            middleName: 'Esperanza',
+            lastName: 'Medina',
+            gender: 'Female',
+            lrn: '123456789032',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        },
+        {
+            id: 20,
+            firstName: 'Santiago',
+            middleName: 'Rafael',
+            lastName: 'Aguilar',
+            gender: 'Male',
+            lrn: '123456789033',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'absent',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 21,
+            totalAbsent: 1,
+            attendanceRate: 95
+        },
+        {
+            id: 21,
+            firstName: 'Valeria',
+            middleName: 'Cristina',
+            lastName: 'Ortega',
+            gender: 'Female',
+            lrn: '123456789034',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'present',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 22,
+            totalAbsent: 0,
+            attendanceRate: 100
+        }
+    ]
+});
 
 // Form data for new report
 const newReport = ref({
@@ -781,6 +2074,236 @@ const exportAllReports = () => {
     // Implement export logic here
 };
 
+// Section details methods
+const viewSectionDetails = (section) => {
+    // Close the main report dialog first
+    showViewDialog.value = false;
+    // Wait a moment then open the section details dialog
+    setTimeout(() => {
+        selectedSectionDetails.value = section;
+        showSectionDetailsDialog.value = true;
+    }, 100);
+};
+
+const downloadSectionReport = (section) => {
+    toast.add({
+        severity: 'info',
+        summary: 'Download Started',
+        detail: `Downloading ${section.name} attendance report...`,
+        life: 3000
+    });
+};
+
+const getSectionDialogTitle = () => {
+    if (!selectedSectionDetails.value) return 'Section Details';
+    return `${selectedSectionDetails.value.name} - Daily Attendance Report`;
+};
+
+const getSectionStudents = (sectionName) => {
+    const monthDisplay = getCurrentMonthDisplay();
+    const historicalData = historicalSectionData.value[sectionName];
+    
+    // Check if we have historical data for this month
+    if (historicalData && historicalData[monthDisplay] && historicalData[monthDisplay].students.length > 0) {
+        return historicalData[monthDisplay].students;
+    }
+    
+    // Fall back to current section students data
+    return sectionStudents.value[sectionName] || [];
+};
+
+const getMaleStudents = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male');
+};
+
+const getFemaleStudents = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female');
+};
+
+const getDayTotal = (sectionName, date) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.attendance[date] === 'present').length;
+};
+
+const getTotalPresent = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.reduce((total, student) => total + student.totalPresent, 0);
+};
+
+const getTotalAbsent = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.reduce((total, student) => total + student.totalAbsent, 0);
+};
+
+const getOverallAttendanceRate = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    if (students.length === 0) return 0;
+    const totalRate = students.reduce((sum, student) => sum + student.attendanceRate, 0);
+    return Math.round(totalRate / students.length);
+};
+
+// Male-specific calculations
+const getMaleDayTotal = (sectionName, date) => {
+    const maleStudents = getMaleStudents(sectionName);
+    return maleStudents.filter((student) => student.attendance[date] === 'present').length;
+};
+
+const getMaleTotalPresent = (sectionName) => {
+    const maleStudents = getMaleStudents(sectionName);
+    return maleStudents.reduce((total, student) => total + student.totalPresent, 0);
+};
+
+const getMaleTotalAbsent = (sectionName) => {
+    const maleStudents = getMaleStudents(sectionName);
+    return maleStudents.reduce((total, student) => total + student.totalAbsent, 0);
+};
+
+const getMaleAttendanceRate = (sectionName) => {
+    const maleStudents = getMaleStudents(sectionName);
+    if (maleStudents.length === 0) return 0;
+    const totalRate = maleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
+    return Math.round(totalRate / maleStudents.length);
+};
+
+// Female-specific calculations
+const getFemaleDayTotal = (sectionName, date) => {
+    const femaleStudents = getFemaleStudents(sectionName);
+    return femaleStudents.filter((student) => student.attendance[date] === 'present').length;
+};
+
+const getFemaleTotalPresent = (sectionName) => {
+    const femaleStudents = getFemaleStudents(sectionName);
+    return femaleStudents.reduce((total, student) => total + student.totalPresent, 0);
+};
+
+const getFemaleTotalAbsent = (sectionName) => {
+    const femaleStudents = getFemaleStudents(sectionName);
+    return femaleStudents.reduce((total, student) => total + student.totalAbsent, 0);
+};
+
+const getFemaleAttendanceRate = (sectionName) => {
+    const femaleStudents = getFemaleStudents(sectionName);
+    if (femaleStudents.length === 0) return 0;
+    const totalRate = femaleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
+    return Math.round(totalRate / femaleStudents.length);
+};
+
+const getAttendanceMark = (status) => {
+    switch (status) {
+        case 'present':
+            return '✓';
+        case 'absent':
+            return '✗';
+        case 'late':
+            return 'L';
+        default:
+            return '-';
+    }
+};
+
+const getAttendanceClass = (status) => {
+    switch (status) {
+        case 'present':
+            return 'mark-present';
+        case 'absent':
+            return 'mark-absent';
+        case 'late':
+            return 'mark-late';
+        default:
+            return 'mark-none';
+    }
+};
+
+const calculateTotalPresent = () => {
+    if (!selectedSectionDetails.value) return 0;
+    const students = getSectionStudents(selectedSectionDetails.value.name);
+    return students.reduce((total, student) => total + student.totalPresent, 0);
+};
+
+const calculateTotalAbsent = () => {
+    if (!selectedSectionDetails.value) return 0;
+    const students = getSectionStudents(selectedSectionDetails.value.name);
+    return students.reduce((total, student) => total + student.totalAbsent, 0);
+};
+
+// Month navigation functions
+const getCurrentMonthDisplay = () => {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[currentMonth.value]} ${currentYear.value}`;
+};
+
+const getCurrentTeacher = () => {
+    if (!selectedSectionDetails.value) return '';
+    const sectionName = selectedSectionDetails.value.name;
+    const monthDisplay = getCurrentMonthDisplay();
+    const historicalData = historicalSectionData.value[sectionName];
+    
+    if (historicalData && historicalData[monthDisplay]) {
+        return historicalData[monthDisplay].teacher;
+    }
+    return selectedSectionDetails.value.teacher;
+};
+
+const canGoPreviousMonth = () => {
+    const currentIndex = availableMonths.value.findIndex(m => 
+        m.month === currentMonth.value && m.year === currentYear.value
+    );
+    return currentIndex > 0;
+};
+
+const canGoNextMonth = () => {
+    const currentIndex = availableMonths.value.findIndex(m => 
+        m.month === currentMonth.value && m.year === currentYear.value
+    );
+    return currentIndex < availableMonths.value.length - 1;
+};
+
+const previousMonth = () => {
+    const currentIndex = availableMonths.value.findIndex(m => 
+        m.month === currentMonth.value && m.year === currentYear.value
+    );
+    if (currentIndex > 0) {
+        const prevMonth = availableMonths.value[currentIndex - 1];
+        currentMonth.value = prevMonth.month;
+        currentYear.value = prevMonth.year;
+    }
+};
+
+const nextMonth = () => {
+    const currentIndex = availableMonths.value.findIndex(m => 
+        m.month === currentMonth.value && m.year === currentYear.value
+    );
+    if (currentIndex < availableMonths.value.length - 1) {
+        const nextMonth = availableMonths.value[currentIndex + 1];
+        currentMonth.value = nextMonth.month;
+        currentYear.value = nextMonth.year;
+    }
+};
+
+const downloadSF2Report = () => {
+    toast.add({
+        severity: 'success',
+        summary: 'Download Started',
+        detail: 'Downloading SF2 report in PDF format...',
+        life: 3000
+    });
+};
+
+const printReport = () => {
+    window.print();
+};
+
+const backToMainReport = () => {
+    showSectionDetailsDialog.value = false;
+    // Wait a moment then reopen the main report dialog
+    setTimeout(() => {
+        showViewDialog.value = true;
+    }, 100);
+};
+
 // Lifecycle
 onMounted(() => {
     // Load reports data
@@ -789,6 +2312,14 @@ onMounted(() => {
         loading.value = false;
     }, 1000);
 });
+
+// Report types for dropdown
+const reportTypes = ref([
+    { name: 'Daily Attendance', value: 'daily' },
+    { name: 'Weekly Summary', value: 'weekly' },
+    { name: 'Monthly Report', value: 'monthly' },
+    { name: 'Quarterly Analysis', value: 'quarterly' }
+]);
 </script>
 
 <style scoped>
@@ -908,6 +2439,19 @@ onMounted(() => {
     font-size: 2.5rem;
     font-weight: 700;
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.title-section h1 .emoji-icon {
+    background: none;
+    -webkit-text-fill-color: initial;
+    background-clip: initial;
+    font-size: 2.5rem;
+}
+
+.title-section h1 .text-gradient {
     background: linear-gradient(135deg, #667eea, #764ba2);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -1306,6 +2850,570 @@ onMounted(() => {
     line-height: 1.6;
 }
 
+/* Section Details Dialog Styles */
+.section-details-overlay {
+    z-index: 10001 !important;
+}
+
+.section-details-overlay .p-dialog {
+    z-index: 10001 !important;
+}
+
+.section-details-overlay .p-dialog-mask {
+    z-index: 10000 !important;
+    background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+.section-details-overlay .p-dialog-content {
+    z-index: 10002 !important;
+}
+
+.section-details-overlay .p-dialog-header {
+    z-index: 10002 !important;
+}
+
+.section-attendance-details {
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.section-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    color: white;
+}
+
+.section-basic-info {
+    flex: 1;
+}
+
+.section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: white;
+}
+
+.teacher-name {
+    font-size: 1.1rem;
+    margin: 0 0 1.5rem 0;
+    opacity: 0.9;
+    font-style: italic;
+}
+
+.attendance-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.summary-label {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.summary-value.present {
+    color: #4caf50;
+}
+
+.summary-value.absent {
+    color: #f44336;
+}
+
+.report-period-info {
+    text-align: right;
+}
+
+.period-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+}
+
+.school-info {
+    opacity: 0.9;
+}
+
+.school-info strong {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.school-info p {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+/* Attendance Grid Styles */
+.attendance-grid-container {
+    margin: 2rem 0;
+}
+
+.grid-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.grid-header h4 {
+    margin: 0;
+    color: #333;
+    font-weight: 600;
+}
+
+.legend {
+    display: flex;
+    gap: 1rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.legend-symbol {
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.present-symbol {
+    color: #4caf50;
+}
+
+.absent-symbol {
+    color: #f44336;
+}
+
+.late-symbol {
+    color: #ff9800;
+}
+
+.attendance-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    background: white;
+}
+
+.attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.attendance-table th,
+.attendance-table td {
+    border: 1px solid #e9ecef;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.student-name-header {
+    background: #667eea;
+    color: white;
+    padding: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    min-width: 200px;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+}
+
+.day-header {
+    background: #f8f9fa;
+    padding: 0.5rem 0.25rem;
+    min-width: 35px;
+    font-weight: 600;
+}
+
+.day-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.day-number {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.day-name {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.summary-header {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.75rem 0.5rem;
+    font-weight: 600;
+    min-width: 80px;
+}
+
+.student-name-cell {
+    background: white;
+    padding: 0.75rem;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    border-right: 2px solid #667eea;
+}
+
+.student-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.student-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.student-lrn {
+    font-size: 0.75rem;
+    color: #666;
+    opacity: 0.8;
+}
+
+.attendance-cell {
+    padding: 0.5rem 0.25rem;
+    background: white;
+}
+
+.attendance-mark {
+    font-weight: bold;
+    font-size: 1rem;
+    padding: 0.25rem;
+    border-radius: 4px;
+    display: inline-block;
+    min-width: 20px;
+}
+
+.mark-present {
+    color: #4caf50;
+    background: #e8f5e8;
+}
+
+.mark-absent {
+    color: #f44336;
+    background: #ffeaea;
+}
+
+.mark-late {
+    color: #ff9800;
+    background: #fff3e0;
+}
+
+.mark-none {
+    color: #999;
+}
+
+.summary-cell {
+    padding: 0.75rem 0.5rem;
+    font-weight: 600;
+}
+
+.present-count {
+    background: #e8f5e8;
+    color: #2e7d32;
+}
+
+.absent-count {
+    background: #ffeaea;
+    color: #c62828;
+}
+
+.rate-cell {
+    background: #f8f9fa;
+}
+
+.rate-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Monthly Statistics */
+.monthly-statistics {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+}
+
+.monthly-statistics h4 {
+    margin: 0 0 1.5rem 0;
+    color: #333;
+    font-weight: 600;
+    text-align: center;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e9ecef;
+}
+
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background: #667eea;
+    color: white;
+}
+
+.stat-icon.present {
+    background: #4caf50;
+}
+
+.stat-icon.absent {
+    background: #f44336;
+}
+
+.stat-icon.rate {
+    background: #2196f3;
+}
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: #666;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+/* Month Navigation Styles */
+.month-navigation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.month-selector {
+    text-align: center;
+    color: white;
+    min-width: 200px;
+}
+
+.month-selector h4 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.teacher-info {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+    font-style: italic;
+}
+
+.month-navigation .p-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    transition: all 0.3s ease;
+}
+
+.month-navigation .p-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.month-navigation .p-button:disabled {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.5);
+    cursor: not-allowed;
+}
+
+/* Gender Section Styles */
+.gender-header-row {
+    background: #f8f9fa;
+    border-top: 2px solid #667eea;
+}
+
+.gender-header {
+    background: #667eea;
+    color: white;
+    padding: 0.75rem;
+    font-weight: 700;
+    text-align: left;
+}
+
+.gender-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.gender-label {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.gender-total {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    font-style: italic;
+}
+
+/* Gender-specific total rows */
+.gender-total-row {
+    background: #f8f9fa;
+    border-top: 2px solid #6c757d;
+    font-weight: 700;
+}
+
+.male-total {
+    background: #e3f2fd;
+    border-top: 2px solid #2196f3;
+}
+
+.female-total {
+    background: #fce4ec;
+    border-top: 2px solid #e91e63;
+}
+
+.gender-total-label {
+    background: #6c757d;
+    color: white;
+    padding: 0.75rem;
+    font-weight: 700;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+}
+
+.male-total .gender-total-label {
+    background: #2196f3;
+}
+
+.female-total .gender-total-label {
+    background: #e91e63;
+}
+
+.gender-total-cell {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    font-weight: 700;
+    border: 1px solid #dee2e6;
+}
+
+.male-total .gender-total-cell {
+    background: #e3f2fd;
+    color: #1976d2;
+    border-color: #2196f3;
+}
+
+.female-total .gender-total-cell {
+    background: #fce4ec;
+    color: #c2185b;
+    border-color: #e91e63;
+}
+
+.combined-total-row {
+    background: #e3f2fd;
+    border-top: 3px solid #2196f3;
+    font-weight: 700;
+}
+
+.total-label-cell {
+    background: #2196f3;
+    color: white;
+    padding: 0.75rem;
+    font-weight: 700;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+}
+
+.total-cell {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    font-weight: 700;
+    border: 1px solid #2196f3;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .content-container {
@@ -1329,6 +3437,39 @@ onMounted(() => {
     .report-details {
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .section-info-header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .attendance-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grid-header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .legend {
+        justify-content: center;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .attendance-table {
+        font-size: 0.75rem;
+    }
+
+    .student-name-header,
+    .student-name-cell {
+        min-width: 150px;
     }
 }
 </style>
