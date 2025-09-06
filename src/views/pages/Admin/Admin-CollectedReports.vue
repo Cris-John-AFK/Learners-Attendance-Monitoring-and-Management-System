@@ -41,7 +41,7 @@
                     </div>
                     <div class="filter-item">
                         <label class="filter-label">Month</label>
-                        <Select v-model="selectedStatus" :options="statusOptions" optionLabel="name" optionValue="value" placeholder="All Months" class="w-full" />
+                        <Select v-model="selectedStatus" :options="monthOptions" optionLabel="name" optionValue="value" placeholder="All Months" class="w-full" />
                     </div>
                     <div class="filter-item">
                         <label class="filter-label">Search</label>
@@ -193,22 +193,12 @@
 
                 <!-- Month Navigation -->
                 <div class="month-navigation">
-                    <Button 
-                        icon="pi pi-chevron-left" 
-                        class="p-button-text p-button-sm" 
-                        @click="previousMonth()"
-                        :disabled="!canGoPreviousMonth()"
-                    />
+                    <Button icon="pi pi-chevron-left" class="p-button-text p-button-sm" @click="previousMonth()" :disabled="!canGoPreviousMonth()" />
                     <div class="month-selector">
                         <h4>{{ getCurrentMonthDisplay() }}</h4>
                         <p class="teacher-info">{{ getCurrentTeacher() }}</p>
                     </div>
-                    <Button 
-                        icon="pi pi-chevron-right" 
-                        class="p-button-text p-button-sm" 
-                        @click="nextMonth()"
-                        :disabled="!canGoNextMonth()"
-                    />
+                    <Button icon="pi pi-chevron-right" class="p-button-text p-button-sm" @click="nextMonth()" :disabled="!canGoNextMonth()" />
                 </div>
 
                 <!-- Attendance Grid -->
@@ -261,6 +251,18 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
+                                            <span v-if="student.status && student.status !== 'active'" 
+                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
+                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                                {{ student.status.replace('_', ' ') }}
+                                                <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
+                                            </span>
+                                            <button v-if="!student.status || student.status === 'active'" 
+                                                    class="status-change-btn" 
+                                                    @click="showStatusChangeDialog(student)"
+                                                    title="Change student status">
+                                                ⚙️
+                                            </button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -308,6 +310,18 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
+                                            <span v-if="student.status && student.status !== 'active'" 
+                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
+                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                                {{ student.status.replace('_', ' ') }}
+                                                <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
+                                            </span>
+                                            <button v-if="!student.status || student.status === 'active'" 
+                                                    class="status-change-btn" 
+                                                    @click="showStatusChangeDialog(student)"
+                                                    title="Change student status">
+                                                ⚙️
+                                            </button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -409,6 +423,174 @@
                 </div>
             </div>
 
+            <!-- SF2 Template Preview -->
+            <div class="sf2-template-preview">
+                <div class="sf2-header">
+                    <h3>SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS</h3>
+                </div>
+                
+                <div class="sf2-info-section">
+                    <div class="sf2-school-info">
+                        <div class="info-row">
+                            <span class="label">School:</span>
+                            <span class="value">Kagawasan Elementary School</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Section:</span>
+                            <span class="value">{{ selectedSectionDetails.name }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Teacher:</span>
+                            <span class="value">{{ getCurrentTeacher() }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Month/Year:</span>
+                            <span class="value">{{ getCurrentMonthDisplay() }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="sf2-guidelines">
+                        <h4>GUIDELINES:</h4>
+                        <ol>
+                            <li>This attendance shall be accomplished daily. Refer to the codes for checking learners' attendance.</li>
+                            <li>Data shall be written in the columns after Learner's Name.</li>
+                            <li>To compute the following:</li>
+                        </ol>
+                        <div class="formulas">
+                            <div class="formula-item">
+                                <span class="formula-label">a. Percentage of Enrolment =</span>
+                                <div class="formula-box">
+                                    <div>Registered Learners as of end of the month</div>
+                                    <div class="divider">Enrolment as of 1st Friday of the School Year</div>
+                                    <span class="multiply">x 100</span>
+                                </div>
+                            </div>
+                            <div class="formula-item">
+                                <span class="formula-label">b. Average Daily Attendance =</span>
+                                <div class="formula-box">
+                                    <div>Total Daily Attendance</div>
+                                    <div class="divider">Number of School Days in reporting month</div>
+                                </div>
+                            </div>
+                            <div class="formula-item">
+                                <span class="formula-label">c. Percentage of Attendance for the month =</span>
+                                <div class="formula-box">
+                                    <div>Average Daily Attendance</div>
+                                    <div class="divider">Registered Learners as of end of the month</div>
+                                    <span class="multiply">x 100</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="sf2-codes">
+                        <h4>CODES FOR CHECKING ATTENDANCE</h4>
+                        <div class="codes-grid">
+                            <div class="code-section">
+                                <h5>A. REASONS/CAUSES (Specify the appropriate code)</h5>
+                                <div class="code-list">
+                                    <div class="code-item">a. Domestic-Related Factors</div>
+                                    <div class="code-item">a1. Had to take care of siblings</div>
+                                    <div class="code-item">a2. Early marriage/pregnancy</div>
+                                    <div class="code-item">a3. Parents' attitude toward schooling</div>
+                                    <div class="code-item">a4. Peer pressure</div>
+                                    <div class="code-item">b. Individual-Related Factors</div>
+                                    <div class="code-item">b1. Illness</div>
+                                    <div class="code-item">b2. Overage</div>
+                                    <div class="code-item">b3. Death</div>
+                                    <div class="code-item">b4. Drug Abuse</div>
+                                    <div class="code-item">b5. Poor academic performance</div>
+                                    <div class="code-item">b6. Lack of interest/Disinterest</div>
+                                    <div class="code-item">b7. Hunger/Malnutrition</div>
+                                </div>
+                            </div>
+                            <div class="code-section">
+                                <h5>c. School-Related Factors</h5>
+                                <div class="code-list">
+                                    <div class="code-item">c1. Teacher Factor</div>
+                                    <div class="code-item">c2. Physical condition of classroom</div>
+                                    <div class="code-item">c3. Peer influence</div>
+                                    <div class="code-item">c4. School environment</div>
+                                    <div class="code-item">d. Geographic/Environmental</div>
+                                    <div class="code-item">d1. Distance between home and school</div>
+                                    <div class="code-item">d2. Armed conflict area. Tribal wars & clan feuds</div>
+                                    <div class="code-item">d3. Calamities/Disasters</div>
+                                    <div class="code-item">e. Economic/Financial</div>
+                                    <div class="code-item">e1. Child labor - work</div>
+                                    <div class="code-item">f. Others (Specify)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="sf2-summary-section">
+                        <div class="summary-box">
+                            <h4>Month: _____ No. of Days of Classes: _____ Summary</h4>
+                            <div class="summary-grid">
+                                <div class="summary-item">
+                                    <span class="summary-label">* Enrolment as of (1st Friday of June)</span>
+                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Late Enrolment during the month</span>
+                                    <div class="summary-value">0</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Registered Learners as of end of the month</span>
+                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Percentage of Enrolment as of end of the month</span>
+                                    <div class="summary-value">100%</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Average Daily Attendance</span>
+                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Percentage of Attendance for the month</span>
+                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Number of students absent for 5 consecutive days:</span>
+                                    <div class="summary-value">0</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Drop out</span>
+                                    <div class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Transferred out</span>
+                                    <div class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Transferred in</span>
+                                    <div class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</div>
+                                </div>
+                            </div>
+                            <div class="certification">
+                                <p>I certify that this is a true and correct report.</p>
+                                <div class="signature-section">
+                                    <div class="signature-box">
+                                        <div class="signature-line"></div>
+                                        <span>(Signature of Teacher over Printed Name)</span>
+                                    </div>
+                                    <div class="signature-box">
+                                        <span>Attested by:</span>
+                                        <div class="signature-line"></div>
+                                        <span>(Signature of School Head over Printed Name)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sf2-footer">
+                    <span>School Form 2 - Page ___ of ___</span>
+                </div>
+            </div>
+
             <template #footer>
                 <Button label="Back to Reports" icon="pi pi-arrow-left" class="p-button-text" @click="backToMainReport()" />
                 <Button label="Download SF2 Report" icon="pi pi-download" class="p-button-primary" @click="downloadSF2Report()" />
@@ -484,6 +666,38 @@
                 <Button label="Download" icon="pi pi-download" class="p-button-primary" @click="downloadReport(selectedReport)" />
             </template>
         </Dialog>
+
+        <!-- Status Change Dialog -->
+        <Dialog v-model:visible="statusChangeDialog" modal header="Change Student Status" :style="{ width: '450px' }">
+            <div class="status-change-form" v-if="selectedStudent">
+                <div class="student-details">
+                    <h4>{{ selectedStudent.firstName }} {{ selectedStudent.lastName }}</h4>
+                    <p>LRN: {{ selectedStudent.lrn }}</p>
+                    <p>Current Status: {{ selectedStudent.status || 'Active' }}</p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="newStatus">New Status:</label>
+                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" 
+                              placeholder="Select new status" class="w-full" />
+                </div>
+                
+                <div class="form-group" v-if="newStatus">
+                    <label for="statusDate">Effective Date:</label>
+                    <Calendar v-model="statusDate" dateFormat="yy-mm-dd" placeholder="Select date" class="w-full" />
+                </div>
+                
+                <div class="form-group" v-if="newStatus">
+                    <label for="statusReason">Reason (Optional):</label>
+                    <Textarea v-model="statusReason" rows="3" placeholder="Enter reason for status change..." class="w-full" />
+                </div>
+            </div>
+            
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" @click="closeStatusDialog" class="p-button-text" />
+                <Button label="Update Status" icon="pi pi-check" @click="updateStudentStatus" :disabled="!newStatus || !statusDate" />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -493,9 +707,15 @@ import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
+import Dropdown from 'primevue/dropdown';
+import Calendar from 'primevue/calendar';
+import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -508,6 +728,19 @@ const showViewDialog = ref(false);
 const showSectionDetailsDialog = ref(false);
 const selectedReport = ref(null);
 const selectedSectionDetails = ref(null);
+
+// Status change dialog variables
+const statusChangeDialog = ref(false);
+const selectedStudent = ref(null);
+const newStatus = ref('');
+const statusDate = ref(null);
+const statusReason = ref('');
+
+const statusOptions = [
+    { label: 'Drop Out', value: 'dropped_out' },
+    { label: 'Transfer Out', value: 'transferred_out' },
+    { label: 'Transfer In', value: 'transferred_in' }
+];
 const searchQuery = ref('');
 const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
@@ -536,13 +769,27 @@ const historicalSectionData = ref({
                     gender: 'Male',
                     lrn: '123456789010',
                     attendance: {
-                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
-                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
-                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'absent',
-                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
-                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
-                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
-                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-01': 'present',
+                        '2025-08-02': 'present',
+                        '2025-08-05': 'present',
+                        '2025-08-06': 'present',
+                        '2025-08-07': 'present',
+                        '2025-08-08': 'present',
+                        '2025-08-09': 'present',
+                        '2025-08-12': 'present',
+                        '2025-08-13': 'absent',
+                        '2025-08-14': 'present',
+                        '2025-08-15': 'present',
+                        '2025-08-16': 'present',
+                        '2025-08-19': 'present',
+                        '2025-08-20': 'present',
+                        '2025-08-21': 'present',
+                        '2025-08-22': 'present',
+                        '2025-08-23': 'present',
+                        '2025-08-26': 'present',
+                        '2025-08-27': 'present',
+                        '2025-08-28': 'present',
+                        '2025-08-29': 'present',
                         '2025-08-30': 'present'
                     },
                     totalPresent: 21,
@@ -557,13 +804,27 @@ const historicalSectionData = ref({
                     gender: 'Female',
                     lrn: '123456789011',
                     attendance: {
-                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
-                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
-                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
-                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
-                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
-                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
-                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-01': 'present',
+                        '2025-08-02': 'present',
+                        '2025-08-05': 'present',
+                        '2025-08-06': 'present',
+                        '2025-08-07': 'present',
+                        '2025-08-08': 'present',
+                        '2025-08-09': 'present',
+                        '2025-08-12': 'present',
+                        '2025-08-13': 'present',
+                        '2025-08-14': 'present',
+                        '2025-08-15': 'present',
+                        '2025-08-16': 'present',
+                        '2025-08-19': 'present',
+                        '2025-08-20': 'present',
+                        '2025-08-21': 'present',
+                        '2025-08-22': 'present',
+                        '2025-08-23': 'present',
+                        '2025-08-26': 'present',
+                        '2025-08-27': 'present',
+                        '2025-08-28': 'present',
+                        '2025-08-29': 'present',
                         '2025-08-30': 'present'
                     },
                     totalPresent: 22,
@@ -578,13 +839,27 @@ const historicalSectionData = ref({
                     gender: 'Male',
                     lrn: '123456789012',
                     attendance: {
-                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
-                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'absent',
-                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
-                        '2025-08-14': 'present', '2025-08-15': 'present', '2025-08-16': 'present',
-                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
-                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
-                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-01': 'present',
+                        '2025-08-02': 'present',
+                        '2025-08-05': 'present',
+                        '2025-08-06': 'present',
+                        '2025-08-07': 'present',
+                        '2025-08-08': 'absent',
+                        '2025-08-09': 'present',
+                        '2025-08-12': 'present',
+                        '2025-08-13': 'present',
+                        '2025-08-14': 'present',
+                        '2025-08-15': 'present',
+                        '2025-08-16': 'present',
+                        '2025-08-19': 'present',
+                        '2025-08-20': 'present',
+                        '2025-08-21': 'present',
+                        '2025-08-22': 'present',
+                        '2025-08-23': 'present',
+                        '2025-08-26': 'present',
+                        '2025-08-27': 'present',
+                        '2025-08-28': 'present',
+                        '2025-08-29': 'present',
                         '2025-08-30': 'present'
                     },
                     totalPresent: 21,
@@ -599,13 +874,27 @@ const historicalSectionData = ref({
                     gender: 'Female',
                     lrn: '123456789013',
                     attendance: {
-                        '2025-08-01': 'present', '2025-08-02': 'present', '2025-08-05': 'present',
-                        '2025-08-06': 'present', '2025-08-07': 'present', '2025-08-08': 'present',
-                        '2025-08-09': 'present', '2025-08-12': 'present', '2025-08-13': 'present',
-                        '2025-08-14': 'present', '2025-08-15': 'absent', '2025-08-16': 'present',
-                        '2025-08-19': 'present', '2025-08-20': 'present', '2025-08-21': 'present',
-                        '2025-08-22': 'present', '2025-08-23': 'present', '2025-08-26': 'present',
-                        '2025-08-27': 'present', '2025-08-28': 'present', '2025-08-29': 'present',
+                        '2025-08-01': 'present',
+                        '2025-08-02': 'present',
+                        '2025-08-05': 'present',
+                        '2025-08-06': 'present',
+                        '2025-08-07': 'present',
+                        '2025-08-08': 'present',
+                        '2025-08-09': 'present',
+                        '2025-08-12': 'present',
+                        '2025-08-13': 'present',
+                        '2025-08-14': 'present',
+                        '2025-08-15': 'absent',
+                        '2025-08-16': 'present',
+                        '2025-08-19': 'present',
+                        '2025-08-20': 'present',
+                        '2025-08-21': 'present',
+                        '2025-08-22': 'present',
+                        '2025-08-23': 'present',
+                        '2025-08-26': 'present',
+                        '2025-08-27': 'present',
+                        '2025-08-28': 'present',
+                        '2025-08-29': 'present',
                         '2025-08-30': 'present'
                     },
                     totalPresent: 21,
@@ -629,14 +918,29 @@ const historicalSectionData = ref({
                     gender: 'Male',
                     lrn: '123456789010',
                     attendance: {
-                        '2025-10-01': 'present', '2025-10-02': 'present', '2025-10-03': 'present',
-                        '2025-10-04': 'present', '2025-10-07': 'present', '2025-10-08': 'present',
-                        '2025-10-09': 'present', '2025-10-10': 'present', '2025-10-11': 'present',
-                        '2025-10-14': 'present', '2025-10-15': 'present', '2025-10-16': 'present',
-                        '2025-10-17': 'present', '2025-10-18': 'present', '2025-10-21': 'present',
-                        '2025-10-22': 'present', '2025-10-23': 'present', '2025-10-24': 'present',
-                        '2025-10-25': 'present', '2025-10-28': 'present', '2025-10-29': 'present',
-                        '2025-10-30': 'present', '2025-10-31': 'present'
+                        '2025-10-01': 'present',
+                        '2025-10-02': 'present',
+                        '2025-10-03': 'present',
+                        '2025-10-04': 'present',
+                        '2025-10-07': 'present',
+                        '2025-10-08': 'present',
+                        '2025-10-09': 'present',
+                        '2025-10-10': 'present',
+                        '2025-10-11': 'present',
+                        '2025-10-14': 'present',
+                        '2025-10-15': 'present',
+                        '2025-10-16': 'present',
+                        '2025-10-17': 'present',
+                        '2025-10-18': 'present',
+                        '2025-10-21': 'present',
+                        '2025-10-22': 'present',
+                        '2025-10-23': 'present',
+                        '2025-10-24': 'present',
+                        '2025-10-25': 'present',
+                        '2025-10-28': 'present',
+                        '2025-10-29': 'present',
+                        '2025-10-30': 'present',
+                        '2025-10-31': 'present'
                     },
                     totalPresent: 23,
                     totalAbsent: 0,
@@ -902,6 +1206,7 @@ const sectionStudents = ref({
             lastName: 'Reyes',
             gender: 'Male',
             lrn: '123456789013',
+            status: 'active', // active, dropped_out, transferred_out, transferred_in
             attendance: {
                 '2025-09-01': 'present',
                 '2025-09-02': 'present',
@@ -936,7 +1241,9 @@ const sectionStudents = ref({
             middleName: 'Jose',
             lastName: 'Martinez',
             gender: 'Male',
-            lrn: '123456789015',
+            lrn: '123456789014',
+            status: 'dropped_out', // Student dropped out
+            statusDate: '2025-09-15', // Date when student dropped out
             attendance: {
                 '2025-09-01': 'present',
                 '2025-09-02': 'present',
@@ -947,21 +1254,10 @@ const sectionStudents = ref({
                 '2025-09-09': 'present',
                 '2025-09-10': 'present',
                 '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
+                '2025-09-12': 'present'
+                // Student dropped out on Sept 15, so no attendance after this date
             },
-            totalPresent: 22,
+            totalPresent: 10,
             totalAbsent: 0,
             attendanceRate: 100
         },
@@ -971,7 +1267,9 @@ const sectionStudents = ref({
             middleName: 'Antonio',
             lastName: 'Santos',
             gender: 'Male',
-            lrn: '123456789020',
+            lrn: '123456789015',
+            status: 'transferred_out', // Student transferred out
+            statusDate: '2025-09-20', // Date when student transferred out
             attendance: {
                 '2025-09-01': 'present',
                 '2025-09-02': 'absent',
@@ -987,18 +1285,12 @@ const sectionStudents = ref({
                 '2025-09-16': 'present',
                 '2025-09-17': 'present',
                 '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
+                '2025-09-19': 'present'
+                // Student transferred out on Sept 20, so no attendance after this date
             },
-            totalPresent: 20,
+            totalPresent: 13,
             totalAbsent: 2,
-            attendanceRate: 91
+            attendanceRate: 87
         },
         {
             id: 4,
@@ -1037,20 +1329,16 @@ const sectionStudents = ref({
         },
         // FEMALE STUDENTS
         {
-            id: 5,
+            id: 4,
             firstName: 'Maria',
             middleName: 'Santos',
             lastName: 'Cruz',
             gender: 'Female',
-            lrn: '123456789012',
+            lrn: '123456789016',
+            status: 'transferred_in', // Student transferred in
+            statusDate: '2025-09-10', // Date when student transferred in
             attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'absent',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
+                // Student transferred in on Sept 10, so no attendance before this date
                 '2025-09-10': 'present',
                 '2025-09-11': 'present',
                 '2025-09-12': 'present',
@@ -1072,12 +1360,49 @@ const sectionStudents = ref({
             attendanceRate: 91
         },
         {
-            id: 6,
+            id: 5,
             firstName: 'Ana',
             middleName: 'Marie',
             lastName: 'Garcia',
             gender: 'Female',
-            lrn: '123456789014',
+            lrn: '123456789017',
+            status: 'active',
+            attendance: {
+                '2025-09-01': 'present',
+                '2025-09-02': 'absent',
+                '2025-09-03': 'present',
+                '2025-09-04': 'present',
+                '2025-09-05': 'present',
+                '2025-09-08': 'present',
+                '2025-09-09': 'present',
+                '2025-09-10': 'present',
+                '2025-09-11': 'present',
+                '2025-09-12': 'present',
+                '2025-09-15': 'present',
+                '2025-09-16': 'present',
+                '2025-09-17': 'present',
+                '2025-09-18': 'present',
+                '2025-09-19': 'present',
+                '2025-09-22': 'present',
+                '2025-09-23': 'present',
+                '2025-09-24': 'present',
+                '2025-09-25': 'present',
+                '2025-09-26': 'present',
+                '2025-09-29': 'present',
+                '2025-09-30': 'present'
+            },
+            totalPresent: 20,
+            totalAbsent: 2,
+            attendanceRate: 91
+        },
+        {
+            id: 6,
+            firstName: 'Sofia',
+            middleName: 'Isabel',
+            lastName: 'Lopez',
+            gender: 'Female',
+            lrn: '123456789018',
+            status: 'active',
             attendance: {
                 '2025-09-01': 'present',
                 '2025-09-02': 'absent',
@@ -1848,7 +2173,7 @@ const dateRanges = ref([
     { name: '2020', value: '2020' }
 ]);
 
-const statusOptions = ref([
+const monthOptions = ref([
     { name: 'January', value: 'january' },
     { name: 'February', value: 'february' },
     { name: 'March', value: 'march' },
@@ -2102,12 +2427,12 @@ const getSectionDialogTitle = () => {
 const getSectionStudents = (sectionName) => {
     const monthDisplay = getCurrentMonthDisplay();
     const historicalData = historicalSectionData.value[sectionName];
-    
+
     // Check if we have historical data for this month
     if (historicalData && historicalData[monthDisplay] && historicalData[monthDisplay].students.length > 0) {
         return historicalData[monthDisplay].students;
     }
-    
+
     // Fall back to current section students data
     return sectionStudents.value[sectionName] || [];
 };
@@ -2192,15 +2517,111 @@ const getFemaleAttendanceRate = (sectionName) => {
 
 const getAttendanceMark = (status) => {
     switch (status) {
-        case 'present':
-            return '✓';
-        case 'absent':
-            return '✗';
-        case 'late':
-            return 'L';
-        default:
-            return '-';
+        case 'present': return '✓';
+        case 'absent': return '✗';
+        case 'late': return 'L';
+        default: return '-';
     }
+};
+
+const formatStatusDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Student status functions
+const getDroppedOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter(student => student.status === 'dropped_out').length;
+};
+
+const getTransferredOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter(student => student.status === 'transferred_out').length;
+};
+
+const getTransferredInCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter(student => student.status === 'transferred_in').length;
+};
+
+// Status change functions
+const showStatusChangeDialog = (student) => {
+    selectedStudent.value = student;
+    newStatus.value = '';
+    statusDate.value = null;
+    statusReason.value = '';
+    statusChangeDialog.value = true;
+};
+
+const closeStatusDialog = () => {
+    statusChangeDialog.value = false;
+    selectedStudent.value = null;
+    newStatus.value = '';
+    statusDate.value = null;
+    statusReason.value = '';
+};
+
+const updateStudentStatus = () => {
+    if (!selectedStudent.value || !newStatus.value || !statusDate.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Missing Information',
+            detail: 'Please fill in all required fields.',
+            life: 3000
+        });
+        return;
+    }
+
+    // Find the student in the data and update their status
+    const sectionName = selectedSectionDetails.value.name;
+    const students = sectionStudents.value[sectionName];
+    const studentIndex = students.findIndex(s => s.id === selectedStudent.value.id);
+    
+    if (studentIndex !== -1) {
+        // Update student status
+        students[studentIndex].status = newStatus.value;
+        students[studentIndex].statusDate = statusDate.value.toISOString().split('T')[0];
+        students[studentIndex].statusReason = statusReason.value;
+        
+        // If dropping out or transferring out, remove future attendance
+        if (newStatus.value === 'dropped_out' || newStatus.value === 'transferred_out') {
+            const cutoffDate = new Date(statusDate.value);
+            const attendance = students[studentIndex].attendance;
+            
+            // Remove attendance records after the status change date
+            Object.keys(attendance).forEach(dateKey => {
+                const attendanceDate = new Date(dateKey);
+                if (attendanceDate > cutoffDate) {
+                    delete attendance[dateKey];
+                }
+            });
+            
+            // Recalculate totals
+            const presentDays = Object.values(attendance).filter(status => status === 'present').length;
+            const absentDays = Object.values(attendance).filter(status => status === 'absent').length;
+            const totalDays = presentDays + absentDays;
+            
+            students[studentIndex].totalPresent = presentDays;
+            students[studentIndex].totalAbsent = absentDays;
+            students[studentIndex].attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
+        }
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Status Updated',
+            detail: `${selectedStudent.value.firstName} ${selectedStudent.value.lastName} status changed to ${newStatus.value.replace('_', ' ')}.`,
+            life: 3000
+        });
+        
+        closeStatusDialog();
+    }
+};
+
+const getActiveStudentsCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter(student => student.status === 'active').length;
 };
 
 const getAttendanceClass = (status) => {
@@ -2230,8 +2651,7 @@ const calculateTotalAbsent = () => {
 
 // Month navigation functions
 const getCurrentMonthDisplay = () => {
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return `${monthNames[currentMonth.value]} ${currentYear.value}`;
 };
 
@@ -2240,7 +2660,7 @@ const getCurrentTeacher = () => {
     const sectionName = selectedSectionDetails.value.name;
     const monthDisplay = getCurrentMonthDisplay();
     const historicalData = historicalSectionData.value[sectionName];
-    
+
     if (historicalData && historicalData[monthDisplay]) {
         return historicalData[monthDisplay].teacher;
     }
@@ -2248,23 +2668,17 @@ const getCurrentTeacher = () => {
 };
 
 const canGoPreviousMonth = () => {
-    const currentIndex = availableMonths.value.findIndex(m => 
-        m.month === currentMonth.value && m.year === currentYear.value
-    );
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
     return currentIndex > 0;
 };
 
 const canGoNextMonth = () => {
-    const currentIndex = availableMonths.value.findIndex(m => 
-        m.month === currentMonth.value && m.year === currentYear.value
-    );
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
     return currentIndex < availableMonths.value.length - 1;
 };
 
 const previousMonth = () => {
-    const currentIndex = availableMonths.value.findIndex(m => 
-        m.month === currentMonth.value && m.year === currentYear.value
-    );
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
     if (currentIndex > 0) {
         const prevMonth = availableMonths.value[currentIndex - 1];
         currentMonth.value = prevMonth.month;
@@ -2273,9 +2687,7 @@ const previousMonth = () => {
 };
 
 const nextMonth = () => {
-    const currentIndex = availableMonths.value.findIndex(m => 
-        m.month === currentMonth.value && m.year === currentYear.value
-    );
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
     if (currentIndex < availableMonths.value.length - 1) {
         const nextMonth = availableMonths.value[currentIndex + 1];
         currentMonth.value = nextMonth.month;
@@ -2284,12 +2696,177 @@ const nextMonth = () => {
 };
 
 const downloadSF2Report = () => {
-    toast.add({
-        severity: 'success',
-        summary: 'Download Started',
-        detail: 'Downloading SF2 report in PDF format...',
-        life: 3000
-    });
+    if (!selectedSectionDetails.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'No Section Selected',
+            detail: 'Please select a section to download SF2 report.',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        // Get current section data
+        const section = selectedSectionDetails.value;
+        const sectionName = section.name;
+        const teacher = getCurrentTeacher();
+        const monthDisplay = getCurrentMonthDisplay();
+        const students = getSectionStudents(sectionName);
+        const maleStudents = getMaleStudents(sectionName);
+        const femaleStudents = getFemaleStudents(sectionName);
+
+        // Create new workbook
+        const wb = XLSX.utils.book_new();
+        
+        // Prepare data array for SF2 format
+        const data = [];
+        
+        // Header rows
+        data.push(['SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS']);
+        data.push([]);
+        data.push([`School: Kagawasan Elementary School`]);
+        data.push([`Section: ${sectionName}`]);
+        data.push([`Teacher: ${teacher}`]);
+        data.push([`Month/Year: ${monthDisplay}`]);
+        data.push([]);
+        
+        // Table headers
+        const headerRow = [
+            'Learner\'s Name (Last Name, First Name, Middle Name)',
+            'LRN',
+            ...attendanceDays.value.map(day => day.day.toString()),
+            'Total Present',
+            'Total Absent',
+            'Rate %'
+        ];
+        data.push(headerRow);
+        
+        // MALE students section
+        data.push(['MALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
+        
+        // Add male students data
+        maleStudents.forEach(student => {
+            const row = [
+                `${student.lastName}, ${student.firstName} ${student.middleName}`,
+                student.lrn,
+                ...attendanceDays.value.map(day => {
+                    const status = student.attendance[day.date];
+                    return getAttendanceMark(status);
+                }),
+                student.totalPresent,
+                student.totalAbsent,
+                `${student.attendanceRate}%`
+            ];
+            data.push(row);
+        });
+        
+        // Male totals
+        const maleTotalRow = [
+            'MALE TOTAL PER DAY',
+            '',
+            ...attendanceDays.value.map(day => getMaleDayTotal(sectionName, day.date)),
+            getMaleTotalPresent(sectionName),
+            getMaleTotalAbsent(sectionName),
+            `${getMaleAttendanceRate(sectionName)}%`
+        ];
+        data.push(maleTotalRow);
+        data.push([]);
+        
+        // FEMALE students section
+        data.push(['FEMALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
+        
+        // Add female students data
+        femaleStudents.forEach(student => {
+            const row = [
+                `${student.lastName}, ${student.firstName} ${student.middleName}`,
+                student.lrn,
+                ...attendanceDays.value.map(day => {
+                    const status = student.attendance[day.date];
+                    return getAttendanceMark(status);
+                }),
+                student.totalPresent,
+                student.totalAbsent,
+                `${student.attendanceRate}%`
+            ];
+            data.push(row);
+        });
+        
+        // Female totals
+        const femaleTotalRow = [
+            'FEMALE TOTAL PER DAY',
+            '',
+            ...attendanceDays.value.map(day => getFemaleDayTotal(sectionName, day.date)),
+            getFemaleTotalPresent(sectionName),
+            getFemaleTotalAbsent(sectionName),
+            `${getFemaleAttendanceRate(sectionName)}%`
+        ];
+        data.push(femaleTotalRow);
+        data.push([]);
+        
+        // Combined totals
+        const combinedTotalRow = [
+            'COMBINED TOTAL PER DAY',
+            '',
+            ...attendanceDays.value.map(day => getDayTotal(sectionName, day.date)),
+            getTotalPresent(sectionName),
+            getTotalAbsent(sectionName),
+            `${getOverallAttendanceRate(sectionName)}%`
+        ];
+        data.push(combinedTotalRow);
+        data.push([]);
+        
+        // Summary
+        data.push(['MONTHLY SUMMARY']);
+        data.push([`Total Students: ${students.length}`]);
+        data.push([`Male Students: ${maleStudents.length}`]);
+        data.push([`Female Students: ${femaleStudents.length}`]);
+        data.push([`Overall Attendance Rate: ${getOverallAttendanceRate(sectionName)}%`]);
+        data.push([]);
+        data.push(['Legend: ✓ = Present, ✗ = Absent, L = Late']);
+        data.push([`Generated on: ${new Date().toLocaleDateString()}`]);
+        data.push(['Generated by: LAMMS - Learners Attendance Monitoring and Management System']);
+        
+        // Create worksheet
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Set column widths
+        const colWidths = [
+            { wch: 40 }, // Student name
+            { wch: 15 }, // LRN
+            ...attendanceDays.value.map(() => ({ wch: 4 })), // Day columns
+            { wch: 12 }, // Total Present
+            { wch: 12 }, // Total Absent
+            { wch: 8 }   // Rate %
+        ];
+        ws['!cols'] = colWidths;
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'SF2 Report');
+        
+        // Generate filename
+        const currentDate = new Date().toISOString().split('T')[0];
+        const filename = `SF-2-Daily-Attendance_${sectionName.replace(/\s+/g, '_')}_${monthDisplay.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
+        
+        // Save the file
+        XLSX.writeFile(wb, filename);
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Excel Download Complete',
+            detail: `SF2 Excel report for ${sectionName} has been downloaded.`,
+            life: 5000
+        });
+        
+    } catch (error) {
+        console.error('Error generating SF2 Excel report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Download Failed',
+            detail: 'Failed to generate SF2 Excel report. Please try again.',
+            life: 5000
+        });
+    }
 };
 
 const printReport = () => {
@@ -2467,6 +3044,260 @@ const reportTypes = ref([
 .header-actions {
     display: flex;
     gap: 1rem;
+}
+
+/* SF2 Template Styles */
+.sf2-template-preview {
+    background: white;
+    border: 2px solid #000;
+    padding: 20px;
+    margin: 20px 0;
+    font-family: 'Times New Roman', serif;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.sf2-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
+}
+
+.sf2-header h3 {
+    font-size: 14px;
+    font-weight: bold;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.sf2-info-section {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.sf2-school-info {
+    border: 1px solid #000;
+    padding: 10px;
+}
+
+.info-row {
+    display: flex;
+    margin-bottom: 5px;
+}
+
+.info-row .label {
+    font-weight: bold;
+    min-width: 80px;
+}
+
+.info-row .value {
+    border-bottom: 1px solid #000;
+    flex: 1;
+    padding-left: 5px;
+}
+
+.sf2-guidelines {
+    border: 1px solid #000;
+    padding: 10px;
+}
+
+.sf2-guidelines h4 {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0 0 10px 0;
+    text-decoration: underline;
+}
+
+.sf2-guidelines ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.sf2-guidelines li {
+    margin-bottom: 5px;
+    font-size: 10px;
+}
+
+.formulas {
+    margin-top: 10px;
+}
+
+.formula-item {
+    margin-bottom: 10px;
+    font-size: 10px;
+}
+
+.formula-label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 3px;
+}
+
+.formula-box {
+    border: 1px solid #000;
+    padding: 5px;
+    text-align: center;
+    position: relative;
+}
+
+.formula-box .divider {
+    border-top: 1px solid #000;
+    margin: 3px 0;
+    padding-top: 3px;
+}
+
+.formula-box .multiply {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.sf2-codes {
+    border: 1px solid #000;
+    padding: 10px;
+}
+
+.sf2-codes h4 {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-decoration: underline;
+}
+
+.codes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.code-section h5 {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 0 5px 0;
+    text-decoration: underline;
+}
+
+.code-list {
+    font-size: 9px;
+}
+
+.code-item {
+    margin-bottom: 2px;
+    padding-left: 10px;
+}
+
+.sf2-summary-section {
+    grid-column: 1 / -1;
+    margin-top: 20px;
+}
+
+.summary-box {
+    border: 2px solid #000;
+    padding: 15px;
+}
+
+.summary-box h4 {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0 0 15px 0;
+    text-align: center;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px;
+    border-bottom: 1px solid #ccc;
+}
+
+.summary-label {
+    font-size: 10px;
+    flex: 1;
+}
+
+.summary-value {
+    font-weight: bold;
+    min-width: 50px;
+    text-align: right;
+    border-bottom: 1px solid #000;
+    padding: 2px 5px;
+}
+
+.certification {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.certification p {
+    font-size: 11px;
+    font-style: italic;
+    margin-bottom: 20px;
+}
+
+.signature-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+}
+
+.signature-box {
+    text-align: center;
+}
+
+.signature-line {
+    border-bottom: 1px solid #000;
+    height: 40px;
+    margin-bottom: 5px;
+}
+
+.signature-box span {
+    font-size: 10px;
+}
+
+.sf2-footer {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #000;
+    font-size: 10px;
+}
+
+/* Student Status Badges */
+.status-badge {
+    font-size: 8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.status-dropped {
+    background-color: #ff4444;
+    color: white;
+}
+
+.status-transferred-out {
+    background-color: #ff9800;
+    color: white;
+}
+
+.status-transferred-in {
+    background-color: #4caf50;
+    color: white;
 }
 
 /* Filter section */
@@ -3471,5 +4302,55 @@ const reportTypes = ref([
     .student-name-cell {
         min-width: 150px;
     }
+}
+
+/* Status Change Button */
+.status-change-btn {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.status-change-btn:hover {
+    background: #e0e0e0;
+    border-color: #ccc;
+}
+
+.status-change-form {
+    padding: 1rem 0;
+}
+
+.student-details {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.student-details h4 {
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+}
+
+.student-details p {
+    margin: 0.25rem 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #2c3e50;
 }
 </style>
