@@ -951,7 +951,7 @@ async function assignStudentToSection() {
         }
 
 =======
-        
+
 >>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 >>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
         sectionAssignmentDialog.value = false;
@@ -1189,10 +1189,10 @@ defineExpose({
 <<<<<<< HEAD
                                 <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="enrolledStudents.filter((s) => !s.section).length === 0" />
 =======
-                                <Button 
-                                    label="Auto-Assign All" 
-                                    icon="pi pi-bolt" 
-                                    size="small" 
+                                <Button
+                                    label="Auto-Assign All"
+                                    icon="pi pi-bolt"
+                                    size="small"
                                     class="p-button-sm p-button-outlined"
                                     @click="autoAssignAllStudents"
                                     :disabled="pendingEnrollmentStudents.length === 0"
@@ -1213,9 +1213,9 @@ defineExpose({
                                 class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer"
                                 :class="student.current_section_name || student.section ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'"
 =======
-                            <div 
-                                v-for="student in filteredStudents" 
-                                :key="student.id" 
+                            <div
+                                v-for="student in filteredStudents"
+                                :key="student.id"
                                 class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
 >>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
                                 @click="openSectionAssignment(student)"
@@ -1808,12 +1808,12 @@ defineExpose({
 <<<<<<< HEAD
                     <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSections" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
 =======
-                    <Dropdown 
+                    <Dropdown
                         id="sectionSelect"
-                        v-model="selectedSectionForAssignment" 
-                        :options="availableSectionsForAssignment" 
-                        optionLabel="name" 
-                        placeholder="Choose a section" 
+                        v-model="selectedSectionForAssignment"
+                        :options="availableSectionsForAssignment"
+                        optionLabel="name"
+                        placeholder="Choose a section"
                         class="w-full mt-2"
                         :disabled="!studentToAssign"
                     >
