@@ -127,11 +127,35 @@ class StudentController extends Controller
     public function getAttendanceRecords($id)
     {
         try {
-            $student = Student::findOrFail($id);
+            // Check if student exists - student IDs start from 3, not 1
+            $student = Student::find($id);
+            if (!$student) {
+                Log::info('Student not found with ID ' . $id . '. Available student IDs: ' . Student::pluck('id')->implode(', '));
+                return response()->json(['error' => 'Student not found', 'available_ids' => Student::pluck('id')->toArray()], 404);
+            }
 
-            // For now, return empty array since attendance system is being set up
-            // This prevents 500 errors while the system is being configured
-            return response()->json([]);
+            // Get attendance records for this student
+            $attendanceRecords = \App\Models\Attendance::where('student_id', $id)
+                ->with(['attendanceStatus', 'section', 'subject'])
+                ->orderBy('date', 'desc')
+                ->limit(50) // Limit to recent 50 records
+                ->get()
+                ->map(function($record) {
+                    return [
+                        'id' => $record->id,
+                        'date' => $record->date,
+                        'status' => $record->attendanceStatus->name ?? 'Unknown',
+                        'status_code' => $record->attendanceStatus->code ?? 'U',
+                        'section' => $record->section->name ?? 'Unknown',
+                        'subject' => $record->subject->name ?? 'General',
+                        'time_in' => $record->time_in,
+                        'time_out' => $record->time_out,
+                        'remarks' => $record->remarks,
+                        'created_at' => $record->created_at
+                    ];
+                });
+
+            return response()->json($attendanceRecords);
             
         } catch (\Exception $e) {
             Log::error('Error fetching attendance records for student ' . $id . ': ' . $e->getMessage());
