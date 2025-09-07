@@ -196,7 +196,7 @@ const processStudentScan = async (qrData) => {
 
         // Validate QR code using the backend API
         const validationResponse = await QRCodeAPIService.validateQRCode(qrData.trim());
-        
+
         if (!validationResponse.valid) {
             console.log('Invalid QR code:', qrData);
             showScanFeedback('error', null, 'Invalid QR code or QR code not registered');
@@ -208,10 +208,7 @@ const processStudentScan = async (qrData) => {
         console.log('QR code validated for student:', studentData);
 
         // Get today's records for this student
-        const todaysRecords = attendanceRecords.value.filter((record) => 
-            record.id.toString() === studentData.id.toString() && 
-            record.date === new Date().toLocaleDateString()
-        );
+        const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === studentData.id.toString() && record.date === new Date().toLocaleDateString());
 
         console.log("Today's records for this student:", todaysRecords);
 

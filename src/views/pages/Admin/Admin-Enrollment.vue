@@ -1,13 +1,8 @@
 <script setup>
-import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
-import Calendar from 'primevue/calendar';
-import Checkbox from 'primevue/checkbox';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import RadioButton from 'primevue/radiobutton';
-import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
@@ -632,7 +627,7 @@ async function submitNewStudent() {
         const enrollmentData = {
             // Student enrollment data would go here
         };
-        
+
         const studentForDisplay = {
             firstName: newStudent.value.firstName,
             lastName: newStudent.value.lastName,
@@ -668,8 +663,6 @@ async function submitNewStudent() {
         });
     }
 }
-
-
 
 async function assignStudentToSection() {
     if (!studentToAssign.value || !selectedSectionForAssignment.value) {
@@ -942,14 +935,7 @@ defineExpose({
                                     <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
                                     <p class="text-xs text-blue-600">Assign students to available sections</p>
                                 </div>
-                                <Button 
-                                    label="Auto-Assign All" 
-                                    icon="pi pi-bolt" 
-                                    size="small" 
-                                    class="p-button-sm p-button-outlined"
-                                    @click="autoAssignAllStudents"
-                                    :disabled="enrolledStudents.filter((s) => !s.section).length === 0"
-                                />
+                                <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="enrolledStudents.filter((s) => !s.section).length === 0" />
                             </div>
                         </div>
 
@@ -1002,15 +988,7 @@ defineExpose({
 
             <div class="field">
                 <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
-                <Dropdown 
-                    id="sectionSelect"
-                    v-model="selectedSectionForAssignment" 
-                    :options="availableSectionsForAssignment"
-                    optionLabel="name"
-                    placeholder="Choose a section"
-                    class="w-full mt-2"
-                    :disabled="!studentToAssign"
-                >
+                <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSectionsForAssignment" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
                     <template #option="slotProps">
                         <div class="flex items-center">
                             <i class="pi pi-users mr-2 text-blue-500"></i>
