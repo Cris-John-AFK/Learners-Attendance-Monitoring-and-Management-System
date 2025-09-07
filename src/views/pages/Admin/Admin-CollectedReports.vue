@@ -251,18 +251,11 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" 
-                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
-                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
                                                 {{ student.status.replace('_', ' ') }}
                                                 <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
                                             </span>
-                                            <button v-if="!student.status || student.status === 'active'" 
-                                                    class="status-change-btn" 
-                                                    @click="showStatusChangeDialog(student)"
-                                                    title="Change student status">
-                                                ⚙️
-                                            </button>
+                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -310,18 +303,11 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" 
-                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
-                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
                                                 {{ student.status.replace('_', ' ') }}
                                                 <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
                                             </span>
-                                            <button v-if="!student.status || student.status === 'active'" 
-                                                    class="status-change-btn" 
-                                                    @click="showStatusChangeDialog(student)"
-                                                    title="Change student status">
-                                                ⚙️
-                                            </button>
+                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -428,7 +414,7 @@
                 <div class="sf2-header">
                     <h3>SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS</h3>
                 </div>
-                
+
                 <div class="sf2-info-section">
                     <div class="sf2-school-info">
                         <div class="info-row">
@@ -448,7 +434,7 @@
                             <span class="value">{{ getCurrentMonthDisplay() }}</span>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-guidelines">
                         <h4>GUIDELINES:</h4>
                         <ol>
@@ -482,7 +468,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-codes">
                         <h4>CODES FOR CHECKING ATTENDANCE</h4>
                         <div class="codes-grid">
@@ -522,7 +508,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-summary-section">
                         <div class="summary-box">
                             <h4>Month: _____ No. of Days of Classes: _____ Summary</h4>
@@ -585,7 +571,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="sf2-footer">
                     <span>School Form 2 - Page ___ of ___</span>
                 </div>
@@ -675,24 +661,23 @@
                     <p>LRN: {{ selectedStudent.lrn }}</p>
                     <p>Current Status: {{ selectedStudent.status || 'Active' }}</p>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="newStatus">New Status:</label>
-                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" 
-                              placeholder="Select new status" class="w-full" />
+                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="Select new status" class="w-full" />
                 </div>
-                
+
                 <div class="form-group" v-if="newStatus">
                     <label for="statusDate">Effective Date:</label>
                     <Calendar v-model="statusDate" dateFormat="yy-mm-dd" placeholder="Select date" class="w-full" />
                 </div>
-                
+
                 <div class="form-group" v-if="newStatus">
                     <label for="statusReason">Reason (Optional):</label>
                     <Textarea v-model="statusReason" rows="3" placeholder="Enter reason for status change..." class="w-full" />
                 </div>
             </div>
-            
+
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" @click="closeStatusDialog" class="p-button-text" />
                 <Button label="Update Status" icon="pi pi-check" @click="updateStudentStatus" :disabled="!newStatus || !statusDate" />
@@ -702,20 +687,19 @@
 </template>
 
 <script setup>
+import 'jspdf-autotable';
 import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
-import Dropdown from 'primevue/dropdown';
-import Calendar from 'primevue/calendar';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -2517,10 +2501,14 @@ const getFemaleAttendanceRate = (sectionName) => {
 
 const getAttendanceMark = (status) => {
     switch (status) {
-        case 'present': return '✓';
-        case 'absent': return '✗';
-        case 'late': return 'L';
-        default: return '-';
+        case 'present':
+            return '✓';
+        case 'absent':
+            return '✗';
+        case 'late':
+            return 'L';
+        default:
+            return '-';
     }
 };
 
@@ -2533,17 +2521,17 @@ const formatStatusDate = (dateString) => {
 // Student status functions
 const getDroppedOutCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'dropped_out').length;
+    return students.filter((student) => student.status === 'dropped_out').length;
 };
 
 const getTransferredOutCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'transferred_out').length;
+    return students.filter((student) => student.status === 'transferred_out').length;
 };
 
 const getTransferredInCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'transferred_in').length;
+    return students.filter((student) => student.status === 'transferred_in').length;
 };
 
 // Status change functions
@@ -2577,51 +2565,51 @@ const updateStudentStatus = () => {
     // Find the student in the data and update their status
     const sectionName = selectedSectionDetails.value.name;
     const students = sectionStudents.value[sectionName];
-    const studentIndex = students.findIndex(s => s.id === selectedStudent.value.id);
-    
+    const studentIndex = students.findIndex((s) => s.id === selectedStudent.value.id);
+
     if (studentIndex !== -1) {
         // Update student status
         students[studentIndex].status = newStatus.value;
         students[studentIndex].statusDate = statusDate.value.toISOString().split('T')[0];
         students[studentIndex].statusReason = statusReason.value;
-        
+
         // If dropping out or transferring out, remove future attendance
         if (newStatus.value === 'dropped_out' || newStatus.value === 'transferred_out') {
             const cutoffDate = new Date(statusDate.value);
             const attendance = students[studentIndex].attendance;
-            
+
             // Remove attendance records after the status change date
-            Object.keys(attendance).forEach(dateKey => {
+            Object.keys(attendance).forEach((dateKey) => {
                 const attendanceDate = new Date(dateKey);
                 if (attendanceDate > cutoffDate) {
                     delete attendance[dateKey];
                 }
             });
-            
+
             // Recalculate totals
-            const presentDays = Object.values(attendance).filter(status => status === 'present').length;
-            const absentDays = Object.values(attendance).filter(status => status === 'absent').length;
+            const presentDays = Object.values(attendance).filter((status) => status === 'present').length;
+            const absentDays = Object.values(attendance).filter((status) => status === 'absent').length;
             const totalDays = presentDays + absentDays;
-            
+
             students[studentIndex].totalPresent = presentDays;
             students[studentIndex].totalAbsent = absentDays;
             students[studentIndex].attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
         }
-        
+
         toast.add({
             severity: 'success',
             summary: 'Status Updated',
             detail: `${selectedStudent.value.firstName} ${selectedStudent.value.lastName} status changed to ${newStatus.value.replace('_', ' ')}.`,
             life: 3000
         });
-        
+
         closeStatusDialog();
     }
 };
 
 const getActiveStudentsCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'active').length;
+    return students.filter((student) => student.status === 'active').length;
 };
 
 const getAttendanceClass = (status) => {
@@ -2718,10 +2706,10 @@ const downloadSF2Report = () => {
 
         // Create new workbook
         const wb = XLSX.utils.book_new();
-        
+
         // Prepare data array for SF2 format
         const data = [];
-        
+
         // Header rows
         data.push(['SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS']);
         data.push([]);
@@ -2730,27 +2718,20 @@ const downloadSF2Report = () => {
         data.push([`Teacher: ${teacher}`]);
         data.push([`Month/Year: ${monthDisplay}`]);
         data.push([]);
-        
+
         // Table headers
-        const headerRow = [
-            'Learner\'s Name (Last Name, First Name, Middle Name)',
-            'LRN',
-            ...attendanceDays.value.map(day => day.day.toString()),
-            'Total Present',
-            'Total Absent',
-            'Rate %'
-        ];
+        const headerRow = ["Learner's Name (Last Name, First Name, Middle Name)", 'LRN', ...attendanceDays.value.map((day) => day.day.toString()), 'Total Present', 'Total Absent', 'Rate %'];
         data.push(headerRow);
-        
+
         // MALE students section
         data.push(['MALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
-        
+
         // Add male students data
-        maleStudents.forEach(student => {
+        maleStudents.forEach((student) => {
             const row = [
                 `${student.lastName}, ${student.firstName} ${student.middleName}`,
                 student.lrn,
-                ...attendanceDays.value.map(day => {
+                ...attendanceDays.value.map((day) => {
                     const status = student.attendance[day.date];
                     return getAttendanceMark(status);
                 }),
@@ -2760,28 +2741,21 @@ const downloadSF2Report = () => {
             ];
             data.push(row);
         });
-        
+
         // Male totals
-        const maleTotalRow = [
-            'MALE TOTAL PER DAY',
-            '',
-            ...attendanceDays.value.map(day => getMaleDayTotal(sectionName, day.date)),
-            getMaleTotalPresent(sectionName),
-            getMaleTotalAbsent(sectionName),
-            `${getMaleAttendanceRate(sectionName)}%`
-        ];
+        const maleTotalRow = ['MALE TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getMaleDayTotal(sectionName, day.date)), getMaleTotalPresent(sectionName), getMaleTotalAbsent(sectionName), `${getMaleAttendanceRate(sectionName)}%`];
         data.push(maleTotalRow);
         data.push([]);
-        
+
         // FEMALE students section
         data.push(['FEMALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
-        
+
         // Add female students data
-        femaleStudents.forEach(student => {
+        femaleStudents.forEach((student) => {
             const row = [
                 `${student.lastName}, ${student.firstName} ${student.middleName}`,
                 student.lrn,
-                ...attendanceDays.value.map(day => {
+                ...attendanceDays.value.map((day) => {
                     const status = student.attendance[day.date];
                     return getAttendanceMark(status);
                 }),
@@ -2791,31 +2765,24 @@ const downloadSF2Report = () => {
             ];
             data.push(row);
         });
-        
+
         // Female totals
         const femaleTotalRow = [
             'FEMALE TOTAL PER DAY',
             '',
-            ...attendanceDays.value.map(day => getFemaleDayTotal(sectionName, day.date)),
+            ...attendanceDays.value.map((day) => getFemaleDayTotal(sectionName, day.date)),
             getFemaleTotalPresent(sectionName),
             getFemaleTotalAbsent(sectionName),
             `${getFemaleAttendanceRate(sectionName)}%`
         ];
         data.push(femaleTotalRow);
         data.push([]);
-        
+
         // Combined totals
-        const combinedTotalRow = [
-            'COMBINED TOTAL PER DAY',
-            '',
-            ...attendanceDays.value.map(day => getDayTotal(sectionName, day.date)),
-            getTotalPresent(sectionName),
-            getTotalAbsent(sectionName),
-            `${getOverallAttendanceRate(sectionName)}%`
-        ];
+        const combinedTotalRow = ['COMBINED TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getDayTotal(sectionName, day.date)), getTotalPresent(sectionName), getTotalAbsent(sectionName), `${getOverallAttendanceRate(sectionName)}%`];
         data.push(combinedTotalRow);
         data.push([]);
-        
+
         // Summary
         data.push(['MONTHLY SUMMARY']);
         data.push([`Total Students: ${students.length}`]);
@@ -2826,10 +2793,10 @@ const downloadSF2Report = () => {
         data.push(['Legend: ✓ = Present, ✗ = Absent, L = Late']);
         data.push([`Generated on: ${new Date().toLocaleDateString()}`]);
         data.push(['Generated by: LAMMS - Learners Attendance Monitoring and Management System']);
-        
+
         // Create worksheet
         const ws = XLSX.utils.aoa_to_sheet(data);
-        
+
         // Set column widths
         const colWidths = [
             { wch: 40 }, // Student name
@@ -2837,27 +2804,26 @@ const downloadSF2Report = () => {
             ...attendanceDays.value.map(() => ({ wch: 4 })), // Day columns
             { wch: 12 }, // Total Present
             { wch: 12 }, // Total Absent
-            { wch: 8 }   // Rate %
+            { wch: 8 } // Rate %
         ];
         ws['!cols'] = colWidths;
-        
+
         // Add worksheet to workbook
         XLSX.utils.book_append_sheet(wb, ws, 'SF2 Report');
-        
+
         // Generate filename
         const currentDate = new Date().toISOString().split('T')[0];
         const filename = `SF-2-Daily-Attendance_${sectionName.replace(/\s+/g, '_')}_${monthDisplay.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
-        
+
         // Save the file
         XLSX.writeFile(wb, filename);
-        
+
         toast.add({
             severity: 'success',
             summary: 'Excel Download Complete',
             detail: `SF2 Excel report for ${sectionName} has been downloaded.`,
             life: 5000
         });
-        
     } catch (error) {
         console.error('Error generating SF2 Excel report:', error);
         toast.add({

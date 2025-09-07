@@ -939,7 +939,7 @@ defineExpose({
                         </div>
 
                         <div class="grid grid-cols-1 gap-3">
-                            <div v-for="student in filteredStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200" @click="openSectionAssignment(student)">
+                            <div v-for="student in pendingEnrollmentStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-shadow">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center space-x-3">
                                         <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -1234,6 +1234,177 @@ defineExpose({
 
 .bg-blue-50 {
     background-color: #eff6ff;
+}
+
+/* Modern Header Styling - Matching Student Management System */
+.modern-header-container {
+    margin: -2rem -2rem 2rem -2rem;
+}
+
+.gradient-header {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    border-radius: 12px 12px 0 0;
+    padding: 2rem;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.gradient-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
+}
+
+.header-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.header-icon {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 4rem;
+    height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-icon i {
+    font-size: 1.75rem;
+    color: white;
+}
+
+.header-text {
+    flex: 1;
+}
+
+.header-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.025em;
+    color: white !important;
+}
+
+.header-subtitle {
+    font-size: 1.1rem;
+    margin: 0 0 0.75rem 0;
+    opacity: 0.9;
+    font-weight: 400;
+    color: white !important;
+}
+
+.student-count {
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: fit-content;
+}
+
+.count-badge {
+    background: rgba(255, 255, 255, 0.9);
+    color: #1e40af;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-weight: 700;
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-container {
+    position: relative;
+}
+
+.search-input {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 25px !important;
+    padding: 0.75rem 1rem 0.75rem 2.75rem !important;
+    color: #1e40af !important;
+    font-weight: 500 !important;
+    width: 300px !important;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease !important;
+    height: 44px !important;
+}
+
+.search-input::placeholder {
+    color: #64748b !important;
+}
+
+#search-container .pi-search {
+    color: #64748b !important;
+    left: 1rem !important;
+    z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.search-input:focus {
+    background: white !important;
+    border-color: rgba(255, 255, 255, 0.8) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2) !important;
+    outline: none !important;
+}
+
+.search-container .pi-search {
+    color: #64748b !important;
+    left: 1rem !important;
+    z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.add-student-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 25px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.add-student-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Responsive Design */
