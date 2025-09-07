@@ -17,6 +17,7 @@
                     <div class="title-section">
                         <div class="icon-wrapper">
                             <i class="pi pi-archive animated-icon"></i>
+                            <span class="icon-fallback">📁</span>
                         </div>
                         <div class="title-text">
                             <h1 class="page-title">
@@ -497,6 +498,21 @@ const statusClass = (status) => {
     font-size: 2.5rem;
     color: white;
     animation: pulse 2s ease-in-out infinite;
+}
+
+.icon-fallback {
+    font-size: 2.5rem;
+    display: none;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Show fallback if PrimeIcons fail to load */
+.icon-wrapper .pi:before {
+    content: "";
+}
+
+.icon-wrapper .pi:empty + .icon-fallback {
+    display: inline-block;
 }
 
 @keyframes pulse {
