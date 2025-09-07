@@ -32,6 +32,262 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Get attendance trends for teacher dashboard
+     */
+    public function getAttendanceTrends(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'teacher_id' => 'required|exists:teachers,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'period' => 'required|in:daily,weekly,monthly',
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $teacherId = $request->teacher_id;
+            $subjectId = $request->subject_id;
+            $period = $request->period;
+            $dateFrom = Carbon::parse($request->date_from);
+            $dateTo = Carbon::parse($request->date_to);
+
+            // Get teacher's sections for this subject
+            $sections = DB::table('teacher_section_subject')
+                ->where('teacher_id', $teacherId)
+                ->where('subject_id', $subjectId)
+                ->where('is_active', true)
+                ->pluck('section_id');
+
+            if ($sections->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'labels' => [],
+                        'datasets' => []
+                    ],
+                    'message' => 'No sections assigned to this teacher for the selected subject'
+                ]);
+            }
+
+            // Get attendance data based on period
+            $attendanceData = $this->getAttendanceDataByPeriod($sections, $subjectId, $dateFrom, $dateTo, $period);
+
+            return response()->json([
+                'success' => true,
+                'data' => $attendanceData
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching attendance trends: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch attendance trends'], 500);
+        }
+    }
+
+    /**
+     * Get attendance summary for teacher dashboard
+     */
+    public function getAttendanceSummary(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'teacher_id' => 'required|exists:teachers,id',
+            'subject_id' => 'nullable|exists:subjects,id',
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $teacherId = $request->teacher_id;
+            $subjectId = $request->subject_id;
+            $dateFrom = Carbon::parse($request->date_from);
+            $dateTo = Carbon::parse($request->date_to);
+
+            // Get teacher's sections
+            $sectionsQuery = DB::table('teacher_section_subject')
+                ->where('teacher_id', $teacherId)
+                ->where('is_active', true);
+
+            if ($subjectId) {
+                $sectionsQuery->where('subject_id', $subjectId);
+            }
+
+            $sections = $sectionsQuery->pluck('section_id');
+
+            if ($sections->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'totalStudents' => 0,
+                        'averageAttendance' => 0,
+                        'studentsWithWarning' => 0,
+                        'studentsWithCritical' => 0
+                    ]
+                ]);
+            }
+
+            // Get total students in these sections
+            $totalStudents = DB::table('student_section')
+                ->whereIn('section_id', $sections)
+                ->where('is_active', true)
+                ->distinct('student_id')
+                ->count();
+
+            // Get attendance statistics
+            $attendanceQuery = Attendance::whereIn('section_id', $sections)
+                ->whereBetween('date', [$dateFrom, $dateTo]);
+
+            if ($subjectId) {
+                $attendanceQuery->where('subject_id', $subjectId);
+            }
+
+            $totalAttendanceRecords = $attendanceQuery->count();
+            $presentCount = $attendanceQuery->where('status', 'present')->count();
+
+            // Calculate average attendance percentage
+            $averageAttendance = $totalAttendanceRecords > 0 ?
+                round(($presentCount / $totalAttendanceRecords) * 100, 1) : 0;
+
+            // Count students with attendance issues
+            $studentAbsenceCounts = $attendanceQuery
+                ->where('status', 'absent')
+                ->select('student_id', DB::raw('COUNT(*) as absence_count'))
+                ->groupBy('student_id')
+                ->get();
+
+            $studentsWithWarning = $studentAbsenceCounts->where('absence_count', '>=', 3)->where('absence_count', '<', 5)->count();
+            $studentsWithCritical = $studentAbsenceCounts->where('absence_count', '>=', 5)->count();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'totalStudents' => $totalStudents,
+                    'averageAttendance' => $averageAttendance,
+                    'studentsWithWarning' => $studentsWithWarning,
+                    'studentsWithCritical' => $studentsWithCritical
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching attendance summary: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch attendance summary'], 500);
+        }
+    }
+
+    /**
+     * Helper method to get attendance data by period
+     */
+    private function getAttendanceDataByPeriod($sections, $subjectId, $dateFrom, $dateTo, $period)
+    {
+        $labels = [];
+        $presentData = [];
+        $absentData = [];
+        $lateData = [];
+
+        switch ($period) {
+            case 'daily':
+                // Group by day
+                $current = $dateFrom->copy();
+                while ($current <= $dateTo) {
+                    $labels[] = $current->format('M j');
+
+                    $dayAttendance = Attendance::whereIn('section_id', $sections)
+                        ->where('subject_id', $subjectId)
+                        ->whereDate('date', $current)
+                        ->join('attendance_statuses', 'attendances.attendance_status_id', '=', 'attendance_statuses.id')
+                        ->selectRaw("
+                            SUM(CASE WHEN attendance_statuses.code = 'P' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'A' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'L' THEN 1 ELSE 0 END) as late_count
+                        ")
+                        ->first();
+
+                    $presentData[] = $dayAttendance->present_count ?? 0;
+                    $absentData[] = $dayAttendance->absent_count ?? 0;
+                    $lateData[] = $dayAttendance->late_count ?? 0;
+
+                    $current->addDay();
+                }
+                break;
+
+            case 'weekly':
+                // Group by week
+                $current = $dateFrom->copy()->startOfWeek();
+                while ($current <= $dateTo) {
+                    $weekEnd = $current->copy()->endOfWeek();
+                    if ($weekEnd > $dateTo) $weekEnd = $dateTo;
+
+                    $labels[] = $current->format('M j') . ' - ' . $weekEnd->format('M j');
+
+                    $weekAttendance = Attendance::whereIn('section_id', $sections)
+                        ->where('subject_id', $subjectId)
+                        ->whereBetween('date', [$current, $weekEnd])
+                        ->join('attendance_statuses', 'attendances.attendance_status_id', '=', 'attendance_statuses.id')
+                        ->selectRaw("
+                            SUM(CASE WHEN attendance_statuses.code = 'P' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'A' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'L' THEN 1 ELSE 0 END) as late_count
+                        ")
+                        ->first();
+
+                    $presentData[] = $weekAttendance->present_count ?? 0;
+                    $absentData[] = $weekAttendance->absent_count ?? 0;
+                    $lateData[] = $weekAttendance->late_count ?? 0;
+
+                    $current->addWeek();
+                }
+                break;
+
+            case 'monthly':
+                // Group by month
+                $current = $dateFrom->copy()->startOfMonth();
+                while ($current <= $dateTo) {
+                    $monthEnd = $current->copy()->endOfMonth();
+                    if ($monthEnd > $dateTo) $monthEnd = $dateTo;
+
+                    $labels[] = $current->format('M Y');
+
+                    $monthAttendance = Attendance::whereIn('section_id', $sections)
+                        ->where('subject_id', $subjectId)
+                        ->whereBetween('date', [$current, $monthEnd])
+                        ->join('attendance_statuses', 'attendances.attendance_status_id', '=', 'attendance_statuses.id')
+                        ->selectRaw("
+                            SUM(CASE WHEN attendance_statuses.code = 'P' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'A' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN attendance_statuses.code = 'L' THEN 1 ELSE 0 END) as late_count
+                        ")
+                        ->first();
+
+                    $presentData[] = $monthAttendance->present_count ?? 0;
+                    $absentData[] = $monthAttendance->absent_count ?? 0;
+                    $lateData[] = $monthAttendance->late_count ?? 0;
+
+                    $current->addMonth();
+                }
+                break;
+        }
+
+        // Prepare data in the format expected by frontend
+        $chartData = [];
+        for ($i = 0; $i < count($labels); $i++) {
+            $chartData[] = [
+                'label' => $labels[$i],
+                'present_count' => $presentData[$i] ?? 0,
+                'absent_count' => $absentData[$i] ?? 0,
+                'late_count' => $lateData[$i] ?? 0
+            ];
+        }
+
+        return $chartData;
+    }
+
+    /**
      * Get attendance for a specific section, subject and date
      */
     public function getAttendance(Request $request)
@@ -67,7 +323,7 @@ class AttendanceController extends Controller
             $attendanceData = [];
             foreach ($students as $student) {
                 $attendance = $existingAttendance->get($student->id);
-                
+
                 $attendanceData[] = [
                     'id' => $attendance ? $attendance->id : null,
                     'student_id' => $student->id,
@@ -142,16 +398,16 @@ class AttendanceController extends Controller
 
             foreach ($attendanceData as $attendance) {
                 $attendanceStatus = AttendanceStatus::find($attendance['attendance_status_id']);
-                
+
                 // Map status codes to enum values for backward compatibility
                 $statusMapping = [
                     'P' => 'present',
-                    'A' => 'absent', 
+                    'A' => 'absent',
                     'L' => 'late',
                     'E' => 'excused'
                 ];
                 $enumStatus = $statusMapping[$attendanceStatus->code] ?? 'present';
-                
+
                 $attendanceRecord = Attendance::updateOrCreate(
                     [
                         'student_id' => $attendance['student_id'],
@@ -204,16 +460,16 @@ class AttendanceController extends Controller
 
         try {
             $attendanceStatus = AttendanceStatus::find($request->attendance_status_id);
-            
+
             // Map status codes to enum values for backward compatibility
             $statusMapping = [
                 'P' => 'present',
-                'A' => 'absent', 
+                'A' => 'absent',
                 'L' => 'late',
                 'E' => 'excused'
             ];
             $enumStatus = $statusMapping[$attendanceStatus->code] ?? 'present';
-            
+
             $attendance = Attendance::updateOrCreate(
                 [
                     'student_id' => $request->student_id,
@@ -308,7 +564,7 @@ class AttendanceController extends Controller
     {
         try {
             $teacher = Teacher::findOrFail($teacherId);
-            
+
             // Get teacher assignments from teacher_section_subject table
             $assignments = DB::table('teacher_section_subject')
                 ->join('sections', 'teacher_section_subject.section_id', '=', 'sections.id')
@@ -321,7 +577,7 @@ class AttendanceController extends Controller
                     'teacher_section_subject.id as assignment_id',
                     'sections.id as section_id',
                     'sections.name as section_name',
-                    'subjects.id as subject_id', 
+                    'subjects.id as subject_id',
                     'subjects.name as subject_name',
                     'grades.id as grade_id',
                     'grades.name as grade_name',
@@ -334,7 +590,7 @@ class AttendanceController extends Controller
             $result = [];
             foreach ($assignments as $sectionId => $sectionAssignments) {
                 $firstAssignment = $sectionAssignments->first();
-                
+
                 $sectionData = [
                     'section_id' => $sectionId,
                     'section_name' => $firstAssignment->section_name,
@@ -443,7 +699,7 @@ class AttendanceController extends Controller
 
         try {
             // Verify teacher has assignment to this section and subject
-            $assignment = \DB::table('teacher_section_subject')
+            $assignment = DB::table('teacher_section_subject')
                 ->where('teacher_id', $teacherId)
                 ->where('section_id', $request->section_id)
                 ->where('subject_id', $request->subject_id)

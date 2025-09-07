@@ -21,6 +21,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('student_qr_codes');
+        return;
     }
 };

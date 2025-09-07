@@ -238,19 +238,27 @@ class AttendanceSessionController extends Controller
         try {
             $session = AttendanceSession::findOrFail($sessionId);
             
+            // Check if session is already completed to avoid unique constraint violation
+            if ($session->status === 'completed') {
+                return response()->json([
+                    'message' => 'Session already completed',
+                    'session' => $session->load(['attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+                ]);
+            }
+
             if ($session->status !== 'active') {
                 return response()->json(['error' => 'Session is not active'], 400);
             }
 
-            $session->update([
-                'status' => 'completed',
-                'session_end_time' => now()->format('H:i:s'),
-                'completed_at' => now()
-            ]);
+            // Update session status directly without transaction to avoid constraint issues
+            $session->status = 'completed';
+            $session->session_end_time = now()->format('H:i:s');
+            $session->completed_at = now();
+            $session->save();
 
             return response()->json([
                 'message' => 'Session completed successfully',
-                'session' => $session->load(['attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+                'session' => $session->fresh()->load(['attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
             ]);
 
         } catch (\Exception $e) {

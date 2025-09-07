@@ -188,6 +188,10 @@ Route::prefix('attendance')->group(function () {
     
     // Get attendance reports
     Route::get('/reports/section/{sectionId}', [AttendanceController::class, 'getAttendanceReport']);
+    
+    // Dashboard routes for teacher analytics
+    Route::get('/trends', [AttendanceController::class, 'getAttendanceTrends']);
+    Route::get('/summary', [AttendanceController::class, 'getAttendanceSummary']);
 });
 
 // New Attendance Session routes for solid database system
