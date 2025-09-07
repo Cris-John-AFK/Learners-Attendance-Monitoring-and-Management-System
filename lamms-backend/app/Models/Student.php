@@ -129,7 +129,7 @@ class Student extends Model
     public function scopeInSection($query, $sectionId)
     {
         return $query->whereHas('sections', function($q) use ($sectionId) {
-            $q->where('sections.id', $sectionId)->wherePivot('is_active', true);
+            $q->where('sections.id', $sectionId)->where('student_section.is_active', true);
         });
     }
 

@@ -5,6 +5,7 @@ import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceServ
 import { SubjectService } from '@/router/service/Subjects';
 import SeatingService from '@/services/SeatingService';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
+import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
 import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -95,6 +96,13 @@ const showAttendanceDialog = ref(false);
 const showRollCallRemarksDialog = ref(false);
 const rollCallRemarks = ref('');
 const pendingRollCallStatus = ref('');
+
+// Attendance Completion Modal state
+const showCompletionModal = ref(false);
+const completedSessionData = ref(null);
+const modalDismissedToday = ref(false);
+const completionModalTimer = ref(null);
+const showSessionDetailsDialog = ref(false);
 
 // Initialize attendance session system
 const initializeAttendanceSession = async () => {
@@ -1053,10 +1061,34 @@ const startAttendanceSession = async () => {
         console.log('Started attendance session:', response.session);
     } catch (error) {
         console.error('Error starting attendance session:', error);
+        
+        // Handle specific error types
+        let errorMessage = 'Failed to start attendance session';
+        let severity = 'error';
+        
+        if (error.response?.status === 409) {
+            // Conflict - session already exists
+            const responseData = error.response.data;
+            if (responseData.message) {
+                errorMessage = responseData.message;
+                severity = 'warn';
+            }
+            
+            // If there's an existing active session, use it
+            if (responseData.session) {
+                currentSession.value = responseData.session;
+                sessionActive.value = true;
+                errorMessage = 'Resumed existing active session';
+                severity = 'info';
+            }
+        } else if (error.response?.data?.details) {
+            errorMessage = error.response.data.details;
+        }
+        
         toast.add({
-            severity: 'error',
-            summary: 'Session Error',
-            detail: 'Failed to start attendance session',
+            severity: severity,
+            summary: severity === 'info' ? 'Session Resumed' : 'Session Error',
+            detail: errorMessage,
             life: 5000
         });
     }
@@ -1079,6 +1111,9 @@ const completeAttendanceSession = async () => {
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
+        
+        // Show completion modal and save session data
+        saveCompletedSession(response.summary);
         
         toast.add({
             severity: 'success',
@@ -1413,6 +1448,9 @@ onMounted(async () => {
     } catch (error) {
         console.error('Error initializing data:', error);
     }
+
+    // Check for completed sessions on mount
+    checkCompletedSessionPersistence();
 });
 
 // Function to check for and load cached attendance data for a specific date
@@ -2072,6 +2110,152 @@ const updateRemarksPanel = (studentId, status, remarks) => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 };
 
+// Attendance Completion Modal Management Functions
+const checkCompletedSessionPersistence = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const completionKey = `attendance_completion_${today}`;
+    const dismissKey = `completion_dismissed_${today}`;
+    
+    const completionData = localStorage.getItem(completionKey);
+    const isDismissed = localStorage.getItem(dismissKey) === 'true';
+    
+    if (completionData && !isDismissed) {
+        const data = JSON.parse(completionData);
+        const completionTime = new Date(data.timestamp);
+        const now = new Date();
+        
+        // Check if it's still the same day and before 11:59 PM
+        if (completionTime.toDateString() === now.toDateString() && now.getHours() < 24) {
+            completedSessionData.value = data.sessionData;
+            showCompletionModal.value = true;
+            setupMidnightTimer();
+        }
+    }
+};
+
+const saveCompletedSession = (sessionData) => {
+    const today = new Date().toISOString().split('T')[0];
+    const completionKey = `attendance_completion_${today}`;
+    
+    const completionData = {
+        timestamp: new Date().toISOString(),
+        sessionData: sessionData
+    };
+    
+    localStorage.setItem(completionKey, JSON.stringify(completionData));
+    completedSessionData.value = sessionData;
+    showCompletionModal.value = true;
+    modalDismissedToday.value = false;
+    
+    // Clear any previous dismissal
+    localStorage.removeItem(`completion_dismissed_${today}`);
+    
+    setupMidnightTimer();
+};
+
+const setupMidnightTimer = () => {
+    if (completionModalTimer.value) {
+        clearTimeout(completionModalTimer.value);
+    }
+    
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(23, 59, 59, 999);
+    
+    const timeUntilMidnight = midnight.getTime() - now.getTime();
+    
+    if (timeUntilMidnight > 0) {
+        completionModalTimer.value = setTimeout(() => {
+            hideCompletionModal();
+            clearCompletedSessionData();
+        }, timeUntilMidnight);
+    }
+};
+
+const clearCompletedSessionData = () => {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.removeItem(`attendance_completion_${today}`);
+    localStorage.removeItem(`completion_dismissed_${today}`);
+    completedSessionData.value = null;
+    showCompletionModal.value = false;
+    modalDismissedToday.value = false;
+};
+
+// Modal Event Handlers
+const handleModalClose = () => {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem(`completion_dismissed_${today}`, 'true');
+    showCompletionModal.value = false;
+    modalDismissedToday.value = true;
+};
+
+const handleViewDetails = () => {
+    showSessionDetailsDialog.value = true;
+};
+
+const handleEditAttendance = () => {
+    // Enable edit mode for the completed session
+    showCompletionModal.value = false;
+    // You can add specific edit logic here
+    toast.add({
+        severity: 'info',
+        summary: 'Edit Mode',
+        detail: 'You can now modify the completed attendance session',
+        life: 3000
+    });
+};
+
+const handleStartNewSession = async () => {
+    if (sessionActive.value) {
+        // If session is active, stop it and show modal
+        try {
+            const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+            saveCompletedSession(response.summary);
+            sessionActive.value = false;
+            currentSession.value = null;
+        } catch (error) {
+            console.error('Error completing session:', error);
+        }
+    } else {
+        // If no active session, hide modal and start new session
+        showCompletionModal.value = false;
+        modalDismissedToday.value = true;
+        
+        // Start new session logic here
+        toast.add({
+            severity: 'success',
+            summary: 'New Session',
+            detail: 'Ready to start a new attendance session',
+            life: 3000
+        });
+    }
+};
+
+const hideCompletionModal = () => {
+    showCompletionModal.value = false;
+};
+
+// Helper functions for session details
+const getStatusLabel = (statusId) => {
+    const statusMap = {
+        1: 'Present',
+        2: 'Absent', 
+        3: 'Late',
+        4: 'Excused'
+    };
+    return statusMap[statusId] || 'Unknown';
+};
+
+const exportSessionReport = () => {
+    // Export functionality - can be implemented later
+    toast.add({
+        severity: 'info',
+        summary: 'Export Report',
+        detail: 'Report export functionality will be implemented soon',
+        life: 3000
+    });
+};
+
 // Add a function to apply attendance statuses to the seat plan after loading
 const applyAttendanceStatusesToSeatPlan = () => {
     // Skip if no attendance records
@@ -2167,6 +2351,10 @@ onUnmounted(() => {
     }
     if (refreshInterval) {
         clearInterval(refreshInterval);
+    }
+    // Clear modal timer to prevent memory leaks
+    if (modalTimer.value) {
+        clearTimeout(modalTimer.value);
     }
 });
 
@@ -2554,53 +2742,35 @@ const isDropTarget = ref(false);
         </Dialog>
 
         <!-- QR Scanner Dialog -->
-        <Dialog v-model:visible="showQRScanner" header="QR Scanner" :modal="true" :closable="true" style="width: 500px" @hide="stopQRScanner">
-            <div class="p-4">
-                <div class="scanner-container" :class="{ 'scanning-active': scanning }">
-                    <!-- Show camera feed when scanning -->
-                    <QrcodeStream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'" :track="true"></QrcodeStream>
-
-                    <!-- Show paused message when not scanning -->
-                    <div v-else-if="!scanning && !cameraError" class="scanner-paused">
-                        <i class="pi pi-camera-off"></i>
-                        <p>Scanner paused</p>
+        <Dialog v-model:visible="showQRScanner" modal header="QR Code Scanner" :style="{ width: '50vw' }" :closable="false">
+            <div class="qr-scanner-container">
+                <div v-if="cameraError" class="text-center p-4">
+                    <i class="pi pi-exclamation-triangle text-4xl text-red-500 mb-3"></i>
+                    <p class="text-red-600 mb-3">{{ cameraError }}</p>
+                    <Button label="Try Again" icon="pi pi-refresh" @click="initializeCamera" />
+                </div>
+                <div v-else-if="scanning" class="scanner-container">
+                    <QrcodeStream @detect="onQRDetect" @error="onQRError" />
+                    <div class="text-center mt-3">
+                        <p class="text-sm text-gray-600 mb-2">Position QR code within the frame</p>
+                        <Button label="Stop Scanning" icon="pi pi-stop" class="p-button-danger p-button-sm" @click="stopScanning" />
                     </div>
-
-                    <!-- Show error message when camera fails -->
-                    <div v-else class="scanner-error">
-                        <i class="pi pi-exclamation-triangle"></i>
-                        <p>{{ cameraError || 'Camera error occurred' }}</p>
-                        <button @click="restartCamera" class="restart-button">
-                            <i class="pi pi-refresh"></i>
-                            Retry Camera
-                        </button>
-                    </div>
-
-                    <!-- Scanner overlay with corners -->
-                    <div class="scanner-overlay">
-                        <div class="scanner-corners">
-                            <span></span>
+                </div>
+                <div v-else class="scanner-paused text-center p-4">
+                    <i class="pi pi-camera text-4xl text-gray-400 mb-3"></i>
+                    <p class="text-gray-600 mb-3">Scanner paused</p>
+                    <Button label="Start Scanning" icon="pi pi-play" @click="startScanning" />
+                </div>
+                
+                <!-- Scanned Students List -->
+                <div v-if="scannedStudents.length > 0" class="mt-4">
+                    <h4 class="text-lg font-semibold mb-2">Scanned Students ({{ scannedStudents.length }})</h4>
+                    <div class="max-h-32 overflow-y-auto">
+                        <div v-for="student in scannedStudents" :key="student.id" class="flex justify-content-between align-items-center p-2 border-bottom-1 surface-border">
+                            <span>{{ student.name }}</span>
+                            <Tag :value="student.status" :severity="getStatusSeverity(student.status)" />
                         </div>
                     </div>
-                </div>
-
-                <div v-if="scannedStudents.length > 0" class="mt-4">
-                    <h4 class="text-sm font-semibold mb-2">Students Marked Present: {{ scannedStudents.length }}</h4>
-                    <ul class="text-sm max-h-60 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-                        <li v-for="id in scannedStudents" :key="id" class="py-2 px-3 bg-green-50 rounded mb-1 flex items-center">
-                            <i class="pi pi-check-circle text-green-500 mr-2"></i>
-                            {{ getStudentById(id)?.name || `Student ID: ${id}` }}
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="flex justify-between mt-4">
-                    <div>
-                        <Button icon="pi pi-replay" label="Reset" class="p-button-outlined p-button-danger" @click="scannedStudents = []" :disabled="scannedStudents.length === 0" />
-                        <Button icon="pi pi-pause" v-if="scanning" label="Pause" class="p-button-outlined ml-2" @click="scanning = false" />
-                        <Button icon="pi pi-play" v-else label="Resume" class="p-button-outlined ml-2" @click="scanning = true" />
-                    </div>
-                    <Button icon="pi pi-times" label="Close" @click="stopQRScanner" />
                 </div>
             </div>
         </Dialog>
