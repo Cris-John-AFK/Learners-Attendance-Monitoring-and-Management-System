@@ -251,18 +251,11 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" 
-                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
-                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
                                                 {{ student.status.replace('_', ' ') }}
                                                 <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
                                             </span>
-                                            <button v-if="!student.status || student.status === 'active'" 
-                                                    class="status-change-btn" 
-                                                    @click="showStatusChangeDialog(student)"
-                                                    title="Change student status">
-                                                ⚙️
-                                            </button>
+                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -310,18 +303,11 @@
                                     <td class="student-name-cell">
                                         <div class="student-info">
                                             <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" 
-                                                  :class="'status-badge status-' + student.status.replace('_', '-')"
-                                                  :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
+                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
                                                 {{ student.status.replace('_', ' ') }}
                                                 <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
                                             </span>
-                                            <button v-if="!student.status || student.status === 'active'" 
-                                                    class="status-change-btn" 
-                                                    @click="showStatusChangeDialog(student)"
-                                                    title="Change student status">
-                                                ⚙️
-                                            </button>
+                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
                                             <span class="student-lrn">LRN: {{ student.lrn }}</span>
                                         </div>
                                     </td>
@@ -428,7 +414,7 @@
                 <div class="sf2-header">
                     <h3>SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS</h3>
                 </div>
-                
+
                 <div class="sf2-info-section">
                     <div class="sf2-school-info">
                         <div class="info-row">
@@ -448,7 +434,7 @@
                             <span class="value">{{ getCurrentMonthDisplay() }}</span>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-guidelines">
                         <h4>GUIDELINES:</h4>
                         <ol>
@@ -482,7 +468,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-codes">
                         <h4>CODES FOR CHECKING ATTENDANCE</h4>
                         <div class="codes-grid">
@@ -522,52 +508,87 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="sf2-summary-section">
                         <div class="summary-box">
-                            <h4>Month: _____ No. of Days of Classes: _____ Summary</h4>
-                            <div class="summary-grid">
-                                <div class="summary-item">
-                                    <span class="summary-label">* Enrolment as of (1st Friday of June)</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Late Enrolment during the month</span>
-                                    <div class="summary-value">0</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Registered Learners as of end of the month</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Percentage of Enrolment as of end of the month</span>
-                                    <div class="summary-value">100%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Average Daily Attendance</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Percentage of Attendance for the month</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Number of students absent for 5 consecutive days:</span>
-                                    <div class="summary-value">0</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Drop out</span>
-                                    <div class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Transferred out</span>
-                                    <div class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Transferred in</span>
-                                    <div class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</div>
-                                </div>
+                            <div class="summary-header">
+                                <span class="month-label">Month: _____</span>
+                                <span class="days-label">No. of Days of Classes: _____</span>
+                                <span class="summary-title">Summary</span>
                             </div>
+                            
+                            <table class="sf2-summary-table">
+                                <thead>
+                                    <tr>
+                                        <th class="summary-description"></th>
+                                        <th class="summary-m">M</th>
+                                        <th class="summary-f">F</th>
+                                        <th class="summary-total">TOTAL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="summary-label">* Enrolment as of (1st Friday of June)</td>
+                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Late Enrolment during the month<br><small>(beyond cut-off)</small></td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Registered Learners as of <em>end of the month</em></td>
+                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Percentage of Enrolment as of <em>end of the month</em></td>
+                                        <td class="summary-value">100%</td>
+                                        <td class="summary-value">100%</td>
+                                        <td class="summary-value">100%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Average Daily Attendance</td>
+                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Percentage of Attendance for the month</td>
+                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Number of students absent for 5 consecutive days:</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Drop out</td>
+                                        <td class="summary-value">{{ getMaleDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Transferred out</td>
+                                        <td class="summary-value">{{ getMaleTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Transferred in</td>
+                                        <td class="summary-value">{{ getMaleTransferredInCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleTransferredInCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                             <div class="certification">
                                 <p>I certify that this is a true and correct report.</p>
                                 <div class="signature-section">
@@ -585,7 +606,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="sf2-footer">
                     <span>School Form 2 - Page ___ of ___</span>
                 </div>
@@ -675,24 +696,23 @@
                     <p>LRN: {{ selectedStudent.lrn }}</p>
                     <p>Current Status: {{ selectedStudent.status || 'Active' }}</p>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="newStatus">New Status:</label>
-                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" 
-                              placeholder="Select new status" class="w-full" />
+                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="Select new status" class="w-full" />
                 </div>
-                
+
                 <div class="form-group" v-if="newStatus">
                     <label for="statusDate">Effective Date:</label>
                     <Calendar v-model="statusDate" dateFormat="yy-mm-dd" placeholder="Select date" class="w-full" />
                 </div>
-                
+
                 <div class="form-group" v-if="newStatus">
                     <label for="statusReason">Reason (Optional):</label>
                     <Textarea v-model="statusReason" rows="3" placeholder="Enter reason for status change..." class="w-full" />
                 </div>
             </div>
-            
+
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" @click="closeStatusDialog" class="p-button-text" />
                 <Button label="Update Status" icon="pi pi-check" @click="updateStudentStatus" :disabled="!newStatus || !statusDate" />
@@ -702,20 +722,19 @@
 </template>
 
 <script setup>
+import 'jspdf-autotable';
 import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
-import Dropdown from 'primevue/dropdown';
-import Calendar from 'primevue/calendar';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -2485,12 +2504,7 @@ const getMaleTotalAbsent = (sectionName) => {
     return maleStudents.reduce((total, student) => total + student.totalAbsent, 0);
 };
 
-const getMaleAttendanceRate = (sectionName) => {
-    const maleStudents = getMaleStudents(sectionName);
-    if (maleStudents.length === 0) return 0;
-    const totalRate = maleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
-    return Math.round(totalRate / maleStudents.length);
-};
+// Removed duplicate - using the one defined later in gender-based functions section
 
 // Female-specific calculations
 const getFemaleDayTotal = (sectionName, date) => {
@@ -2508,19 +2522,18 @@ const getFemaleTotalAbsent = (sectionName) => {
     return femaleStudents.reduce((total, student) => total + student.totalAbsent, 0);
 };
 
-const getFemaleAttendanceRate = (sectionName) => {
-    const femaleStudents = getFemaleStudents(sectionName);
-    if (femaleStudents.length === 0) return 0;
-    const totalRate = femaleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
-    return Math.round(totalRate / femaleStudents.length);
-};
+// Removed duplicate - using the one defined later in gender-based functions section
 
 const getAttendanceMark = (status) => {
     switch (status) {
-        case 'present': return '✓';
-        case 'absent': return '✗';
-        case 'late': return 'L';
-        default: return '-';
+        case 'present':
+            return '✓';
+        case 'absent':
+            return '✗';
+        case 'late':
+            return 'L';
+        default:
+            return '-';
     }
 };
 
@@ -2533,17 +2546,17 @@ const formatStatusDate = (dateString) => {
 // Student status functions
 const getDroppedOutCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'dropped_out').length;
+    return students.filter((student) => student.status === 'dropped_out').length;
 };
 
 const getTransferredOutCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'transferred_out').length;
+    return students.filter((student) => student.status === 'transferred_out').length;
 };
 
 const getTransferredInCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'transferred_in').length;
+    return students.filter((student) => student.status === 'transferred_in').length;
 };
 
 // Status change functions
@@ -2577,51 +2590,110 @@ const updateStudentStatus = () => {
     // Find the student in the data and update their status
     const sectionName = selectedSectionDetails.value.name;
     const students = sectionStudents.value[sectionName];
-    const studentIndex = students.findIndex(s => s.id === selectedStudent.value.id);
-    
+    const studentIndex = students.findIndex((s) => s.id === selectedStudent.value.id);
+
     if (studentIndex !== -1) {
         // Update student status
         students[studentIndex].status = newStatus.value;
         students[studentIndex].statusDate = statusDate.value.toISOString().split('T')[0];
         students[studentIndex].statusReason = statusReason.value;
-        
+
         // If dropping out or transferring out, remove future attendance
         if (newStatus.value === 'dropped_out' || newStatus.value === 'transferred_out') {
             const cutoffDate = new Date(statusDate.value);
             const attendance = students[studentIndex].attendance;
-            
+
             // Remove attendance records after the status change date
-            Object.keys(attendance).forEach(dateKey => {
+            Object.keys(attendance).forEach((dateKey) => {
                 const attendanceDate = new Date(dateKey);
                 if (attendanceDate > cutoffDate) {
                     delete attendance[dateKey];
                 }
             });
-            
+
             // Recalculate totals
-            const presentDays = Object.values(attendance).filter(status => status === 'present').length;
-            const absentDays = Object.values(attendance).filter(status => status === 'absent').length;
+            const presentDays = Object.values(attendance).filter((status) => status === 'present').length;
+            const absentDays = Object.values(attendance).filter((status) => status === 'absent').length;
             const totalDays = presentDays + absentDays;
-            
+
             students[studentIndex].totalPresent = presentDays;
             students[studentIndex].totalAbsent = absentDays;
             students[studentIndex].attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
         }
-        
+
         toast.add({
             severity: 'success',
             summary: 'Status Updated',
             detail: `${selectedStudent.value.firstName} ${selectedStudent.value.lastName} status changed to ${newStatus.value.replace('_', ' ')}.`,
             life: 3000
         });
-        
+
         closeStatusDialog();
     }
 };
 
 const getActiveStudentsCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
-    return students.filter(student => student.status === 'active').length;
+    return students.filter((student) => student.status === 'active').length;
+};
+
+// Gender-based count functions
+const getMaleStudentsCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male').length;
+};
+
+const getFemaleStudentsCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female').length;
+};
+
+const getMaleAttendanceRate = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    const maleStudents = students.filter((student) => student.gender === 'Male');
+    if (maleStudents.length === 0) return 0;
+    
+    const totalRate = maleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
+    return Math.round(totalRate / maleStudents.length);
+};
+
+const getFemaleAttendanceRate = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    const femaleStudents = students.filter((student) => student.gender === 'Female');
+    if (femaleStudents.length === 0) return 0;
+    
+    const totalRate = femaleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
+    return Math.round(totalRate / femaleStudents.length);
+};
+
+const getMaleDroppedOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'dropped_out').length;
+};
+
+const getFemaleDroppedOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'dropped_out').length;
+};
+
+const getMaleTransferredOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_out').length;
+};
+
+const getFemaleTransferredOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_out').length;
+};
+
+const getMaleTransferredInCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_in').length;
+};
+
+const getFemaleTransferredInCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_in').length;
 };
 
 const getAttendanceClass = (status) => {
@@ -2718,10 +2790,10 @@ const downloadSF2Report = () => {
 
         // Create new workbook
         const wb = XLSX.utils.book_new();
-        
+
         // Prepare data array for SF2 format
         const data = [];
-        
+
         // Header rows
         data.push(['SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS']);
         data.push([]);
@@ -2730,27 +2802,20 @@ const downloadSF2Report = () => {
         data.push([`Teacher: ${teacher}`]);
         data.push([`Month/Year: ${monthDisplay}`]);
         data.push([]);
-        
+
         // Table headers
-        const headerRow = [
-            'Learner\'s Name (Last Name, First Name, Middle Name)',
-            'LRN',
-            ...attendanceDays.value.map(day => day.day.toString()),
-            'Total Present',
-            'Total Absent',
-            'Rate %'
-        ];
+        const headerRow = ["Learner's Name (Last Name, First Name, Middle Name)", 'LRN', ...attendanceDays.value.map((day) => day.day.toString()), 'Total Present', 'Total Absent', 'Rate %'];
         data.push(headerRow);
-        
+
         // MALE students section
         data.push(['MALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
-        
+
         // Add male students data
-        maleStudents.forEach(student => {
+        maleStudents.forEach((student) => {
             const row = [
                 `${student.lastName}, ${student.firstName} ${student.middleName}`,
                 student.lrn,
-                ...attendanceDays.value.map(day => {
+                ...attendanceDays.value.map((day) => {
                     const status = student.attendance[day.date];
                     return getAttendanceMark(status);
                 }),
@@ -2760,28 +2825,21 @@ const downloadSF2Report = () => {
             ];
             data.push(row);
         });
-        
+
         // Male totals
-        const maleTotalRow = [
-            'MALE TOTAL PER DAY',
-            '',
-            ...attendanceDays.value.map(day => getMaleDayTotal(sectionName, day.date)),
-            getMaleTotalPresent(sectionName),
-            getMaleTotalAbsent(sectionName),
-            `${getMaleAttendanceRate(sectionName)}%`
-        ];
+        const maleTotalRow = ['MALE TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getMaleDayTotal(sectionName, day.date)), getMaleTotalPresent(sectionName), getMaleTotalAbsent(sectionName), `${getMaleAttendanceRate(sectionName)}%`];
         data.push(maleTotalRow);
         data.push([]);
-        
+
         // FEMALE students section
         data.push(['FEMALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
-        
+
         // Add female students data
-        femaleStudents.forEach(student => {
+        femaleStudents.forEach((student) => {
             const row = [
                 `${student.lastName}, ${student.firstName} ${student.middleName}`,
                 student.lrn,
-                ...attendanceDays.value.map(day => {
+                ...attendanceDays.value.map((day) => {
                     const status = student.attendance[day.date];
                     return getAttendanceMark(status);
                 }),
@@ -2791,31 +2849,24 @@ const downloadSF2Report = () => {
             ];
             data.push(row);
         });
-        
+
         // Female totals
         const femaleTotalRow = [
             'FEMALE TOTAL PER DAY',
             '',
-            ...attendanceDays.value.map(day => getFemaleDayTotal(sectionName, day.date)),
+            ...attendanceDays.value.map((day) => getFemaleDayTotal(sectionName, day.date)),
             getFemaleTotalPresent(sectionName),
             getFemaleTotalAbsent(sectionName),
             `${getFemaleAttendanceRate(sectionName)}%`
         ];
         data.push(femaleTotalRow);
         data.push([]);
-        
+
         // Combined totals
-        const combinedTotalRow = [
-            'COMBINED TOTAL PER DAY',
-            '',
-            ...attendanceDays.value.map(day => getDayTotal(sectionName, day.date)),
-            getTotalPresent(sectionName),
-            getTotalAbsent(sectionName),
-            `${getOverallAttendanceRate(sectionName)}%`
-        ];
+        const combinedTotalRow = ['COMBINED TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getDayTotal(sectionName, day.date)), getTotalPresent(sectionName), getTotalAbsent(sectionName), `${getOverallAttendanceRate(sectionName)}%`];
         data.push(combinedTotalRow);
         data.push([]);
-        
+
         // Summary
         data.push(['MONTHLY SUMMARY']);
         data.push([`Total Students: ${students.length}`]);
@@ -2826,10 +2877,10 @@ const downloadSF2Report = () => {
         data.push(['Legend: ✓ = Present, ✗ = Absent, L = Late']);
         data.push([`Generated on: ${new Date().toLocaleDateString()}`]);
         data.push(['Generated by: LAMMS - Learners Attendance Monitoring and Management System']);
-        
+
         // Create worksheet
         const ws = XLSX.utils.aoa_to_sheet(data);
-        
+
         // Set column widths
         const colWidths = [
             { wch: 40 }, // Student name
@@ -2837,27 +2888,26 @@ const downloadSF2Report = () => {
             ...attendanceDays.value.map(() => ({ wch: 4 })), // Day columns
             { wch: 12 }, // Total Present
             { wch: 12 }, // Total Absent
-            { wch: 8 }   // Rate %
+            { wch: 8 } // Rate %
         ];
         ws['!cols'] = colWidths;
-        
+
         // Add worksheet to workbook
         XLSX.utils.book_append_sheet(wb, ws, 'SF2 Report');
-        
+
         // Generate filename
         const currentDate = new Date().toISOString().split('T')[0];
         const filename = `SF-2-Daily-Attendance_${sectionName.replace(/\s+/g, '_')}_${monthDisplay.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
-        
+
         // Save the file
         XLSX.writeFile(wb, filename);
-        
+
         toast.add({
             severity: 'success',
             summary: 'Excel Download Complete',
             detail: `SF2 Excel report for ${sectionName} has been downloaded.`,
             life: 5000
         });
-        
     } catch (error) {
         console.error('Error generating SF2 Excel report:', error);
         toast.add({
@@ -4234,6 +4284,100 @@ const reportTypes = ref([
     position: sticky;
     left: 0;
     z-index: 5;
+}
+
+/* SF2 Summary Table Styles */
+.sf2-summary-section {
+    margin: 2rem 0;
+    border: 2px solid #333;
+    background: white;
+}
+
+.summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 2px solid #333;
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.month-label, .days-label {
+    flex: 1;
+}
+
+.summary-title {
+    text-align: center;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.sf2-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    font-size: 0.85rem;
+}
+
+.sf2-summary-table th {
+    background: #f8f9fa;
+    border: 1px solid #333;
+    padding: 0.5rem;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.sf2-summary-table th.summary-description {
+    width: 60%;
+    text-align: left;
+}
+
+.sf2-summary-table th.summary-m,
+.sf2-summary-table th.summary-f,
+.sf2-summary-table th.summary-total {
+    width: 13.33%;
+    text-align: center;
+}
+
+.sf2-summary-table td {
+    border: 1px solid #333;
+    padding: 0.4rem 0.6rem;
+    vertical-align: middle;
+}
+
+.sf2-summary-table td.summary-label {
+    text-align: left;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.sf2-summary-table td.summary-label em {
+    font-style: italic;
+    text-decoration: underline;
+}
+
+.sf2-summary-table td.summary-label small {
+    font-size: 0.7rem;
+    color: #666;
+    display: block;
+    margin-top: 0.2rem;
+}
+
+.sf2-summary-table td.summary-value {
+    text-align: center;
+    font-weight: 600;
+    background: #f8f9fa;
+}
+
+.sf2-summary-table tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.sf2-summary-table tr:hover {
+    background: #f0f8ff;
 }
 
 .total-cell {
