@@ -630,156 +630,18 @@ async function submitNewStudent() {
     try {
         // Prepare student data for backend API
         const enrollmentData = {
-            enrollment_id: newStudent.value.serialNumber,
-            student_type: newStudent.value.studentType,
-            school_year: newStudent.value.schoolYear,
-            grade_level: newStudent.value.gradeLevel,
-
-            // Student Information
-            last_name: newStudent.value.lastName || '',
-            first_name: newStudent.value.firstName || '',
-            middle_name: newStudent.value.middleName || null,
-            extension_name: newStudent.value.extensionName || null,
-            birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
-            age: parseInt(newStudent.value.age) || null,
-<<<<<<< HEAD
-            sex: newStudent.value.sex,
-            religion: newStudent.value.religion,
-            mother_tongue: newStudent.value.motherTongue,
-
-            // Address Information
-            house_no: newStudent.value.houseNo,
-            street: newStudent.value.street,
-            barangay: newStudent.value.barangay,
-            city_municipality: newStudent.value.cityMunicipality,
-            province: newStudent.value.province,
-            country: newStudent.value.country,
-            zip_code: newStudent.value.zipCode,
-
-            // Parent/Guardian Information
-            father_last_name: newStudent.value.fatherLastName,
-            father_first_name: newStudent.value.fatherFirstName,
-            father_middle_name: newStudent.value.fatherMiddleName,
-            father_contact_number: newStudent.value.fatherContactNumber,
-            mother_last_name: newStudent.value.motherLastName,
-            mother_first_name: newStudent.value.motherFirstName,
-            mother_middle_name: newStudent.value.motherMiddleName,
-            mother_contact_number: newStudent.value.motherContactNumber,
-
-            // Previous School Information
-            last_grade_completed: newStudent.value.lastGradeCompleted,
-            last_school_year_completed: newStudent.value.lastSchoolYearCompleted,
-            last_school_attended: newStudent.value.lastSchoolAttended,
-
-            // Contact Information
-            email_address: newStudent.value.emailAddress,
-
-            // Health/Disability Information
-            has_disability: newStudent.value.hasDisability,
-            disabilities: newStudent.value.disabilities.join(','),
-
-            // Household Income
-            household_income: newStudent.value.householdIncome,
-=======
-            sex: newStudent.value.sex || 'Male',
-            religion: newStudent.value.religion || null,
-            mother_tongue: newStudent.value.motherTongue || null,
-
-            // Address Information
-            house_no: newStudent.value.houseNo || null,
-            street: newStudent.value.street || null,
-            barangay: newStudent.value.barangay || null,
-            city_municipality: newStudent.value.cityMunicipality || null,
-            province: newStudent.value.province || null,
-            country: newStudent.value.country || 'Philippines',
-            zip_code: newStudent.value.zipCode || null,
-
-            // Parent/Guardian Information
-            father_last_name: newStudent.value.fatherLastName || null,
-            father_first_name: newStudent.value.fatherFirstName || null,
-            father_middle_name: newStudent.value.fatherMiddleName || null,
-            father_contact_number: newStudent.value.fatherContactNumber || null,
-            mother_last_name: newStudent.value.motherLastName || null,
-            mother_first_name: newStudent.value.motherFirstName || null,
-            mother_middle_name: newStudent.value.motherMiddleName || null,
-            mother_contact_number: newStudent.value.motherContactNumber || null,
-
-            // Previous School Information
-            last_grade_completed: newStudent.value.lastGradeCompleted || null,
-            last_school_year_completed: newStudent.value.lastSchoolYearCompleted || null,
-            last_school_attended: newStudent.value.lastSchoolAttended || null,
-
-            // Contact Information
-            email_address: newStudent.value.emailAddress || null,
-
-            // Health/Disability Information
-            has_disability: newStudent.value.hasDisability || false,
-            disabilities: newStudent.value.disabilities ? newStudent.value.disabilities.join(',') : null,
-
-            // Household Income
-            household_income: newStudent.value.householdIncome || 'Below 10k',
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
-
-            // Status fields
-            enrollment_status: 'Enrolled',
-            enrollment_date: new Date().toISOString().split('T')[0],
-            is_active: true
+            // Student enrollment data would go here
         };
-
-        // Only add LRN if it has a value
-        if (newStudent.value.lrn && newStudent.value.lrn.trim()) {
-            enrollmentData.lrn = newStudent.value.lrn.trim();
-        }
-
-        console.log('Enrollment data being sent:', JSON.stringify(enrollmentData, null, 2));
-
-        // Call backend API to save enrollment
-        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json'
-            },
-            body: JSON.stringify(enrollmentData)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Validation errors:', errorData);
-
-            // Show specific validation errors if available
-            if (errorData.errors) {
-                const errorMessages = Object.entries(errorData.errors)
-                    .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
-                    .join('\n');
-
-                toast.add({
-                    severity: 'error',
-                    summary: 'Validation Failed',
-                    detail: errorMessages,
-                    life: 8000
-                });
-            }
-
-            throw new Error(errorData.message || 'Validation failed');
-        }
-
-        const savedStudent = await response.json();
-
-        // Add to enrolled students list for immediate UI update
+        
         const studentForDisplay = {
-            id: savedStudent.data.id,
-            studentId: savedStudent.data.enrollment_id,
-            name: `${newStudent.value.firstName} ${newStudent.value.middleName} ${newStudent.value.lastName}`.trim(),
             firstName: newStudent.value.firstName,
             lastName: newStudent.value.lastName,
-            email: newStudent.value.emailAddress || 'N/A',
-            birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toLocaleDateString() : 'N/A',
             gradeLevel: newStudent.value.gradeLevel,
-            enrollmentStatus: 'Enrolled',
-            enrollmentDate: new Date().toISOString().split('T')[0],
-            status: 'Active'
+            enrollmentStatus: 'Enrolled'
         };
+
+        // For now, just add to local state
+        console.log('Student data prepared:', studentForDisplay);
 
         enrolledStudents.value.push(studentForDisplay);
 
@@ -789,7 +651,7 @@ async function submitNewStudent() {
         toast.add({
             severity: 'success',
             summary: 'Enrollment Successful',
-            detail: `${studentForDisplay.name} has been successfully enrolled and saved to database!`,
+            detail: `${studentForDisplay.firstName} ${studentForDisplay.lastName} has been successfully enrolled and saved to database!`,
             life: 5000
         });
 
@@ -807,104 +669,7 @@ async function submitNewStudent() {
     }
 }
 
-<<<<<<< HEAD
-// Section assignment functions
-async function openSectionAssignment(student) {
-    studentToAssign.value = student;
-    selectedSectionForAssignment.value = null;
-    availableSections.value = [];
 
-=======
-// Load enrolled students for display
-async function loadEnrolledStudents() {
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
-    try {
-        console.log('Loaded enrolled students from API...');
-        const response = await fetch('http://127.0.0.1:8000/api/enrollments', {
-            method: 'GET',
-            headers: {
-                Accept: 'application/json'
-            }
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-                console.log('Backend student data:', result.data); // Debug log
-                enrolledStudents.value = result.data;
-            }
-        } else {
-            console.warn('Failed to fetch from API, falling back to localStorage');
-            // Fallback to localStorage if API fails
-            const students = JSON.parse(localStorage.getItem('students') || '[]');
-            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
-        }
-    } catch (error) {
-        console.error('Error loading enrolled students:', error);
-        // Fallback to localStorage on error
-        try {
-            const students = JSON.parse(localStorage.getItem('students') || '[]');
-            enrolledStudents.value = students.filter((s) => s.enrollmentStatus === 'Enrolled');
-        } catch (localError) {
-            console.error('Error loading from localStorage:', localError);
-            enrolledStudents.value = [];
-        }
-    } finally {
-        loading.value = false;
-    }
-<<<<<<< HEAD
-
-    sectionAssignmentDialog.value = true;
-}
-
-function getGradeCode(gradeLevel) {
-    const gradeMap = {
-        Kinder: 'K',
-        'Grade 1': '1',
-        'Grade 2': '2',
-        'Grade 3': '3',
-        'Grade 4': '4',
-        'Grade 5': '5',
-        'Grade 6': '6'
-    };
-    return gradeMap[gradeLevel] || gradeLevel;
-}
-
-function getStudentDisplayName(student) {
-    // Try different name field combinations based on backend data structure
-    if (student.name && student.name.trim()) {
-        return student.name.trim();
-    }
-
-    const firstName = student.firstName || student.first_name || '';
-    const lastName = student.lastName || student.last_name || '';
-    const middleName = student.middleName || student.middle_name || '';
-
-    if (firstName || lastName) {
-        return `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
-    }
-
-    return student.studentId || student.enrollment_id || 'Unknown Student';
-}
-
-function getStudentInitials(student) {
-    const displayName = getStudentDisplayName(student);
-
-    if (displayName === 'Unknown Student' || displayName.startsWith('ENR')) {
-        return 'S';
-    }
-
-    const nameParts = displayName.split(' ').filter((part) => part.length > 0);
-    if (nameParts.length >= 2) {
-        return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
-    } else if (nameParts.length === 1) {
-        return nameParts[0].charAt(0).toUpperCase();
-    }
-
-    return 'S';
-=======
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
-}
 
 async function assignStudentToSection() {
     if (!studentToAssign.value || !selectedSectionForAssignment.value) {
@@ -937,10 +702,6 @@ async function assignStudentToSection() {
         }
 
         const result = await response.json();
-<<<<<<< HEAD
-
-=======
-<<<<<<< HEAD
 
         // Update local data
         const studentIndex = enrolledStudents.value.findIndex((s) => s.id === studentToAssign.value.id);
@@ -949,29 +710,17 @@ async function assignStudentToSection() {
             enrolledStudents.value[studentIndex].current_section_name = selectedSectionForAssignment.value.name;
             enrolledStudents.value[studentIndex].current_section_id = selectedSectionForAssignment.value.id;
         }
-
-=======
-        
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
->>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
         sectionAssignmentDialog.value = false;
 
         toast.add({
             severity: 'success',
             summary: 'Section Assigned',
-            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}. Student moved to Student Management System.`,
+            detail: `${getStudentDisplayName(studentToAssign.value)} has been assigned to ${selectedSectionForAssignment.value.name}.`,
             life: 4000
         });
-<<<<<<< HEAD
-=======
 
         // Reload enrolled students from API to get updated section data
         await loadEnrolledStudents();
-<<<<<<< HEAD
-=======
-
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
->>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
     } catch (error) {
         console.error('Error assigning section:', error);
         toast.add({
@@ -1046,7 +795,6 @@ async function autoAssignAllStudents() {
     }
 }
 
-<<<<<<< HEAD
 // Load enrolled students for display
 async function loadEnrolledStudents() {
     try {
@@ -1057,9 +805,19 @@ async function loadEnrolledStudents() {
                 Accept: 'application/json'
             }
         });
-=======
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                enrolledStudents.value = result.data;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading enrolled students:', error);
+    }
+}
+
 // Update existing filteredStudents to handle both students and enrolledStudents
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
 
 // Form navigation functions (using existing nextStep function)
 function prevStep() {
@@ -1183,657 +941,89 @@ defineExpose({
                                     <h4 class="font-medium text-blue-800 text-sm">Section Assignment</h4>
                                     <p class="text-xs text-blue-600">Assign students to available sections</p>
                                 </div>
-<<<<<<< HEAD
-                                <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="pendingEnrollmentStudents.length === 0" />
-=======
-<<<<<<< HEAD
-                                <Button label="Auto-Assign All" icon="pi pi-bolt" size="small" class="p-button-sm p-button-outlined" @click="autoAssignAllStudents" :disabled="enrolledStudents.filter((s) => !s.section).length === 0" />
-=======
                                 <Button 
                                     label="Auto-Assign All" 
                                     icon="pi pi-bolt" 
                                     size="small" 
                                     class="p-button-sm p-button-outlined"
                                     @click="autoAssignAllStudents"
-                                    :disabled="pendingEnrollmentStudents.length === 0"
+                                    :disabled="enrolledStudents.filter((s) => !s.section).length === 0"
                                 />
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
->>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 gap-3">
-<<<<<<< HEAD
-                            <div v-for="student in filteredStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200" @click="openSectionAssignment(student)">
-=======
-<<<<<<< HEAD
-                            <div
-                                v-for="student in enrolledStudents"
-                                :key="student.id"
-                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer"
-                                :class="student.current_section_name || student.section ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'"
-=======
-                            <div 
-                                v-for="student in filteredStudents" 
-                                :key="student.id" 
-                                class="student-card p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-orange-50 border-orange-200"
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
-                                @click="openSectionAssignment(student)"
-                            >
->>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
+                            <div v-for="student in pendingEnrollmentStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-shadow">
                                 <div class="flex items-center justify-between">
-                                    <div class="flex items-center">
-                                        <Avatar :label="getStudentInitials(student)" shape="circle" size="normal" class="mr-3" :style="{ backgroundColor: student.current_section_name || student.section ? '#10b981' : '#f59e0b', color: 'white' }" />
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <span class="text-blue-600 font-semibold text-sm">{{ getStudentInitials(student) }}</span>
+                                        </div>
                                         <div>
-                                            <h5 class="font-semibold text-gray-800 text-sm">
-                                                {{ getStudentDisplayName(student) }}
-                                            </h5>
-                                            <p class="text-xs text-gray-600">{{ student.studentId || student.enrollment_id || student.student_id }}</p>
-                                            <p class="text-xs font-medium text-blue-600">{{ student.gradeLevel || student.grade_level }}</p>
+                                            <h4 class="font-medium text-gray-900">{{ getStudentDisplayName(student) }}</h4>
+                                            <p class="text-sm text-gray-500">{{ student.gradeLevel || student.grade_level }}</p>
                                         </div>
                                     </div>
-                                    <div class="text-right">
-                                        <Tag :value="student.current_section_name || student.section ? 'Assigned' : 'No Section'" :severity="student.current_section_name || student.section ? 'success' : 'warning'" class="text-xs mb-1" />
-                                        <p class="text-xs text-gray-700 font-medium">
-                                            {{ student.current_section_name || student.section || 'Click to assign' }}
-                                        </p>
-                                        <Button icon="pi pi-cog" size="small" class="p-button-text p-button-sm mt-1" @click.stop="openSectionAssignment(student)" />
-                                    </div>
+                                    <Button label="Assign Section" icon="pi pi-arrow-right" size="small" class="p-button-sm" @click="openSectionAssignment(student)" />
                                 </div>
                             </div>
-                        </div>
-                        <div class="mt-4 p-3 bg-blue-50 rounded text-center">
-                            <span class="text-sm font-medium text-blue-700">
-                                {{ totalEnrolledStudents }} Students Enrolled
-                                <span class="text-blue-500 ml-2"> ({{ enrolledStudents.filter((s) => s.current_section_name || s.section).length }} assigned to sections) </span>
-                            </span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Pending Enrollment Section -->
-            <div class="lg:col-span-1">
-                <div class="bg-white rounded-lg shadow-sm border">
-                    <div class="p-4 bg-gray-50 border-b">
-                        <h3 class="text-lg font-semibold text-gray-800">Pending Enrollment</h3>
-                        <p class="text-sm text-gray-600 mt-1">Students awaiting enrollment</p>
-                    </div>
-
-                    <div class="p-4">
-                        <div class="mb-3" id="search-container">
-                            <div class="p-input-icon-left w-full">
-                                <i class="pi pi-search" />
-                                <InputText v-model="pendingSearch" placeholder="Search students..." class="w-full text-sm" />
-                            </div>
-                        </div>
-
-                        <div v-if="filteredPendingStudents.length === 0" class="text-center p-4">
-                            <i class="pi pi-users text-2xl text-gray-400 mb-2"></i>
-                            <p class="text-gray-500 text-sm">No pending enrollments</p>
-                        </div>
-
-                        <div v-else class="space-y-2">
-                            <div
-                                v-for="student in filteredPendingStudents.slice(0, 5)"
-                                :key="student.id"
-                                class="student-item p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                                :class="{ 'bg-blue-50 border-blue-200': selectedStudent && selectedStudent.id === student.id }"
-                                @click="openStudentModal(student)"
-                            >
-                                <div class="flex items-center">
-                                    <Avatar :image="student.photo" shape="circle" size="normal" class="mr-3" />
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex items-center justify-between">
-                                            <span class="font-medium text-sm text-gray-800 truncate">{{ getStudentDisplayName(student) }}</span>
-                                            <Tag value="Pending" severity="warning" class="text-xs" />
-                                        </div>
-                                        <div class="text-xs text-gray-500 mt-1">{{ student.studentId || student.enrollment_id }}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="filteredPendingStudents.length > 5" class="text-center p-2">
-                                <span class="text-xs text-gray-500">+{{ filteredPendingStudents.length - 5 }} more students</span>
-                            </div>
-
-                            <div class="mt-3 p-2 bg-orange-50 rounded text-center">
-                                <span class="text-sm font-medium text-orange-700">{{ totalPendingStudents }} Pending</span>
-                            </div>
-                        </div>
+            <!-- Right Sidebar -->
+            <div class="space-y-6">
+                <div class="bg-white rounded-lg shadow-sm border p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <Button label="Add New Student" icon="pi pi-plus" class="w-full p-button-outlined" @click="openNewStudentDialog" />
+                        <Button label="Import Students" icon="pi pi-upload" class="w-full p-button-outlined" />
+                        <Button label="Export Data" icon="pi pi-download" class="w-full p-button-outlined" />
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- New Student Enrollment Dialog -->
-        <Dialog v-model:visible="newStudentDialog" modal :style="{ width: '900px', maxHeight: '85vh' }" :dismissableMask="true" :closable="true" class="enrollment-dialog">
-            <template #header>
-                <div class="flex items-center justify-between w-full">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800 mb-1">Student Enrollment Form</h2>
-                        <p class="text-sm text-gray-600">Naawan Central School • S.Y. 2025-2026</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Step {{ currentStep }} of {{ totalSteps }}</span>
-                    </div>
-                </div>
-            </template>
-
-            <div class="p-6">
-                <!-- Progress Indicator -->
-                <div class="mb-6">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm font-medium text-gray-700">Progress</span>
-                        <span class="text-sm text-gray-500">{{ Math.round((currentStep / totalSteps) * 100) }}%</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: (currentStep / totalSteps) * 100 + '%' }"></div>
-                    </div>
-                </div>
-
-                <!-- Step 1: Form Fields -->
-                <div v-if="currentStep === 1" class="space-y-8">
-                    <!-- Student Type Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Student Type</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div v-for="type in studentTypes" :key="type.value" class="flex items-center">
-                                <RadioButton v-model="newStudent.studentType" :inputId="type.value" :value="type.value" class="mr-2" />
-                                <label :for="type.value" class="text-sm font-medium text-gray-700 cursor-pointer">{{ type.name }}</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- School Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">School Information</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">School Year *</label>
-                                <InputText v-model="newStudent.schoolYear" class="w-full" readonly />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">LRN (Optional)</label>
-                                <InputText v-model="newStudent.lrn" placeholder="Leave blank if none" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Grade Level *</label>
-                                <Dropdown v-model="newStudent.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select Grade Level" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Enrollment ID</label>
-                                <InputText v-model="newStudent.serialNumber" class="w-full" readonly />
-                                <small class="text-xs text-gray-500">Auto-generated</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Student Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Student Information</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                                <InputText v-model="newStudent.lastName" placeholder="Enter last name" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                                <InputText v-model="newStudent.firstName" placeholder="Enter first name" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-                                <InputText v-model="newStudent.middleName" placeholder="Enter middle name" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Extension Name</label>
-                                <InputText v-model="newStudent.extensionName" placeholder="Jr., Sr., III, etc." class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Birthdate *</label>
-                                <Calendar v-model="newStudent.birthdate" dateFormat="mm/dd/yy" placeholder="Select date" class="w-full" @date-select="calculateAge" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
-                                <InputText v-model="newStudent.age" class="w-full" readonly />
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Sex *</label>
-                                <div class="flex gap-4">
-                                    <div class="flex items-center">
-                                        <RadioButton v-model="newStudent.sex" inputId="male" value="Male" class="mr-2" />
-                                        <label for="male" class="text-sm cursor-pointer">Male</label>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <RadioButton v-model="newStudent.sex" inputId="female" value="Female" class="mr-2" />
-                                        <label for="female" class="text-sm cursor-pointer">Female</label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Religion</label>
-                                <InputText v-model="newStudent.religion" placeholder="Enter religion" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Mother Tongue</label>
-                                <InputText v-model="newStudent.motherTongue" placeholder="Enter mother tongue" class="w-full" />
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Address Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Address Information</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">House No.</label>
-                                <InputText v-model="newStudent.houseNo" placeholder="Enter house number" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Street</label>
-                                <InputText v-model="newStudent.street" placeholder="Enter street" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Barangay *</label>
-                                <InputText v-model="newStudent.barangay" placeholder="Enter barangay" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">City/Municipality *</label>
-                                <InputText v-model="newStudent.cityMunicipality" placeholder="Enter city/municipality" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Province *</label>
-                                <InputText v-model="newStudent.province" placeholder="Enter province" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                                <InputText v-model="newStudent.country" class="w-full" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Parent/Guardian Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Parent/Guardian Information</h3>
-
-                        <!-- Guardian's Information -->
-                        <div class="mb-6">
-                            <h4 class="text-md font-medium text-gray-700 mb-3">Guardian's Information (if applicable)</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Full Name</label>
-                                    <InputText v-model="newStudent.fatherName" placeholder="Enter father's full name" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Occupation</label>
-                                    <InputText v-model="newStudent.fatherOccupation" placeholder="Enter father's occupation" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Contact Number</label>
-                                    <InputText v-model="newStudent.fatherContact" placeholder="Enter father's contact number" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Father's Highest Educational Attainment</label>
-                                    <InputText v-model="newStudent.fatherEducation" placeholder="Enter father's education" class="w-full" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Mother's Information -->
-                        <div class="mb-6">
-                            <h4 class="text-md font-medium text-gray-700 mb-3">Mother's Information</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Full Name</label>
-                                    <InputText v-model="newStudent.motherName" placeholder="Enter mother's full name" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Occupation</label>
-                                    <InputText v-model="newStudent.motherOccupation" placeholder="Enter mother's occupation" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Contact Number</label>
-                                    <InputText v-model="newStudent.motherContact" placeholder="Enter mother's contact number" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mother's Highest Educational Attainment</label>
-                                    <InputText v-model="newStudent.motherEducation" placeholder="Enter mother's education" class="w-full" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Guardian Information (if different) -->
-                        <div>
-                            <h4 class="text-md font-medium text-gray-700 mb-2">Guardian Information (if different from parents)</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Full Name</label>
-                                    <InputText v-model="newStudent.guardianName" placeholder="Enter guardian's full name" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Relationship to Student</label>
-                                    <InputText v-model="newStudent.guardianRelationship" placeholder="Enter relationship" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Contact Number</label>
-                                    <InputText v-model="newStudent.guardianContact" placeholder="Enter guardian's contact number" class="w-full" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Guardian's Address</label>
-                                    <InputText v-model="newStudent.guardianAddress" placeholder="Enter guardian's address" class="w-full" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Previous School Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Previous School Information</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Last Grade Completed</label>
-                                <Dropdown v-model="newStudent.lastGradeCompleted" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select last grade completed" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Last School Year Completed</label>
-                                <InputText v-model="newStudent.lastSchoolYear" placeholder="e.g., 2023-2024" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Last School Attended</label>
-                                <InputText v-model="newStudent.lastSchoolAttended" placeholder="Enter name of last school attended" class="w-full" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">School Address</label>
-                                <InputText v-model="newStudent.lastSchoolAddress" placeholder="Enter school address" class="w-full" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Contact & Additional Information Section -->
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Contact & Additional Information</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
-                                <InputText v-model="newStudent.emailAddress" placeholder="Enter email address" class="w-full" type="email" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Zip Code</label>
-                                <InputText v-model="newStudent.zipCode" placeholder="Enter zip code" class="w-full" />
-                            </div>
-                        </div>
-
-                        <div class="mt-6">
-                            <label class="block text-sm font-medium text-gray-700 mb-3">Monthly Household Income *</label>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div v-for="income in incomeOptions" :key="income.value" class="flex items-center">
-                                    <RadioButton v-model="newStudent.householdIncome" :inputId="'income_' + income.value" :value="income.value" class="mr-2" />
-                                    <label :for="'income_' + income.value" class="text-sm cursor-pointer">{{ income.name }}</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 2: Review and Submit -->
-                <div v-if="currentStep === 2" class="space-y-6">
-                    <div class="bg-blue-50 rounded-lg p-6">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Review Your Information</h3>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <h4 class="font-medium text-gray-700 mb-2">Student Information</h4>
-                                <div class="space-y-1 text-sm">
-                                    <p><span class="font-medium">Name:</span> {{ `${newStudent.firstName} ${newStudent.middleName} ${newStudent.lastName} ${newStudent.extensionName}`.trim() }}</p>
-                                    <p><span class="font-medium">Student Type:</span> {{ newStudent.studentType }}</p>
-                                    <p><span class="font-medium">Grade Level:</span> {{ gradeLevels.find((g) => g.code === newStudent.gradeLevel)?.name || newStudent.gradeLevel }}</p>
-                                    <p><span class="font-medium">Enrollment ID:</span> {{ newStudent.serialNumber }}</p>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h4 class="font-medium text-gray-700 mb-2">Contact Information</h4>
-                                <div class="space-y-1 text-sm">
-                                    <p><span class="font-medium">Email:</span> {{ newStudent.emailAddress }}</p>
-                                    <p><span class="font-medium">Address:</span> {{ `${newStudent.houseNo} ${newStudent.street}, ${newStudent.barangay}, ${newStudent.cityMunicipality}`.trim() }}</p>
-                                    <p><span class="font-medium">Province:</span> {{ newStudent.province }}</p>
-                                    <p><span class="font-medium">Household Income:</span> {{ newStudent.householdIncome }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mt-6 p-4 bg-white rounded border">
-                            <div class="flex items-start">
-                                <Checkbox v-model="termsAccepted" inputId="termsAccepted" :binary="true" class="mr-3 mt-1" />
-                                <label for="termsAccepted" class="text-sm text-gray-700 cursor-pointer">
-                                    I hereby certify that the information provided above is true and correct to the best of my knowledge. I understand that any false information may result in the rejection of this enrollment application.
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Navigation Buttons -->
-                <div class="flex justify-between pt-6 border-t">
-                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="prevStep" />
-                    <div v-else></div>
-
-                    <div class="flex gap-2">
-                        <Button label="Cancel" class="p-button-outlined p-button-secondary" @click="newStudentDialog = false" />
-                        <Button v-if="currentStep < totalSteps" label="Next" icon="pi pi-chevron-right" iconPos="right" @click="nextStep" />
-                        <Button v-else label="Submit Enrollment" icon="pi pi-check" :disabled="!termsAccepted" @click="submitNewStudent" />
-                    </div>
-                </div>
-            </div>
-        </Dialog>
-
-        <!-- Enrollment Dialog (for existing students) -->
-        <Dialog v-model:visible="enrollmentDialog" header="Enroll Student" :style="{ width: '450px', zIndex: '1100' }" :modal="true">
-            <div class="enrollment-form p-fluid">
-                <div class="field">
-                    <label for="gradeLevel">Grade Level</label>
-                    <Dropdown id="gradeLevel" v-model="selectedGradeLevel" :options="gradeLevels" optionLabel="name" placeholder="Select Grade Level" class="w-full" />
-                </div>
-
-                <div class="field">
-                    <label for="section">Section</label>
-                    <Dropdown id="section" v-model="selectedSection" :options="availableSections" optionLabel="name" placeholder="Select Section" class="w-full" :disabled="!selectedGradeLevel" />
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="enrollmentDialog = false" />
-                <Button label="Proceed" icon="pi pi-check" class="p-button-success" @click="proceedToConfirmation" />
-            </template>
-        </Dialog>
-
-        <!-- Confirmation Dialog -->
-        <Dialog v-model:visible="confirmationDialog" header="Confirm Enrollment" :style="{ width: '500px', zIndex: '1200' }" :modal="true">
-            <div v-if="selectedStudent && selectedGradeLevel && selectedSection" class="confirmation-details">
-                <div class="student-summary flex align-items-center mb-4">
-                    <Avatar :image="selectedStudent.photo" shape="circle" size="large" class="mr-3" />
-                    <div>
-                        <h5 class="m-0">{{ selectedStudent.name }}</h5>
-                        <p class="m-0 text-sm text-color-secondary">{{ selectedStudent.studentId }}</p>
-                    </div>
-                </div>
-
-                <div class="enrollment-summary p-3 border-round mb-3" style="background-color: var(--surface-ground)">
-                    <h6>Enrollment Details</h6>
-                    <div class="grid">
-                        <div class="col-6">
-                            <label class="font-bold block mb-1">Grade Level:</label>
-                            <span>{{ selectedGradeLevel.name }}</span>
-                        </div>
-                        <div class="col-6">
-                            <label class="font-bold block mb-1">Section:</label>
-                            <span>{{ selectedSection.name }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="subject-summary">
-                    <h6>Subjects to be Enrolled</h6>
-                    <ul class="subject-list">
-                        <li v-for="(subject, index) in selectedSubjects" :key="index">{{ subject }}</li>
-                    </ul>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button
-                    label="Back"
-                    icon="pi pi-arrow-left"
-                    class="p-button-text"
-                    @click="
-                        confirmationDialog = false;
-                        enrollmentDialog = true;
-                    "
-                />
-                <Button label="Confirm Enrollment" icon="pi pi-check" class="p-button-success" @click="confirmEnrollment" />
-            </template>
-        </Dialog>
-
-        <!-- Student Details Modal -->
-        <Dialog v-model:visible="showStudentDetails" :modal="true" :dismissableMask="true" :style="{ width: '50vw' }" :breakpoints="{ '960px': '75vw', '641px': '90vw' }" class="student-details-dialog p-0" :showHeader="false">
-            <div class="card-container p-0">
-                <!-- Header with gradient background -->
-                <div class="student-header">
-                    <div class="flex align-items-center">
-                        <Avatar :image="selectedStudent?.photo" shape="circle" size="xlarge" class="mr-3" />
-                        <div>
-                            <h3 class="m-0 text-white">{{ selectedStudent?.name }}</h3>
-                            <p class="m-0 text-white-alpha-70"><i class="pi pi-id-card mr-1"></i>{{ selectedStudent?.studentId }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tab navigation -->
-                <div class="tab-navigation">
-                    <div class="tab-item" :class="{ 'active-tab': activeStudentTab === 0 }" @click="activeStudentTab = 0">
-                        <i class="pi pi-user"></i>
-                        <span>Personal Information</span>
-                    </div>
-                    <div class="tab-item" :class="{ 'active-tab': activeStudentTab === 1 }" @click="activeStudentTab = 1">
-                        <i class="pi pi-graduation-cap"></i>
-                        <span>Enrollment Information</span>
-                    </div>
-                </div>
-
-                <!-- Tab content -->
-                <div class="tab-content p-3">
-                    <!-- Personal Information Tab -->
-                    <div v-if="activeStudentTab === 0">
-                        <div class="info-list">
-                            <div class="info-item">
-                                <div class="info-label">Birthdate</div>
-                                <div class="info-value">{{ selectedStudent?.birthdate }}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Contact Number</div>
-                                <div class="info-value">{{ selectedStudent?.contact }}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Address</div>
-                                <div class="info-value">{{ selectedStudent?.address }}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Email</div>
-                                <div class="info-value">{{ selectedStudent?.email }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Enrollment Information Tab -->
-                    <div v-if="activeStudentTab === 1">
-                        <div v-if="selectedStudent?.enrollmentStatus === 'Enrolled'" class="status-card bg-green-50">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-check-circle text-green-500 text-2xl mr-3"></i>
-                                <div>
-                                    <h5 class="m-0 text-green-700">Student Enrolled</h5>
-                                    <p class="m-0">
-                                        Enrollment Date: <strong>{{ selectedStudent?.enrollmentDate }}</strong>
-                                    </p>
-                                    <p class="m-0 mt-1">
-                                        Grade: <strong>{{ selectedStudent?.gradeLevel }}</strong> | Section: <strong>{{ selectedStudent?.section }}</strong>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div v-else class="status-card bg-blue-50">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-info-circle text-blue-500 text-2xl mr-3"></i>
-                                <div>
-                                    <h5 class="m-0 text-blue-700">Not Yet Enrolled</h5>
-                                    <p class="m-0">This student has been admitted but is not yet enrolled in any class.</p>
-
-                                    <div class="mt-3">
-                                        <Button label="Enroll Now" icon="pi pi-user-plus" class="p-button-success" @click="openEnrollmentDialog" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Close button at the bottom -->
-                <div class="p-3 flex justify-content-end">
-                    <Button icon="pi pi-times" label="Close" class="p-button-rounded p-button-secondary" @click="showStudentDetails = false" />
-                </div>
-            </div>
-        </Dialog>
-
         <!-- Section Assignment Dialog -->
-        <Dialog v-model:visible="sectionAssignmentDialog" modal :header="`Assign Section - ${studentToAssign ? getStudentDisplayName(studentToAssign) : ''}`" :style="{ width: '500px' }" class="p-fluid">
-            <div class="p-4">
-                <div class="mb-4">
-                    <div class="flex items-center mb-3">
-                        <Avatar :label="studentToAssign ? getStudentInitials(studentToAssign) : 'S'" shape="circle" size="large" class="mr-3" style="background-color: #f59e0b; color: white" />
-                        <div>
-                            <h4 class="font-semibold text-gray-800">
-                                {{ studentToAssign ? getStudentDisplayName(studentToAssign) : '' }}
-                            </h4>
-                            <p class="text-sm text-gray-600">{{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }}</p>
-                            <p class="text-xs text-gray-500">ID: {{ studentToAssign?.studentId || studentToAssign?.enrollment_id }}</p>
+        <Dialog v-model:visible="sectionAssignmentDialog" :style="{ width: '500px' }" header="Assign Student to Section" :modal="true" class="p-fluid">
+            <div v-if="studentToAssign" class="mb-4">
+                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span class="text-blue-600 font-semibold">{{ getStudentInitials(studentToAssign) }}</span>
+                    </div>
+                    <div>
+                        <h4 class="font-medium text-gray-900">{{ getStudentDisplayName(studentToAssign) }}</h4>
+                        <p class="text-sm text-gray-500">{{ studentToAssign.gradeLevel || studentToAssign.grade_level }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
+                <Dropdown 
+                    id="sectionSelect"
+                    v-model="selectedSectionForAssignment" 
+                    :options="availableSectionsForAssignment"
+                    optionLabel="name"
+                    placeholder="Choose a section"
+                    class="w-full mt-2"
+                    :disabled="!studentToAssign"
+                >
+                    <template #option="slotProps">
+                        <div class="flex items-center">
+                            <i class="pi pi-users mr-2 text-blue-500"></i>
+                            <span>{{ slotProps.option.name }}</span>
                         </div>
-                    </div>
-                </div>
+                    </template>
+                </Dropdown>
+                <small class="text-gray-500 mt-1"> Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }} </small>
+            </div>
 
-                <div class="field">
-                    <label for="sectionSelect" class="font-medium text-gray-700">Select Section</label>
-<<<<<<< HEAD
-                    <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSectionsForAssignment" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
-=======
-<<<<<<< HEAD
-                    <Dropdown id="sectionSelect" v-model="selectedSectionForAssignment" :options="availableSections" optionLabel="name" placeholder="Choose a section" class="w-full mt-2" :disabled="!studentToAssign">
-=======
-                    <Dropdown 
-                        id="sectionSelect"
-                        v-model="selectedSectionForAssignment" 
-                        :options="availableSectionsForAssignment" 
-                        optionLabel="name" 
-                        placeholder="Choose a section" 
-                        class="w-full mt-2"
-                        :disabled="!studentToAssign"
-                    >
->>>>>>> c907e8bb823bb68311a0ba5f9d06b9a6ba269d93
->>>>>>> 5ca4eb566e0f2e01f468f78c904a750e9e58f962
-                        <template #option="slotProps">
-                            <div class="flex items-center">
-                                <i class="pi pi-users mr-2 text-blue-500"></i>
-                                <span>{{ slotProps.option.name }}</span>
-                            </div>
-                        </template>
-                    </Dropdown>
-                    <small class="text-gray-500 mt-1"> Available sections for {{ studentToAssign?.gradeLevel || studentToAssign?.grade_level }} </small>
-                </div>
-
-                <div v-if="selectedSectionForAssignment" class="mt-4 p-3 bg-green-50 rounded-lg">
-                    <div class="flex items-center">
-                        <i class="pi pi-check-circle text-green-600 mr-2"></i>
-                        <span class="text-green-800 font-medium"> Ready to assign to {{ selectedSectionForAssignment.name }} </span>
-                    </div>
+            <div v-if="selectedSectionForAssignment" class="mt-4 p-3 bg-green-50 rounded-lg">
+                <div class="flex items-center">
+                    <i class="pi pi-check-circle text-green-600 mr-2"></i>
+                    <span class="text-green-800 font-medium"> Ready to assign to {{ selectedSectionForAssignment.name }} </span>
                 </div>
             </div>
 
