@@ -1,6 +1,11 @@
 <script>
+import GlobalLoader from '@/components/GlobalLoader.vue'
+
 export default {
-    name: 'App'
+    name: 'App',
+    components: {
+        GlobalLoader
+    }
 };
 </script>
 
@@ -11,6 +16,7 @@ export default {
                 <component :is="Component" />
             </transition>
         </router-view>
+        <GlobalLoader />
     </div>
 </template>
 

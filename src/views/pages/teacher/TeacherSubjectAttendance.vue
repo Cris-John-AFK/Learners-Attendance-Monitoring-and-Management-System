@@ -635,19 +635,32 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
             }
         }
         
-        // Fallback to legacy system
+        // Get attendance status ID based on status
+        const getAttendanceStatusId = (status) => {
+            if (typeof status === 'number') {
+                return status; // Already an ID
+            }
+            // Map status strings to IDs (adjust based on your attendance_statuses table)
+            const statusMap = {
+                'present': 1,
+                'absent': 2, 
+                'late': 3,
+                'excused': 4
+            };
+            return statusMap[status.toLowerCase()] || 1;
+        };
+
+        // Fallback to legacy system - format for markAttendance API
         const attendanceData = {
-            student_id: studentId,
-            teacher_id: teacherId.value,
             section_id: sectionId.value,
             subject_id: subjectId.value,
+            teacher_id: teacherId.value,
             date: currentDate.value,
-            status: typeof status === 'number' ? 
-                (status === 1 ? 'present' : status === 2 ? 'absent' : status === 3 ? 'late' : 'present') : 
-                status.toLowerCase(),
-            time_in: new Date().toTimeString().split(' ')[0],
-            remarks: remarks,
-            marked_at: new Date().toISOString()
+            attendance: [{
+                student_id: studentId,
+                attendance_status_id: getAttendanceStatusId(status),
+                remarks: remarks || null
+            }]
         };
 
         console.log('Saving attendance record (legacy):', attendanceData);
@@ -834,7 +847,9 @@ const fetchAttendanceHistory = async () => {
         });
 
         // Now fetch server records - only if we need historical data
-        const records = await AttendanceService.getAttendanceRecords(subjectId.value);
+        // Use a valid student ID from the students array instead of seatingArrangement
+        const firstStudent = students.value && students.value.length > 0 ? students.value[0] : null;
+        const records = firstStudent ? await AttendanceService.getAttendanceRecords(firstStudent.id) : [];
         console.log('Fetched attendance records:', records);
 
         // Merge records, but give priority to localStorage records for today

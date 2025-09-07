@@ -738,6 +738,7 @@ async function autoAssignAllStudents() {
         return;
     }
 
+
     try {
         let assignedCount = 0;
 
