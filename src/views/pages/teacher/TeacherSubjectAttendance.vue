@@ -6,6 +6,7 @@ import { SubjectService } from '@/router/service/Subjects';
 import SeatingService from '@/services/SeatingService';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
 import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
+import NotificationService from '@/services/NotificationService';
 import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -2144,13 +2145,30 @@ const saveCompletedSession = (sessionData) => {
     
     localStorage.setItem(completionKey, JSON.stringify(completionData));
     completedSessionData.value = sessionData;
-    showCompletionModal.value = true;
-    modalDismissedToday.value = false;
     
-    // Clear any previous dismissal
-    localStorage.removeItem(`completion_dismissed_${today}`);
+    // Add notification to the system
+    NotificationService.addSessionCompletionNotification(sessionData);
     
-    setupMidnightTimer();
+    // Show modal after 5-10 seconds delay as requested
+    setTimeout(() => {
+        showCompletionModal.value = true;
+        modalDismissedToday.value = false;
+        
+        // Clear any previous dismissal
+        localStorage.removeItem(`completion_dismissed_${today}`);
+        
+        setupMidnightTimer();
+        setupAutoHideTimer();
+    }, 7000); // 7 second delay
+};
+
+const setupAutoHideTimer = () => {
+    // Auto-hide modal after 15 seconds
+    setTimeout(() => {
+        if (showCompletionModal.value && !modalDismissedToday.value) {
+            showCompletionModal.value = false;
+        }
+    }, 15000);
 };
 
 const setupMidnightTimer = () => {
@@ -2183,26 +2201,24 @@ const clearCompletedSessionData = () => {
 
 // Modal Event Handlers
 const handleModalClose = () => {
+    showCompletionModal.value = false;
+};
+
+const handleDontShowAgain = () => {
     const today = new Date().toISOString().split('T')[0];
     localStorage.setItem(`completion_dismissed_${today}`, 'true');
-    showCompletionModal.value = false;
     modalDismissedToday.value = true;
+    showCompletionModal.value = false;
 };
 
 const handleViewDetails = () => {
-    showSessionDetailsDialog.value = true;
+    // TODO: Implement view details functionality
+    console.log('View details clicked');
 };
 
 const handleEditAttendance = () => {
-    // Enable edit mode for the completed session
-    showCompletionModal.value = false;
-    // You can add specific edit logic here
-    toast.add({
-        severity: 'info',
-        summary: 'Edit Mode',
-        detail: 'You can now modify the completed attendance session',
-        life: 3000
-    });
+    // TODO: Implement edit attendance functionality
+    console.log('Edit attendance clicked');
 };
 
 const handleStartNewSession = async () => {
@@ -2774,6 +2790,19 @@ const isDropTarget = ref(false);
                 </div>
             </div>
         </Dialog>
+        
+        <!-- Attendance Completion Modal -->
+        <AttendanceCompletionModal
+            :visible="showCompletionModal"
+            :subject-name="selectedSubject?.name || 'Subject'"
+            :session-date="new Date().toLocaleDateString()"
+            :session-data="completedSessionData"
+            @close="handleModalClose"
+            @view-details="handleViewDetails"
+            @edit-attendance="handleEditAttendance"
+            @start-new-session="handleStartNewSession"
+            @dont-show-again="handleDontShowAgain"
+        />
     </div>
 </template>
 

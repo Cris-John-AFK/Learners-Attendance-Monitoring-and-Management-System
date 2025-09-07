@@ -1,8 +1,10 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import Dialog from 'primevue/dialog';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import NotificationBell from '@/components/NotificationBell.vue';
+import NotificationService from '@/services/NotificationService';
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -59,6 +61,28 @@ const isProfileOpen = ref(false); // Controls dropdown visibility
 
 const isLogoutSuccess = ref(false); // Controls the log out confirmation modal
 
+// Notification state
+const notifications = ref([]);
+let unsubscribeNotifications = null;
+
+// Notification handlers
+const handleNotificationClick = (notification) => {
+    NotificationService.markAsRead(notification.id);
+    
+    if (notification.type === 'session_completed') {
+        // Navigate to attendance page or show session details
+        router.push('/teacher/subject/attendance');
+    }
+};
+
+const handleMarkAllRead = () => {
+    NotificationService.markAllAsRead();
+};
+
+const handleRemoveNotification = (notificationId) => {
+    NotificationService.removeNotification(notificationId);
+};
+
 const logout = () => {
     // Clear user session data
     localStorage.removeItem('user');
@@ -67,6 +91,20 @@ const logout = () => {
     // Redirect to homepage
     router.push('/');
 };
+
+// Subscribe to notifications
+onMounted(() => {
+    notifications.value = NotificationService.getNotifications();
+    unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
+        notifications.value = updatedNotifications;
+    });
+});
+
+onUnmounted(() => {
+    if (unsubscribeNotifications) {
+        unsubscribeNotifications();
+    }
+});
 </script>
 
 <template>
@@ -87,6 +125,14 @@ const logout = () => {
                     <i class="pi pi-calendar"></i>
                     <span>Calendar</span>
                 </button>
+
+                <!-- Notification Bell -->
+                <NotificationBell
+                    :notifications="notifications"
+                    @notification-clicked="handleNotificationClick"
+                    @mark-all-read="handleMarkAllRead"
+                    @remove-notification="handleRemoveNotification"
+                />
 
                 <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
                     <i class="pi pi-cog"></i>

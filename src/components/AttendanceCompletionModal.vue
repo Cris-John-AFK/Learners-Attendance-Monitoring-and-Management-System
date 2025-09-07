@@ -1,6 +1,6 @@
 <template>
     <Teleport to="body">
-        <div v-if="visible" class="attendance-completion-overlay" @click="handleOverlayClick">
+        <div v-if="visible" class="attendance-completion-overlay main-content-only" @click="handleOverlayClick">
             <div class="attendance-completion-modal" @click.stop>
                 <div class="modal-header">
                     <div class="success-icon">
@@ -28,21 +28,41 @@
                 <div class="modal-actions">
                     <Button 
                         label="View Details" 
-                        icon="pi pi-eye"
-                        class="p-button-outlined p-button-success"
-                        @click="$emit('viewDetails')"
+                        icon="pi pi-eye" 
+                        class="p-button-outlined p-button-info"
+                        @click="$emit('view-details')"
                     />
                     <Button 
                         label="Edit Attendance" 
-                        icon="pi pi-pencil"
-                        class="p-button-outlined"
-                        @click="$emit('editAttendance')"
+                        icon="pi pi-pencil" 
+                        class="p-button-outlined p-button-warning"
+                        @click="$emit('edit-attendance')"
                     />
                     <Button 
                         label="Start New Session" 
-                        icon="pi pi-plus"
+                        icon="pi pi-plus" 
                         class="p-button-success"
-                        @click="$emit('startNewSession')"
+                        @click="$emit('start-new-session')"
+                    />
+                </div>
+
+                <div class="modal-footer">
+                    <div class="dont-show-again">
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                v-model="dontShowAgainToday"
+                                @change="handleDontShowAgainChange"
+                            />
+                            <span class="checkmark"></span>
+                            Don't show again today
+                        </label>
+                    </div>
+                    
+                    <Button 
+                        icon="pi pi-times" 
+                        class="p-button-text p-button-rounded close-btn"
+                        @click="handleClose"
                     />
                 </div>
                 
@@ -58,7 +78,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 
 const props = defineProps({
@@ -80,23 +100,40 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'viewDetails', 'editAttendance', 'startNewSession']);
+const emit = defineEmits(['close', 'view-details', 'edit-attendance', 'start-new-session', 'dont-show-again']);
+
+const dontShowAgainToday = ref(false);
 
 const presentCount = computed(() => {
-    return props.sessionData?.attendance_records?.filter(r => r.attendance_status_id === 1).length || 0;
+    return props.sessionData?.statistics?.present || 
+           props.sessionData?.attendance_records?.filter(r => r.status_code === 'P').length || 0;
 });
 
 const absentCount = computed(() => {
-    return props.sessionData?.attendance_records?.filter(r => r.attendance_status_id === 2).length || 0;
+    return props.sessionData?.statistics?.absent || 
+           props.sessionData?.attendance_records?.filter(r => r.status_code === 'A').length || 0;
 });
 
 const lateCount = computed(() => {
-    return props.sessionData?.attendance_records?.filter(r => r.attendance_status_id === 3).length || 0;
+    return props.sessionData?.statistics?.late || 
+           props.sessionData?.attendance_records?.filter(r => r.status_code === 'L').length || 0;
 });
 
 const handleOverlayClick = () => {
     // Close modal when clicking outside
-    emit('close');
+    handleClose();
+};
+
+const handleClose = () => {
+    if (dontShowAgainToday.value) {
+        emit('dont-show-again');
+    } else {
+        emit('close');
+    }
+};
+
+const handleDontShowAgainChange = () => {
+    // This will be handled when the modal is closed
 };
 </script>
 
@@ -114,6 +151,18 @@ const handleOverlayClick = () => {
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Main content area only overlay */
+.attendance-completion-overlay.main-content-only {
+    top: 4rem; /* Account for topbar height */
+    left: 16rem; /* Account for sidebar width */
+}
+
+@media (max-width: 991px) {
+    .attendance-completion-overlay.main-content-only {
+        left: 0; /* Full width on mobile */
+    }
 }
 
 .attendance-completion-modal {
@@ -196,6 +245,67 @@ const handleOverlayClick = () => {
     padding: 0.75rem 1.25rem;
     font-weight: 600;
     border-radius: 8px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.dont-show-again {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #6b7280;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    display: none;
+}
+
+.checkmark {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #d1d5db;
+    border-radius: 4px;
+    margin-right: 8px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.close-btn {
+    width: 2rem !important;
+    height: 2rem !important;
+    padding: 0 !important;
+    min-width: auto !important;
 }
 
 .modal-close-btn {
