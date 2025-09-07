@@ -5525,7 +5525,6 @@ watch(
                 <TabMenu :model="managementTabItems" v-model:activeIndex="activeManagementTabIndex" />
             </div>
 
-
             <!-- Subjects Tab -->
             <div v-if="activeManagementTab === 'subjects'" class="tab-content">
                 <div class="schedule-header-container">
@@ -5559,7 +5558,7 @@ watch(
                                 <Button label="Remove" icon="pi pi-trash" class="p-button-sm p-button-danger p-button-outlined" @click="removeSubjectFromSection(subject.id)" />
                             </div>
                         </div>
-                        
+
                         <!-- Subject Details -->
                         <div class="mb-3">
                             <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
