@@ -240,7 +240,7 @@
                             <tbody>
                                 <!-- MALE Students Section -->
                                 <tr class="gender-header-row">
-                                    <td class="gender-header" colspan="25">
+                                    <td class="gender-header" colspan="26">
                                         <div class="gender-section">
                                             <span class="gender-label">👨 MALE</span>
                                             <span class="gender-total">TOTAL Per Day</span>
@@ -292,7 +292,7 @@
 
                                 <!-- FEMALE Students Section -->
                                 <tr class="gender-header-row">
-                                    <td class="gender-header" colspan="25">
+                                    <td class="gender-header" colspan="26">
                                         <div class="gender-section">
                                             <span class="gender-label">👩 FEMALE</span>
                                             <span class="gender-total">TOTAL Per Day</span>
@@ -359,6 +359,15 @@
                                     <td class="total-cell">
                                         <strong>{{ getOverallAttendanceRate(selectedSectionDetails.name) }}%</strong>
                                     </td>
+                                </tr>
+                                
+                                <!-- Line Numbers Row -->
+                                <tr class="line-numbers-row">
+                                    <td class="line-number-label">Line No.</td>
+                                    <td v-for="(day, index) in attendanceDays" :key="day.date" class="line-number-cell">{{ index + 2 }}</td>
+                                    <td class="line-number-cell">{{ attendanceDays.length + 2 }}</td>
+                                    <td class="line-number-cell">{{ attendanceDays.length + 3 }}</td>
+                                    <td class="line-number-cell">{{ attendanceDays.length + 4 }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -516,7 +525,7 @@
                                 <span class="days-label">No. of Days of Classes: _____</span>
                                 <span class="summary-title">Summary</span>
                             </div>
-                            
+
                             <table class="sf2-summary-table">
                                 <thead>
                                     <tr>
@@ -534,7 +543,7 @@
                                         <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
                                     </tr>
                                     <tr>
-                                        <td class="summary-label">Late Enrolment during the month<br><small>(beyond cut-off)</small></td>
+                                        <td class="summary-label">Late Enrolment during the month<br /><small>(beyond cut-off)</small></td>
                                         <td class="summary-value">0</td>
                                         <td class="summary-value">0</td>
                                         <td class="summary-value">0</td>
@@ -2652,7 +2661,7 @@ const getMaleAttendanceRate = (sectionName) => {
     const students = getSectionStudents(sectionName);
     const maleStudents = students.filter((student) => student.gender === 'Male');
     if (maleStudents.length === 0) return 0;
-    
+
     const totalRate = maleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
     return Math.round(totalRate / maleStudents.length);
 };
@@ -2661,7 +2670,7 @@ const getFemaleAttendanceRate = (sectionName) => {
     const students = getSectionStudents(sectionName);
     const femaleStudents = students.filter((student) => student.gender === 'Female');
     if (femaleStudents.length === 0) return 0;
-    
+
     const totalRate = femaleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
     return Math.round(totalRate / femaleStudents.length);
 };
@@ -2767,7 +2776,7 @@ const nextMonth = () => {
     }
 };
 
-const downloadSF2Report = () => {
+const downloadSF2Report = async () => {
     if (!selectedSectionDetails.value) {
         toast.add({
             severity: 'warn',
@@ -2788,112 +2797,80 @@ const downloadSF2Report = () => {
         const maleStudents = getMaleStudents(sectionName);
         const femaleStudents = getFemaleStudents(sectionName);
 
-        // Create new workbook
-        const wb = XLSX.utils.book_new();
+        // Load the Excel template
+        const templatePath = '/templates/School Form Attendance Report of Learners.xlsx';
+        const response = await fetch(templatePath);
 
-        // Prepare data array for SF2 format
-        const data = [];
+        if (!response.ok) {
+            throw new Error('Template file not found');
+        }
 
-        // Header rows
-        data.push(['SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS']);
-        data.push([]);
-        data.push([`School: Kagawasan Elementary School`]);
-        data.push([`Section: ${sectionName}`]);
-        data.push([`Teacher: ${teacher}`]);
-        data.push([`Month/Year: ${monthDisplay}`]);
-        data.push([]);
+        const arrayBuffer = await response.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: 'array' });
 
-        // Table headers
-        const headerRow = ["Learner's Name (Last Name, First Name, Middle Name)", 'LRN', ...attendanceDays.value.map((day) => day.day.toString()), 'Total Present', 'Total Absent', 'Rate %'];
-        data.push(headerRow);
+        // Get the first worksheet from the template
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
 
-        // MALE students section
-        data.push(['MALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
+        // Populate template with actual data
+        // Update school information
+        if (ws['B3']) ws['B3'].v = 'Kagawasan Elementary School';
+        if (ws['B4']) ws['B4'].v = sectionName;
+        if (ws['B5']) ws['B5'].v = teacher;
+        if (ws['B6']) ws['B6'].v = monthDisplay;
 
-        // Add male students data
-        maleStudents.forEach((student) => {
-            const row = [
-                `${student.lastName}, ${student.firstName} ${student.middleName}`,
-                student.lrn,
-                ...attendanceDays.value.map((day) => {
-                    const status = student.attendance[day.date];
-                    return getAttendanceMark(status);
-                }),
-                student.totalPresent,
-                student.totalAbsent,
-                `${student.attendanceRate}%`
-            ];
-            data.push(row);
-        });
+        // Summary data (from the modal)
+        const summaryData = {
+            maleEnrollment: getMaleStudents(sectionName).length,
+            femaleEnrollment: getFemaleStudents(sectionName).length,
+            totalEnrollment: students.length,
+            maleDroppedOut: getMaleDroppedOutCount(sectionName),
+            femaleDroppedOut: getFemaleDroppedOutCount(sectionName),
+            maleTransferredOut: getMaleTransferredOutCount(sectionName),
+            femaleTransferredOut: getFemaleTransferredOutCount(sectionName),
+            maleTransferredIn: getMaleTransferredInCount(sectionName),
+            femaleTransferredIn: getFemaleTransferredInCount(sectionName),
+            maleAttendanceRate: getMaleAttendanceRate(sectionName),
+            femaleAttendanceRate: getFemaleAttendanceRate(sectionName),
+            overallAttendanceRate: getOverallAttendanceRate(sectionName)
+        };
 
-        // Male totals
-        const maleTotalRow = ['MALE TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getMaleDayTotal(sectionName, day.date)), getMaleTotalPresent(sectionName), getMaleTotalAbsent(sectionName), `${getMaleAttendanceRate(sectionName)}%`];
-        data.push(maleTotalRow);
-        data.push([]);
+        // Populate summary section (adjust cell references based on your template)
+        // Male column (M)
+        if (ws['M10']) ws['M10'].v = summaryData.maleEnrollment;
+        if (ws['M11']) ws['M11'].v = 0; // Late enrollment during month
+        if (ws['M12']) ws['M12'].v = summaryData.maleEnrollment;
+        if (ws['M13']) ws['M13'].v = '100%'; // Percentage of enrollment
+        if (ws['M14']) ws['M14'].v = `${summaryData.maleAttendanceRate}%`;
+        if (ws['M15']) ws['M15'].v = `${summaryData.maleAttendanceRate}%`;
+        if (ws['M16']) ws['M16'].v = 0; // Absent for 5 consecutive days
+        if (ws['M17']) ws['M17'].v = summaryData.maleDroppedOut;
+        if (ws['M18']) ws['M18'].v = summaryData.maleTransferredOut;
+        if (ws['M19']) ws['M19'].v = summaryData.maleTransferredIn;
 
-        // FEMALE students section
-        data.push(['FEMALE STUDENTS', '', ...Array(attendanceDays.value.length + 3).fill('')]);
+        // Female column (F)
+        if (ws['F10']) ws['F10'].v = summaryData.femaleEnrollment;
+        if (ws['F11']) ws['F11'].v = 0; // Late enrollment during month
+        if (ws['F12']) ws['F12'].v = summaryData.femaleEnrollment;
+        if (ws['F13']) ws['F13'].v = '100%'; // Percentage of enrollment
+        if (ws['F14']) ws['F14'].v = `${summaryData.femaleAttendanceRate}%`;
+        if (ws['F15']) ws['F15'].v = `${summaryData.femaleAttendanceRate}%`;
+        if (ws['F16']) ws['F16'].v = 0; // Absent for 5 consecutive days
+        if (ws['F17']) ws['F17'].v = summaryData.femaleDroppedOut;
+        if (ws['F18']) ws['F18'].v = summaryData.femaleTransferredOut;
+        if (ws['F19']) ws['F19'].v = summaryData.femaleTransferredIn;
 
-        // Add female students data
-        femaleStudents.forEach((student) => {
-            const row = [
-                `${student.lastName}, ${student.firstName} ${student.middleName}`,
-                student.lrn,
-                ...attendanceDays.value.map((day) => {
-                    const status = student.attendance[day.date];
-                    return getAttendanceMark(status);
-                }),
-                student.totalPresent,
-                student.totalAbsent,
-                `${student.attendanceRate}%`
-            ];
-            data.push(row);
-        });
-
-        // Female totals
-        const femaleTotalRow = [
-            'FEMALE TOTAL PER DAY',
-            '',
-            ...attendanceDays.value.map((day) => getFemaleDayTotal(sectionName, day.date)),
-            getFemaleTotalPresent(sectionName),
-            getFemaleTotalAbsent(sectionName),
-            `${getFemaleAttendanceRate(sectionName)}%`
-        ];
-        data.push(femaleTotalRow);
-        data.push([]);
-
-        // Combined totals
-        const combinedTotalRow = ['COMBINED TOTAL PER DAY', '', ...attendanceDays.value.map((day) => getDayTotal(sectionName, day.date)), getTotalPresent(sectionName), getTotalAbsent(sectionName), `${getOverallAttendanceRate(sectionName)}%`];
-        data.push(combinedTotalRow);
-        data.push([]);
-
-        // Summary
-        data.push(['MONTHLY SUMMARY']);
-        data.push([`Total Students: ${students.length}`]);
-        data.push([`Male Students: ${maleStudents.length}`]);
-        data.push([`Female Students: ${femaleStudents.length}`]);
-        data.push([`Overall Attendance Rate: ${getOverallAttendanceRate(sectionName)}%`]);
-        data.push([]);
-        data.push(['Legend: ✓ = Present, ✗ = Absent, L = Late']);
-        data.push([`Generated on: ${new Date().toLocaleDateString()}`]);
-        data.push(['Generated by: LAMMS - Learners Attendance Monitoring and Management System']);
-
-        // Create worksheet
-        const ws = XLSX.utils.aoa_to_sheet(data);
-
-        // Set column widths
-        const colWidths = [
-            { wch: 40 }, // Student name
-            { wch: 15 }, // LRN
-            ...attendanceDays.value.map(() => ({ wch: 4 })), // Day columns
-            { wch: 12 }, // Total Present
-            { wch: 12 }, // Total Absent
-            { wch: 8 } // Rate %
-        ];
-        ws['!cols'] = colWidths;
-
-        // Add worksheet to workbook
-        XLSX.utils.book_append_sheet(wb, ws, 'SF2 Report');
+        // Total column (TOTAL)
+        if (ws['H10']) ws['H10'].v = summaryData.totalEnrollment;
+        if (ws['H11']) ws['H11'].v = 0; // Late enrollment during month
+        if (ws['H12']) ws['H12'].v = summaryData.totalEnrollment;
+        if (ws['H13']) ws['H13'].v = '100%'; // Percentage of enrollment
+        if (ws['H14']) ws['H14'].v = `${summaryData.overallAttendanceRate}%`;
+        if (ws['H15']) ws['H15'].v = `${summaryData.overallAttendanceRate}%`;
+        if (ws['H16']) ws['H16'].v = 0; // Absent for 5 consecutive days
+        if (ws['H17']) ws['H17'].v = summaryData.maleDroppedOut + summaryData.femaleDroppedOut;
+        if (ws['H18']) ws['H18'].v = summaryData.maleTransferredOut + summaryData.femaleTransferredOut;
+        if (ws['H19']) ws['H19'].v = summaryData.maleTransferredIn + summaryData.femaleTransferredIn;
 
         // Generate filename
         const currentDate = new Date().toISOString().split('T')[0];
@@ -4304,7 +4281,8 @@ const reportTypes = ref([
     font-size: 0.9rem;
 }
 
-.month-label, .days-label {
+.month-label,
+.days-label {
     flex: 1;
 }
 
@@ -4380,13 +4358,37 @@ const reportTypes = ref([
     background: #f0f8ff;
 }
 
-.total-cell {
+.attendance-table .summary-header {
     background: #e3f2fd;
     color: #1976d2;
     padding: 0.75rem 0.5rem;
     text-align: center;
     font-weight: 700;
     border: 1px solid #2196f3;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    min-width: 80px;
+    display: table-cell;
+    vertical-align: middle;
+}
+
+.line-number-label {
+    background: #6c757d;
+    color: white;
+    padding: 0.4rem;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.line-number-cell {
+    background: #f8f9fa;
+    color: #495057;
+    padding: 0.4rem;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #dee2e6;
 }
 
 /* Responsive design */
