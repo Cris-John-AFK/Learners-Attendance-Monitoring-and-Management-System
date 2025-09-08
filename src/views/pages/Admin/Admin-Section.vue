@@ -65,7 +65,7 @@ const filteredSections = computed(() => {
         return nameMatch || gradeMatch || descMatch;
     };
 
-    return sections.value.filter(section => {
+    return sections.value.filter((section) => {
         // If no grade is selected or "All Grades" is selected, only apply search filter
         if (!selectedGrade.value || selectedGrade.value.value === null) {
             return matchesSearch(section);
@@ -87,7 +87,7 @@ const loadGrades = async () => {
         console.log('Fetched grades from API:', gradesData);
 
         // Regular grades list for form (without All Grades option)
-        grades.value = gradesData.map(grade => ({
+        grades.value = gradesData.map((grade) => ({
             id: grade.id,
             name: grade.name,
             code: grade.code,
@@ -96,10 +96,7 @@ const loadGrades = async () => {
         }));
 
         // Filter grades list with All Grades option
-        filterGrades.value = [
-            { id: null, name: 'All Grades', code: 'ALL', label: 'All Grades', value: null },
-            ...grades.value
-        ];
+        filterGrades.value = [{ id: null, name: 'All Grades', code: 'ALL', label: 'All Grades', value: null }, ...grades.value];
 
         console.log('Processed grades for dropdown:', grades.value);
     } catch (error) {
@@ -120,7 +117,7 @@ const loadSections = async () => {
 
         const data = await SectionService.getSections();
         // Transform the data to include grade name
-        sections.value = data.map(section => ({
+        sections.value = data.map((section) => ({
             ...section,
             gradeName: section.grade?.name || 'No Grade'
         }));
@@ -144,12 +141,12 @@ const saveSection = async () => {
     submitted.value = true;
 
     if (!section.value.name?.trim() || !section.value.grade) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
             detail: 'Please fill in all required fields',
-                life: 3000
-            });
+            life: 3000
+        });
         return;
     }
 
@@ -169,21 +166,21 @@ const saveSection = async () => {
         if (section.value.id) {
             // Update existing section
             await SectionService.updateSection(section.value.id, sectionData);
-        toast.add({
+            toast.add({
                 severity: 'success',
                 summary: 'Success',
                 detail: 'Section updated successfully',
-            life: 3000
-        });
+                life: 3000
+            });
         } else {
             // Create new section
             await SectionService.createSection(sectionData);
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
                 detail: 'Section created successfully',
-            life: 3000
-        });
+                life: 3000
+            });
         }
 
         sectionDialog.value = false;
@@ -199,9 +196,7 @@ const saveSection = async () => {
         if (error.response?.data?.errors) {
             console.log('Validation errors:', error.response.data.errors);
             // Format validation errors into readable message
-            const validationErrors = Object.values(error.response.data.errors)
-                .flat()
-                .join(', ');
+            const validationErrors = Object.values(error.response.data.errors).flat().join(', ');
             errorMessage = `Validation errors: ${validationErrors}`;
         } else if (error.response?.data?.message) {
             errorMessage = error.response.data.message;
@@ -231,7 +226,7 @@ const openNew = () => {
     submitted.value = false;
     nextTick(() => {
         const fields = document.querySelectorAll('.animated-field');
-        fields.forEach(field => {
+        fields.forEach((field) => {
             field.style.animation = 'none';
             setTimeout(() => {
                 field.style.animation = '';
@@ -373,7 +368,7 @@ onMounted(async () => {
             <!-- Top Section -->
             <div class="top-nav-bar">
                 <div class="nav-left">
-                    <h2 class="text-2xl font-semibold ">Section Management</h2>
+                    <h2 class="text-2xl font-semibold">Section Management</h2>
                 </div>
                 <div class="search-container">
                     <div class="search-input-wrapper">
@@ -382,28 +377,21 @@ onMounted(async () => {
                         <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch">
                             <i class="pi pi-times"></i>
                         </button>
-            </div>
                     </div>
+                </div>
                 <div class="nav-right">
                     <div class="grade-filter">
-                        <Select
-                            v-model="selectedGrade"
-                            :options="filterGrades"
-                            optionLabel="label"
-                            placeholder="Filter by Grade"
-                            @change="filterSections"
-                            class="p-inputtext-sm"
-                        />
-                </div>
+                        <Select v-model="selectedGrade" :options="filterGrades" optionLabel="label" placeholder="Filter by Grade" @change="filterSections" class="p-inputtext-sm" />
+                    </div>
                     <Button label="Add Section" icon="pi pi-plus" class="add-button p-button-success" @click.prevent="openNew" />
-        </div>
                 </div>
+            </div>
 
-                <!-- Loading State -->
-                <div v-if="loading" class="loading-container">
-                    <ProgressSpinner />
-                    <p>Loading sections...</p>
-                </div>
+            <!-- Loading State -->
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
+                <p>Loading sections...</p>
+            </div>
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
@@ -424,13 +412,13 @@ onMounted(async () => {
                         </div>
                     </div>
                 </div>
-                </div>
-
-                <!-- Empty State -->
-            <div v-if="filteredSections.length === 0 && !loading" class="empty-state">
-                    <p>No sections found. Click "Add Section" to create one.</p>
             </div>
-                </div>
+
+            <!-- Empty State -->
+            <div v-if="filteredSections.length === 0 && !loading" class="empty-state">
+                <p>No sections found. Click "Add Section" to create one.</p>
+            </div>
+        </div>
 
         <!-- Sketch Style Modal -->
         <div v-if="showSectionDetails" ref="modalContainer" id="modal-container">
@@ -439,7 +427,7 @@ onMounted(async () => {
                     <div class="modal-header">
                         <h2>{{ detailsEditMode ? 'Edit Section' : 'Section Details' }}</h2>
                         <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="closeDetailsModal" aria-label="Close" />
-                                </div>
+                    </div>
 
                     <!-- View Mode -->
                     <div v-if="!detailsEditMode" class="modal-content">
@@ -447,16 +435,16 @@ onMounted(async () => {
                             <div class="detail-row">
                                 <label>Name:</label>
                                 <span>{{ section.name }}</span>
-                                </div>
+                            </div>
                             <div class="detail-row">
                                 <label>Grade:</label>
                                 <span>{{ section.grade?.name || 'No Grade' }}</span>
-                                </div>
+                            </div>
                             <div class="detail-row description">
                                 <label>Description:</label>
                                 <p>{{ section.description || 'No description available.' }}</p>
                             </div>
-                            </div>
+                        </div>
                         <div class="modal-actions">
                             <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
                             <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(section)" />
@@ -470,27 +458,19 @@ onMounted(async () => {
                                 <label for="name">Name</label>
                                 <InputText id="name" v-model="section.name" required placeholder="Enter section name" :class="{ 'p-invalid': submitted && !section.name }" />
                                 <small class="p-error" v-if="submitted && !section.name">Name is required.</small>
-                </div>
+                            </div>
                             <div class="field">
                                 <label for="grade">Grade</label>
                                 <div class="select-wrapper">
-                                    <Select
-                                        id="grade"
-                                        v-model="section.grade"
-                                        :options="grades"
-                                        optionLabel="name"
-                                        placeholder="Select a grade"
-                                        :class="{ 'p-invalid': submitted && !section.grade }"
-                                        appendTo="body"
-                                    />
-            </div>
+                                    <Select id="grade" v-model="section.grade" :options="grades" optionLabel="name" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !section.grade }" appendTo="body" />
+                                </div>
                                 <small class="p-error" v-if="submitted && !section.grade">Grade is required.</small>
-                </div>
+                            </div>
                             <div class="field">
                                 <label for="description">Description</label>
                                 <Textarea id="description" v-model="section.description" rows="3" placeholder="Add a description" />
-                </div>
-                </div>
+                            </div>
+                        </div>
                         <div class="modal-actions">
                             <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
                             <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSection" />
@@ -514,66 +494,30 @@ onMounted(async () => {
                 <div class="dialog-particle"></div>
 
                 <div class="field animated-field">
-                    <label for="name">
-                        <i class="pi pi-book mr-2"></i>Section Name
-                    </label>
-                    <InputText
-                        id="name"
-                        v-model="section.name"
-                        required
-                        placeholder="Enter section name"
-                        :class="{ 'p-invalid': submitted && !section.name }"
-                    />
+                    <label for="name"> <i class="pi pi-book mr-2"></i>Section Name </label>
+                    <InputText id="name" v-model="section.name" required placeholder="Enter section name" :class="{ 'p-invalid': submitted && !section.name }" />
                     <small class="p-error" v-if="submitted && !section.name">Name is required.</small>
                 </div>
 
                 <div class="field animated-field">
-                    <label for="grade">
-                        <i class="pi pi-tag mr-2"></i>Grade Level
-                    </label>
+                    <label for="grade"> <i class="pi pi-tag mr-2"></i>Grade Level </label>
                     <div class="select-wrapper">
-                        <Select
-                            id="grade"
-                            v-model="section.grade"
-                            :options="grades"
-                            optionLabel="name"
-                            placeholder="Select a grade"
-                            :class="{ 'p-invalid': submitted && !section.grade }"
-                            appendTo="body"
-                        />
+                        <Select id="grade" v-model="section.grade" :options="grades" optionLabel="name" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !section.grade }" appendTo="body" />
                     </div>
                     <small class="p-error" v-if="submitted && !section.grade">Grade is required.</small>
                 </div>
 
                 <div class="field animated-field">
-                    <label for="description">
-                        <i class="pi pi-info-circle mr-2"></i>Description
-                    </label>
-                    <Textarea
-                        id="description"
-                        v-model="section.description"
-                        rows="3"
-                        placeholder="Enter a short description of the section"
-                        autoResize
-                    />
-                    </div>
+                    <label for="description"> <i class="pi pi-info-circle mr-2"></i>Description </label>
+                    <Textarea id="description" v-model="section.description" rows="3" placeholder="Enter a short description of the section" autoResize />
                 </div>
+            </div>
 
             <template #footer>
                 <div class="dialog-footer-buttons">
-                    <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        class="p-button-text cancel-button"
-                        @click="hideDialog"
-                    />
-                    <Button
-                        label="Save"
-                        icon="pi pi-check"
-                        class="p-button-raised p-button-primary save-button-custom"
-                        @click="saveSection"
-                    />
-                    </div>
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text cancel-button" @click="hideDialog" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSection" />
+                </div>
             </template>
         </Dialog>
 
@@ -582,12 +526,12 @@ onMounted(async () => {
             <div class="confirmation-content">
                 <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                 <span>Are you sure you want to delete this section?</span>
-                </div>
+            </div>
             <template #footer>
                 <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteSectionDialog = false" />
                 <Button label="Yes" icon="pi pi-check" class="p-button-danger" @click="deleteSection()" />
             </template>
-    </Dialog>
+        </Dialog>
     </div>
 </template>
 
@@ -641,7 +585,9 @@ onMounted(async () => {
     bottom: 10%;
     left: -80px;
     transform: rotate(30deg);
-    animation: rotate 25s linear infinite, float 18s ease-in-out infinite;
+    animation:
+        rotate 25s linear infinite,
+        float 18s ease-in-out infinite;
 }
 
 /* Triangle shape */
@@ -654,7 +600,9 @@ onMounted(async () => {
     top: 40%;
     right: -100px;
     opacity: 0.15;
-    animation: float 22s ease-in-out infinite, opacity-pulse 15s ease-in-out infinite;
+    animation:
+        float 22s ease-in-out infinite,
+        opacity-pulse 15s ease-in-out infinite;
 }
 
 /* Rectangle shape */
@@ -676,12 +624,15 @@ onMounted(async () => {
     transform: rotate(45deg);
     top: 15%;
     left: 10%;
-    animation: float 23s ease-in-out infinite reverse, opacity-pulse 18s ease-in-out infinite;
+    animation:
+        float 23s ease-in-out infinite reverse,
+        opacity-pulse 18s ease-in-out infinite;
 }
 
 /* Simple float animation */
 @keyframes float {
-    0%, 100% {
+    0%,
+    100% {
         transform: translate(0, 0) rotate(0deg);
     }
     25% {
@@ -707,7 +658,8 @@ onMounted(async () => {
 
 /* Subtle opacity animation */
 @keyframes opacity-pulse {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 0.05;
     }
     50% {
@@ -796,15 +748,35 @@ onMounted(async () => {
     animation-duration: 10s;
 }
 
-.subject-card:nth-child(3n+1) .symbol {
+.subject-card:nth-child(3n + 1) .symbol {
     animation-duration: 7s;
 }
 
-.subject-card .symbol:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
-.subject-card .symbol:nth-child(2) { top: 30%; left: 80%; animation-delay: 1s; }
-.subject-card .symbol:nth-child(3) { top: 70%; left: 30%; animation-delay: 2s; }
-.subject-card .symbol:nth-child(4) { top: 60%; left: 70%; animation-delay: 3s; }
-.subject-card .symbol:nth-child(5) { top: 20%; left: 50%; animation-delay: 4s; }
+.subject-card .symbol:nth-child(1) {
+    top: 10%;
+    left: 10%;
+    animation-delay: 0s;
+}
+.subject-card .symbol:nth-child(2) {
+    top: 30%;
+    left: 80%;
+    animation-delay: 1s;
+}
+.subject-card .symbol:nth-child(3) {
+    top: 70%;
+    left: 30%;
+    animation-delay: 2s;
+}
+.subject-card .symbol:nth-child(4) {
+    top: 60%;
+    left: 70%;
+    animation-delay: 3s;
+}
+.subject-card .symbol:nth-child(5) {
+    top: 20%;
+    left: 50%;
+    animation-delay: 4s;
+}
 
 @keyframes float-symbol {
     0% {
@@ -1350,7 +1322,7 @@ onMounted(async () => {
 }
 
 /* Dialog Styles */
-    :deep(.section-dialog) {
+:deep(.section-dialog) {
     z-index: 1100 !important;
     border-radius: 16px;
     overflow: visible !important;
@@ -1388,7 +1360,7 @@ onMounted(async () => {
 .dialog-footer-buttons {
     display: flex;
     justify-content: flex-end;
-        gap: 1rem;
+    gap: 1rem;
     position: relative;
     z-index: 50;
 }
@@ -1449,7 +1421,8 @@ onMounted(async () => {
         top: -50%;
         left: -50%;
     }
-    30%, 100% {
+    30%,
+    100% {
         top: 150%;
         left: 150%;
     }
