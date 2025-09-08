@@ -10,18 +10,63 @@
                     <p class="modal-subtitle">{{ subjectName }} - {{ sessionDate }}</p>
                 </div>
                 
-                <div class="modal-stats" v-if="sessionData">
-                    <div class="stat-item">
-                        <span class="stat-number">{{ presentCount }}</span>
-                        <span class="stat-label">Present</span>
+                <div class="modal-stats" v-if="sessionData && sessionData.statistics">
+                    <div class="stats-grid">
+                        <div class="stat-card present">
+                            <div class="stat-icon">
+                                <i class="pi pi-check"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ sessionData.statistics.present || 0 }}</span>
+                                <span class="stat-label">Present</span>
+                            </div>
+                        </div>
+                        <div class="stat-card absent">
+                            <div class="stat-icon">
+                                <i class="pi pi-times"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ sessionData.statistics.absent || 0 }}</span>
+                                <span class="stat-label">Absent</span>
+                            </div>
+                        </div>
+                        <div class="stat-card late">
+                            <div class="stat-icon">
+                                <i class="pi pi-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ sessionData.statistics.late || 0 }}</span>
+                                <span class="stat-label">Late</span>
+                            </div>
+                        </div>
+                        <div class="stat-card excused">
+                            <div class="stat-icon">
+                                <i class="pi pi-info-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-number">{{ sessionData.statistics.excused || 0 }}</span>
+                                <span class="stat-label">Excused</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-number">{{ absentCount }}</span>
-                        <span class="stat-label">Absent</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">{{ lateCount }}</span>
-                        <span class="stat-label">Late</span>
+                    
+                    <div class="session-summary">
+                        <div class="summary-row">
+                            <span class="summary-label">Total Students:</span>
+                            <span class="summary-value">{{ sessionData.statistics.total_students || 0 }}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Marked:</span>
+                            <span class="summary-value">{{ sessionData.statistics.marked_students || 0 }}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Session Duration:</span>
+                            <span class="summary-value">{{ formatSessionDuration() }}</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Attendance Rate:</span>
+                            <span class="summary-value attendance-rate" :class="getAttendanceRateClass()">{{ calculateAttendanceRate() }}%</span>
+                        </div>
                     </div>
                 </div>
 
@@ -103,6 +148,61 @@ const props = defineProps({
 const emit = defineEmits(['close', 'view-details', 'edit-attendance', 'start-new-session', 'dont-show-again']);
 
 const dontShowAgainToday = ref(false);
+
+// Helper functions for session data display
+const formatSessionDuration = () => {
+    // Try different possible property names from the backend response
+    const startTime = props.sessionData?.session_start_time || 
+                     props.sessionData?.start_time || 
+                     props.sessionData?.created_at;
+    const endTime = props.sessionData?.session_end_time || 
+                   props.sessionData?.end_time || 
+                   props.sessionData?.completed_at ||
+                   new Date().toISOString(); // Use current time if no end time
+    
+    if (!startTime) {
+        return 'N/A';
+    }
+    
+    try {
+        const start = new Date(startTime);
+        const end = new Date(endTime);
+        const diffMs = end - start;
+        const diffMins = Math.floor(diffMs / 60000);
+        
+        if (diffMins < 1) {
+            return '< 1 min';
+        } else if (diffMins < 60) {
+            return `${diffMins} min`;
+        } else {
+            const hours = Math.floor(diffMins / 60);
+            const mins = diffMins % 60;
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        }
+    } catch (error) {
+        console.error('Error calculating session duration:', error);
+        return 'N/A';
+    }
+};
+
+const calculateAttendanceRate = () => {
+    if (!props.sessionData?.statistics) return 0;
+    
+    const stats = props.sessionData.statistics;
+    const totalMarked = stats.marked_students || 0;
+    const presentAndLate = (stats.present || 0) + (stats.late || 0);
+    
+    if (totalMarked === 0) return 0;
+    return Math.round((presentAndLate / totalMarked) * 100);
+};
+
+const getAttendanceRateClass = () => {
+    const rate = calculateAttendanceRate();
+    if (rate >= 90) return 'excellent';
+    if (rate >= 75) return 'good';
+    if (rate >= 60) return 'fair';
+    return 'poor';
+};
 
 const presentCount = computed(() => {
     return props.sessionData?.statistics?.present || 
@@ -205,32 +305,119 @@ const handleDontShowAgainChange = () => {
     margin: 0;
 }
 
-.modal-stats {
-    display: flex;
-    justify-content: space-around;
-    margin: 2rem 0;
-    gap: 1.5rem;
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-.stat-item {
+.stat-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0.75rem;
+    font-size: 1.2rem;
+}
+
+.stat-card.present .stat-icon {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.stat-card.absent .stat-icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.stat-card.late .stat-icon {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.stat-card.excused .stat-icon {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.stat-content {
     display: flex;
     flex-direction: column;
-    align-items: center;
 }
 
 .stat-number {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: #059669;
+    font-size: 1.5rem;
+    font-weight: 700;
     line-height: 1;
 }
 
 .stat-label {
     font-size: 0.875rem;
     color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.session-summary {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-row:last-child {
+    border-bottom: none;
+}
+
+.summary-label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.summary-value {
+    font-weight: 600;
+    color: #111827;
+}
+
+.attendance-rate.excellent {
+    color: #16a34a;
+}
+
+.attendance-rate.good {
+    color: #059669;
+}
+
+.attendance-rate.fair {
+    color: #d97706;
+}
+
+.attendance-rate.poor {
+    color: #dc2626;
 }
 
 .modal-actions {

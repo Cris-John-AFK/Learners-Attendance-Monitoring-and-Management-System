@@ -9,6 +9,8 @@ class NotificationService {
      * Add a new notification
      */
     addNotification(notification) {
+        console.log('Adding notification:', notification);
+        
         const newNotification = {
             id: Date.now() + Math.random(),
             timestamp: new Date().toISOString(),
@@ -16,9 +18,15 @@ class NotificationService {
             ...notification
         };
 
+        console.log('New notification created:', newNotification);
         this.notifications.unshift(newNotification);
+        console.log('Total notifications after add:', this.notifications.length);
+        
         this.saveNotifications();
+        console.log('Notifications saved to localStorage');
+        
         this.notifyListeners();
+        console.log('Listeners notified');
         
         return newNotification;
     }
@@ -27,14 +35,20 @@ class NotificationService {
      * Add session completion notification
      */
     addSessionCompletionNotification(sessionData) {
+        console.log('Creating session completion notification with data:', sessionData);
+        
         const notification = {
             type: 'session_completed',
             title: 'Attendance Session Completed',
-            message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || 0} present, ${sessionData.statistics?.absent || 0} absent`,
+            message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || sessionData.present_count || 0} present, ${sessionData.statistics?.absent || sessionData.absent_count || 0} absent`,
             data: sessionData
         };
 
-        return this.addNotification(notification);
+        console.log('Notification object created:', notification);
+        const result = this.addNotification(notification);
+        console.log('addNotification returned:', result);
+        
+        return result;
     }
 
     /**
@@ -112,9 +126,11 @@ class NotificationService {
      * Notify all listeners of changes
      */
     notifyListeners() {
-        this.listeners.forEach(callback => {
+        console.log('Notifying listeners, current notifications:', this.notifications.length);
+        this.listeners.forEach((callback, index) => {
             try {
-                callback(this.notifications);
+                console.log(`Calling listener ${index}:`, callback);
+                callback([...this.notifications]); // Pass a copy to ensure reactivity
             } catch (error) {
                 console.error('Error in notification listener:', error);
             }

@@ -5,13 +5,17 @@
             :class="{ 'ringing': hasUnreadNotifications }"
             @click="toggleDropdown"
         >
-            <i class="pi pi-bell"></i>
-            <span 
-                v-if="notificationCount > 0" 
-                class="notification-badge"
-            >
-                {{ notificationCount > 99 ? '99+' : notificationCount }}
-            </span>
+            <div class="bell-container">
+                <i class="pi pi-bell"></i>
+                <div v-if="hasUnreadNotifications" class="red-indicator"></div>
+                <span 
+                    v-if="notificationCount > 0" 
+                    class="notification-badge"
+                    :key="notificationCount"
+                >
+                    {{ notificationCount }}
+                </span>
+            </div>
         </div>
 
         <!-- Notification Dropdown -->
@@ -121,11 +125,17 @@ const closeDropdown = () => {
 };
 
 const handleNotificationClick = (notification) => {
+    // Mark as read immediately in the local state
+    if (!notification.read) {
+        notification.read = true;
+    }
     emit('notification-clicked', notification);
     closeDropdown();
 };
 
 const markAllAsRead = () => {
+    // Mark all notifications as read in local state
+    props.notifications.forEach(n => n.read = true);
     emit('mark-all-read');
 };
 
@@ -172,53 +182,115 @@ onUnmounted(() => {
 
 .notification-bell {
     position: relative;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    border: 2px solid #e9ecef;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .notification-bell:hover {
-    background: #e9ecef;
-    transform: scale(1.05);
+    background: linear-gradient(135deg, #e9ecef, #f1f3f4);
+    transform: scale(1.08) translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #007bff;
+}
+
+.notification-bell:hover .notification-badge {
+    transform: scale(1.1);
+    box-shadow: 0 3px 12px rgba(255, 71, 87, 0.6);
 }
 
 .notification-bell.ringing {
-    animation: shake 0.5s ease-in-out infinite;
+    animation: bell-shake 0.6s ease-in-out infinite;
 }
 
-@keyframes shake {
+.notification-bell.ringing i {
+    color: #ff4757;
+}
+
+.notification-bell.ringing .notification-badge {
+    animation: pulse-badge 1s infinite, bounce-badge 0.6s ease-in-out infinite;
+}
+
+@keyframes bell-shake {
     0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-10deg); }
-    75% { transform: rotate(10deg); }
+    10%, 30%, 50%, 70%, 90% { transform: rotate(-8deg); }
+    20%, 40%, 60%, 80% { transform: rotate(8deg); }
+}
+
+@keyframes pulse-badge {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 3px 12px rgba(255, 71, 87, 0.6);
+    }
+}
+
+@keyframes bounce-badge {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-2px) scale(1.1); }
+}
+
+.bell-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.red-indicator {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    background: #dc3545;
+    border-radius: 50%;
+    border: 2px solid white;
+    z-index: 2;
 }
 
 .notification-bell i {
-    font-size: 18px;
-    color: #6c757d;
+    font-size: 20px;
+    color: #495057;
+    transition: all 0.3s ease;
+}
+
+.notification-bell:hover i {
+    color: #007bff;
+    transform: scale(1.1);
 }
 
 .notification-badge {
     position: absolute;
-    top: -5px;
-    right: -5px;
-    background: #dc3545;
+    top: -12px;
+    right: -8px;
+    background: linear-gradient(135deg, #ff4757, #ff3742);
     color: white;
     border-radius: 50%;
-    min-width: 20px;
-    height: 20px;
+    min-width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
-    font-weight: bold;
-    border: 2px solid white;
+    font-size: 12px;
+    font-weight: 700;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
+    z-index: 10;
+    animation: pulse-badge 2s infinite;
+    transform: scale(1);
+    transition: all 0.3s ease;
 }
 
 .notification-dropdown {
@@ -253,17 +325,38 @@ onUnmounted(() => {
 
 .mark-all-read {
     background: none;
-    border: none;
+    border: 1px solid #007bff;
     color: #007bff;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    padding: 6px 12px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.mark-all-read::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 123, 255, 0.1), transparent);
+    transition: left 0.5s ease;
 }
 
 .mark-all-read:hover {
-    background: #e3f2fd;
+    background: #007bff;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.mark-all-read:hover::before {
+    left: 100%;
 }
 
 .notification-list {
@@ -288,16 +381,60 @@ onUnmounted(() => {
     padding: 16px 20px;
     border-bottom: 1px solid #f1f3f4;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.notification-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, rgba(0, 123, 255, 0.1), rgba(0, 123, 255, 0.05));
+    transition: width 0.3s ease;
 }
 
 .notification-item:hover {
     background: #f8f9fa;
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.notification-item:hover::before {
+    width: 100%;
 }
 
 .notification-item.unread {
-    background: #e3f2fd;
+    background: linear-gradient(90deg, #e3f2fd, #f8f9fa);
     border-left: 4px solid #007bff;
+    position: relative;
+}
+
+.notification-item.unread::after {
+    content: '';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: #007bff;
+    border-radius: 50%;
+    animation: pulse-unread 2s infinite;
+}
+
+@keyframes pulse-unread {
+    0%, 100% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: translateY(-50%) scale(1.2);
+    }
 }
 
 .notification-icon {
@@ -347,14 +484,23 @@ onUnmounted(() => {
     border: none;
     color: #adb5bd;
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    transition: all 0.2s;
+    padding: 6px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: scale(0.8);
+}
+
+.notification-item:hover .close-notification {
+    opacity: 1;
+    transform: scale(1);
 }
 
 .close-notification:hover {
-    background: #f1f3f4;
-    color: #6c757d;
+    background: #ff4757;
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(255, 71, 87, 0.3);
 }
 
 .notification-footer {

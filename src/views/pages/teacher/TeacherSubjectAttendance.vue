@@ -1,19 +1,24 @@
 <script setup>
+import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
-import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import { SubjectService } from '@/router/service/Subjects';
-import SeatingService from '@/services/SeatingService';
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
-import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
 import NotificationService from '@/services/NotificationService';
+import SeatingService from '@/services/SeatingService';
 import Calendar from 'primevue/calendar';
+import Dialog from 'primevue/dialog';
+import OverlayPanel from 'primevue/overlaypanel';
+import Menu from 'primevue/menu';
+import Tag from 'primevue/tag';
+import Textarea from 'primevue/textarea';
+import RadioButton from 'primevue/radiobutton';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 import { useRoute, useRouter } from 'vue-router';
 
-// Add OverlayPanel and Menu components
 
 // Add Dialog component if not already imported
 
@@ -46,6 +51,10 @@ const timeInterval = ref(null);
 const showTemplateManager = ref(false);
 const showTemplateSaveDialog = ref(false);
 const isEditMode = ref(false);
+
+// Loading states
+const isCompletingSession = ref(false);
+const sessionCompletionProgress = ref(0);
 
 // Seating plan configuration
 const rows = ref(9);
@@ -111,16 +120,13 @@ const initializeAttendanceSession = async () => {
         // Load attendance statuses
         attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
         console.log('Loaded attendance statuses:', attendanceStatuses.value);
-        
+
         // Check for active sessions
         const activeSessions = await AttendanceSessionService.getActiveSessionsForTeacher(teacherId.value);
         if (activeSessions && activeSessions.length > 0) {
             // Find session for current subject/section
-            const matchingSession = activeSessions.find(session => 
-                session.section_id == sectionId.value && 
-                session.subject_id == subjectId.value
-            );
-            
+            const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == subjectId.value);
+
             if (matchingSession) {
                 currentSession.value = matchingSession;
                 sessionActive.value = true;
@@ -136,17 +142,17 @@ const initializeAttendanceSession = async () => {
 const loadStudentsData = async () => {
     try {
         console.log('Loading students from database...');
-        
+
         // First get teacher assignments to determine section/subject
         const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
         console.log('Teacher assignments:', assignments);
-        
+
         if (!assignments || assignments.length === 0 || !assignments.assignments || assignments.assignments.length === 0) {
             console.warn('No assignments found for teacher, falling back to Grade 3 students');
             // Fallback to Grade 3 students if no assignments
             const studentsData = await AttendanceService.getStudentsByGrade(3);
             students.value = studentsData || [];
-            
+
             if (students.value.length > 0) {
                 const firstStudent = students.value[0];
                 sectionId.value = firstStudent.current_section_id || 13;
@@ -157,20 +163,16 @@ const loadStudentsData = async () => {
             // Use the first assignment from the assignments array
             const assignmentData = assignments.assignments[0];
             const firstSubject = assignmentData.subjects[0];
-            
+
             sectionId.value = assignmentData.section_id;
             subjectId.value = firstSubject.subject_id;
             subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
-            
+
             // Load students for this specific assignment
-            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(
-                teacherId.value,
-                sectionId.value,
-                subjectId.value
-            );
-            
+            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, subjectId.value);
+
             if (studentsResponse && studentsResponse.students) {
-                students.value = studentsResponse.students.map(student => ({
+                students.value = studentsResponse.students.map((student) => ({
                     id: student.id,
                     name: student.name || `${student.firstName} ${student.lastName}`,
                     firstName: student.firstName,
@@ -183,16 +185,19 @@ const loadStudentsData = async () => {
                 students.value = [];
             }
         }
-        
+
         console.log('Loaded students for attendance:', students.value.length);
-        console.log('Student names:', students.value.map(s => `${s.name} (ID: ${s.id})`));
-        
+        console.log(
+            'Student names:',
+            students.value.map((s) => `${s.name} (ID: ${s.id})`)
+        );
+
         // Initialize attendance session system after we have section/subject info
         await initializeAttendanceSession();
-        
+
         // Update unassigned students list
         calculateUnassignedStudents();
-        
+
         return true;
     } catch (error) {
         console.error('Error loading students:', error);
@@ -235,12 +240,7 @@ const saveCurrentLayout = async (showToast = true) => {
         };
 
         // Save to database via API
-        await SeatingService.saveSeatingArrangement(
-            sectionId.value,
-            subjectId.value,
-            teacherId.value,
-            layout
-        );
+        await SeatingService.saveSeatingArrangement(sectionId.value, subjectId.value, teacherId.value, layout);
 
         // Also save to localStorage as backup
         localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
@@ -255,7 +255,7 @@ const saveCurrentLayout = async (showToast = true) => {
         }
     } catch (error) {
         console.error('Error saving layout to database:', error);
-        
+
         // Fallback to localStorage only
         const layout = {
             rows: rows.value,
@@ -265,7 +265,7 @@ const saveCurrentLayout = async (showToast = true) => {
             showStudentIds: showStudentIds.value
         };
         localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
-        
+
         if (showToast) {
             toast.add({
                 severity: 'warn',
@@ -281,21 +281,17 @@ const saveCurrentLayout = async (showToast = true) => {
 const loadSeatingArrangementFromDatabase = async () => {
     try {
         console.log('Loading seating arrangement from database...');
-        
+
         if (!sectionId.value || !teacherId.value) {
             console.log('Missing sectionId or teacherId, falling back to localStorage');
             return loadSavedLayout();
         }
 
-        const response = await SeatingService.getSeatingArrangement(
-            sectionId.value,
-            teacherId.value,
-            subjectId.value
-        );
+        const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, subjectId.value);
 
         if (response && response.seating_layout) {
             const layout = response.seating_layout;
-            
+
             // Apply the loaded layout
             rows.value = layout.rows || rows.value;
             columns.value = layout.columns || columns.value;
@@ -309,11 +305,10 @@ const loadSeatingArrangementFromDatabase = async () => {
                 return true;
             }
         }
-        
+
         // Fallback to localStorage if database doesn't have data
         console.log('No seating arrangement in database, trying localStorage...');
         return loadSavedLayout();
-        
     } catch (error) {
         console.error('Error loading seating arrangement from database:', error);
         console.log('Falling back to localStorage...');
@@ -611,31 +606,24 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
                 // Map status to attendance status ID
                 let statusId;
                 const statusLower = status.toLowerCase();
-                
+
                 if (statusLower === 'present' || status === 1) {
-                    statusId = attendanceStatuses.value.find(s => s.code === 'P')?.id;
+                    statusId = attendanceStatuses.value.find((s) => s.code === 'P')?.id;
                 } else if (statusLower === 'absent' || status === 2) {
-                    statusId = attendanceStatuses.value.find(s => s.code === 'A')?.id;
+                    statusId = attendanceStatuses.value.find((s) => s.code === 'A')?.id;
                 } else if (statusLower === 'late' || status === 3) {
-                    statusId = attendanceStatuses.value.find(s => s.code === 'L')?.id;
+                    statusId = attendanceStatuses.value.find((s) => s.code === 'L')?.id;
                 } else if (statusLower === 'excused' || status === 4) {
-                    statusId = attendanceStatuses.value.find(s => s.code === 'E')?.id;
+                    statusId = attendanceStatuses.value.find((s) => s.code === 'E')?.id;
                 } else {
-                    statusId = attendanceStatuses.value.find(s => s.code === 'P')?.id; // Default to Present
+                    statusId = attendanceStatuses.value.find((s) => s.code === 'P')?.id; // Default to Present
                 }
 
                 if (statusId) {
-                    const attendanceData = AttendanceSessionService.formatAttendanceForAPI(
-                        studentId,
-                        statusId,
-                        remarks
-                    );
-                    
-                    const response = await AttendanceSessionService.markSessionAttendance(
-                        currentSession.value.id,
-                        [attendanceData]
-                    );
-                    
+                    const attendanceData = AttendanceSessionService.formatAttendanceForAPI(studentId, statusId, remarks);
+
+                    const response = await AttendanceSessionService.markSessionAttendance(currentSession.value.id, [attendanceData]);
+
                     console.log('Attendance saved via session system:', response);
                     return response;
                 }
@@ -643,7 +631,7 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
                 console.warn('Session attendance save failed, falling back to legacy:', sessionError);
             }
         }
-        
+
         // Get attendance status ID based on status
         const getAttendanceStatusId = (status) => {
             if (typeof status === 'number') {
@@ -651,10 +639,10 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
             }
             // Map status strings to IDs (adjust based on your attendance_statuses table)
             const statusMap = {
-                'present': 1,
-                'absent': 2, 
-                'late': 3,
-                'excused': 4
+                present: 1,
+                absent: 2,
+                late: 3,
+                excused: 4
             };
             return statusMap[status.toLowerCase()] || 1;
         };
@@ -665,17 +653,19 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
             subject_id: subjectId.value,
             teacher_id: teacherId.value,
             date: currentDate.value,
-            attendance: [{
-                student_id: studentId,
-                attendance_status_id: getAttendanceStatusId(status),
-                remarks: remarks || null
-            }]
+            attendance: [
+                {
+                    student_id: studentId,
+                    attendance_status_id: getAttendanceStatusId(status),
+                    remarks: remarks || null
+                }
+            ]
         };
 
         console.log('Saving attendance record (legacy):', attendanceData);
         const response = await TeacherAttendanceService.markAttendance(attendanceData);
         console.log('Attendance saved successfully (legacy):', response);
-        
+
         return response;
     } catch (error) {
         console.error('Error saving attendance record:', error);
@@ -831,7 +821,10 @@ const calculateUnassignedStudents = () => {
     console.log('Total students:', students.value.length);
     console.log('Assigned students:', assignedStudentIds.size);
     console.log('Unassigned students:', unassignedStudents.value.length);
-    console.log('Unassigned student names:', unassignedStudents.value.map(s => s.name));
+    console.log(
+        'Unassigned student names:',
+        unassignedStudents.value.map((s) => s.name)
+    );
 };
 
 const filteredUnassignedStudents = computed(() => {
@@ -1024,108 +1017,233 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
 
 // Start new attendance session
 const startAttendanceSession = async () => {
+    if (sessionActive.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Session Already Active',
+            detail: 'An attendance session is already in progress',
+            life: 3000
+        });
+        return;
+    }
+
+    // Show attendance method selection modal
+    showAttendanceMethodModal.value = true;
+};
+
+// Create actual session after method selection
+const createAttendanceSession = async () => {
     try {
-        if (sessionActive.value) {
-            toast.add({
-                severity: 'warn',
-                summary: 'Session Active',
-                detail: 'An attendance session is already active for this subject.',
-                life: 3000
-            });
-            return;
-        }
-        
         const sessionData = {
             teacherId: teacherId.value,
             sectionId: sectionId.value,
             subjectId: subjectId.value,
             date: currentDate.value,
-            startTime: new Date().toTimeString().split(' ')[0],
+            startTime: new Date().toTimeString().split(' ')[0], // Current time in HH:MM:SS format
             type: 'regular',
-            metadata: {
-                seatingArrangement: true,
-                qrCodeEnabled: true
-            }
+            metadata: {}
         };
-        
+
+        console.log('Creating session with data:', sessionData);
         const response = await AttendanceSessionService.createSession(sessionData);
+        console.log('Session created:', response);
+
         currentSession.value = response.session;
         sessionActive.value = true;
-        
+
         toast.add({
             severity: 'success',
             summary: 'Session Started',
-            detail: 'Attendance session started successfully',
+            detail: 'Attendance session has been started successfully',
             life: 3000
         });
-        
-        console.log('Started attendance session:', response.session);
+
+        // Clear any cached attendance data for today
+        const today = currentDate.value;
+        const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
+        localStorage.removeItem(cacheKey);
+        scannedStudents.value = [];
+
     } catch (error) {
-        console.error('Error starting attendance session:', error);
-        
-        // Handle specific error types
-        let errorMessage = 'Failed to start attendance session';
-        let severity = 'error';
-        
-        if (error.response?.status === 409) {
-            // Conflict - session already exists
-            const responseData = error.response.data;
-            if (responseData.message) {
-                errorMessage = responseData.message;
-                severity = 'warn';
-            }
-            
-            // If there's an existing active session, use it
-            if (responseData.session) {
-                currentSession.value = responseData.session;
-                sessionActive.value = true;
-                errorMessage = 'Resumed existing active session';
-                severity = 'info';
-            }
-        } else if (error.response?.data?.details) {
-            errorMessage = error.response.data.details;
-        }
-        
+        console.error('Error starting session:', error);
         toast.add({
-            severity: severity,
-            summary: severity === 'info' ? 'Session Resumed' : 'Session Error',
-            detail: errorMessage,
+            severity: 'error',
+            summary: 'Error',
+            detail: error.message || 'Failed to start attendance session',
             life: 5000
         });
     }
 };
 
+// Calculate session statistics from current seat plan
+const calculateSessionStatistics = () => {
+    let totalStudents = 0;
+    let presentCount = 0;
+    let absentCount = 0;
+    let lateCount = 0;
+    let excusedCount = 0;
+    let markedCount = 0;
+
+    // Count students and their statuses from seat plan
+    seatPlan.value.forEach(row => {
+        row.forEach(seat => {
+            if (seat.isOccupied && seat.studentId) {
+                totalStudents++;
+                
+                if (seat.status) {
+                    markedCount++;
+                    switch (seat.status) {
+                        case 'Present':
+                            presentCount++;
+                            break;
+                        case 'Absent':
+                            absentCount++;
+                            break;
+                        case 'Late':
+                            lateCount++;
+                            break;
+                        case 'Excused':
+                            excusedCount++;
+                            break;
+                    }
+                }
+            }
+        });
+    });
+
+    // Calculate attendance rate
+    const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+    return {
+        total_students: totalStudents,
+        marked_students: markedCount,
+        present_count: presentCount,
+        absent_count: absentCount,
+        late_count: lateCount,
+        excused_count: excusedCount,
+        attendance_rate: attendanceRate,
+        session_date: currentDate.value,
+        subject_name: subjectName.value || 'Subject',
+        session_duration: sessionActive.value ? 'Active' : 'Completed'
+    };
+};
+
+// Method selection functions
+const selectSeatPlanMethod = async () => {
+    await createAttendanceSession();
+    showAttendanceMethodModal.value = false;
+};
+
+const selectRollCallMethod = async () => {
+    await createAttendanceSession();
+    showAttendanceMethodModal.value = false;
+    startRollCall();
+};
+
+const selectQRMethod = async () => {
+    await createAttendanceSession();
+    showAttendanceMethodModal.value = false;
+    startQRScanner();
+};
+
 // Complete attendance session
 const completeAttendanceSession = async () => {
-    try {
-        if (!sessionActive.value || !currentSession.value) {
-            toast.add({
-                severity: 'warn',
-                summary: 'No Active Session',
-                detail: 'No active attendance session to complete.',
-                life: 3000
-            });
-            return;
+    if (!sessionActive.value || !currentSession.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'No Active Session',
+            detail: 'No active attendance session to complete.',
+            life: 3000
+        });
+        return;
+    }
+
+    // Start loading animation
+    isCompletingSession.value = true;
+    sessionCompletionProgress.value = 0;
+
+    // Start progressive animation that runs parallel to API calls
+    const progressInterval = setInterval(() => {
+        if (sessionCompletionProgress.value < 85) {
+            sessionCompletionProgress.value += Math.random() * 1.5 + 0.5; // Slower increment 0.5-2%
         }
+    }, 150); // Slower interval
+
+    try {
+        // Step 1: Initial progress
+        sessionCompletionProgress.value = 10;
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // Step 2: Start API call
+        sessionCompletionProgress.value = 25;
+        await new Promise(resolve => setTimeout(resolve, 600));
         
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+        
+        // Step 3: Process response
+        sessionCompletionProgress.value = 60;
+        await new Promise(resolve => setTimeout(resolve, 700));
+        
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
+
+        // Step 4: Prepare modal data
+        sessionCompletionProgress.value = 80;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 5: Prepare modal (keep loading visible)
+        sessionCompletionProgress.value = 95;
         
-        // Show completion modal and save session data
-        saveCompletedSession(response.summary);
+        // Save session data but don't show modal yet
+        const today = new Date().toISOString().split('T')[0];
+        const completionKey = `attendance_completion_${today}`;
+        const completionData = {
+            timestamp: new Date().toISOString(),
+            sessionData: response.summary
+        };
+        localStorage.setItem(completionKey, JSON.stringify(completionData));
+        completedSessionData.value = response.summary;
         
+        // Add notification
+        console.log('Adding session completion notification:', response.summary);
+        const notification = NotificationService.addSessionCompletionNotification(response.summary);
+        console.log('Notification added:', notification);
+        
+        // Step 6: Final completion
+        sessionCompletionProgress.value = 100;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Clear interval and hide loading
+        clearInterval(progressInterval);
+        isCompletingSession.value = false;
+        sessionCompletionProgress.value = 0;
+        
+        // Show modal immediately
+        showCompletionModal.value = true;
+        modalDismissedToday.value = false;
+        localStorage.removeItem(`completion_dismissed_${today}`);
+        setupMidnightTimer();
+        setupAutoHideTimer();
+
         toast.add({
             severity: 'success',
             summary: 'Session Completed',
             detail: `Attendance session completed. ${response.summary?.total_students || 0} students processed.`,
             life: 5000
         });
-        
+
         console.log('Completed attendance session:', response);
+
     } catch (error) {
+        // Clear interval on error
+        clearInterval(progressInterval);
         console.error('Error completing attendance session:', error);
+        
+        // Hide loading on error
+        isCompletingSession.value = false;
+        sessionCompletionProgress.value = 0;
+        
         toast.add({
             severity: 'error',
             summary: 'Session Error',
@@ -1142,7 +1260,7 @@ const markAllPresent = () => {
             row.forEach((seat) => {
                 if (seat.isOccupied && seat.studentId) {
                     seat.status = 1; // Present status
-                    
+
                     // Update attendance records
                     const recordKey = `${seat.studentId}-${currentDate.value}`;
                     attendanceRecords.value[recordKey] = {
@@ -1343,15 +1461,12 @@ watch(
 // Store interval reference for cleanup
 let refreshInterval = null;
 
-// Initialize data on component mount
-onMounted(async () => {
+// Initialize component data and setup
+const initializeComponent = async () => {
     try {
         // Get subject ID from route params
         if (route.params.subjectId) {
             subjectId.value = route.params.subjectId;
-
-            // Format subject name from ID
-            subjectName.value = formatSubjectName(subjectId.value);
 
             // Try to fetch actual subject data
             try {
@@ -1366,7 +1481,7 @@ onMounted(async () => {
 
         // Load students directly from Grade 3 API to match dashboard
         await loadStudentsData();
-        
+
         // Set up auto-refresh to catch new enrollments (store reference for cleanup)
         refreshInterval = setInterval(async () => {
             console.log('Auto-refreshing student data...');
@@ -1446,12 +1561,25 @@ onMounted(async () => {
                 applyAttendanceStatusesToSeatPlan();
             }
         }
-    } catch (error) {
-        console.error('Error initializing data:', error);
-    }
 
-    // Check for completed sessions on mount
-    checkCompletedSessionPersistence();
+        // Check for completed sessions on mount
+        checkCompletedSessionPersistence();
+    } catch (error) {
+        console.error('Error initializing component:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Initialization Error',
+            detail: 'Failed to initialize component properly',
+            life: 5000
+        });
+    }
+};
+
+// Initialize component when mounted
+onMounted(async () => {
+    await initializeComponent();
+    // Load today's attendance from database after component initialization
+    await loadTodayAttendanceFromDatabase();
 });
 
 // Function to check for and load cached attendance data for a specific date
@@ -1546,18 +1674,32 @@ const loadCachedAttendanceData = () => {
 
 // Show status selection dialog
 const showStatusSelection = (rowIndex, colIndex) => {
-    // Store the selected seat for reference in the status selection handler
-    selectedSeat.value = { rowIndex, colIndex };
+    const seat = seatPlan.value[rowIndex][colIndex];
 
-    // Open the status selection dialog
-    showAttendanceDialog.value = true;
+    // Find the student data
+    const student = students.value.find(s => s.id === seat.studentId);
+
+    if (!student) {
+        console.error('Student not found for seat:', rowIndex, colIndex);
+        return;
+    }
+
+    // Store the selected seat with student data for reference
+    selectedSeat.value = {
+        rowIndex,
+        colIndex,
+        student: student,
+        status: seat.status
+    };
+
+    console.log('Opening status selection dialog for seat:', rowIndex, colIndex, 'Student:', student.name, 'Current status:', seat.status);
+
+    // Show the status selection dialog
+    showStatusDialog.value = true;
 
     // Clear any pending status/remarks
-    pendingStatus.value = '';
+    pendingStatus.value = seat.status || '';
     attendanceRemarks.value = '';
-
-    // Log for debugging
-    console.log('Opening status selection dialog for seat:', rowIndex, colIndex, 'Student:', seatPlan.value[rowIndex][colIndex].studentId, 'Current status:', seatPlan.value[rowIndex][colIndex].status);
 };
 
 // Function to handle drag start
@@ -1705,12 +1847,72 @@ const sortedUnassignedStudents = computed(() => {
     });
 });
 
-// Function to show attendance dialog when clicking a seat
-const handleSeatClick = (rowIndex, colIndex) => {
-    if (!isEditMode.value && seatPlan.value[rowIndex][colIndex].isOccupied) {
-        selectedSeat.value = { rowIndex, colIndex };
-        showAttendanceDialog.value = true;
+// Handle seat click - cycle through attendance statuses
+const handleSeatClick = async (rowIndex, colIndex) => {
+    const seat = seatPlan.value[rowIndex][colIndex];
+    if (!seat.isOccupied) return;
+
+    // Check if session is active
+    if (!sessionActive.value) {
+        // Show attendance method selection modal instead
+        showAttendanceMethodModal.value = true;
+        return;
     }
+
+    // Cycle through attendance statuses: null -> Present -> Absent -> Late -> Excused -> null
+    const statusCycle = [null, 'Present', 'Absent', 'Late', 'Excused'];
+    const currentIndex = statusCycle.indexOf(seat.status);
+    const nextIndex = (currentIndex + 1) % statusCycle.length;
+    const newStatus = statusCycle[nextIndex];
+
+    // Update seat plan immediately
+    seatPlan.value[rowIndex][colIndex].status = newStatus;
+
+    // Save to database if status is not null
+    if (newStatus) {
+        try {
+            const student = students.value.find(s => s.id === seat.studentId);
+            if (student) {
+                await saveAttendanceToDatabase(student.id, newStatus, '');
+                
+                toast.add({
+                    severity: 'success',
+                    summary: 'Attendance Updated',
+                    detail: `${student.name} marked as ${newStatus}`,
+                    life: 2000
+                });
+            }
+        } catch (error) {
+            console.error('Error saving attendance:', error);
+            // Revert the change if save failed
+            seatPlan.value[rowIndex][colIndex].status = statusCycle[currentIndex];
+            
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to save attendance',
+                life: 3000
+            });
+        }
+    } else {
+        // Status is null - just show cleared message
+        const student = students.value.find(s => s.id === seat.studentId);
+        if (student) {
+            toast.add({
+                severity: 'info',
+                summary: 'Status Cleared',
+                detail: `${student.name} attendance cleared`,
+                life: 2000
+            });
+        }
+    }
+};
+
+const showStartSessionConfirmation = () => {
+    return new Promise((resolve) => {
+        const confirmed = confirm('No active session found. Would you like to start a new attendance session?');
+        resolve(confirmed);
+    });
 };
 
 // Function to set attendance status
@@ -1777,15 +1979,22 @@ const openAttendanceMethodDialog = () => {
     console.log('Opening attendance method dialog', showAttendanceMethodModal.value);
 };
 
-// Simplified QR scanner functions using vue-qrcode-reader
+// Enhanced QR scanner with gate log functionality
+const qrScanLog = ref([]);
+const qrScanResults = ref([]);
+const cameraInitialized = ref(false);
+
 const startQRScanner = () => {
-    // Close the method selection dialog and show QR scanner
-    showAttendanceMethodModal.value = false;
     showQRScanner.value = true;
     showRollCall.value = false;
     scanning.value = true;
 
-    console.log('Starting QR scanner...');
+    // Clear previous results
+    qrScanResults.value = [];
+    qrScanLog.value = [];
+
+    // Initialize camera
+    initializeCamera();
 
     toast.add({
         severity: 'info',
@@ -1859,13 +2068,329 @@ const restartCamera = () => {
     }, 500);
 };
 
+// Enhanced QR decode handler with gate log
+const onQRDecode = async (decodedText) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log('QR Code decoded:', decodedText);
+
+    try {
+        // Parse the QR code data (assuming it contains student ID)
+        const studentId = parseInt(decodedText);
+
+        // Add to scan log
+        qrScanLog.value.unshift({
+            timestamp,
+            message: `Scanned QR Code: ${decodedText}`,
+            success: true
+        });
+
+        // Find the student
+        const student = students.value.find(s => s.id === studentId);
+
+        if (student) {
+            // Check if already scanned
+            const existingIndex = qrScanResults.value.findIndex(s => s.studentId === studentId);
+
+            if (existingIndex === -1) {
+                // New scan - mark as present
+                qrScanResults.value.push({
+                    id: studentId,
+                    studentId: studentId,
+                    name: student.name,
+                    status: 'Present',
+                    scannedAt: new Date().toISOString()
+                });
+
+                // Save attendance record
+                await saveAttendanceRecord(studentId, 'Present', 'QR Code scan');
+
+                // Update seat plan if student has a seat
+                const seat = findSeatByStudentId(studentId);
+                if (seat) {
+                    seat.status = 'Present';
+                }
+
+                // Add success log
+                qrScanLog.value.unshift({
+                    timestamp,
+                    message: `✓ ${student.name} marked as Present`,
+                    success: true
+                });
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Student Scanned',
+                    detail: `${student.name} marked as Present`,
+                    life: 2000
+                });
+            } else {
+                // Already scanned
+                qrScanLog.value.unshift({
+                    timestamp,
+                    message: `⚠ ${student.name} already scanned`,
+                    success: false
+                });
+
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Already Scanned',
+                    detail: `${student.name} has already been scanned`,
+                    life: 2000
+                });
+            }
+        } else {
+            // Student not found
+            qrScanLog.value.unshift({
+                timestamp,
+                message: `✗ Student ID ${studentId} not found`,
+                success: false
+            });
+
+            toast.add({
+                severity: 'error',
+                summary: 'Student Not Found',
+                detail: `No student found with ID: ${studentId}`,
+                life: 3000
+            });
+        }
+    } catch (error) {
+        console.error('Error processing QR code:', error);
+
+        qrScanLog.value.unshift({
+            timestamp,
+            message: `✗ Invalid QR code format: ${decodedText}`,
+            success: false
+        });
+
+        toast.add({
+            severity: 'error',
+            summary: 'QR Code Error',
+            detail: 'Invalid QR code format',
+            life: 3000
+        });
+    }
+};
+
+const onCameraInit = async (promise) => {
+    try {
+        await promise;
+        cameraInitialized.value = true;
+        cameraError.value = null;
+
+        qrScanLog.value.unshift({
+            timestamp: new Date().toLocaleTimeString(),
+            message: '📷 Camera initialized successfully',
+            success: true
+        });
+    } catch (error) {
+        console.error('Camera initialization failed:', error);
+        cameraError.value = 'Failed to access camera. Please check permissions.';
+        cameraInitialized.value = false;
+
+        qrScanLog.value.unshift({
+            timestamp: new Date().toLocaleTimeString(),
+            message: '✗ Camera initialization failed',
+            success: false
+        });
+    }
+};
+
+const completeQRSession = async () => {
+    try {
+        // Complete the session and show completion modal
+        const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+        saveCompletedSession(response.summary);
+        sessionActive.value = false;
+        currentSession.value = null;
+
+        // Close QR scanner
+        showQRScanner.value = false;
+
+        toast.add({
+            severity: 'success',
+            summary: 'QR Session Complete',
+            detail: `${qrScanResults.value.length} students scanned and session completed`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error completing QR session:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to complete session',
+            life: 3000
+        });
+    }
+};
+
+// Save attendance status from dialog with database integration
+const saveAttendanceStatus = async () => {
+    if (!pendingStatus.value || !selectedSeat.value) return;
+
+    try {
+        const student = selectedSeat.value.student;
+        const rowIndex = selectedSeat.value.rowIndex;
+        const colIndex = selectedSeat.value.colIndex;
+
+        // Save to database via API
+        const attendanceData = {
+            student_id: student.id,
+            status: pendingStatus.value.toLowerCase(), // Convert to lowercase for database
+            remarks: attendanceRemarks.value || '',
+            date: currentDate.value
+        };
+
+        // Use the teacher attendance service to mark attendance
+        await TeacherAttendanceService.markAttendance(attendanceData);
+
+        // Update seat plan
+        seatPlan.value[rowIndex][colIndex].status = pendingStatus.value;
+
+        // Refresh attendance data from database to ensure consistency
+        await loadTodayAttendanceFromDatabase();
+
+        // Close dialog and reset
+        showStatusDialog.value = false;
+        pendingStatus.value = '';
+        attendanceRemarks.value = '';
+        selectedSeat.value = null;
+
+        toast.add({
+            severity: 'success',
+            summary: 'Status Updated',
+            detail: `${student.name} marked as ${pendingStatus.value}`,
+            life: 3000
+        });
+
+    } catch (error) {
+        console.error('Error saving attendance status:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.message || 'Failed to save attendance status',
+            life: 3000
+        });
+    }
+};
+
+// Save attendance to session-based database
+const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
+    try {
+        if (!currentSession.value || !currentSession.value.id) {
+            throw new Error('No active session found');
+        }
+
+        // Map status names to attendance_status_id (assuming standard IDs)
+        const statusMapping = {
+            'Present': 1,
+            'Absent': 2, 
+            'Late': 3,
+            'Excused': 4
+        };
+
+        const attendanceStatusId = statusMapping[status];
+        if (!attendanceStatusId) {
+            throw new Error(`Invalid status: ${status}`);
+        }
+
+        // Use session-based attendance API
+        const attendanceData = {
+            student_id: parseInt(studentId),
+            attendance_status_id: attendanceStatusId,
+            arrival_time: new Date().toTimeString().split(' ')[0],
+            remarks: remarks || null,
+            marking_method: 'manual'
+        };
+
+        console.log('Saving session attendance with data:', attendanceData);
+        const response = await AttendanceSessionService.markSessionAttendance(currentSession.value.id, [attendanceData]);
+        console.log('Session attendance saved successfully:', response);
+        
+        return response;
+    } catch (error) {
+        console.error('Error saving session attendance to database:', error);
+        throw error;
+    }
+};
+
+// Load attendance data from database for today
+const loadTodayAttendanceFromDatabase = async () => {
+    try {
+        const today = currentDate.value;
+        console.log('Loading attendance from database for date:', today);
+
+        // Fetch students with their attendance data from API
+        const response = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, subjectId.value);
+
+        if (response && response.students) {
+            // Clear existing attendance records and rebuild from database
+            attendanceRecords.value = {};
+
+            // Apply attendance status to seat plan and rebuild attendance records
+            response.students.forEach(student => {
+                // Check if student has attendance for today
+                const todayAttendance = student.attendance?.find(a => a.date === today);
+
+                if (todayAttendance) {
+                    // Update attendance records object
+                    const recordKey = `${student.id}-${today}`;
+                    attendanceRecords.value[recordKey] = {
+                        studentId: student.id,
+                        date: today,
+                        status: todayAttendance.status,
+                        remarks: todayAttendance.remarks || '',
+                        timestamp: todayAttendance.marked_at || new Date().toISOString()
+                    };
+                }
+
+                // Find and update the student's seat in the seat plan
+                for (let i = 0; i < seatPlan.value.length; i++) {
+                    for (let j = 0; j < seatPlan.value[i].length; j++) {
+                        if (seatPlan.value[i][j].studentId === student.id) {
+                            seatPlan.value[i][j].status = todayAttendance?.status || null;
+                            break;
+                        }
+                    }
+                }
+            });
+
+            console.log('Loaded attendance records from database:', attendanceRecords.value);
+        }
+
+    } catch (error) {
+        console.error('Error loading attendance from database:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Database Error',
+            detail: 'Failed to load attendance data from database',
+            life: 3000
+        });
+    }
+};
+
+// Helper function to get status severity for PrimeVue Tag component
+const getStatusSeverity = (status) => {
+    switch (status?.toLowerCase()) {
+        case 'present':
+            return 'success';
+        case 'absent':
+            return 'danger';
+        case 'late':
+            return 'warning';
+        case 'excused':
+            return 'info';
+        default:
+            return 'secondary';
+    }
+};
+
 const processQRCode = async (qrData) => {
     try {
         console.log('Processing QR code:', qrData);
 
         // Validate QR code using the backend API
         const validationResponse = await QRCodeAPIService.validateQRCode(qrData.trim());
-        
+
         if (!validationResponse.valid) {
             throw new Error('Invalid QR code or QR code not registered');
         }
@@ -1977,8 +2502,19 @@ const markRollCallStatus = (status) => {
 };
 
 // Update the roll call attendance marking function
-const markRollCallAttendance = (status) => {
+const markRollCallAttendance = async (status) => {
     if (!currentStudent.value) return;
+
+    // Check if session is active
+    if (!sessionActive.value) {
+        // Show confirmation dialog to start session
+        const confirmed = await showStartSessionConfirmation();
+        if (confirmed) {
+            await startAttendanceSession();
+        } else {
+            return;
+        }
+    }
 
     // For Absent or Excused, show remarks dialog
     if (status === 'Absent' || status === 'Excused') {
@@ -1993,7 +2529,7 @@ const markRollCallAttendance = (status) => {
     if (foundSeat) {
         foundSeat.status = status;
     }
-    
+
     // Save attendance record
     const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
     attendanceRecords.value[recordKey] = {
@@ -2003,11 +2539,11 @@ const markRollCallAttendance = (status) => {
         remarks: '',
         timestamp: new Date().toISOString()
     };
-    
+
     // Save to localStorage and database
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
     saveAttendanceRecord(currentStudent.value.id, status, '');
-    
+
     nextStudent();
 };
 
@@ -2024,19 +2560,36 @@ const findSeatByStudentId = (studentId) => {
 };
 
 // Helper function to move to next student in roll call
-const nextStudent = () => {
+const nextStudent = async () => {
     currentStudentIndex.value++;
     if (currentStudentIndex.value < students.value.length) {
         currentStudent.value = students.value[currentStudentIndex.value];
     } else {
-        // End roll call
+        // End roll call and complete session
         showRollCall.value = false;
-        toast.add({
-            severity: 'success',
-            summary: 'Roll Call Complete',
-            detail: 'Roll call has been completed',
-            life: 3000
-        });
+
+        try {
+            // Complete the session and show completion modal
+            const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+            saveCompletedSession(response.summary);
+            sessionActive.value = false;
+            currentSession.value = null;
+
+            toast.add({
+                severity: 'success',
+                summary: 'Roll Call Complete',
+                detail: 'All students processed and session completed',
+                life: 3000
+            });
+        } catch (error) {
+            console.error('Error completing session:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to complete session',
+                life: 3000
+            });
+        }
     }
 };
 
@@ -2057,7 +2610,7 @@ const saveRollCallRemarks = () => {
     if (foundSeat) {
         foundSeat.status = pendingRollCallStatus.value;
     }
-    
+
     // Save attendance record
     const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
     attendanceRecords.value[recordKey] = {
@@ -2067,21 +2620,21 @@ const saveRollCallRemarks = () => {
         remarks: rollCallRemarks.value,
         timestamp: new Date().toISOString()
     };
-    
+
     // Update remarks panel if needed
     if (pendingRollCallStatus.value === 'Absent' || pendingRollCallStatus.value === 'Excused') {
         updateRemarksPanel(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
     }
-    
+
     // Save to localStorage and database
     localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
     saveAttendanceRecord(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
-    
+
     // Reset dialog values
     showRollCallRemarksDialog.value = false;
     rollCallRemarks.value = '';
     pendingRollCallStatus.value = '';
-    
+
     nextStudent();
 };
 
@@ -2116,15 +2669,15 @@ const checkCompletedSessionPersistence = () => {
     const today = new Date().toISOString().split('T')[0];
     const completionKey = `attendance_completion_${today}`;
     const dismissKey = `completion_dismissed_${today}`;
-    
+
     const completionData = localStorage.getItem(completionKey);
     const isDismissed = localStorage.getItem(dismissKey) === 'true';
-    
+
     if (completionData && !isDismissed) {
         const data = JSON.parse(completionData);
         const completionTime = new Date(data.timestamp);
         const now = new Date();
-        
+
         // Check if it's still the same day and before 11:59 PM
         if (completionTime.toDateString() === now.toDateString() && now.getHours() < 24) {
             completedSessionData.value = data.sessionData;
@@ -2137,26 +2690,26 @@ const checkCompletedSessionPersistence = () => {
 const saveCompletedSession = (sessionData) => {
     const today = new Date().toISOString().split('T')[0];
     const completionKey = `attendance_completion_${today}`;
-    
+
     const completionData = {
         timestamp: new Date().toISOString(),
         sessionData: sessionData
     };
-    
+
     localStorage.setItem(completionKey, JSON.stringify(completionData));
     completedSessionData.value = sessionData;
-    
+
     // Add notification to the system
     NotificationService.addSessionCompletionNotification(sessionData);
-    
+
     // Show modal after 5-10 seconds delay as requested
     setTimeout(() => {
         showCompletionModal.value = true;
         modalDismissedToday.value = false;
-        
+
         // Clear any previous dismissal
         localStorage.removeItem(`completion_dismissed_${today}`);
-        
+
         setupMidnightTimer();
         setupAutoHideTimer();
     }, 7000); // 7 second delay
@@ -2175,13 +2728,13 @@ const setupMidnightTimer = () => {
     if (completionModalTimer.value) {
         clearTimeout(completionModalTimer.value);
     }
-    
+
     const now = new Date();
     const midnight = new Date();
     midnight.setHours(23, 59, 59, 999);
-    
+
     const timeUntilMidnight = midnight.getTime() - now.getTime();
-    
+
     if (timeUntilMidnight > 0) {
         completionModalTimer.value = setTimeout(() => {
             hideCompletionModal();
@@ -2236,7 +2789,7 @@ const handleStartNewSession = async () => {
         // If no active session, hide modal and start new session
         showCompletionModal.value = false;
         modalDismissedToday.value = true;
-        
+
         // Start new session logic here
         toast.add({
             severity: 'success',
@@ -2255,7 +2808,7 @@ const hideCompletionModal = () => {
 const getStatusLabel = (statusId) => {
     const statusMap = {
         1: 'Present',
-        2: 'Absent', 
+        2: 'Absent',
         3: 'Late',
         4: 'Excused'
     };
@@ -2412,28 +2965,30 @@ const isDropTarget = ref(false);
 <template>
     <div class="attendance-container p-4">
         <!-- Header with title and date/time -->
-        <div class="header-section flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2 class="text-2xl font-bold text-gray-800 mb-2">{{ subjectName }} Attendance</h2>
-                <div class="text-sm text-gray-600 flex align-items-center gap-3">
-                    <div class="flex align-items-center">
-                        <i class="pi pi-calendar mr-2"></i>
-                        <Calendar v-model="currentDate" dateFormat="yy-mm-dd" :showIcon="true" />
-                    </div>
-                    <!-- Session Status Indicator -->
-                    <div v-if="sessionActive" class="flex align-items-center text-green-600">
-                        <i class="pi pi-circle-fill mr-1 text-xs"></i>
-                        <span class="text-sm font-semibold">Session Active</span>
-                    </div>
-                    <div v-else class="flex align-items-center text-gray-500">
-                        <i class="pi pi-circle mr-1 text-xs"></i>
-                        <span class="text-sm">No Active Session</span>
+        <div class="header-section mb-4">
+            <div class="flex justify-content-between align-items-start">
+                <div class="header-left">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-3">{{ subjectName }} Attendance</h2>
+                    <div class="header-info flex align-items-center gap-4">
+                        <div class="calendar-section flex align-items-center gap-2 text-sm text-gray-600">
+                            <i class="pi pi-calendar text-gray-500"></i>
+                            <Calendar v-model="currentDate" dateFormat="yy-mm-dd" :showIcon="false" />
+                        </div>
+                        <!-- Session Status Indicator -->
+                        <div v-if="sessionActive" class="session-status active">
+                            <i class="pi pi-circle-fill"></i>
+                            <span>ACTIVE SESSION</span>
+                        </div>
+                        <div v-else class="session-status inactive">
+                            <i class="pi pi-circle"></i>
+                            <span>NO ACTIVE SESSION</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="date-time-display">
-                <div class="date">{{ new Date().toLocaleDateString() }}</div>
-                <div class="time">{{ currentDateTime.toLocaleTimeString() }}</div>
+                <div class="date-time-display">
+                    <div class="date">{{ new Date().toLocaleDateString() }}</div>
+                    <div class="time">{{ currentDateTime.toLocaleTimeString() }}</div>
+                </div>
             </div>
         </div>
 
@@ -2446,12 +3001,31 @@ const isDropTarget = ref(false);
             <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
 
             <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" />
-            
-            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" />
-            
-            <Button icon="pi pi-stop" label="Complete Session" class="p-button-warning" @click="completeAttendanceSession" v-if="sessionActive" />
 
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" />
+            <Button 
+                icon="pi pi-check-circle" 
+                label="Mark All Present" 
+                class="p-button-success" 
+                @click="markAllPresent" 
+                :disabled="isCompletingSession"
+            />
+
+            <Button 
+                :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'" 
+                :label="isCompletingSession ? 'Completing...' : 'Complete Session'" 
+                class="p-button-warning" 
+                @click="completeAttendanceSession" 
+                v-if="sessionActive"
+                :disabled="isCompletingSession"
+            />
+
+            <Button 
+                icon="pi pi-refresh" 
+                label="Reset Attendance" 
+                class="p-button-outlined" 
+                @click="resetAllAttendance" 
+                :disabled="isCompletingSession"
+            />
 
             <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
         </div>
@@ -2507,7 +3081,7 @@ const isDropTarget = ref(false);
 
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
-                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1" @click="!isEditMode ? handleSeatClick(rowIndex, colIndex) : null">
+                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
                                 <div
                                     :class="[
                                         'seat p-3 border rounded-lg',
@@ -2520,7 +3094,7 @@ const isDropTarget = ref(false);
                                         { 'student-occupied': seat.isOccupied },
                                         { removable: isEditMode && seat.isOccupied }
                                     ]"
-                                    @click="isEditMode ? (seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null) : showStatusSelection(rowIndex, colIndex)"
+                                    @click="isEditMode ? (seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null) : handleSeatClick(rowIndex, colIndex)"
                                     @dragover="allowDrop($event)"
                                     @drop="dropOnSeat(rowIndex, colIndex)"
                                 >
@@ -2705,11 +3279,11 @@ const isDropTarget = ref(false);
                 <h3 class="text-lg font-medium mb-4">How would you like to take attendance?</h3>
 
                 <div class="flex flex-col gap-4">
-                    <Button icon="pi pi-users" label="Seat Plan" class="p-button-outlined" @click="showAttendanceMethodModal = false" />
+                    <Button icon="pi pi-users" label="Seat Plan" class="p-button-outlined" @click="selectSeatPlanMethod" />
 
-                    <Button icon="pi pi-list" label="Roll Call" class="p-button-outlined" @click="startRollCall" />
+                    <Button icon="pi pi-list" label="Roll Call" class="p-button-outlined" @click="selectRollCallMethod" />
 
-                    <Button icon="pi pi-camera" label="QR Scanner" class="p-button-outlined" @click="startQRScanner" />
+                    <Button icon="pi pi-qrcode" label="QR Code Scanner" class="p-button-outlined" @click="selectQRMethod" />
                 </div>
             </div>
         </Dialog>
@@ -2757,44 +3331,127 @@ const isDropTarget = ref(false);
             </template>
         </Dialog>
 
-        <!-- QR Scanner Dialog -->
-        <Dialog v-model:visible="showQRScanner" modal header="QR Code Scanner" :style="{ width: '50vw' }" :closable="false">
-            <div class="qr-scanner-container">
-                <div v-if="cameraError" class="text-center p-4">
-                    <i class="pi pi-exclamation-triangle text-4xl text-red-500 mb-3"></i>
-                    <p class="text-red-600 mb-3">{{ cameraError }}</p>
-                    <Button label="Try Again" icon="pi pi-refresh" @click="initializeCamera" />
-                </div>
-                <div v-else-if="scanning" class="scanner-container">
-                    <QrcodeStream @detect="onQRDetect" @error="onQRError" />
-                    <div class="text-center mt-3">
-                        <p class="text-sm text-gray-600 mb-2">Position QR code within the frame</p>
-                        <Button label="Stop Scanning" icon="pi pi-stop" class="p-button-danger p-button-sm" @click="stopScanning" />
+        <!-- Enhanced QR Scanner Dialog with Gate Log -->
+        <Dialog v-model:visible="showQRScanner" modal header="QR Code Attendance Scanner" :style="{ width: '80vw', height: '80vh' }" :closable="false">
+            <div class="qr-scanner-layout grid">
+                <!-- Camera Section -->
+                <div class="col-6">
+                    <div class="qr-camera-section">
+                        <h4 class="text-lg font-semibold mb-3">Camera Feed</h4>
+
+                        <div v-if="cameraError" class="text-center p-4 border-2 border-dashed border-red-300 rounded-lg">
+                            <i class="pi pi-exclamation-triangle text-4xl text-red-500 mb-3"></i>
+                            <p class="text-red-600 mb-3">{{ cameraError }}</p>
+                            <Button label="Try Again" icon="pi pi-refresh" @click="initializeCamera" />
+                        </div>
+
+                        <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden">
+                            <QrcodeStream v-if="!scanning" @decode="onQRDecode" @init="onCameraInit" class="qr-scanner w-full h-64" />
+                            <div v-if="scanning" class="scanner-paused h-64 bg-gray-100">
+                                <i class="pi pi-pause-circle text-4xl mb-2"></i>
+                                <p>Scanner Paused</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 flex gap-2">
+                            <Button :label="scanning ? 'Resume' : 'Pause'" :icon="scanning ? 'pi pi-play' : 'pi pi-pause'" @click="toggleScanning" />
+                            <Button label="Complete Session" icon="pi pi-check" class="p-button-success" @click="completeQRSession" />
+                            <Button label="Close Scanner" icon="pi pi-times" class="p-button-secondary" @click="stopQRScanner" />
+                        </div>
                     </div>
                 </div>
-                <div v-else class="scanner-paused text-center p-4">
-                    <i class="pi pi-camera text-4xl text-gray-400 mb-3"></i>
-                    <p class="text-gray-600 mb-3">Scanner paused</p>
-                    <Button label="Start Scanning" icon="pi pi-play" @click="startScanning" />
-                </div>
-                
-                <!-- Scanned Students List -->
-                <div v-if="scannedStudents.length > 0" class="mt-4">
-                    <h4 class="text-lg font-semibold mb-2">Scanned Students ({{ scannedStudents.length }})</h4>
-                    <div class="max-h-32 overflow-y-auto">
-                        <div v-for="student in scannedStudents" :key="student.id" class="flex justify-content-between align-items-center p-2 border-bottom-1 surface-border">
-                            <span>{{ student.name }}</span>
-                            <Tag :value="student.status" :severity="getStatusSeverity(student.status)" />
+
+                <!-- Results & Log Section -->
+                <div class="col-6">
+                    <div class="qr-results-section">
+                        <!-- Scan Results -->
+                        <div class="mb-4">
+                            <h4 class="text-lg font-semibold mb-3">Attendance Results ({{ qrScanResults.length }})</h4>
+                            <div class="max-h-32 overflow-y-auto border rounded-lg">
+                                <div v-if="qrScanResults.length === 0" class="p-3 text-center text-gray-500">No students scanned yet</div>
+                                <div v-for="result in qrScanResults" :key="result.id" class="flex justify-content-between align-items-center p-2 border-bottom-1 surface-border">
+                                    <div>
+                                        <div class="font-semibold">{{ result.name }}</div>
+                                        <div class="text-sm text-gray-600">ID: {{ result.studentId }}</div>
+                                    </div>
+                                    <Tag :value="result.status" :severity="getStatusSeverity(result.status)" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gate Log -->
+                        <div>
+                            <h4 class="text-lg font-semibold mb-3">Scan Log ({{ qrScanLog.length }})</h4>
+                            <div class="max-h-40 overflow-y-auto border rounded-lg bg-gray-50">
+                                <div v-if="qrScanLog.length === 0" class="p-3 text-center text-gray-500">Scan log will appear here</div>
+                                <div v-for="(log, index) in qrScanLog" :key="index" class="p-2 border-bottom-1 surface-border text-sm">
+                                    <div class="flex justify-content-between">
+                                        <span class="font-mono">{{ log.timestamp }}</span>
+                                        <span :class="log.success ? 'text-green-600' : 'text-red-600'">
+                                            {{ log.success ? 'SUCCESS' : 'FAILED' }}
+                                        </span>
+                                    </div>
+                                    <div class="mt-1">{{ log.message }}</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </Dialog>
-        
+
+        <!-- Status Selection Dialog -->
+        <Dialog v-model:visible="showStatusDialog" modal header="Update Attendance Status" :style="{ width: '400px' }" :closable="true">
+            <div v-if="selectedSeat && selectedSeat.student" class="p-4">
+                <div class="mb-4">
+                    <h4 class="text-lg font-semibold mb-2">{{ selectedSeat.student.name }}</h4>
+                    <p class="text-gray-600">
+                        Current Status:
+                        <Tag v-if="selectedSeat.status" :value="selectedSeat.status" :severity="getStatusSeverity(selectedSeat.status)" />
+                        <span v-else class="text-gray-400">Not marked</span>
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Select Status:</label>
+                    <div class="flex flex-col gap-2">
+                        <div class="flex align-items-center">
+                            <RadioButton v-model="pendingStatus" inputId="present" value="Present" />
+                            <label for="present" class="ml-2">Present</label>
+                        </div>
+                        <div class="flex align-items-center">
+                            <RadioButton v-model="pendingStatus" inputId="absent" value="Absent" />
+                            <label for="absent" class="ml-2">Absent</label>
+                        </div>
+                        <div class="flex align-items-center">
+                            <RadioButton v-model="pendingStatus" inputId="late" value="Late" />
+                            <label for="late" class="ml-2">Late</label>
+                        </div>
+                        <div class="flex align-items-center">
+                            <RadioButton v-model="pendingStatus" inputId="excused" value="Excused" />
+                            <label for="excused" class="ml-2">Excused</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="statusRemarks" class="block text-sm font-medium mb-2">Remarks (Optional):</label>
+                    <Textarea id="statusRemarks" v-model="attendanceRemarks" rows="3" placeholder="Enter any additional notes..." class="w-full" />
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="flex justify-content-end gap-2">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showStatusDialog = false" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveAttendanceStatus" :disabled="!pendingStatus" />
+                </div>
+            </template>
+        </Dialog>
+
         <!-- Attendance Completion Modal -->
         <AttendanceCompletionModal
             :visible="showCompletionModal"
-            :subject-name="selectedSubject?.name || 'Subject'"
+            :subject-name="subjectName"
             :session-date="new Date().toLocaleDateString()"
             :session-data="completedSessionData"
             @close="handleModalClose"
@@ -2803,6 +3460,43 @@ const isDropTarget = ref(false);
             @start-new-session="handleStartNewSession"
             @dont-show-again="handleDontShowAgain"
         />
+
+        <!-- Session Completion Loading Overlay -->
+        <div v-if="isCompletingSession" class="session-loading-overlay">
+            <div class="loading-content">
+                <div class="loading-header">
+                    <h3>Generating Session Summary</h3>
+                    <p>Please wait while we process your attendance data...</p>
+                </div>
+                
+                <!-- Animated Character -->
+                <div class="character-container">
+                    <div class="character">🏃‍♂️</div>
+                    <div class="obstacles">
+                        <div class="obstacle obstacle-1">📚</div>
+                        <div class="obstacle obstacle-2">✏️</div>
+                        <div class="obstacle obstacle-3">📊</div>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: sessionCompletionProgress + '%' }"></div>
+                    </div>
+                    <div class="progress-text">{{ sessionCompletionProgress }}%</div>
+                </div>
+                
+                <div class="loading-message">
+                    <span v-if="sessionCompletionProgress <= 10">Initializing session completion...</span>
+                    <span v-else-if="sessionCompletionProgress <= 25">Connecting to server...</span>
+                    <span v-else-if="sessionCompletionProgress <= 60">Saving attendance data...</span>
+                    <span v-else-if="sessionCompletionProgress <= 80">Calculating statistics...</span>
+                    <span v-else-if="sessionCompletionProgress <= 95">Generating session summary...</span>
+                    <span v-else>Session completed! Opening summary...</span>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -3246,19 +3940,258 @@ const isDropTarget = ref(false);
 
 /* Date and time display styles */
 .date-time-display {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    font-size: 0.9rem;
+    text-align: right;
+    font-size: 0.875rem;
+    color: #6b7280;
 }
 
 .date-time-display .date {
-    font-weight: 500;
-    color: #4b5563;
+    font-weight: 600;
+    color: #374151;
 }
 
 .date-time-display .time {
+    color: #9ca3af;
+}
+
+.header-left {
+    min-width: 0;
+    flex: 1;
+}
+
+.header-info {
+    margin-top: 0.5rem;
+}
+
+.calendar-section {
+    background: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.session-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border: 2px solid;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.session-status.active {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border-color: #10b981;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    animation: pulse-active 2s infinite;
+}
+
+.session-status.inactive {
+    background: #f3f4f6;
+    color: #6b7280;
+    border-color: #d1d5db;
+}
+
+@keyframes pulse-active {
+    0%,
+    100% {
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(16, 185, 129, 0.5);
+    }
+}
+
+/* Session Completion Loading Overlay Styles */
+.session-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(5px);
+}
+
+.loading-content {
+    background: white;
+    padding: 3rem 2rem;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideInUp 0.5s ease-out;
+}
+
+.loading-header h3 {
+    color: #1f2937;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+}
+
+.loading-header p {
+    color: #6b7280;
+    margin: 0 0 2rem 0;
+    font-size: 0.95rem;
+}
+
+.character-container {
+    position: relative;
+    height: 80px;
+    margin: 2rem 0;
+    overflow: hidden;
+}
+
+.character {
+    font-size: 2.5rem;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    animation: runAndJump 3s infinite linear;
+}
+
+.obstacles {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+.obstacle {
+    position: absolute;
+    font-size: 1.5rem;
+    bottom: 0;
+    animation: moveObstacles 3s infinite linear;
+}
+
+.obstacle-1 {
+    right: 80%;
+    animation-delay: 0s;
+}
+
+.obstacle-2 {
+    right: 50%;
+    animation-delay: -1s;
+}
+
+.obstacle-3 {
+    right: 20%;
+    animation-delay: -2s;
+}
+
+.progress-container {
+    margin: 2rem 0 1rem 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background: #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669, #047857);
+    border-radius: 6px;
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 1.5s infinite;
+}
+
+.progress-text {
+    margin-top: 0.5rem;
     font-weight: 600;
-    color: #2563eb;
+    color: #374151;
+    font-size: 0.9rem;
+}
+
+.loading-message {
+    color: #6b7280;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-top: 1rem;
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes runAndJump {
+    0% {
+        left: -10%;
+        transform: translateY(0) rotate(0deg);
+    }
+    15% {
+        transform: translateY(-20px) rotate(5deg);
+    }
+    25% {
+        transform: translateY(0) rotate(0deg);
+    }
+    40% {
+        transform: translateY(-25px) rotate(-5deg);
+    }
+    50% {
+        transform: translateY(0) rotate(0deg);
+    }
+    65% {
+        transform: translateY(-30px) rotate(10deg);
+    }
+    75% {
+        transform: translateY(0) rotate(0deg);
+    }
+    100% {
+        left: 110%;
+        transform: translateY(0) rotate(0deg);
+    }
+}
+
+@keyframes moveObstacles {
+    0% {
+        right: -10%;
+    }
+    100% {
+        right: 110%;
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
 }
 </style>

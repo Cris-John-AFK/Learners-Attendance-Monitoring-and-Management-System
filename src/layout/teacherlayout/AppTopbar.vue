@@ -67,7 +67,11 @@ let unsubscribeNotifications = null;
 
 // Notification handlers
 const handleNotificationClick = (notification) => {
+    console.log('Notification clicked:', notification);
     NotificationService.markAsRead(notification.id);
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
     
     if (notification.type === 'session_completed') {
         // Navigate to attendance page or show session details
@@ -76,11 +80,19 @@ const handleNotificationClick = (notification) => {
 };
 
 const handleMarkAllRead = () => {
+    console.log('Mark all as read clicked');
     NotificationService.markAllAsRead();
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
 };
 
 const handleRemoveNotification = (notificationId) => {
+    console.log('Remove notification:', notificationId);
     NotificationService.removeNotification(notificationId);
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
 };
 
 const logout = () => {
@@ -96,7 +108,8 @@ const logout = () => {
 onMounted(() => {
     notifications.value = NotificationService.getNotifications();
     unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
-        notifications.value = updatedNotifications;
+        console.log('Notifications updated:', updatedNotifications);
+        notifications.value = [...updatedNotifications]; // Force reactivity with new array
     });
 });
 
