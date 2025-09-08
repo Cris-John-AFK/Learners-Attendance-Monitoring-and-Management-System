@@ -14,9 +14,14 @@ class AttendanceSessionController extends Controller
     /**
      * Get students for a specific teacher's section and subject
      */
-    public function getStudentsForTeacherSubject($teacherId, $sectionId, $subjectId)
+    public function getStudentsForTeacherSubject(Request $request)
     {
         try {
+            // Get parameters from request
+            $teacherId = $request->query('teacher_id');
+            $sectionId = $request->query('section_id');
+            $subjectId = $request->query('subject_id');
+            
             // Get all active students in the section
             $students = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')

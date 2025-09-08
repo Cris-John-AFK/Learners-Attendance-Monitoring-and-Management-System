@@ -222,10 +222,13 @@ Route::get('/teachers/{teacherId}/sections/{sectionId}/subjects/{subjectId}/stud
 Route::post('/teachers/{teacherId}/attendance', [AttendanceController::class, 'markTeacherAttendance']);
 
 // Enhanced attendance session routes
-Route::post('/attendance-sessions', [\App\Http\Controllers\AttendanceSessionController::class, 'createSession']);
-Route::post('/attendance-sessions/mark', [\App\Http\Controllers\AttendanceSessionController::class, 'markAttendance']);
-Route::post('/attendance-sessions/{sessionId}/complete', [\App\Http\Controllers\AttendanceSessionController::class, 'completeSession']);
-Route::get('/attendance/summary', [\App\Http\Controllers\AttendanceSessionController::class, 'getAttendanceSummary']);
+Route::post('/attendance-sessions', [AttendanceSessionController::class, 'createSession']);
+Route::post('/attendance-sessions/mark', [AttendanceSessionController::class, 'markAttendance']);
+Route::post('/attendance-sessions/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
+Route::get('/attendance/summary', [AttendanceSessionController::class, 'getAttendanceSummary']);
+
+// Students endpoint for attendance sessions
+Route::get('/attendance-sessions/students', [\App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 
 // Student Management routes for seating arrangements and student operations
 Route::prefix('student-management')->group(function () {

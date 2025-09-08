@@ -28,7 +28,7 @@ const toast = useToast();
 const subjectName = ref('Subject');
 const subjectId = ref('');
 const sectionId = ref('');
-const teacherId = ref(1); // Static teacher ID for now (Maria Santos)
+const teacherId = ref(3); // Maria Santos teacher ID
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
 
@@ -38,11 +38,7 @@ const attendanceStatuses = ref([]);
 const sessionActive = ref(false);
 const sessionSummary = ref(null);
 
-// Watch for date changes and update attendance display
-watch(currentDate, (newDate) => {
-    console.log('Date changed to:', newDate);
-    loadCachedAttendanceData();
-});
+// Watch for date changes and update attendance display (removed duplicate - see line 2957)
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
@@ -174,9 +170,9 @@ const loadStudentsData = async () => {
             if (studentsResponse && studentsResponse.students) {
                 students.value = studentsResponse.students.map((student) => ({
                     id: student.id,
-                    name: student.name || `${student.firstName} ${student.lastName}`,
-                    firstName: student.firstName,
-                    lastName: student.lastName,
+                    name: student.name || `${student.first_name || student.firstName || ''} ${student.last_name || student.lastName || ''}`.trim(),
+                    firstName: student.first_name || student.firstName || '',
+                    lastName: student.last_name || student.lastName || '',
                     current_section_id: sectionId.value,
                     studentId: student.studentId || student.id,
                     student_id: student.studentId || student.id
@@ -1438,6 +1434,12 @@ const decrementColumns = () => {
         // Save the layout after changing columns
         saveCurrentLayout(false);
     }
+};
+
+// Add missing updateGridSize function
+const updateGridSize = () => {
+    initializeSeatPlan();
+    saveCurrentLayout(false);
 };
 
 // Watch for route changes to update subject
