@@ -146,13 +146,13 @@ const newStudent = ref({
     zipCode: '',
 
     // Parent/Guardian Information
-    fatherLastName: '',
     fatherFirstName: '',
+    fatherLastName: '',
     fatherMiddleName: '',
     fatherContactNumber: '',
 
-    motherLastName: '',
     motherFirstName: '',
+    motherLastName: '',
     motherMiddleName: '',
     motherContactNumber: '',
 
@@ -541,12 +541,12 @@ function resetNewStudentForm() {
         province: '',
         country: 'Philippines',
         zipCode: '',
-        fatherLastName: '',
         fatherFirstName: '',
+        fatherLastName: '',
         fatherMiddleName: '',
         fatherContactNumber: '',
-        motherLastName: '',
         motherFirstName: '',
+        motherLastName: '',
         motherMiddleName: '',
         motherContactNumber: '',
         lastGradeCompleted: '',
@@ -628,23 +628,59 @@ async function submitNewStudent() {
             hasDisability: false,
             isActive: true,
             is_active: true,
+
             name: `${newStudent.value.firstName} ${newStudent.value.middleName || ''} ${newStudent.value.lastName}`.replace(/\s+/g, ' ').trim(),
             firstName: newStudent.value.firstName,
             lastName: newStudent.value.lastName,
             middleName: newStudent.value.middleName || '',
             extensionName: newStudent.value.extensionName || '',
+
             lrn: newStudent.value.lrn || '',
             gradeLevel: newStudent.value.gradeLevel,
             section: '',
+            schoolYearStart: '2025',
+            schoolYearEnd: '2026',
+
             birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
             birthplace: newStudent.value.birthplace || '',
             age: parseInt(newStudent.value.age) || null,
             gender: newStudent.value.sex || 'Male',
             sex: newStudent.value.sex || 'Male',
             motherTongue: newStudent.value.motherTongue || '',
+            psaBirthCertNo: '',
+
             photo: '/demo/images/student-photo.jpg',
+            profilePhoto: '/demo/images/student-photo.jpg',
             qr_code: '',
+
             email: newStudent.value.emailAddress || '',
+            contactInfo: newStudent.value.fatherContactNumber || newStudent.value.motherContactNumber || '',
+
+            currentAddress: {
+                house_no: newStudent.value.houseNo || '',
+                street: newStudent.value.street || '',
+                barangay: newStudent.value.barangay || '',
+                city_municipality: newStudent.value.cityMunicipality || '',
+                province: newStudent.value.province || '',
+                country: newStudent.value.country || 'Philippines',
+                zip_code: newStudent.value.zipCode || ''
+            },
+            permanentAddress: {
+                house_no: newStudent.value.houseNo || '',
+                street: newStudent.value.street || '',
+                barangay: newStudent.value.barangay || '',
+                city_municipality: newStudent.value.cityMunicipality || '',
+                province: newStudent.value.province || '',
+                country: newStudent.value.country || 'Philippines',
+                zip_code: newStudent.value.zipCode || ''
+            },
+
+            father: {
+                first_name: newStudent.value.fatherFirstName || '',
+                last_name: newStudent.value.fatherLastName || '',
+                middle_name: newStudent.value.fatherMiddleName || '',
+                contact_number: newStudent.value.fatherContactNumber || ''
+            },
             mother: {
                 first_name: newStudent.value.motherFirstName || '',
                 last_name: newStudent.value.motherLastName || '',
@@ -653,7 +689,13 @@ async function submitNewStudent() {
             },
             parentName: `${newStudent.value.fatherFirstName || ''} ${newStudent.value.fatherLastName || ''}`.trim() || `${newStudent.value.motherFirstName || ''} ${newStudent.value.motherLastName || ''}`.trim() || 'N/A',
             parentContact: `Father: ${newStudent.value.fatherContactNumber || 'N/A'}, Mother: ${newStudent.value.motherContactNumber || 'N/A'}`,
+
             address: `${newStudent.value.houseNo || ''} ${newStudent.value.street || ''}, ${newStudent.value.barangay}, ${newStudent.value.cityMunicipality}, ${newStudent.value.province}`.replace(/\s+/g, ' ').trim(),
+
+            indigenousCommunity: '',
+            householdID: '',
+            disabilities: [],
+
             enrollmentDate: new Date().toISOString(),
             admissionDate: new Date().toISOString(),
             requirements: []
@@ -1721,7 +1763,7 @@ defineExpose({
     flex: 1;
     text-align: center;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
     align-items: center;
