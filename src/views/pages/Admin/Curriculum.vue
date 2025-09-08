@@ -4665,44 +4665,69 @@ watch(
 }
 
 .apple-button {
-    padding: 0.75rem 1.5rem !important;
-    font-size: 0.95rem !important;
-    font-weight: 600 !important;
-    border-radius: 12px !important;
-    border: 2px solid transparent !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    min-width: 90px !important;
-    height: 44px !important;
-    display: flex !important;
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     gap: 0.5rem !important;
+    text-decoration: none !important;
+    min-height: 36px !important;
+    flex: 1 !important;
 }
 
-.edit-button {
-    background: #007aff !important;
-    color: white !important;
-    border-color: #007aff !important;
-}
-
-.edit-button:hover {
-    background: #0056cc !important;
-    border-color: #0056cc !important;
+.apple-button:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+.assign-teacher-button {
+    background: #10b981 !important;
+    color: white !important;
+    border-color: #10b981 !important;
+}
+
+.assign-teacher-button:hover {
+    background: #059669 !important;
+    border-color: #059669 !important;
+}
+
+.change-teacher-button {
+    background: #3b82f6 !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+}
+
+.change-teacher-button:hover {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+}
+
+.schedules-button {
+    background: #8b5cf6 !important;
+    color: white !important;
+    border-color: #8b5cf6 !important;
+}
+
+.schedules-button:hover {
+    background: #7c3aed !important;
+    border-color: #7c3aed !important;
 }
 
 .delete-button {
-    background: #ff3b30 !important;
+    background: #ef4444 !important;
     color: white !important;
-    border-color: #ff3b30 !important;
+    border-color: #ef4444 !important;
 }
 
 .delete-button:hover {
-    background: #d70015 !important;
-    border-color: #d70015 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3) !important;
+    background: #dc2626 !important;
+    border-color: #dc2626 !important;
 }
 
 .apple-button:active {
@@ -4749,7 +4774,13 @@ watch(
 
 .section-actions {
     display: flex;
-    gap: 0.25rem;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-top: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 </style>
 
