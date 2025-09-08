@@ -209,6 +209,10 @@ Route::prefix('attendance-sessions')->group(function () {
     // Reports
     Route::get('/reports/weekly', [AttendanceSessionController::class, 'getWeeklyReport']);
     Route::get('/reports/monthly', [AttendanceSessionController::class, 'getMonthlyReport']);
+    
+    // Session editing and history (for maximum reliability)
+    Route::put('/{sessionId}/edit', [AttendanceSessionController::class, 'editSession']);
+    Route::get('/{sessionId}/history', [AttendanceSessionController::class, 'getSessionHistory']);
 });
 
 // Teacher-specific attendance routes

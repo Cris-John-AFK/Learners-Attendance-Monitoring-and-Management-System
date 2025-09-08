@@ -11,6 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Skip this migration - QR code functionality is handled in students table
+        // This migration references students table which may not exist yet
         return;
     }
 

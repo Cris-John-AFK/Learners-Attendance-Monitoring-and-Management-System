@@ -68,6 +68,11 @@ const router = createRouter({
                     component: TeacherSubjectAttendance
                 },
                 {
+                    path: '/teacher/subject/attendance',
+                    name: 'teacher-subject-attendance',
+                    component: TeacherSubjectAttendance
+                },
+                {
                     path: '/teacher/student-qrcodes',
                     name: 'student-qrcodes',
                     component: StudentQRCodes

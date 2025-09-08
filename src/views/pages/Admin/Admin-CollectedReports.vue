@@ -511,49 +511,84 @@
 
                     <div class="sf2-summary-section">
                         <div class="summary-box">
-                            <h4>Month: _____ No. of Days of Classes: _____ Summary</h4>
-                            <div class="summary-grid">
-                                <div class="summary-item">
-                                    <span class="summary-label">* Enrolment as of (1st Friday of June)</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Late Enrolment during the month</span>
-                                    <div class="summary-value">0</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Registered Learners as of end of the month</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.totalStudents }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Percentage of Enrolment as of end of the month</span>
-                                    <div class="summary-value">100%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Average Daily Attendance</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Percentage of Attendance for the month</span>
-                                    <div class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Number of students absent for 5 consecutive days:</span>
-                                    <div class="summary-value">0</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Drop out</span>
-                                    <div class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Transferred out</span>
-                                    <div class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</div>
-                                </div>
-                                <div class="summary-item">
-                                    <span class="summary-label">Transferred in</span>
-                                    <div class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</div>
-                                </div>
+                            <div class="summary-header">
+                                <span class="month-label">Month: _____</span>
+                                <span class="days-label">No. of Days of Classes: _____</span>
+                                <span class="summary-title">Summary</span>
                             </div>
+                            
+                            <table class="sf2-summary-table">
+                                <thead>
+                                    <tr>
+                                        <th class="summary-description"></th>
+                                        <th class="summary-m">M</th>
+                                        <th class="summary-f">F</th>
+                                        <th class="summary-total">TOTAL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="summary-label">* Enrolment as of (1st Friday of June)</td>
+                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Late Enrolment during the month<br><small>(beyond cut-off)</small></td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Registered Learners as of <em>end of the month</em></td>
+                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Percentage of Enrolment as of <em>end of the month</em></td>
+                                        <td class="summary-value">100%</td>
+                                        <td class="summary-value">100%</td>
+                                        <td class="summary-value">100%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Average Daily Attendance</td>
+                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Percentage of Attendance for the month</td>
+                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
+                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Number of students absent for 5 consecutive days:</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                        <td class="summary-value">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Drop out</td>
+                                        <td class="summary-value">{{ getMaleDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Transferred out</td>
+                                        <td class="summary-value">{{ getMaleTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="summary-label">Transferred in</td>
+                                        <td class="summary-value">{{ getMaleTransferredInCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getFemaleTransferredInCount(selectedSectionDetails.name) }}</td>
+                                        <td class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                             <div class="certification">
                                 <p>I certify that this is a true and correct report.</p>
                                 <div class="signature-section">
@@ -2469,12 +2504,7 @@ const getMaleTotalAbsent = (sectionName) => {
     return maleStudents.reduce((total, student) => total + student.totalAbsent, 0);
 };
 
-const getMaleAttendanceRate = (sectionName) => {
-    const maleStudents = getMaleStudents(sectionName);
-    if (maleStudents.length === 0) return 0;
-    const totalRate = maleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
-    return Math.round(totalRate / maleStudents.length);
-};
+// Removed duplicate - using the one defined later in gender-based functions section
 
 // Female-specific calculations
 const getFemaleDayTotal = (sectionName, date) => {
@@ -2492,12 +2522,7 @@ const getFemaleTotalAbsent = (sectionName) => {
     return femaleStudents.reduce((total, student) => total + student.totalAbsent, 0);
 };
 
-const getFemaleAttendanceRate = (sectionName) => {
-    const femaleStudents = getFemaleStudents(sectionName);
-    if (femaleStudents.length === 0) return 0;
-    const totalRate = femaleStudents.reduce((sum, student) => sum + student.attendanceRate, 0);
-    return Math.round(totalRate / femaleStudents.length);
-};
+// Removed duplicate - using the one defined later in gender-based functions section
 
 const getAttendanceMark = (status) => {
     switch (status) {
@@ -2610,6 +2635,65 @@ const updateStudentStatus = () => {
 const getActiveStudentsCount = (sectionName) => {
     const students = getSectionStudents(sectionName);
     return students.filter((student) => student.status === 'active').length;
+};
+
+// Gender-based count functions
+const getMaleStudentsCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male').length;
+};
+
+const getFemaleStudentsCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female').length;
+};
+
+const getMaleAttendanceRate = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    const maleStudents = students.filter((student) => student.gender === 'Male');
+    if (maleStudents.length === 0) return 0;
+    
+    const totalRate = maleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
+    return Math.round(totalRate / maleStudents.length);
+};
+
+const getFemaleAttendanceRate = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    const femaleStudents = students.filter((student) => student.gender === 'Female');
+    if (femaleStudents.length === 0) return 0;
+    
+    const totalRate = femaleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
+    return Math.round(totalRate / femaleStudents.length);
+};
+
+const getMaleDroppedOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'dropped_out').length;
+};
+
+const getFemaleDroppedOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'dropped_out').length;
+};
+
+const getMaleTransferredOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_out').length;
+};
+
+const getFemaleTransferredOutCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_out').length;
+};
+
+const getMaleTransferredInCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_in').length;
+};
+
+const getFemaleTransferredInCount = (sectionName) => {
+    const students = getSectionStudents(sectionName);
+    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_in').length;
 };
 
 const getAttendanceClass = (status) => {
@@ -4200,6 +4284,100 @@ const reportTypes = ref([
     position: sticky;
     left: 0;
     z-index: 5;
+}
+
+/* SF2 Summary Table Styles */
+.sf2-summary-section {
+    margin: 2rem 0;
+    border: 2px solid #333;
+    background: white;
+}
+
+.summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 2px solid #333;
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.month-label, .days-label {
+    flex: 1;
+}
+
+.summary-title {
+    text-align: center;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.sf2-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    font-size: 0.85rem;
+}
+
+.sf2-summary-table th {
+    background: #f8f9fa;
+    border: 1px solid #333;
+    padding: 0.5rem;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.sf2-summary-table th.summary-description {
+    width: 60%;
+    text-align: left;
+}
+
+.sf2-summary-table th.summary-m,
+.sf2-summary-table th.summary-f,
+.sf2-summary-table th.summary-total {
+    width: 13.33%;
+    text-align: center;
+}
+
+.sf2-summary-table td {
+    border: 1px solid #333;
+    padding: 0.4rem 0.6rem;
+    vertical-align: middle;
+}
+
+.sf2-summary-table td.summary-label {
+    text-align: left;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.sf2-summary-table td.summary-label em {
+    font-style: italic;
+    text-decoration: underline;
+}
+
+.sf2-summary-table td.summary-label small {
+    font-size: 0.7rem;
+    color: #666;
+    display: block;
+    margin-top: 0.2rem;
+}
+
+.sf2-summary-table td.summary-value {
+    text-align: center;
+    font-weight: 600;
+    background: #f8f9fa;
+}
+
+.sf2-summary-table tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.sf2-summary-table tr:hover {
+    background: #f0f8ff;
 }
 
 .total-cell {

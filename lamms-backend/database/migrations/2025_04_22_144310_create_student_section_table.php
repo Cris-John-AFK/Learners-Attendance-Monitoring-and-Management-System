@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('student_section', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('student_id')->constrained('student_details')->onDelete('cascade');
+            $table->foreignId('student_id')->constrained('students')->onDelete('cascade');
             $table->foreignId('section_id')->constrained('sections')->onDelete('cascade');
             $table->string('school_year')->default('2025-2026');
             $table->boolean('is_active')->default(true);

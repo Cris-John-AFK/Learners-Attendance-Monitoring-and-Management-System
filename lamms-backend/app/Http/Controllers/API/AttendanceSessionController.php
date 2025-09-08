@@ -46,10 +46,24 @@ class AttendanceSessionController extends Controller
             ])->first();
 
             if ($existingSession) {
+                Log::info("Active session already exists for teacher {$request->teacher_id}, section {$request->section_id}, subject {$request->subject_id}, date {$request->session_date}");
                 return response()->json([
                     'message' => 'Active session already exists',
                     'session' => $existingSession->load(['teacher', 'section', 'subject'])
                 ], 200);
+            }
+
+            // Allow multiple sessions per day, but log for tracking
+            $completedSessionsCount = AttendanceSession::where([
+                'teacher_id' => $request->teacher_id,
+                'section_id' => $request->section_id,
+                'subject_id' => $request->subject_id,
+                'session_date' => $request->session_date,
+                'status' => 'completed'
+            ])->count();
+
+            if ($completedSessionsCount > 0) {
+                Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$request->teacher_id}, section {$request->section_id}, subject {$request->subject_id}, date {$request->session_date}");
             }
 
             $session = AttendanceSession::create([
@@ -238,33 +252,129 @@ class AttendanceSessionController extends Controller
         try {
             $session = AttendanceSession::findOrFail($sessionId);
             
-            // Check if session is already completed to avoid unique constraint violation
+            Log::info("Attempting to complete session {$sessionId}. Current status: {$session->status}");
+            
+            // Check if session is already completed
             if ($session->status === 'completed') {
+                Log::info("Session {$sessionId} already completed");
                 return response()->json([
                     'message' => 'Session already completed',
-                    'session' => $session->load(['attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+                    'summary' => $this->generateSessionSummary($session)
                 ]);
             }
 
             if ($session->status !== 'active') {
+                Log::warning("Session {$sessionId} is not active. Status: {$session->status}");
                 return response()->json(['error' => 'Session is not active'], 400);
             }
 
-            // Update session status directly without transaction to avoid constraint issues
-            $session->status = 'completed';
-            $session->session_end_time = now()->format('H:i:s');
-            $session->completed_at = now();
-            $session->save();
+            // Use database transaction for data integrity and prevent duplicate completions
+            DB::transaction(function () use ($session) {
+                // Double-check status within transaction to prevent race conditions
+                $currentSession = AttendanceSession::lockForUpdate()->find($session->id);
+                
+                if ($currentSession->status !== 'active') {
+                    throw new \Exception("Session status changed during completion. Current status: {$currentSession->status}");
+                }
+                
+                // Update session with completion data
+                $currentSession->update([
+                    'status' => 'completed',
+                    'session_end_time' => now()->format('H:i:s'),
+                    'completed_at' => now()
+                ]);
+                
+                Log::info("Session {$session->id} completed successfully with transaction lock");
+            });
+
+            // Generate session summary for the modal
+            $summary = $this->generateSessionSummary($session->fresh());
 
             return response()->json([
                 'message' => 'Session completed successfully',
-                'session' => $session->fresh()->load(['attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+                'summary' => $summary
             ]);
 
+        } catch (\Illuminate\Database\QueryException $e) {
+            Log::error("Database error completing session {$sessionId}: " . $e->getMessage());
+            Log::error("SQL Error Code: " . $e->getCode());
+            Log::error("SQL Error Info: " . json_encode($e->errorInfo ?? []));
+            
+            // Handle specific constraint violations
+            if (str_contains($e->getMessage(), 'unique_active_session')) {
+                return response()->json([
+                    'error' => 'Cannot complete session due to unique constraint violation',
+                    'message' => 'Another session with the same parameters already exists',
+                    'details' => config('app.debug') ? $e->getMessage() : 'Duplicate session detected'
+                ], 409); // Conflict status code
+            }
+            
+            return response()->json([
+                'error' => 'Database error occurred while completing session',
+                'details' => config('app.debug') ? $e->getMessage() : 'Please check server logs'
+            ], 500);
+            
         } catch (\Exception $e) {
-            Log::error('Error completing session: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to complete session'], 500);
+            Log::error("General error completing session {$sessionId}: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            
+            // Handle session status change during completion
+            if (str_contains($e->getMessage(), 'Session status changed during completion')) {
+                return response()->json([
+                    'error' => 'Session was modified by another process',
+                    'message' => 'Please refresh and try again',
+                    'details' => $e->getMessage()
+                ], 409); // Conflict status code
+            }
+            
+            return response()->json([
+                'error' => 'Failed to complete session',
+                'details' => config('app.debug') ? $e->getMessage() : 'Please check server logs'
+            ], 500);
         }
+    }
+
+    /**
+     * Generate session summary for completion modal
+     */
+    private function generateSessionSummary($session)
+    {
+        $session->load(['section', 'subject', 'teacher', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus']);
+        
+        // Get all students in the section for accurate counts
+        $allStudents = Student::inSection($session->section_id)->active()->get();
+        $records = $session->attendanceRecords;
+        
+        // Calculate attendance statistics
+        $stats = [
+            'total_students' => $allStudents->count(),
+            'marked_students' => $records->count(),
+            'present' => $records->where('attendanceStatus.code', 'P')->count(),
+            'absent' => $records->where('attendanceStatus.code', 'A')->count(),
+            'late' => $records->where('attendanceStatus.code', 'L')->count(),
+            'excused' => $records->where('attendanceStatus.code', 'E')->count()
+        ];
+        
+        return [
+            'session_id' => $session->id,
+            'session_date' => $session->session_date,
+            'session_start_time' => $session->session_start_time,
+            'session_end_time' => $session->session_end_time,
+            'subject_name' => $session->subject->name ?? 'Homeroom',
+            'section_name' => $session->section->name,
+            'teacher_name' => $session->teacher->first_name . ' ' . $session->teacher->last_name,
+            'statistics' => $stats,
+            'attendance_records' => $records->map(function ($record) {
+                return [
+                    'student_id' => $record->student_id,
+                    'student_name' => $record->student->name,
+                    'status' => $record->attendanceStatus->name,
+                    'status_code' => $record->attendanceStatus->code,
+                    'arrival_time' => $record->arrival_time,
+                    'remarks' => $record->remarks
+                ];
+            })
+        ];
     }
 
     /**
@@ -478,5 +588,227 @@ class AttendanceSessionController extends Controller
             Log::error('Error generating monthly report: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to generate monthly report'], 500);
         }
+    }
+
+    /**
+     * Edit a completed attendance session (creates new version)
+     */
+    public function editSession(Request $request, $sessionId)
+    {
+        $validator = Validator::make($request->all(), [
+            'edit_reason' => 'required|in:correction,late_entry,system_error,administrative',
+            'edit_notes' => 'required|string|max:1000',
+            'session_data' => 'nullable|array',
+            'attendance_records' => 'nullable|array'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $originalSession = AttendanceSession::findOrFail($sessionId);
+            
+            // Only allow editing of completed sessions
+            if ($originalSession->status !== 'completed') {
+                return response()->json(['error' => 'Only completed sessions can be edited'], 400);
+            }
+
+            DB::transaction(function () use ($request, $originalSession) {
+                // Mark original session as not current
+                $originalSession->update(['is_current_version' => false]);
+                
+                // Create new version of the session
+                $newSession = $originalSession->replicate();
+                $newSession->version = $originalSession->version + 1;
+                $newSession->original_session_id = $originalSession->original_session_id ?? $originalSession->id;
+                $newSession->edit_reason = $request->edit_reason;
+                $newSession->edit_notes = $request->edit_notes;
+                $newSession->edited_by_teacher_id = $originalSession->teacher_id; // TODO: Get from auth
+                $newSession->edited_at = now();
+                $newSession->is_current_version = true;
+                
+                // Apply session data changes if provided
+                if ($request->session_data) {
+                    foreach ($request->session_data as $field => $value) {
+                        if (in_array($field, ['session_start_time', 'session_end_time', 'session_type', 'metadata'])) {
+                            $newSession->$field = $value;
+                        }
+                    }
+                }
+                
+                $newSession->save();
+                
+                // Log the edit in audit trail
+                $this->logAuditEvent('session', $newSession->id, 'edit', $originalSession->teacher_id, [
+                    'original_session_id' => $originalSession->id,
+                    'version' => $newSession->version,
+                    'edit_reason' => $request->edit_reason,
+                    'edit_notes' => $request->edit_notes
+                ]);
+                
+                // Handle attendance records editing if provided
+                if ($request->attendance_records) {
+                    $this->editAttendanceRecords($newSession, $request->attendance_records, $request->edit_reason);
+                }
+                
+                // Update session statistics
+                $this->updateSessionStatistics($newSession);
+            });
+
+            return response()->json([
+                'message' => 'Session edited successfully',
+                'session' => $originalSession->fresh()->load(['teacher', 'section', 'subject'])
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error editing session {$sessionId}: " . $e->getMessage());
+            return response()->json(['error' => 'Failed to edit session'], 500);
+        }
+    }
+
+    /**
+     * Get session edit history
+     */
+    public function getSessionHistory($sessionId)
+    {
+        try {
+            $session = AttendanceSession::findOrFail($sessionId);
+            $originalId = $session->original_session_id ?? $session->id;
+            
+            // Get all versions of this session
+            $versions = AttendanceSession::where(function($query) use ($originalId, $session) {
+                $query->where('id', $originalId)
+                      ->orWhere('original_session_id', $originalId);
+            })
+            ->with(['teacher', 'editedByTeacher'])
+            ->orderBy('version')
+            ->get();
+            
+            // Get detailed edit history
+            $editHistory = DB::table('attendance_session_edits')
+                ->where('session_id', $originalId)
+                ->orWhereIn('session_id', $versions->pluck('id'))
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            return response()->json([
+                'original_session_id' => $originalId,
+                'current_version' => $versions->where('is_current_version', true)->first(),
+                'all_versions' => $versions,
+                'edit_history' => $editHistory
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error getting session history for {$sessionId}: " . $e->getMessage());
+            return response()->json(['error' => 'Failed to get session history'], 500);
+        }
+    }
+
+    /**
+     * Edit attendance records for a session
+     */
+    private function editAttendanceRecords($session, $recordsData, $editReason)
+    {
+        foreach ($recordsData as $recordData) {
+            if (isset($recordData['id'])) {
+                // Editing existing record
+                $originalRecord = AttendanceRecord::find($recordData['id']);
+                if ($originalRecord) {
+                    // Mark original as not current
+                    $originalRecord->update(['is_current_version' => false]);
+                    
+                    // Create new version
+                    $newRecord = $originalRecord->replicate();
+                    $newRecord->version = $originalRecord->version + 1;
+                    $newRecord->original_record_id = $originalRecord->original_record_id ?? $originalRecord->id;
+                    $newRecord->attendance_session_id = $session->id;
+                    $newRecord->is_current_version = true;
+                    
+                    // Apply changes
+                    if (isset($recordData['attendance_status_id'])) {
+                        $newRecord->attendance_status_id = $recordData['attendance_status_id'];
+                    }
+                    if (isset($recordData['arrival_time'])) {
+                        $newRecord->arrival_time = $recordData['arrival_time'];
+                    }
+                    if (isset($recordData['remarks'])) {
+                        $newRecord->remarks = $recordData['remarks'];
+                    }
+                    
+                    $newRecord->save();
+                    
+                    // Log the change
+                    $this->logAuditEvent('record', $newRecord->id, 'edit', $session->teacher_id, [
+                        'original_record_id' => $originalRecord->id,
+                        'edit_reason' => $editReason
+                    ]);
+                }
+            } else {
+                // Adding new record
+                AttendanceRecord::create([
+                    'attendance_session_id' => $session->id,
+                    'student_id' => $recordData['student_id'],
+                    'attendance_status_id' => $recordData['attendance_status_id'],
+                    'marked_by_teacher_id' => $session->teacher_id,
+                    'marked_at' => now(),
+                    'arrival_time' => $recordData['arrival_time'] ?? null,
+                    'remarks' => $recordData['remarks'] ?? null,
+                    'marking_method' => 'manual',
+                    'data_source' => 'manual',
+                    'version' => 1,
+                    'is_current_version' => true
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Update session statistics cache
+     */
+    private function updateSessionStatistics($session)
+    {
+        $records = $session->attendanceRecords()->where('is_current_version', true)->with('attendanceStatus')->get();
+        $allStudents = Student::inSection($session->section_id)->active()->count();
+        
+        $stats = [
+            'total_students' => $allStudents,
+            'marked_students' => $records->count(),
+            'present_count' => $records->where('attendanceStatus.code', 'P')->count(),
+            'absent_count' => $records->where('attendanceStatus.code', 'A')->count(),
+            'late_count' => $records->where('attendanceStatus.code', 'L')->count(),
+            'excused_count' => $records->where('attendanceStatus.code', 'E')->count(),
+        ];
+        
+        $stats['attendance_rate'] = $stats['total_students'] > 0 ? 
+            (($stats['present_count'] + $stats['late_count']) / $stats['total_students']) * 100 : 0;
+        
+        // Update or create statistics record
+        DB::table('attendance_session_stats')->updateOrInsert(
+            ['session_id' => $session->id],
+            array_merge($stats, [
+                'detailed_stats' => json_encode($records->groupBy('attendanceStatus.code')),
+                'calculated_at' => now(),
+                'updated_at' => now()
+            ])
+        );
+    }
+
+    /**
+     * Log audit events
+     */
+    private function logAuditEvent($entityType, $entityId, $action, $teacherId, $context = [])
+    {
+        DB::table('attendance_audit_log')->insert([
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'action' => $action,
+            'performed_by_teacher_id' => $teacherId,
+            'context' => json_encode($context),
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
     }
 }
