@@ -51,12 +51,7 @@ class Student extends Model
         'householdID',
         'hasDisability',
         'disabilities',
-        'isActive',
-        'religion',
-        'householdIncome',
-        'lastSchoolAttended',
-        'lastGradeCompleted',
-        'lastSchoolYearCompleted'
+        'isActive'
     ];
 
     protected $casts = [
