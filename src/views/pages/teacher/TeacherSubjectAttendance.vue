@@ -2913,18 +2913,38 @@ const viewAttendanceRecords = () => {
     router.push('/teacher/attendance-records');
 };
 
-// Cleanup function for intervals
+// Cleanup function for intervals and timers
 onUnmounted(() => {
+    // Clear all intervals
     if (timeInterval.value) {
         clearInterval(timeInterval.value);
     }
     if (refreshInterval) {
         clearInterval(refreshInterval);
     }
-    // Clear modal timer to prevent memory leaks
-    if (modalTimer.value) {
-        clearTimeout(modalTimer.value);
+    
+    // Clear all timers
+    if (completionModalTimer.value) {
+        clearTimeout(completionModalTimer.value);
     }
+    
+    // Clear any active loading states
+    if (isCompletingSession.value) {
+        isCompletingSession.value = false;
+        sessionCompletionProgress.value = 0;
+    }
+    
+    // Reset session states
+    sessionActive.value = false;
+    currentSession.value = null;
+    
+    // Close any open modals
+    showCompletionModal.value = false;
+    showQRScanner.value = false;
+    showRollCall.value = false;
+    showAttendanceMethodModal.value = false;
+    showStatusDialog.value = false;
+    showRemarksDialog.value = false;
 });
 
 // Update watch for currentDate to reapply statuses when date changes
