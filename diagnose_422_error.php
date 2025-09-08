@@ -59,26 +59,114 @@ if ($httpCode == 422) {
         echo "Error Message: " . $errorData['message'] . "\n";
     }
 } elseif ($httpCode == 200) {
-    echo "✅ Attendance marking successful!\n";
+    echo " Attendance marking successful!\n";
 } else {
-    echo "❌ Unexpected error code: {$httpCode}\n";
+    echo " Unexpected error code: {$httpCode}\n";
 }
 
-// Also check what students exist in section 13
-echo "\n=== CHECKING STUDENTS IN SECTION 13 ===\n";
 require_once 'lamms-backend/vendor/autoload.php';
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
+
+// Bootstrap Laravel
 $app = require_once 'lamms-backend/bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-use App\Models\Section;
+// Set up database configuration
+Config::set('database.default', 'pgsql');
+Config::set('database.connections.pgsql', [
+    'driver' => 'pgsql',
+    'host' => 'localhost',
+    'port' => '5432',
+    'database' => 'lamms_db',
+    'username' => 'postgres',
+    'password' => 'password',
+    'charset' => 'utf8',
+    'prefix' => '',
+    'schema' => 'public',
+]);
 
-$section = Section::find(13);
-if ($section) {
-    $students = $section->activeStudents()->get();
-    echo "Students in section 13:\n";
-    foreach ($students as $student) {
-        echo "- ID: {$student->id}, Name: {$student->name}, StudentId: {$student->studentId}\n";
+echo "Diagnosing API Error...\n\n";
+
+try {
+    // Test database connection
+    $connection = DB::connection();
+    $pdo = $connection->getPdo();
+    echo " Database connection successful\n";
+
+    // Check if attendance_statuses table exists
+    $statusTableExists = DB::select("SELECT to_regclass('attendance_statuses') as exists");
+    $hasStatusTable = $statusTableExists[0]->exists !== null;
+    echo " Attendance statuses table exists: " . ($hasStatusTable ? 'Yes' : 'No') . "\n";
+
+    // Check teacher assignments
+    $assignments = DB::table('teacher_section_subject as tss')
+        ->join('sections as s', 'tss.section_id', '=', 's.id')
+        ->join('subjects as sub', 'tss.subject_id', '=', 'sub.id')
+        ->where('tss.teacher_id', 3)
+        ->select('tss.*', 's.name as section_name', 'sub.name as subject_name')
+        ->get();
+    
+    echo " Teacher 3 assignments: " . count($assignments) . "\n";
+    foreach ($assignments as $assignment) {
+        echo "  - Section: {$assignment->section_name}, Subject: {$assignment->subject_name}\n";
     }
-} else {
-    echo "Section 13 not found!\n";
+
+    // Check students for teacher
+    $students = DB::table('student_details as sd')
+        ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+        ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
+        ->where('tss.teacher_id', 3)
+        ->where('tss.subject_id', 1)
+        ->where('ss.is_active', true)
+        ->where('sd.isActive', true)
+        ->select('sd.id', 'sd.firstName', 'sd.lastName')
+        ->distinct()
+        ->get();
+    
+    echo " Students for teacher 3, subject 1: " . count($students) . "\n";
+
+    // Test the attendance summary controller directly
+    $controller = new \App\Http\Controllers\API\AttendanceSummaryController();
+    
+    // Create a mock request
+    $request = new Request();
+    $request->merge([
+        'teacher_id' => 3,
+        'period' => 'month',
+        'view_type' => 'subject',
+        'subject_id' => 1
+    ]);
+
+    echo "\nTesting attendance summary endpoint...\n";
+    $response = $controller->getTeacherAttendanceSummary($request);
+    $statusCode = $response->getStatusCode();
+    $content = $response->getContent();
+    
+    echo "Status Code: $statusCode\n";
+    echo "Response: $content\n";
+
+    // Test trends endpoint
+    echo "\nTesting attendance trends endpoint...\n";
+    $request2 = new Request();
+    $request2->merge([
+        'teacher_id' => 3,
+        'period' => 'week',
+        'view_type' => 'subject',
+        'subject_id' => 1
+    ]);
+    
+    $response2 = $controller->getTeacherAttendanceTrends($request2);
+    $statusCode2 = $response2->getStatusCode();
+    $content2 = $response2->getContent();
+    
+    echo "Status Code: $statusCode2\n";
+    echo "Response: $content2\n";
+
+} catch (Exception $e) {
+    echo " Error: " . $e->getMessage() . "\n";
+    echo "File: " . $e->getFile() . " Line: " . $e->getLine() . "\n";
+    echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
 }

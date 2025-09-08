@@ -15,7 +15,7 @@ import Tag from 'primevue/tag';
 import Textarea from 'primevue/textarea';
 import RadioButton from 'primevue/radiobutton';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -25,8 +25,38 @@ import { useRoute, useRouter } from 'vue-router';
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
-const subjectName = ref('Subject');
-const subjectId = ref('');
+
+// Define props for subject routing
+const props = defineProps({
+    subjectId: {
+        type: String,
+        default: ''
+    },
+    subjectName: {
+        type: String,
+        default: 'Subject'
+    }
+});
+
+// Initialize subject info immediately from route/props
+const getInitialSubjectInfo = () => {
+    if (props.subjectId && props.subjectName) {
+        return { id: props.subjectId, name: props.subjectName };
+    } else if (route.path.includes('/subject/homeroom')) {
+        return { id: '2', name: 'Homeroom' };
+    } else if (route.path.includes('/subject/mathematics')) {
+        return { id: '1', name: 'Mathematics' };
+    } else if (route.params.subjectId) {
+        const id = route.params.subjectId;
+        const name = id === '1' ? 'Mathematics' : id === '2' ? 'Homeroom' : 'Subject';
+        return { id, name };
+    }
+    return { id: '1', name: 'Mathematics' };
+};
+
+const initialSubject = getInitialSubjectInfo();
+const subjectName = ref(initialSubject.name);
+const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
 const teacherId = ref(3); // Maria Santos teacher ID
 const currentDate = ref(new Date().toISOString().split('T')[0]);
@@ -152,17 +182,25 @@ const loadStudentsData = async () => {
             if (students.value.length > 0) {
                 const firstStudent = students.value[0];
                 sectionId.value = firstStudent.current_section_id || 13;
-                subjectName.value = 'Mathematics (Grade 3)';
-                subjectId.value = 1;
+                
+                // Only set subject info if not already set by props/route
+                if (!subjectId.value || !subjectName.value) {
+                    subjectName.value = 'Mathematics (Grade 3)';
+                    subjectId.value = 1;
+                }
             }
         } else {
             // Use the first assignment from the assignments array
             const assignmentData = assignments.assignments[0];
-            const firstSubject = assignmentData.subjects[0];
-
+            
             sectionId.value = assignmentData.section_id;
-            subjectId.value = firstSubject.subject_id;
-            subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
+            
+            // Only set subject info if not already set by props/route
+            if (!subjectId.value || !subjectName.value) {
+                const firstSubject = assignmentData.subjects[0];
+                subjectId.value = firstSubject.subject_id;
+                subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
+            }
 
             // Load students for this specific assignment
             const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, subjectId.value);
@@ -297,6 +335,10 @@ const loadSeatingArrangementFromDatabase = async () => {
             // Set the seat plan with deep copy to avoid reference issues
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
+                
+                // Clean up invalid student assignments after loading
+                cleanupInvalidStudentAssignments();
+                
                 console.log('Loaded seating arrangement from database');
                 return true;
             }
@@ -456,10 +498,41 @@ const getStudentById = (studentId) => {
     const student = students.value.find((s) => s.id.toString() === idStr);
 
     if (!student) {
-        console.warn(`Student with ID ${studentId} not found`);
+        // Only warn once per missing student to avoid console spam
+        if (!getStudentById._warnedIds) getStudentById._warnedIds = new Set();
+        if (!getStudentById._warnedIds.has(idStr)) {
+            console.warn(`Student with ID ${studentId} not found in current student list`);
+            getStudentById._warnedIds.add(idStr);
+        }
     }
 
     return student || null;
+};
+
+// Clean up invalid student assignments from seating arrangement
+const cleanupInvalidStudentAssignments = () => {
+    let cleanedCount = 0;
+    
+    seatPlan.value.forEach((row, rowIndex) => {
+        row.forEach((seat, colIndex) => {
+            if (seat.isOccupied && seat.studentId) {
+                const student = getStudentById(seat.studentId);
+                if (!student) {
+                    // Clear the invalid assignment
+                    seat.isOccupied = false;
+                    seat.studentId = null;
+                    seat.status = null;
+                    cleanedCount++;
+                }
+            }
+        });
+    });
+    
+    if (cleanedCount > 0) {
+        console.log(`Cleaned up ${cleanedCount} invalid student assignments from seating arrangement`);
+        // Recalculate unassigned students after cleanup
+        calculateUnassignedStudents();
+    }
 };
 
 // Update the other drop functions to also clean up
@@ -1466,44 +1539,35 @@ let refreshInterval = null;
 // Initialize component data and setup
 const initializeComponent = async () => {
     try {
-        // Get subject ID from route params
-        if (route.params.subjectId) {
-            subjectId.value = route.params.subjectId;
+        // Subject info is already set during component creation, just log it
+        console.log(`Initializing component for: ${subjectName.value} (ID: ${subjectId.value})`);
+        
+        // Skip subject info setting since it's already done
 
-            // Try to fetch actual subject data
-            try {
-                const subject = await SubjectService.getSubjectById(subjectId.value);
-                if (subject && subject.name) {
-                    subjectName.value = subject.name;
-                }
-            } catch (err) {
-                console.warn('Could not fetch subject details', err);
-            }
-        }
-
-        // Load students directly from Grade 3 API to match dashboard
-        await loadStudentsData();
-
-        // Set up auto-refresh to catch new enrollments (store reference for cleanup)
-        refreshInterval = setInterval(async () => {
-            console.log('Auto-refreshing student data...');
-            await loadStudentsData();
-        }, 30000); // Refresh every 30 seconds (reduced frequency)
+        // Load students data in background (non-blocking)
+        loadStudentsData().then(() => {
+            // Set up auto-refresh after initial load
+            refreshInterval = setInterval(async () => {
+                console.log('Auto-refreshing student data...');
+                await loadStudentsData();
+            }, 30000); // Refresh every 30 seconds (reduced frequency)
+        });
 
         // Initialize an empty seat plan for grid layout
         initializeSeatPlan();
 
-        // Try to load seating arrangement from database first
-        await loadSeatingArrangementFromDatabase();
+        // Load seating arrangement in background (non-blocking for faster UI)
+        loadSeatingArrangementFromDatabase();
 
         // Update time every second
         timeInterval.value = setInterval(() => {
             currentDateTime.value = new Date();
         }, 1000);
 
-        // Always load saved templates first, so they're available for use
-        await loadSavedTemplates();
-        console.log('Templates loaded, count:', savedTemplates.value.length);
+        // Load saved templates in background (non-blocking)
+        loadSavedTemplates().then(() => {
+            console.log('Templates loaded, count:', savedTemplates.value.length);
+        });
 
         // Load attendance records from localStorage if available
         try {
@@ -1577,11 +1641,25 @@ const initializeComponent = async () => {
     }
 };
 
+// Watch for route changes to update subject info immediately
+watchEffect(() => {
+    const newSubject = getInitialSubjectInfo();
+    if (newSubject.id !== subjectId.value || newSubject.name !== subjectName.value) {
+        subjectId.value = newSubject.id;
+        subjectName.value = newSubject.name;
+        console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
+    }
+});
+
 // Initialize component when mounted
 onMounted(async () => {
-    await initializeComponent();
-    // Load today's attendance from database after component initialization
-    await loadTodayAttendanceFromDatabase();
+    console.log(`Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
+    
+    // Initialize component in background without blocking UI
+    initializeComponent();
+    
+    // Load today's attendance in background
+    loadTodayAttendanceFromDatabase();
 });
 
 // Function to check for and load cached attendance data for a specific date
@@ -3120,7 +3198,7 @@ const isDropTarget = ref(false);
                                     @dragover="allowDrop($event)"
                                     @drop="dropOnSeat(rowIndex, colIndex)"
                                 >
-                                    <div v-if="seat.isOccupied" class="student-info">
+                                    <div v-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info">
                                         <div class="student-initials bg-blue-500 text-white">
                                             {{ getStudentInitials(getStudentById(seat.studentId)) }}
                                         </div>

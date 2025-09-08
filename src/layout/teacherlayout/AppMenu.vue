@@ -51,7 +51,7 @@ onMounted(async () => {
                     const menuItem = {
                         label: subject.subject_name,
                         icon: 'pi pi-fw pi-book',
-                        to: `/subject/${subject.subject_code.toLowerCase()}`
+                        to: `/subject/${subject.subject_name.toLowerCase()}`
                     };
                     
                     if (subject.role === 'homeroom_teacher' || subject.subject_code === 'HR') {

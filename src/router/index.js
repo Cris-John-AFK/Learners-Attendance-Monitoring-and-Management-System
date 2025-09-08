@@ -63,13 +63,20 @@ const router = createRouter({
                     component: TeacherSettings
                 },
                 {
-                    path: '/subject/:subject',
-                    name: 'subject-attendance',
-                    component: TeacherSubjectAttendance
+                    path: '/subject/homeroom',
+                    name: 'homeroom-attendance',
+                    component: TeacherSubjectAttendance,
+                    props: { subjectId: '2', subjectName: 'Homeroom' }
                 },
                 {
-                    path: '/teacher/subject/attendance',
-                    name: 'teacher-subject-attendance',
+                    path: '/subject/mathematics',
+                    name: 'mathematics-attendance', 
+                    component: TeacherSubjectAttendance,
+                    props: { subjectId: '1', subjectName: 'Mathematics' }
+                },
+                {
+                    path: '/subject/:subjectId',
+                    name: 'subject-attendance',
                     component: TeacherSubjectAttendance
                 },
                 {

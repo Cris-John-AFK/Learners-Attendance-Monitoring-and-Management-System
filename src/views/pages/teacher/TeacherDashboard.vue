@@ -1,10 +1,9 @@
 <script setup>
-import { GradeService } from '@/router/service/Grades';
-import { StudentAttendanceService } from '@/router/service/StudentAttendanceService';
-import { AttendanceService } from '@/router/service/Students';
-import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
+import BookFlipLoader from '@/components/BookFlipLoader.vue';
+import AttendanceInsights from '@/components/Teachers/AttendanceInsights.vue';
 import api from '@/config/axios';
-import { SubjectService } from '@/router/service/Subjects';
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService.js';
+import { AttendanceSummaryService } from '@/services/AttendanceSummaryService.js';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Chart from 'primevue/chart';
@@ -19,7 +18,6 @@ import ProgressSpinner from 'primevue/progressspinner';
 import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import BookFlipLoader from '@/components/BookFlipLoader.vue';
 
 // Dashboard components
 const currentTeacher = ref(null);
@@ -34,11 +32,18 @@ const attendanceChartData = ref(null);
 const selectedSubject = ref(null);
 const availableSubjects = ref([]);
 const chartViewOptions = [
-    { label: 'Daily', value: 'daily' },
-    { label: 'Weekly', value: 'weekly' },
-    { label: 'Monthly', value: 'monthly' }
+    { label: 'Daily', value: 'day' },
+    { label: 'Weekly', value: 'week' },
+    { label: 'Monthly', value: 'month' }
 ];
-const chartView = ref('weekly'); 
+const chartView = ref('week');
+
+// Attendance view options
+const viewTypeOptions = [
+    { label: 'Subject-Specific', value: 'subject' },
+    { label: 'All Students', value: 'all_students' }
+];
+const viewType = ref('subject');
 const currentDate = ref(new Date());
 const currentMonth = ref(new Date().getMonth());
 const currentYear = ref(new Date().getFullYear());
@@ -106,9 +111,7 @@ const MOCK_TEACHER = {
     ]
 };
 
-const MOCK_SUBJECTS = [
-    { id: 1, name: 'Mathematics', grade: 'Grade 3', originalSubject: { id: 1, name: 'Mathematics' } }
-];
+const MOCK_SUBJECTS = [{ id: 1, name: 'Mathematics', grade: 'Grade 3', originalSubject: { id: 1, name: 'Mathematics' } }];
 
 // Remove mock data - will be loaded from API
 
@@ -148,7 +151,7 @@ onMounted(async () => {
     try {
         // Use Maria Santos as the default teacher (ID: 3)
         const teacherId = 3;
-        
+
         // Set teacher data directly (skip API call for now)
         currentTeacher.value = {
             id: teacherId,
@@ -164,7 +167,7 @@ onMounted(async () => {
             const directResponse = await fetch(`http://localhost:8000/api/teachers/${teacherId}/assignments`, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json'
                 }
             });
@@ -177,20 +180,20 @@ onMounted(async () => {
                     currentTeacher.value.section = `${firstAssignment.section_name} (Grade 3)`;
                 }
 
-                const realSubjects = assignments.assignments.flatMap(assignment => 
-                    assignment.subjects.map(subject => ({
+                const realSubjects = assignments.assignments.flatMap((assignment) =>
+                    assignment.subjects.map((subject) => ({
                         id: subject.subject_id,
                         name: subject.subject_name,
                         grade: 'Grade 3',
                         sectionId: assignment.section_id,
-                        originalSubject: { 
-                            id: subject.subject_id, 
+                        originalSubject: {
+                            id: subject.subject_id,
                             name: subject.subject_name,
                             sectionId: assignment.section_id
                         }
                     }))
                 );
-                
+
                 teacherSubjects.value = realSubjects;
                 availableSubjects.value = realSubjects.map((subject) => ({
                     id: subject.id,
@@ -213,19 +216,19 @@ onMounted(async () => {
             console.error('Error loading teacher assignments:', error);
             // Fallback to hardcoded subjects with sectionId
             const fallbackSubjects = [
-                { 
-                    id: 1, 
-                    name: 'Mathematics', 
-                    grade: 'Grade 3', 
+                {
+                    id: 1,
+                    name: 'Mathematics',
+                    grade: 'Grade 3',
                     sectionId: 3,
-                    originalSubject: { id: 1, name: 'Mathematics', sectionId: 3 } 
+                    originalSubject: { id: 1, name: 'Mathematics', sectionId: 3 }
                 },
-                { 
-                    id: 2, 
-                    name: 'Homeroom', 
-                    grade: 'Grade 3', 
+                {
+                    id: 2,
+                    name: 'Homeroom',
+                    grade: 'Grade 3',
                     sectionId: 3,
-                    originalSubject: { id: 2, name: 'Homeroom', sectionId: 3 } 
+                    originalSubject: { id: 2, name: 'Homeroom', sectionId: 3 }
                 }
             ];
             teacherSubjects.value = fallbackSubjects;
@@ -291,12 +294,12 @@ async function loadTeacherSubjects() {
 
         if (assignmentsResponse && assignmentsResponse.assignments) {
             // Process each section assignment
-            assignmentsResponse.assignments.forEach(sectionAssignment => {
+            assignmentsResponse.assignments.forEach((sectionAssignment) => {
                 const sectionName = sectionAssignment.section_name;
                 const sectionId = sectionAssignment.section_id;
 
                 // Process each subject in this section
-                sectionAssignment.subjects.forEach(subject => {
+                sectionAssignment.subjects.forEach((subject) => {
                     tempSubjects.push({
                         id: subject.subject_id,
                         name: subject.subject_name,
@@ -387,18 +390,14 @@ async function loadAttendanceData() {
         // Use the same API as the attendance page to get students
         const sectionId = selectedSubject.value.sectionId || selectedSubject.value.originalSubject?.sectionId || 3; // Use Malikhain section ID
         console.log('Using sectionId:', sectionId, 'for subject:', selectedSubject.value.name);
-        
+
         console.log('Calling getStudentsForTeacherSubject with params:', {
             teacherId: currentTeacher.value.id,
             sectionId: sectionId,
             subjectId: selectedSubject.value.id
         });
 
-        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(
-            currentTeacher.value.id,
-            sectionId,
-            selectedSubject.value.id
-        );
+        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(currentTeacher.value.id, sectionId, selectedSubject.value.id);
 
         console.log('Raw students response:', studentsResponse);
 
@@ -418,27 +417,21 @@ async function loadAttendanceData() {
         const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-        // Get attendance summary from database
-        const summaryResponse = await fetch(`http://127.0.0.1:8000/api/attendance/summary?` + new URLSearchParams({
-            teacher_id: currentTeacher.value.id,
-            subject_id: selectedSubject.value.id,
-            date_from: firstDay.toISOString().split('T')[0],
-            date_to: lastDay.toISOString().split('T')[0]
-        }), {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-
+        // Get attendance summary using the new service
         let summaryData = null;
-        if (summaryResponse.ok) {
-            const summaryResult = await summaryResponse.json();
-            if (summaryResult.success) {
+        try {
+            const summaryResult = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
+                period: chartView.value,
+                viewType: viewType.value,
+                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
+            });
+
+            if (summaryResult && summaryResult.success) {
                 summaryData = summaryResult.data;
                 console.log('Attendance summary from database:', summaryData);
             }
+        } catch (summaryError) {
+            console.error('Error fetching attendance summary:', summaryError);
         }
 
         // If no summary data, calculate from students
@@ -450,21 +443,42 @@ async function loadAttendanceData() {
                 studentsWithCritical: 0
             };
         } else {
-            // Ensure totalStudents matches actual student count
-            summaryData.totalStudents = students.length;
+            // Map API response fields to frontend expected fields
+            summaryData = {
+                totalStudents: summaryData.total_students || students.length,
+                averageAttendance: summaryData.average_attendance || 0,
+                studentsWithWarning: summaryData.students_with_warning || 0,
+                studentsWithCritical: summaryData.students_with_critical || 0,
+                students: summaryData.students || []
+            };
         }
 
         attendanceSummary.value = summaryData;
 
-        // Process students for absence issues
-        studentsWithAbsenceIssues.value = students.map(student => ({
-            id: student.id,
-            name: student.first_name + ' ' + student.last_name,
-            gradeLevel: student.grade_level || 3,
-            section: student.section_name || 'Unknown',
-            absences: Math.floor(Math.random() * 3), // Will be replaced with real data
-            severity: 'normal'
-        }));
+        // Process students for absence issues using real data
+        studentsWithAbsenceIssues.value = students.map((student) => {
+            // Use real absence data from summary if available
+            const studentSummary = summaryData?.students?.find((s) => s.student_id === student.id);
+            const absences = studentSummary?.total_absences || 0;
+            const recentAbsences = studentSummary?.recent_absences || 0;
+
+            let severity = 'normal';
+            if (recentAbsences >= CRITICAL_THRESHOLD) {
+                severity = 'critical';
+            } else if (recentAbsences >= WARNING_THRESHOLD) {
+                severity = 'warning';
+            }
+
+            return {
+                id: student.id,
+                name: student.first_name + ' ' + student.last_name,
+                gradeLevel: student.grade_level || 3,
+                section: student.section_name || 'Unknown',
+                absences: absences,
+                recentAbsences: recentAbsences,
+                severity: severity
+            };
+        });
 
         console.log('Attendance data loaded successfully');
         console.log('Updated attendance summary:', attendanceSummary.value);
@@ -620,23 +634,23 @@ async function prepareChartData() {
         let dateFrom, dateTo;
         let labels = [];
 
-        if (chartView.value === 'daily') {
+        if (chartView.value === 'day') {
             // Last 7 days
             dateFrom = new Date(today);
             dateFrom.setDate(today.getDate() - 6);
             dateTo = new Date(today);
-            
+
             for (let i = 6; i >= 0; i--) {
                 const date = new Date(today);
                 date.setDate(today.getDate() - i);
                 labels.push(formatDateShort(date));
             }
-        } else if (chartView.value === 'weekly') {
+        } else if (chartView.value === 'week') {
             // Last 4 weeks
             dateFrom = new Date(today);
             dateFrom.setDate(today.getDate() - 27); // 4 weeks ago
             dateTo = new Date(today);
-            
+
             for (let i = 3; i >= 0; i--) {
                 const endDate = new Date(today);
                 endDate.setDate(today.getDate() - i * 7);
@@ -644,12 +658,13 @@ async function prepareChartData() {
                 startDate.setDate(endDate.getDate() - 6);
                 labels.push(`${formatDateShort(startDate)} - ${formatDateShort(endDate)}`);
             }
-        } else { // monthly
+        } else {
+            // monthly
             // Last 6 months
             dateFrom = new Date(today);
             dateFrom.setMonth(today.getMonth() - 5);
             dateTo = new Date(today);
-            
+
             for (let i = 5; i >= 0; i--) {
                 const date = new Date(today);
                 date.setMonth(today.getMonth() - i);
@@ -657,42 +672,50 @@ async function prepareChartData() {
             }
         }
 
-        // Fetch attendance trends from database
-        const trendsResponse = await fetch(`http://127.0.0.1:8000/api/attendance/trends?` + new URLSearchParams({
-            teacher_id: currentTeacher.value.id,
-            subject_id: selectedSubject.value.id,
-            period: chartView.value,
-            date_from: dateFrom.toISOString().split('T')[0],
-            date_to: dateTo.toISOString().split('T')[0]
-        }), {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-
+        // Fetch attendance trends using the new service
         let attendanceData = {
             present: [],
             absent: [],
             late: []
         };
 
-        if (trendsResponse.ok) {
-            const trendsResult = await trendsResponse.json();
-            if (trendsResult.success && trendsResult.data) {
-                // Process the database response
+        try {
+            const trendsResult = await AttendanceSummaryService.getAttendanceTrends(currentTeacher.value.id, {
+                period: chartView.value,
+                viewType: viewType.value,
+                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
+            });
+
+            if (trendsResult && trendsResult.success && trendsResult.data) {
+                // Process the database response - API returns labels and datasets structure
                 const dbData = trendsResult.data;
-                attendanceData.present = dbData.map(item => item.present_count || 0);
-                attendanceData.absent = dbData.map(item => item.absent_count || 0);
-                attendanceData.late = dbData.map(item => item.late_count || 0);
-                
-                console.log('Using database attendance trends:', attendanceData);
+
+                if (dbData.datasets && Array.isArray(dbData.datasets)) {
+                    // Extract data from datasets
+                    const presentDataset = dbData.datasets.find((d) => d.label === 'Present');
+                    const absentDataset = dbData.datasets.find((d) => d.label === 'Absent');
+                    const lateDataset = dbData.datasets.find((d) => d.label === 'Late');
+
+                    attendanceData.present = presentDataset ? presentDataset.data : [];
+                    attendanceData.absent = absentDataset ? absentDataset.data : [];
+                    attendanceData.late = lateDataset ? lateDataset.data : [];
+
+                    // Update labels if provided by API
+                    if (dbData.labels && Array.isArray(dbData.labels)) {
+                        labels = dbData.labels;
+                    }
+
+                    console.log('Using database attendance trends:', attendanceData);
+                    console.log('Using database labels:', labels);
+                } else {
+                    console.warn('Invalid datasets structure in trends response');
+                }
             } else {
                 console.warn('Invalid trends response, using fallback data');
             }
-        } else {
-            console.warn('Failed to fetch attendance trends, using fallback data');
+        } catch (trendsError) {
+            console.error('Error fetching attendance trends:', trendsError);
+            console.warn('Using fallback data due to error');
         }
 
         // Fallback data if API fails or returns empty data
@@ -700,9 +723,15 @@ async function prepareChartData() {
             console.log('Using fallback chart data');
             const fallbackCounts = labels.length;
             attendanceData = {
-                present: Array(fallbackCounts).fill(0).map(() => Math.floor(Math.random() * 15) + 5),
-                absent: Array(fallbackCounts).fill(0).map(() => Math.floor(Math.random() * 5) + 1),
-                late: Array(fallbackCounts).fill(0).map(() => Math.floor(Math.random() * 3) + 1)
+                present: Array(fallbackCounts)
+                    .fill(0)
+                    .map(() => Math.floor(Math.random() * 15) + 5),
+                absent: Array(fallbackCounts)
+                    .fill(0)
+                    .map(() => Math.floor(Math.random() * 5) + 1),
+                late: Array(fallbackCounts)
+                    .fill(0)
+                    .map(() => Math.floor(Math.random() * 3) + 1)
             };
         }
 
@@ -872,6 +901,19 @@ function onSubjectChange() {
     prepareChartData();
 }
 
+// Handle view type change (subject-specific vs all students)
+function onViewTypeChange() {
+    console.log('View type changed to:', viewType.value);
+    loadAttendanceData();
+    prepareChartData();
+}
+
+// Handle chart view change (daily/weekly/monthly)
+function onChartViewChange() {
+    console.log('Chart view changed to:', chartView.value);
+    prepareChartData();
+}
+
 // Watch for subject changes to update data
 watch(selectedSubject, (newSubject) => {
     if (newSubject) {
@@ -965,11 +1007,7 @@ function ensureStudentAttendanceService() {
     <div class="grid" style="margin: 0 1rem">
         <!-- Loading State -->
         <div v-if="loading" class="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
-            <BookFlipLoader 
-                size="medium" 
-                text="Loading dashboard data..." 
-                :show-text="true"
-            />
+            <BookFlipLoader size="medium" text="Loading dashboard data..." :show-text="true" />
         </div>
 
         <div v-else>
@@ -980,7 +1018,7 @@ function ensureStudentAttendanceService() {
                         <h1
                             class="text-2xl font-bold mb-1"
                             style="
-                                color: #1a1a1a;
+                                color: #ffffff;
                                 text-shadow:
                                     0 0 1px #fff,
                                     0 0 2px #fff;
@@ -991,13 +1029,11 @@ function ensureStudentAttendanceService() {
                         <p class="text-blue-100 font-normal">
                             {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
                         </p>
-                        <p class="text-blue-200 font-medium text-sm mt-1">
-                            Section: {{ currentTeacher?.section || 'Malikhain (Grade 3)' }}
-                        </p>
+                        <p class="text-blue-200 font-medium text-sm mt-1">Section: {{ currentTeacher?.section || 'Malikhain (Grade 3)' }}</p>
                     </div>
 
                     <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
-                        <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg" @change="onSubjectChange" />
+                        <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-3xl" @change="onSubjectChange" />
                     </div>
                 </div>
             </div>
@@ -1061,9 +1097,20 @@ function ensureStudentAttendanceService() {
                 <!-- Attendance Trends Chart -->
                 <div class="col-span-12 lg:col-span-8">
                     <div class="bg-white rounded-xl shadow-sm p-5">
-                        <div class="flex justify-between items-center mb-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                             <h2 class="text-lg font-semibold">Attendance Trends</h2>
-                            <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" />
+                            <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                                <!-- View Type Toggle -->
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm font-medium text-gray-600">View:</label>
+                                    <SelectButton v-model="viewType" :options="viewTypeOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onViewTypeChange" />
+                                </div>
+                                <!-- Time Period Toggle -->
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm font-medium text-gray-600">Period:</label>
+                                    <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartViewChange" />
+                                </div>
+                            </div>
                         </div>
 
                         <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
@@ -1102,49 +1149,9 @@ function ensureStudentAttendanceService() {
                     </div>
                 </div>
 
-                <!-- Attendance Insights Card -->
+                <!-- Enhanced Attendance Insights Card -->
                 <div class="col-span-12 lg:col-span-4">
-                    <div class="bg-white rounded-xl shadow-sm p-5 h-full">
-                        <h2 class="text-lg font-semibold mb-4 flex items-center">
-                            <i class="pi pi-lightbulb text-amber-500 mr-2"></i>
-                            Attendance Insights
-                            <span v-if="selectedSubject" class="text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
-                                {{ selectedSubject.name }}
-                            </span>
-                        </h2>
-
-                        <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-8 text-gray-500">
-                            <i class="pi pi-info-circle text-4xl mb-3 text-gray-300"></i>
-                            <p class="font-normal">Please select a subject to view insights</p>
-                        </div>
-
-                        <div v-else-if="attendanceSummary" class="space-y-4">
-                            <div v-if="attendanceSummary.studentsWithWarning > 0" class="flex items-start p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                                <i class="pi pi-exclamation-triangle text-yellow-500 mr-3 mt-0.5"></i>
-                                <p class="font-normal">{{ attendanceSummary.studentsWithWarning }} students have {{ WARNING_THRESHOLD }}+ absences this month</p>
-                            </div>
-
-                            <div v-if="attendanceSummary.studentsWithCritical > 0" class="flex items-start p-3 bg-red-50 rounded-lg border border-red-200">
-                                <i class="pi pi-exclamation-circle text-red-500 mr-3 mt-0.5"></i>
-                                <p class="font-normal">{{ attendanceSummary.studentsWithCritical }} students have {{ CRITICAL_THRESHOLD }}+ absences this month</p>
-                            </div>
-
-                            <div v-if="attendanceSummary.averageAttendance < 85 && attendanceSummary.totalStudents > 0" class="flex items-start p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                <i class="pi pi-chart-line text-blue-500 mr-3 mt-0.5"></i>
-                                <p class="font-normal">Average attendance is below 85% for this subject</p>
-                            </div>
-
-                            <div v-if="attendanceSummary.studentsWithWarning === 0 && attendanceSummary.studentsWithCritical === 0 && attendanceSummary.totalStudents > 0" class="flex items-start p-3 bg-green-50 rounded-lg border border-green-200">
-                                <i class="pi pi-check-circle text-green-500 mr-3 mt-0.5"></i>
-                                <p class="font-normal">No attendance issues detected for this subject</p>
-                            </div>
-
-                            <div v-if="attendanceSummary.totalStudents === 0" class="flex items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <i class="pi pi-info-circle text-gray-500 mr-3 mt-0.5"></i>
-                                <p class="font-normal">No students found for this subject</p>
-                            </div>
-                        </div>
-                    </div>
+                    <AttendanceInsights :students="attendanceSummary?.students || []" :selectedSubject="selectedSubject" />
                 </div>
             </div>
 
