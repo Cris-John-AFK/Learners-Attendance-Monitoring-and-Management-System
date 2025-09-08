@@ -1,10 +1,252 @@
-﻿<script setup>
+﻿<template>
+    <div class="card p-8 shadow-xl rounded-xl bg-white border border-gray-100">
+        <!-- Modern Gradient Header -->
+        <div class="modern-header-container mb-8">
+            <div class="gradient-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="pi pi-users"></i>
+                        </div>
+                        <div class="header-text">
+                            <h1 class="header-title">Teacher Management System</h1>
+                            <p class="header-subtitle">Naawan Central School</p>
+                            <div class="teacher-count">
+                                <i class="pi pi-chart-bar mr-2"></i>
+                                Total Teachers: <span class="count-badge">{{ filteredTeachers.length }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="search-container">
+                            <span class="p-input-icon-left">
+                                <i class="pi pi-search" />
+                                <InputText v-model="searchQuery" placeholder="Search teachers..." class="search-input" />
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teachers Cards -->
+        <div class="teachers-container">
+            <div v-if="loading" class="loading-container">
+                <ProgressSpinner />
+                <p>Loading teachers...</p>
+            </div>
+            <div v-else-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
+                <div v-for="teacher in filteredTeachers" :key="teacher.id" class="teacher-card">
+                    <div class="teacher-card-header">
+                        <div class="teacher-info">
+                            <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
+                        </div>
+                    </div>
+
+                    <div class="teacher-card-body">
+                        <!-- Homeroom Section -->
+                        <div class="homeroom-section">
+                            <h4>Homeroom</h4>
+                            <div v-if="teacher.primary_assignment" class="assignment-info">
+                                <div class="section-info">
+                                    <div class="section-name">{{ teacher.primary_assignment.section?.name || 'N/A' }}</div>
+                                    <div class="grade-level">{{ teacher.primary_assignment.section?.grade?.name || 'N/A' }}</div>
+                                </div>
+                            </div>
+                            <div v-else class="not-assigned">
+                                <i class="pi pi-exclamation-triangle"></i>
+                                No homeroom assigned
+                            </div>
+                        </div>
+
+                        <!-- Teaching Subjects Section -->
+                        <div class="teaching-subjects-section">
+                            <h4>Teaching Subjects</h4>
+                            <div v-if="teacher.subject_assignments && teacher.subject_assignments.length > 0" class="subjects-list">
+                                <div v-for="(assignment, index) in teacher.subject_assignments" :key="assignment.id || index" class="subject-item">
+                                    <div class="subject-name">
+                                        <i class="pi pi-book subject-icon"></i>
+                                        {{ assignment.subject?.name || 'Unknown Subject' }}
+                                    </div>
+                                    <div class="section-name">{{ assignment.section?.name || 'N/A' }}</div>
+                                </div>
+                            </div>
+                            <div v-else class="not-assigned">
+                                <i class="pi pi-exclamation-triangle"></i>
+                                No subjects assigned
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="teacher-card-actions">
+                        <div class="action-buttons-row">
+                            <button class="action-btn details-btn" @click="viewTeacherDetails(teacher)" title="View Details">
+                                <i class="pi pi-eye"></i>
+                                <span>Details</span>
+                            </button>
+                            <button class="action-btn edit-btn" @click="editTeacher(teacher)" title="Edit Teacher">
+                                <i class="pi pi-pencil"></i>
+                                <span>Edit</span>
+                            </button>
+                            <button class="action-btn archive-btn" @click="archiveTeacher(teacher)" title="Archive Teacher">
+                                <i class="pi pi-archive"></i>
+                                <span>Archive</span>
+                            </button>
+                        </div>
+                        <div class="action-buttons-row">
+                            <button class="action-btn assign-section-btn" @click="assignSection(teacher)" title="Assign Section">
+                                <i class="pi pi-home"></i>
+                                <span>Assign Section</span>
+                            </button>
+                            <button class="action-btn add-subject-btn" @click="addSubject(teacher)" title="Add Subject">
+                                <i class="pi pi-plus"></i>
+                                <span>Add Subject</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div v-else class="no-data-message">
+                <i class="pi pi-users" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem"></i>
+                <p>No teachers found</p>
+                <p class="no-data-subtitle">Try adjusting your search criteria or add new teachers to get started.</p>
+            </div>
+        </div>
+
+        <!-- Teacher Registration/Edit Dialog -->
+        <Dialog v-model:visible="teacherDialog" :header="dialogTitle" :style="{ width: '700px' }" :modal="true" class="registration-dialog">
+            <div class="p-fluid">
+                <div class="form-grid p-5">
+                    <div class="field">
+                        <label for="first_name">First Name*</label>
+                        <InputText id="first_name" v-model="teacher.first_name" required :class="{ 'p-invalid': submitted && !teacher.first_name }" />
+                        <small class="p-error" v-if="submitted && !teacher.first_name">First name is required.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="last_name">Last Name*</label>
+                        <InputText id="last_name" v-model="teacher.last_name" required :class="{ 'p-invalid': submitted && !teacher.last_name }" />
+                        <small class="p-error" v-if="submitted && !teacher.last_name">Last name is required.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="email">Email*</label>
+                        <InputText id="email" v-model="teacher.email" required :class="{ 'p-invalid': submitted && !teacher.email }" />
+                        <small class="p-error" v-if="submitted && !teacher.email">Email is required.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="phone_number">Phone Number</label>
+                        <InputText id="phone_number" v-model="teacher.phone_number" />
+                    </div>
+
+                    <div class="field">
+                        <label for="address">Address</label>
+                        <InputText id="address" v-model="teacher.address" />
+                    </div>
+
+                    <div class="field">
+                        <label for="username">Username*</label>
+                        <InputText id="username" v-model="teacher.username" required :class="{ 'p-invalid': submitted && !teacher.username }" />
+                        <small class="p-error" v-if="submitted && !teacher.username">Username is required.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="password">Password*</label>
+                        <Password id="password" v-model="teacher.password" required :class="{ 'p-invalid': submitted && !teacher.password }" :feedback="false" />
+                        <small class="p-error" v-if="submitted && !teacher.password">Password is required.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="gender">Gender*</label>
+                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" :class="{ 'p-invalid': submitted && !teacher.gender }" />
+                        <small class="p-error" v-if="submitted && !teacher.gender">Gender is required.</small>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
+            </template>
+        </Dialog>
+
+        <!-- Teacher Details Dialog -->
+        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
+            <div class="p-fluid" v-if="selectedTeacher">
+                <div class="teacher-details-header">
+                    <div class="teacher-avatar">
+                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
+                    </div>
+                    <div class="teacher-details-name">
+                        <div class="teacher-info-header">
+                            <div class="name-status">
+                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
+                            </div>
+                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
+                                <i class="pi pi-refresh"></i>
+                                Refresh Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="teacher-details-info">
+                    <div class="info-section">
+                        <div class="info-row">
+                            <div class="info-label">Email</div>
+                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Phone</div>
+                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Address</div>
+                            <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Gender</div>
+                            <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Homeroom Section -->
+                    <div class="homeroom-section">
+                        <h3>Homeroom</h3>
+                        <div v-if="selectedTeacher.primary_assignment" class="assignment-info">
+                            <div class="section-info">
+                                <div class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'N/A' }}</div>
+                                <div class="grade-level">{{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="no-assignment">No homeroom assigned</div>
+                    </div>
+
+                    <!-- Teaching Subjects Section -->
+                    <div class="teaching-subjects-section">
+                        <h3>Teaching Subjects</h3>
+                        <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-list">
+                            <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
+                                <div class="subject-name">{{ assignment.subject?.name }}</div>
+                                <div class="section-name">{{ assignment.section?.name }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="no-assignment">No subjects assigned</div>
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+    </div>
+</template>
+
+<script setup>
 import api, { API_BASE_URL } from '@/config/axios';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import { default as Dropdown } from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
-import ProgressSpinner from 'primevue/progressspinner';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
@@ -598,7 +840,7 @@ const validateAssignment = () => {
     // Check if another teacher is already the primary for this section
     if (isPrimary && teachers.value && teachers.value.length > 0) {
         for (const teacher of teachers.value) {
-            // Skip checking the current teacher
+            // Skip checking the current teacher we're editing
             if (editedTeacher.value && teacher.id === editedTeacher.value.id) {
                 continue;
             }
@@ -768,106 +1010,6 @@ const saveAssignment = async () => {
     }
 };
 
-// Function to save assignments to backend
-const saveAssignmentToBackend = async (teacherId, assignments) => {
-    try {
-        console.log('Saving assignments to backend for teacher ID:', teacherId);
-
-        // Check for potential conflicts with server data before saving
-        const conflicts = await checkServerAssignmentConflicts(assignments);
-        if (conflicts.length > 0) {
-            // Return a standardized error object for a better UX
-            throw {
-                isValidationError: true,
-                message: conflicts[0],
-                conflicts
-            };
-        }
-
-        const response = await api.put(`${API_BASE_URL}/teachers/${teacherId}/assignments`, {
-            assignments: assignments.map((a) => ({
-                section_id: a.section_id,
-                subject_id: a.subject_id,
-                is_primary: a.is_primary || false,
-                role: a.role || 'Teacher'
-            }))
-        });
-
-        console.log('Backend save response:', response.data);
-
-        // Refresh teacher data to ensure we have the latest from the server
-        await loadTeachers();
-
-        return response.data;
-    } catch (error) {
-        console.error('Failed to save assignments to backend:', error);
-
-        // If it's already our custom error, just rethrow it
-        if (error.isValidationError) {
-            throw error;
-        }
-
-        // Check if this is a validation error response from server
-        if (error.response) {
-            // Handle 500 error that's actually a validation error (not ideal API design)
-            if (error.response.status === 500) {
-                // Check if error message contains information about duplicate assignment
-                const errorMessage = error.response.data?.message || error.message;
-                if (
-                    errorMessage.includes('duplicate') ||
-                    errorMessage.includes('already assigned') ||
-                    errorMessage.includes('SQLSTATE[23000]') || // SQL integrity constraint error
-                    errorMessage.includes('constraint') ||
-                    errorMessage.toLowerCase().includes('unique')
-                ) {
-                    // Show a user-friendly validation error
-                    toast.add({
-                        severity: 'warn',
-                        summary: 'Validation Error',
-                        detail: 'This teacher is already assigned to this section and subject',
-                        life: 5000
-                    });
-
-                    // Refresh data to get current state from server
-                    await loadTeachers();
-
-                    // Return a standardized error object
-                    throw {
-                        isValidationError: true,
-                        message: 'This teacher is already assigned to this section and subject'
-                    };
-                }
-            }
-
-            // Handle proper validation responses (422 status)
-            if (error.response.status === 422) {
-                const validationErrors = error.response.data.errors || {};
-                const errorMessages = Object.values(validationErrors).flat();
-
-                toast.add({
-                    severity: 'warn',
-                    summary: 'Validation Error',
-                    detail: errorMessages.join(', ') || 'Invalid assignment data',
-                    life: 5000
-                });
-
-                // Return a standardized error object
-                throw {
-                    isValidationError: true,
-                    message: errorMessages.join(', ') || 'Invalid assignment data'
-                };
-            }
-        }
-
-        // For other types of errors, rethrow with a better message
-        throw {
-            isValidationError: false,
-            original: error,
-            message: error.message || 'Unknown server error'
-        };
-    }
-};
-
 // New function to check for existing conflicts on the server before saving
 const checkServerAssignmentConflicts = async (assignments) => {
     if (!assignments || assignments.length === 0) return [];
@@ -892,7 +1034,7 @@ const checkServerAssignmentConflicts = async (assignments) => {
         if (conflicts.length === 0) {
             // Fallback to client-side check of other teachers
             for (const teacher of teachers.value) {
-                // Skip the current teacher we're editing
+                // Skip checking the current teacher we're editing
                 if (editedTeacher.value && teacher.id === editedTeacher.value.id) {
                     continue;
                 }
@@ -1349,7 +1491,7 @@ const getGradeName = (assignments) => {
     // Then check active assignments
     if (assignments?.active_assignments?.length > 0) {
         // Try to find primary assignments first
-        const primaryAssignment = assignments.active_assignments.find((a) => (a.is_primary === true || a.role === 'primary') && a.section && a.section.grade);
+        const primaryAssignment = assignments.active_assignments.find((a) => a.is_primary === true || a.role === 'primary');
 
         if (primaryAssignment && primaryAssignment.section.grade) {
             return primaryAssignment.section.grade.name;
@@ -1380,7 +1522,7 @@ const getSectionName = (assignments) => {
     // Then check active assignments
     if (assignments?.active_assignments?.length > 0) {
         // First try to find primary assignment
-        const primaryAssignment = assignments.active_assignments.find((a) => (a.is_primary === true || a.role === 'primary') && a.section);
+        const primaryAssignment = assignments.active_assignments.find((a) => a.is_primary === true || a.role === 'primary');
 
         if (primaryAssignment && primaryAssignment.section) {
             return primaryAssignment.section.name;
@@ -1927,7 +2069,7 @@ const loadSectionsForAssignment = async (gradeId) => {
             severity: 'error',
             summary: 'Error',
             detail: 'Failed to load sections. Please try again.',
-            life: 3000
+            life: 5000
         });
         availableSections.value = [];
     } finally {
@@ -1983,7 +2125,7 @@ const loadSubjectsForAssignment = async () => {
             severity: 'error',
             summary: 'Error',
             detail: 'Failed to load subjects. Please try again.',
-            life: 3000
+            life: 5000
         });
         availableSubjectsForAssignment.value = [];
     } finally {
@@ -2211,536 +2353,15 @@ const archiveTeacher = async (teacher) => {
 };
 </script>
 
-<template>
-    <div class="admin-teacher-wrapper">
-        <!-- Background shapes remain unchanged -->
-        <div class="background-shapes">
-            <div class="shape circle"></div>
-            <div class="shape square"></div>
-            <div class="shape triangle"></div>
-            <div class="shape rectangle"></div>
-            <div class="shape diamond"></div>
-            <div class="shape circle-2"></div>
-            <div class="shape square-2"></div>
-            <div class="shape triangle-2"></div>
-        </div>
-
-        <div class="content-wrapper">
-            <!-- Modern Gradient Header -->
-            <div class="modern-header-container mb-8">
-                <div class="gradient-header">
-                    <div class="header-content">
-                        <div class="header-left">
-                            <div class="header-icon">
-                                <i class="pi pi-users"></i>
-                            </div>
-                            <div class="header-text">
-                                <h1 class="header-title">Teacher Management System</h1>
-                                <p class="header-subtitle">Naawan Central School</p>
-                                <div class="teacher-count">
-                                    <i class="pi pi-chart-bar mr-2"></i>
-                                    Total Teachers: <span class="count-badge">{{ filteredTeachers.length }}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="header-actions">
-                            <div class="search-container">
-                                <span class="p-input-icon-left">
-                                    <i class="pi pi-search" />
-                                    <InputText v-model="searchQuery" placeholder="Search teachers..." class="search-input" />
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Teachers Cards -->
-            <div class="teachers-container">
-                <div v-if="loading" class="loading-container">
-                    <ProgressSpinner />
-                    <p>Loading teachers...</p>
-                </div>
-                <div v-else-if="!loading && filteredTeachers.length > 0" class="teacher-cards">
-                    <div v-for="teacher in filteredTeachers" :key="teacher.id" class="teacher-card">
-                        <div class="teacher-card-header">
-                            <div class="teacher-info">
-                                <div class="teacher-name">{{ teacher.first_name }} {{ teacher.last_name }}</div>
-                            </div>
-                        </div>
-
-                        <div class="teacher-card-body">
-                            <!-- Homeroom Section -->
-                            <div class="homeroom-section">
-                                <h4>Homeroom</h4>
-                                <div v-if="teacher.primary_assignment" class="assignment-info">
-                                    <div class="section-info">
-                                        <span class="section-name">{{ teacher.primary_assignment.section?.name || 'Not assigned' }}</span>
-                                        <span class="grade-level">Grade {{ teacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
-                                    </div>
-                                </div>
-                                <div v-else class="not-assigned">No homeroom assigned</div>
-                            </div>
-
-                            <!-- Teaching Subjects Section -->
-                            <div class="teaching-subjects-section">
-                                <h4>Teaching Subjects</h4>
-                                <div v-if="teacher.subject_assignments && teacher.subject_assignments.length > 0" class="subjects-list">
-                                    <div v-for="assignment in teacher.subject_assignments" :key="assignment.id" class="subject-item">
-                                        <span class="subject-name">{{ assignment.subject?.name }}</span>
-                                        <span class="section-name">{{ assignment.section?.name }}</span>
-                                    </div>
-                                </div>
-                                <div v-else class="not-assigned">No subjects assigned</div>
-                            </div>
-                        </div>
-
-                        <div class="teacher-card-actions">
-                            <div class="action-buttons-row">
-                                <Button class="action-btn details-btn" @click="viewTeacher(teacher)" v-tooltip.top="'View Details'">
-                                    <i class="pi pi-eye"></i>
-                                    <span>Details</span>
-                                </Button>
-
-                                <Button class="action-btn edit-btn" @click="editTeacher(teacher)" v-tooltip.top="'Edit Teacher'">
-                                    <i class="pi pi-pencil"></i>
-                                    <span>Edit</span>
-                                </Button>
-
-                                <Button class="action-btn archive-btn" @click="confirmArchiveTeacher(teacher)" v-tooltip.top="'Archive Teacher'">
-                                    <i class="pi pi-folder"></i>
-                                    <span>Archive</span>
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div v-else class="no-data-message">
-                    <i class="pi pi-info-circle"></i>
-                    <p>No teachers found</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Teacher Registration/Edit Dialog -->
-        <Dialog v-model:visible="teacherDialog" :header="dialogTitle" :style="{ width: '700px' }" :modal="true" class="registration-dialog">
-            <div class="p-fluid">
-                <div class="form-grid p-5">
-                    <div class="field">
-                        <label for="first_name">First Name*</label>
-                        <InputText id="first_name" v-model="teacher.first_name" required :class="{ 'p-invalid': submitted && !teacher.first_name }" />
-                        <small class="p-error" v-if="submitted && !teacher.first_name">First name is required.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="last_name">Last Name*</label>
-                        <InputText id="last_name" v-model="teacher.last_name" required :class="{ 'p-invalid': submitted && !teacher.last_name }" />
-                        <small class="p-error" v-if="submitted && !teacher.last_name">Last name is required.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="email">Email*</label>
-                        <InputText id="email" v-model="teacher.email" required :class="{ 'p-invalid': submitted && !teacher.email }" />
-                        <small class="p-error" v-if="submitted && !teacher.email">Email is required.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="phone_number">Phone Number</label>
-                        <InputText id="phone_number" v-model="teacher.phone_number" />
-                    </div>
-
-                    <div class="field">
-                        <label for="address">Address</label>
-                        <InputText id="address" v-model="teacher.address" />
-                    </div>
-
-                    <div class="field">
-                        <label for="username">Username*</label>
-                        <InputText id="username" v-model="teacher.username" required :class="{ 'p-invalid': submitted && !teacher.username }" />
-                        <small class="p-error" v-if="submitted && !teacher.username">Username is required.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="password">Password*</label>
-                        <Password id="password" v-model="teacher.password" required :class="{ 'p-invalid': submitted && !teacher.password }" :feedback="false" />
-                        <small class="p-error" v-if="submitted && !teacher.password">Password is required.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="gender">Gender*</label>
-                        <Dropdown id="gender" v-model="teacher.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select Gender" :class="{ 'p-invalid': submitted && !teacher.gender }" />
-                        <small class="p-error" v-if="submitted && !teacher.gender">Gender is required.</small>
-                    </div>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
-                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
-            </template>
-        </Dialog>
-
-        <!-- Teacher Details Dialog -->
-        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
-            <div class="p-fluid" v-if="selectedTeacher">
-                <div class="teacher-details-header">
-                    <div class="teacher-avatar">
-                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
-                    </div>
-                    <div class="teacher-details-name">
-                        <div class="teacher-info-header">
-                            <div class="name-status">
-                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
-                            </div>
-                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
-                                <i class="pi pi-refresh"></i>
-                                Refresh Data
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="teacher-details-info">
-                    <div class="info-section">
-                        <div class="info-row">
-                            <div class="info-label">Email</div>
-                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Phone</div>
-                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Address</div>
-                            <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Gender</div>
-                            <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
-                        </div>
-                    </div>
-
-                    <!-- Homeroom Section -->
-                    <div class="homeroom-section">
-                        <h3>Homeroom</h3>
-                        <div v-if="selectedTeacher.primary_assignment" class="assignment-info">
-                            <div class="section-info">
-                                <span class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'Not assigned' }}</span>
-                                <span class="grade-level">Grade {{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</span>
-                            </div>
-                        </div>
-                        <div v-else class="no-assignment">No homeroom assigned</div>
-                    </div>
-
-                    <!-- Teaching Subjects Section -->
-                    <div class="teaching-subjects-section">
-                        <h3>Teaching Subjects</h3>
-                        <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-list">
-                            <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
-                                <span class="subject-name">{{ assignment.subject?.name }}</span>
-                                <span class="section-name">{{ assignment.section?.name }}</span>
-                            </div>
-                        </div>
-                        <div v-else class="no-assignment">No subjects assigned</div>
-                    </div>
-                </div>
-            </div>
-        </Dialog>
-    </div>
-</template>
-
 <style scoped>
-.admin-teacher-wrapper {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
-    padding: 2rem;
-    position: relative;
-    overflow: hidden;
-    animation: gradientShift 15s ease infinite;
-}
-
-.teacher-management-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding: 0 1rem;
-}
-
-.teacher-management-title {
-    color: var(--primary-color);
-    margin: 0;
-    font-size: 1.75rem;
-    font-weight: 600;
-}
-
-.teacher-management-subtitle {
-    color: #64748b;
-    margin: 0.5rem 0 0 0;
-    font-size: 1rem;
-}
-
-.search-container {
-    margin: 1rem;
-    padding: 0.5rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.teacher-cards-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-    padding: 1rem;
-    margin: 0 auto;
-    max-width: 1400px;
-}
-
-.teacher-card {
+/* Main Card Container - matching Admin-Student exactly */
+.card {
     background: white;
     border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
-}
-
-.teacher-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-}
-
-.teacher-name {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #1e293b;
-    margin-bottom: 0.25rem;
-}
-
-.section-label {
-    font-weight: 600;
-    color: #4b5563;
-    margin-bottom: 0.5rem;
-}
-
-.section-content {
-    background: #f8fafc;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-}
-
-.no-assignment {
-    color: #94a3b8;
-    font-style: italic;
-}
-
-.action-buttons {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-    margin-top: 1.5rem;
-}
-
-.action-button {
-    padding: 0.5rem;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-weight: 500;
-    transition: background-color 0.2s;
-}
-
-.details-button {
-    background-color: #3b82f6;
-    color: white;
-}
-
-.edit-button {
-    background-color: #f59e0b;
-    color: white;
-}
-
-.archive-button {
-    background-color: #10b981;
-    color: white;
-}
-
-.action-button:hover {
-    opacity: 0.9;
-}
-
-/* Registration Dialog Styles */
-.registration-dialog :deep(.p-dialog-content) {
-    padding: 0;
-}
-
-.registration-dialog .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .teacher-cards-container {
-        grid-template-columns: 1fr;
-    }
-
-    .registration-dialog .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .teacher-management-header {
-        flex-direction: column;
-        text-align: center;
-        gap: 1rem;
-    }
-}
-
-@keyframes gradientShift {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
-}
-
-/* Professional background elements */
-.background-shapes {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    z-index: 0;
-}
-
-.background-shapes .shape {
-    position: absolute;
-    opacity: 0.05;
-    animation: float 20s infinite ease-in-out;
-}
-
-.shape.circle {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background: #4361ee;
-    top: 10%;
-    left: 10%;
-    animation-delay: 0s;
-}
-
-.shape.square {
-    width: 120px;
-    height: 120px;
-    background: #3a0ca3;
-    top: 40%;
-    right: 15%;
-    transform: rotate(45deg);
-    animation-delay: 2s;
-}
-
-.shape.triangle {
-    width: 0;
-    height: 0;
-    border-left: 80px solid transparent;
-    border-right: 80px solid transparent;
-    border-bottom: 140px solid #4895ef;
-    top: 60%;
-    left: 20%;
-    animation-delay: 4s;
-}
-
-.shape.rectangle {
-    width: 180px;
-    height: 90px;
-    background: #560bad;
-    bottom: 20%;
-    right: 10%;
-    animation-delay: 1s;
-}
-
-.shape.diamond {
-    width: 100px;
-    height: 100px;
-    background: #f72585;
-    top: 25%;
-    left: 45%;
-    transform: rotate(45deg);
-    animation-delay: 3s;
-}
-
-.shape.circle-2 {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: #4cc9f0;
-    top: 70%;
-    right: 30%;
-    animation-delay: 5s;
-}
-
-.shape.square-2 {
-    width: 100px;
-    height: 100px;
-    background: #4361ee;
-    top: 15%;
-    right: 35%;
-    transform: rotate(25deg);
-    animation-delay: 6s;
-}
-
-.shape.triangle-2 {
-    width: 0;
-    height: 0;
-    border-left: 60px solid transparent;
-    border-right: 60px solid transparent;
-    border-bottom: 120px solid #7209b7;
-    bottom: 15%;
-    left: 30%;
-    animation-delay: 7s;
-}
-
-/* Enhanced floating animation */
-@keyframes float {
-    0% {
-        transform: translateY(0) rotate(0deg);
-    }
-    25% {
-        transform: translateY(-15px) rotate(3deg);
-    }
-    50% {
-        transform: translateY(0) rotate(0deg);
-    }
-    75% {
-        transform: translateY(15px) rotate(-3deg);
-    }
-    100% {
-        transform: translateY(0) rotate(0deg);
-    }
-}
-
-.content-wrapper {
-    position: relative;
-    z-index: 1;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 1rem;
-    padding: 2rem;
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.08),
-        0 6px 10px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
     transition: all 0.3s ease;
-    animation: fadeIn 0.8s ease-out;
+    animation: fadeIn 0.6s ease-out;
 }
 
 @keyframes fadeIn {
@@ -2754,706 +2375,18 @@ const archiveTeacher = async (teacher) => {
     }
 }
 
-.header-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.table-header {
-    padding: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.table-header h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-    background: linear-gradient(to right, #3a0ca3, #4361ee);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradientText 8s ease infinite;
-}
-
-/* Assignment Dialog Specific Styles */
-.assignment-dialog {
-    overflow: hidden;
-}
-
-.assignment-header {
-    text-align: center;
-    margin-bottom: 2rem;
-    position: relative;
-    z-index: 5;
-}
-
-.edu-symbol-container {
-    width: 100px;
-    height: 100px;
-    margin: 0 auto 1.5rem;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.math-symbol {
-    font-size: 4rem;
-    color: #4361ee;
-}
-
-.education-animation-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    z-index: 1;
-    opacity: 0.7;
-    pointer-events: none; /* Ensure it doesn't block clicks */
-}
-
-.edu-symbol {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #f8fafc;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-    z-index: 1;
-    animation: float 15s infinite ease-in-out;
-}
-
-.edu-symbol i {
-    font-size: 18px;
-    color: #4361ee;
-}
-
-.edu-symbol.pi {
-    top: 15%;
-    left: 8%;
-    animation-delay: 0s;
-}
-
-.edu-symbol.sigma {
-    top: 25%;
-    right: 8%;
-    animation-delay: 3s;
-}
-
-.edu-symbol.delta {
-    bottom: 20%;
-    left: 12%;
-    animation-delay: 1.5s;
-}
-
-.edu-symbol.omega {
-    top: 60%;
-    right: 10%;
-    animation-delay: 4s;
-}
-
-.edu-symbol.sqrt {
-    bottom: 30%;
-    right: 20%;
-    animation-delay: 2s;
-}
-
-.edu-symbol.infinity {
-    bottom: 15%;
-    left: 30%;
-    animation-delay: 7s;
-}
-
-.edu-symbol.function {
-    top: 50%;
-    left: 45%;
-    transform: translate(-50%, -50%);
-    animation: pulse 15s ease-in-out infinite;
-}
-
-.edu-symbol.equation {
-    bottom: 20%;
-    right: 20%;
-    animation-delay: 2s;
-}
-
-.animated-circle {
-    position: absolute;
-    border-radius: 50%;
-    opacity: 0.1;
-    z-index: 0;
-}
-
-.animated-circle.circle1 {
-    width: 200px;
-    height: 200px;
-    background: linear-gradient(135deg, #4361ee, #3a0ca3);
-    top: -50px;
-    right: -50px;
-    animation: rotate 25s linear infinite;
-}
-
-.animated-circle.circle2 {
-    width: 150px;
-    height: 150px;
-    background: linear-gradient(135deg, #4cc9f0, #4361ee);
-    bottom: -30px;
-    left: -30px;
-    animation: rotate 20s linear infinite reverse;
-}
-
-.animated-circle.circle3 {
-    width: 100px;
-    height: 100px;
-    background: linear-gradient(135deg, #f72585, #7209b7);
-    top: 50%;
-    left: 45%;
-    transform: translate(-50%, -50%);
-    animation: pulse 15s ease-in-out infinite;
-}
-
-@keyframes rotate {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.animated-field {
-    opacity: 0;
-    transform: translateY(10px);
-    animation: fadeInUp 0.6s forwards;
-}
-
-.animated-field:nth-child(1) {
-    animation-delay: 0.1s;
-}
-.animated-field:nth-child(2) {
-    animation-delay: 0.2s;
-}
-.animated-field:nth-child(3) {
-    animation-delay: 0.3s;
-}
-
-@keyframes fadeInUp {
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.grade-badge,
-.section-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    text-align: center;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    min-width: 100px;
-}
-
-.grade-badge {
-    background: linear-gradient(135deg, #e0f2fe, #bae6fd);
-    color: #0369a1;
-}
-
-.section-badge {
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-    color: #1e40af;
-}
-
-.grade-badge:hover,
-.section-badge:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.subjects-list {
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: #4b5563;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.subjects-list:hover {
-    overflow: visible;
-    white-space: normal;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    background-color: #f9fafb;
-    border-radius: 8px;
-    padding: 0.5rem;
-    max-width: none;
-    position: relative;
-    z-index: 10;
-}
-
-.table-header {
-    padding: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.table-header h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-    background: linear-gradient(to right, #3a0ca3, #4361ee);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradientText 8s ease infinite;
-}
-
-/* Schedule Dialog Styles */
-.schedule-dialog {
-    overflow: hidden;
-}
-
-.schedule-dialog .schedule-header {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-}
-
-.schedule-form {
-    background-color: #f8fafc;
-    transition: all 0.3s ease;
-}
-
-.schedule-form:hover {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-}
-
-.schedule-item {
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.schedule-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.schedule-grid {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.time-label {
-    font-weight: 600;
-    color: #475569;
-    background-color: #f8fafc;
-}
-
-.schedule-cell {
-    min-height: 80px;
-    background-color: #ffffff;
-    transition: background-color 0.2s;
-}
-
-.schedule-cell:hover {
-    background-color: #f8fafc;
-}
-
-.weekly-schedule {
-    animation: fadeIn 0.5s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Teacher Card Styles */
-.teacher-cards-container {
-    margin-top: 1.5rem;
-}
-
-.teacher-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 1.5rem;
-}
-
-.teacher-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-}
-
-.teacher-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.teacher-card-header {
-    padding: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 1px solid #f0f0f0;
-    background: linear-gradient(135deg, #f8f9fa, #e2e8f0);
-}
-
-.teacher-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.teacher-card .teacher-name {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 0.25rem;
-}
-
-.teacher-card .teacher-role {
-    font-size: 0.875rem;
-    color: #4361ee;
-    font-weight: 600;
-}
-
-.teacher-card-body {
-    padding: 1rem;
-    flex-grow: 1;
-}
-
-.primary-assignment,
-.subject-assignments {
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-}
-
-.primary-assignment h4,
-.subject-assignments h4 {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--primary-700);
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.25rem;
-    border-bottom: 1px dashed var(--surface-200);
-}
-
-.not-assigned {
-    padding: 0.2rem 0;
-    font-style: italic;
-}
-
-.badge-muted {
-    background-color: var(--surface-200);
-    color: var(--text-color-secondary);
-    font-size: 0.8rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 3px;
-}
-
-.assignment-details {
-    padding: 0.2rem 0;
-}
-
-.teacher-detail {
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: flex-start;
-}
-
-.teacher-card-actions {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-}
-
-.action-buttons-row {
-    display: flex;
-    width: 100%;
-    margin-bottom: 4px;
-}
-
-.action-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0.25rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.375rem;
-    font-weight: 500;
-    transition: all 0.2s ease;
-    box-shadow:
-        0 1px 3px rgba(0, 0, 0, 0.12),
-        0 1px 2px rgba(0, 0, 0, 0.24);
-}
-
-.action-btn:hover {
-    transform: translateY(-2px);
-    box-shadow:
-        0 4px 6px rgba(0, 0, 0, 0.1),
-        0 2px 4px rgba(0, 0, 0, 0.12);
-}
-
-.action-btn i {
-    margin-right: 0.5rem;
-    font-size: 1rem;
-}
-
-.action-btn.details-btn {
-    background-color: #3182ce;
-    border-color: #3182ce;
-    color: #fff;
-}
-
-.action-btn.edit-btn {
-    background-color: #f59e0b;
-    border-color: #f59e0b;
-    color: #fff;
-}
-
-.action-btn.delete-btn {
-    background-color: #ef4444;
-    border-color: #ef4444;
-    color: #fff;
-}
-
-.action-btn.assign-section-btn {
-    background-color: #3182ce;
-    border-color: #3182ce;
-    color: #fff;
-}
-
-.action-btn.add-subject-btn {
-    background-color: #38a169;
-    border-color: #38a169;
-    color: #fff;
-}
-
-.action-btn {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0.75rem 0.5rem !important;
-    transition: all 0.2s ease;
-    border: none !important;
-    border-radius: 0 !important;
-    color: white !important;
-    box-shadow: none !important;
-    height: auto !important;
-    width: 75px !important;
-    margin: 0 !important;
-    flex: 1;
-}
-
-.action-btn i {
-    font-size: 1.25rem;
-    margin-bottom: 0.5rem;
-}
-
-.action-btn span {
-    font-size: 0.75rem;
-    font-weight: 500;
-    white-space: nowrap;
-    text-align: center;
-    width: 100%;
-}
-
-/* First row buttons */
-.action-btn.details-btn {
-    background-color: #4096ff !important;
-    border-color: #4096ff !important;
-}
-
-.action-btn.edit-btn {
-    background-color: #ffb340 !important;
-    border-color: #ffb340 !important;
-}
-
-.action-btn.delete-btn {
-    background-color: #ff4d4f !important;
-    border-color: #ff4d4f !important;
-}
-
-/* Second row buttons */
-.action-btn.assign-section-btn {
-    background-color: #4096ff !important;
-    border-color: #4096ff !important;
-    width: 100px !important;
-}
-
-.action-btn.add-subject-btn {
-    background-color: #5e35b1 !important;
-    border-color: #5e35b1 !important;
-    width: 100px !important;
-}
-
-.homeroom-section,
-.teaching-subjects-section {
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-}
-
-.homeroom-section h4,
-.teaching-subjects-section h4 {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--primary-700);
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.25rem;
-    border-bottom: 1px dashed var(--surface-200);
-}
-
-.section-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.section-name {
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.grade-level {
-    font-size: 0.875rem;
-    color: #64748b;
-}
-
-.subjects-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.subject-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: #f8fafc;
-    border-radius: 6px;
-}
-
-.subject-name {
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.not-assigned {
-    color: #64748b;
-    font-style: italic;
-    padding: 0.5rem;
-    background-color: #f8fafc;
-    border-radius: 6px;
-}
-
-.assignment-info {
-    padding: 0.5rem 0;
-}
-
-.assignment-info .section-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.assignment-info .section-name {
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.assignment-info .grade-level {
-    font-size: 0.875rem;
-    color: #64748b;
-}
-
-.no-assignment {
-    color: #64748b;
-    font-style: italic;
-    padding: 0.5rem;
-    background-color: #f8fafc;
-    border-radius: 6px;
-}
-
-.no-data-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1rem;
-    color: #64748b;
-    text-align: center;
-}
-
-.no-data-message i {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.3;
-}
-
-.no-data-message p {
-    color: #64748b;
-}
-
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1rem;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.loading-container p {
-    color: #64748b;
-}
-
-/* Modern Gradient Header Styles */
+/* Modern Gradient Header - exact match with Admin-Student */
 .modern-header-container {
-    margin-bottom: 2rem;
+    margin: -2rem -2rem 2rem -2rem;
 }
 
 .gradient-header {
-    background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
-    border-radius: 12px;
-    padding: 0;
-    box-shadow: 0 8px 32px rgba(67, 97, 238, 0.3);
-    overflow: hidden;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    border-radius: 12px 12px 0 0;
+    padding: 2rem;
+    color: white;
     position: relative;
+    overflow: hidden;
 }
 
 .gradient-header::before {
@@ -3463,17 +2396,17 @@ const archiveTeacher = async (teacher) => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-    pointer-events: none;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
 }
 
 .header-content {
+    position: relative;
+    z-index: 1;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 2rem;
-    position: relative;
-    z-index: 2;
+    gap: 2rem;
 }
 
 .header-left {
@@ -3483,10 +2416,10 @@ const archiveTeacher = async (teacher) => {
 }
 
 .header-icon {
-    width: 60px;
-    height: 60px;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
+    width: 4rem;
+    height: 4rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3495,50 +2428,57 @@ const archiveTeacher = async (teacher) => {
 }
 
 .header-icon i {
-    font-size: 2rem;
+    font-size: 1.75rem;
     color: white;
 }
 
 .header-text {
-    color: white;
+    flex: 1;
 }
 
 .header-title {
     font-size: 2rem;
     font-weight: 700;
     margin: 0 0 0.5rem 0;
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.025em;
+    color: white !important;
 }
 
 .header-subtitle {
     font-size: 1.1rem;
     margin: 0 0 0.75rem 0;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 500;
+    opacity: 0.9;
+    font-weight: 400;
+    color: white !important;
 }
 
 .teacher-count {
     display: flex;
     align-items: center;
     font-size: 1rem;
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 600;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: fit-content;
 }
 
 .teacher-count i {
     margin-right: 0.5rem;
-    font-size: 1.1rem;
+    font-size: 1rem;
 }
 
 .count-badge {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.9);
+    color: #1e40af;
     padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    margin-left: 0.5rem;
+    border-radius: 15px;
     font-weight: 700;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
 }
 
 .header-actions {
@@ -3591,5 +2531,308 @@ const archiveTeacher = async (teacher) => {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
+}
+
+/* Teachers Container */
+.teachers-container {
+    padding: 0;
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+.loading-container p {
+    margin-top: 1rem;
+    color: #6b7280;
+    font-size: 1.1rem;
+}
+
+.no-data-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+    color: #6b7280;
+}
+
+.no-data-message p {
+    margin: 0.5rem 0;
+    font-size: 1.1rem;
+}
+
+.no-data-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+/* Teacher Cards */
+.teacher-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1.5rem;
+    padding: 0;
+}
+
+.teacher-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.teacher-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    border-color: #d1d5db;
+}
+
+.teacher-card-header {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.teacher-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.teacher-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.teacher-card-body {
+    padding: 1.5rem;
+}
+
+.homeroom-section,
+.teaching-subjects-section {
+    margin-bottom: 1.5rem;
+}
+
+.homeroom-section:last-child,
+.teaching-subjects-section:last-child {
+    margin-bottom: 0;
+}
+
+.homeroom-section h4,
+.teaching-subjects-section h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #374151;
+    margin: 0 0 0.75rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.assignment-info {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    border-left: 4px solid #3b82f6;
+}
+
+.section-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.section-name {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 1rem;
+}
+
+.grade-level {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.not-assigned {
+    color: #9ca3af;
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f9fafb;
+    border-radius: 6px;
+    border: 1px dashed #d1d5db;
+}
+
+.subjects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.subject-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.subject-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.subject-icon {
+    color: #3b82f6;
+    font-size: 0.875rem;
+}
+
+.teacher-card-actions {
+    padding: 1rem 1.5rem;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.action-buttons-row {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.details-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+}
+
+.details-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    transform: translateY(-1px);
+}
+
+.edit-btn {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+}
+
+.edit-btn:hover {
+    background: linear-gradient(135deg, #e5a50a 0%, #c2710c 100%);
+    transform: translateY(-1px);
+}
+
+.archive-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.archive-btn:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    transform: translateY(-1px);
+}
+
+.assign-section-btn {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.assign-section-btn:hover {
+    background: linear-gradient(135deg, #0d9488 0%, #047857 100%);
+    transform: translateY(-1px);
+}
+
+.add-subject-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+}
+
+.add-subject-btn:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1.5rem;
+        text-align: center;
+    }
+
+    .header-left {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .search-input {
+        width: 250px !important;
+    }
+
+    .teacher-cards {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .action-buttons-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .card {
+        padding: 1rem;
+    }
+
+    .gradient-header {
+        padding: 1.5rem;
+    }
+
+    .modern-header-container {
+        margin: -1rem -1rem 1.5rem -1rem;
+    }
+
+    .header-title {
+        font-size: 1.5rem;
+    }
+
+    .search-input {
+        width: 200px !important;
+    }
 }
 </style>
