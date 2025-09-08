@@ -216,9 +216,16 @@ Route::prefix('attendance-sessions')->group(function () {
 });
 
 // Teacher-specific attendance routes
-Route::get('/teachers/{teacherId}/assignments', [AttendanceController::class, 'getTeacherAssignments']);
-Route::get('/teachers/{teacherId}/sections/{sectionId}/subjects/{subjectId}/students', [AttendanceController::class, 'getStudentsForTeacherSubject']);
+Route::get('/teachers/{teacherId}', [\App\Http\Controllers\AttendanceSessionController::class, 'getTeacherData']);
+Route::get('/teachers/{teacherId}/assignments', [\App\Http\Controllers\AttendanceSessionController::class, 'getTeacherAssignments']);
+Route::get('/teachers/{teacherId}/sections/{sectionId}/subjects/{subjectId}/students', [\App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 Route::post('/teachers/{teacherId}/attendance', [AttendanceController::class, 'markTeacherAttendance']);
+
+// Enhanced attendance session routes
+Route::post('/attendance-sessions', [\App\Http\Controllers\AttendanceSessionController::class, 'createSession']);
+Route::post('/attendance-sessions/mark', [\App\Http\Controllers\AttendanceSessionController::class, 'markAttendance']);
+Route::post('/attendance-sessions/{sessionId}/complete', [\App\Http\Controllers\AttendanceSessionController::class, 'completeSession']);
+Route::get('/attendance/summary', [\App\Http\Controllers\AttendanceSessionController::class, 'getAttendanceSummary']);
 
 // Student Management routes for seating arrangements and student operations
 Route::prefix('student-management')->group(function () {

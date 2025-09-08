@@ -2,111 +2,84 @@
 
 require_once 'lamms-backend/vendor/autoload.php';
 
-use Illuminate\Database\Capsule\Manager as DB;
+// Bootstrap Laravel
+$app = require_once 'lamms-backend/bootstrap/app.php';
+$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
-// Database configuration
-$capsule = new DB;
-$capsule->addConnection([
-    'driver' => 'pgsql',
-    'host' => 'localhost',
-    'database' => 'lamms_db',
-    'username' => 'postgres',
-    'password' => 'password',
-    'charset' => 'utf8',
-    'prefix' => '',
-    'schema' => 'public',
-]);
-
-$capsule->setAsGlobal();
-$capsule->bootEloquent();
-
-echo "=== TESTING ATTENDANCE TABLE STRUCTURE ===\n\n";
+use Illuminate\Http\Request;
 
 try {
-    // Check table structure
-    $columns = DB::select("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'attendances' ORDER BY ordinal_position");
+    echo "=== TESTING NEW ATTENDANCE API ENDPOINTS ===\n\n";
     
-    echo "Attendance table columns:\n";
-    foreach ($columns as $column) {
-        echo "- {$column->column_name} ({$column->data_type})\n";
-    }
+    // Test 1: Get students for teacher's section and subject
+    echo "1. Testing GET /api/attendance-sessions/students...\n";
     
-    echo "\n=== TESTING ATTENDANCE INSERTION ===\n\n";
+    $request = Request::create('/api/attendance-sessions/students', 'GET', [
+        'teacher_id' => 3,
+        'section_id' => 3, 
+        'subject_id' => 1
+    ]);
     
-    // Test attendance record insertion
-    $attendanceData = [
-        'student_id' => 3,
-        'subject_id' => null,
-        'date' => '2025-01-04',
-        'status' => 'Present',
-        'remarks' => 'Test attendance',
-        'created_at' => now(),
-        'updated_at' => now()
-    ];
+    $response = $kernel->handle($request);
+    $content = $response->getContent();
     
-    // Check if record exists
-    $existing = DB::table('attendances')
-        ->where('student_id', 3)
-        ->where('date', '2025-01-04')
-        ->whereNull('subject_id')
-        ->first();
+    echo "Status: " . $response->getStatusCode() . "\n";
+    echo "Response: " . $content . "\n\n";
     
-    if ($existing) {
-        echo "✓ Found existing attendance record: ID {$existing->id}\n";
+    // Test 2: Create attendance session
+    echo "2. Testing POST /api/attendance-sessions...\n";
+    
+    $sessionRequest = Request::create('/api/attendance-sessions', 'POST', [
+        'teacher_id' => 3,
+        'section_id' => 3,
+        'subject_id' => 1,
+        'session_date' => date('Y-m-d'),
+        'session_start_time' => date('H:i:s'),
+        'session_type' => 'regular',
+        'metadata' => []
+    ]);
+    
+    $sessionResponse = $kernel->handle($sessionRequest);
+    $sessionContent = $sessionResponse->getContent();
+    
+    echo "Status: " . $sessionResponse->getStatusCode() . "\n";
+    echo "Response: " . $sessionContent . "\n\n";
+    
+    if ($sessionResponse->getStatusCode() === 201) {
+        $sessionData = json_decode($sessionContent, true);
+        $sessionId = $sessionData['data']['id'] ?? null;
         
-        // Update existing record
-        DB::table('attendances')
-            ->where('id', $existing->id)
-            ->update([
-                'status' => 'Present',
-                'remarks' => 'Updated test attendance',
-                'updated_at' => now()
+        if ($sessionId) {
+            echo "3. Testing POST /api/attendance-sessions/{$sessionId}/attendance...\n";
+            
+            // Test 3: Mark attendance
+            $attendanceRequest = Request::create("/api/attendance-sessions/{$sessionId}/attendance", 'POST', [
+                'attendance' => [
+                    ['student_id' => 3, 'attendance_status_id' => 1, 'remarks' => 'Present'],
+                    ['student_id' => 4, 'attendance_status_id' => 1, 'remarks' => 'Present'],
+                    ['student_id' => 5, 'attendance_status_id' => 2, 'remarks' => 'Absent'],
+                    ['student_id' => 6, 'attendance_status_id' => 1, 'remarks' => 'Present']
+                ]
             ]);
-        
-        echo "✓ Updated existing attendance record\n";
-    } else {
-        // Insert new record
-        $id = DB::table('attendances')->insertGetId($attendanceData);
-        echo "✓ Created new attendance record with ID: $id\n";
+            
+            $attendanceResponse = $kernel->handle($attendanceRequest);
+            echo "Status: " . $attendanceResponse->getStatusCode() . "\n";
+            echo "Response: " . $attendanceResponse->getContent() . "\n\n";
+            
+            // Test 4: Complete session
+            echo "4. Testing POST /api/attendance-sessions/{$sessionId}/complete...\n";
+            
+            $completeRequest = Request::create("/api/attendance-sessions/{$sessionId}/complete", 'POST');
+            $completeResponse = $kernel->handle($completeRequest);
+            
+            echo "Status: " . $completeResponse->getStatusCode() . "\n";
+            echo "Response: " . $completeResponse->getContent() . "\n\n";
+        }
     }
     
-    echo "\n=== TESTING TEACHER ASSIGNMENT VERIFICATION ===\n\n";
-    
-    // Test teacher assignment verification
-    $teacherAssignment = DB::table('teacher_section_subject')
-        ->where('teacher_id', 1)
-        ->where('section_id', 13)
-        ->whereNull('subject_id')
-        ->where('is_active', true)
-        ->first();
-    
-    if ($teacherAssignment) {
-        echo "✓ Teacher assignment verified: Teacher 1 -> Section 13 (Homeroom)\n";
-        echo "  Assignment ID: {$teacherAssignment->id}\n";
-        echo "  Role: {$teacherAssignment->role}\n";
-    } else {
-        echo "✗ Teacher assignment not found\n";
-    }
-    
-    echo "\n=== TESTING STUDENT SECTION VERIFICATION ===\n\n";
-    
-    // Test student in section verification
-    $studentInSection = DB::table('students')
-        ->join('student_section', 'students.id', '=', 'student_section.student_id')
-        ->where('students.id', 3)
-        ->where('student_section.section_id', 13)
-        ->where('student_section.is_active', true)
-        ->first();
-    
-    if ($studentInSection) {
-        echo "✓ Student in section verified: Student 3 -> Section 13\n";
-        echo "  Student Name: {$studentInSection->name}\n";
-    } else {
-        echo "✗ Student not found in section\n";
-    }
-    
-    echo "\n=== ATTENDANCE API TEST COMPLETE ===\n";
+    echo "✅ NEW ATTENDANCE API TESTING COMPLETED!\n";
     
 } catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
+    echo "❌ Error: " . $e->getMessage() . "\n";
+    echo "Trace: " . $e->getTraceAsString() . "\n";
 }

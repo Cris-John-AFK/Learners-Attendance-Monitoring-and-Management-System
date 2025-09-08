@@ -124,7 +124,7 @@ const newStudent = ref({
     schoolYear: '2025-2026',
     lrn: '',
     gradeLevel: '',
-    serialNumber: '', // Auto-generated enrollment ID
+    studentId: '', // Unique field
 
     // Student Information
     lastName: '',
@@ -134,7 +134,6 @@ const newStudent = ref({
     birthdate: null,
     age: '',
     sex: 'Male',
-    religion: '',
     motherTongue: '',
 
     // Address Information
@@ -165,10 +164,6 @@ const newStudent = ref({
     // Contact Information
     emailAddress: '',
 
-    // Health/Disability Information
-    hasDisability: false,
-    disabilities: [],
-
     // Household Income
     householdIncome: 'Below 10k'
 });
@@ -195,9 +190,6 @@ const gradeLevels = ref([
     { name: 'Grade 5', code: '5' },
     { name: 'Grade 6', code: '6' }
 ]);
-
-// Disability types
-const disabilityTypes = ['Visual Impairment', 'Hearing Impairment', 'Physical Disability', 'Intellectual Disability', 'Learning Disability', 'Speech/Language Impairment', 'Autism Spectrum Disorder', 'Multiple Disabilities', 'Other'];
 
 // Household income options
 const incomeOptions = [
@@ -274,13 +266,14 @@ async function loadGradesFromDatabase() {
     }
 }
 
-// Generate serial number for enrollment ID
+// Generate unique student ID for enrollment
 function generateSerialNumber() {
     const currentYear = new Date().getFullYear();
-    const randomNum = Math.floor(Math.random() * 10000)
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+    const randomNum = Math.floor(Math.random() * 1000)
         .toString()
-        .padStart(4, '0');
-    newStudent.value.serialNumber = `ENR${currentYear}${randomNum}`;
+        .padStart(3, '0');
+    newStudent.value.studentId = `STU${currentYear}${timestamp}${randomNum}`;
 }
 
 // Load admitted students from localStorage
@@ -532,7 +525,7 @@ function resetNewStudentForm() {
         schoolYear: '2025-2026',
         lrn: '',
         gradeLevel: '',
-        serialNumber: '',
+        studentId: '',
         lastName: '',
         firstName: '',
         middleName: '',
@@ -540,7 +533,6 @@ function resetNewStudentForm() {
         birthdate: null,
         age: '',
         sex: 'Male',
-        religion: '',
         motherTongue: '',
         houseNo: '',
         street: '',
@@ -561,8 +553,6 @@ function resetNewStudentForm() {
         lastSchoolYearCompleted: '',
         lastSchoolAttended: '',
         emailAddress: '',
-        hasDisability: false,
-        disabilities: [],
         householdIncome: 'Below 10k'
     };
     termsAccepted.value = false;
@@ -623,34 +613,94 @@ async function submitNewStudent() {
     }
 
     try {
-        // Prepare student data for backend API
-        const enrollmentData = {
-            // Student enrollment data would go here
-        };
+        // Generate enrollment ID if not exists
+        if (!newStudent.value.studentId) {
+            generateSerialNumber();
+        }
 
-        const studentForDisplay = {
+        // Prepare comprehensive student data for backend API
+        const enrollmentData = {
+            studentId: newStudent.value.studentId,
+            student_id: newStudent.value.studentId,
+            status: 'Enrolled',
+            isIndigenous: false,
+            is4PsBeneficiary: false,
+            hasDisability: false,
+            isActive: true,
+            is_active: true,
+            name: `${newStudent.value.firstName} ${newStudent.value.middleName || ''} ${newStudent.value.lastName}`.replace(/\s+/g, ' ').trim(),
             firstName: newStudent.value.firstName,
             lastName: newStudent.value.lastName,
+            middleName: newStudent.value.middleName || '',
+            extensionName: newStudent.value.extensionName || '',
+            lrn: newStudent.value.lrn || '',
             gradeLevel: newStudent.value.gradeLevel,
-            enrollmentStatus: 'Enrolled'
+            section: '',
+            birthdate: newStudent.value.birthdate ? new Date(newStudent.value.birthdate).toISOString().split('T')[0] : null,
+            birthplace: newStudent.value.birthplace || '',
+            age: parseInt(newStudent.value.age) || null,
+            gender: newStudent.value.sex || 'Male',
+            sex: newStudent.value.sex || 'Male',
+            motherTongue: newStudent.value.motherTongue || '',
+            photo: '/demo/images/student-photo.jpg',
+            qr_code: '',
+            email: newStudent.value.emailAddress || '',
+            mother: {
+                first_name: newStudent.value.motherFirstName || '',
+                last_name: newStudent.value.motherLastName || '',
+                middle_name: newStudent.value.motherMiddleName || '',
+                contact_number: newStudent.value.motherContactNumber || ''
+            },
+            parentName: `${newStudent.value.fatherFirstName || ''} ${newStudent.value.fatherLastName || ''}`.trim() || `${newStudent.value.motherFirstName || ''} ${newStudent.value.motherLastName || ''}`.trim() || 'N/A',
+            parentContact: `Father: ${newStudent.value.fatherContactNumber || 'N/A'}, Mother: ${newStudent.value.motherContactNumber || 'N/A'}`,
+            address: `${newStudent.value.houseNo || ''} ${newStudent.value.street || ''}, ${newStudent.value.barangay}, ${newStudent.value.cityMunicipality}, ${newStudent.value.province}`.replace(/\s+/g, ' ').trim(),
+            enrollmentDate: new Date().toISOString(),
+            admissionDate: new Date().toISOString(),
+            requirements: []
         };
 
-        // For now, just add to local state
-        console.log('Student data prepared:', studentForDisplay);
+        console.log('Sending enrollment data to API:', enrollmentData);
 
-        enrolledStudents.value.push(studentForDisplay);
+        // Send data to backend API
+        const response = await fetch('http://127.0.0.1:8000/api/students', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            },
+            body: JSON.stringify(enrollmentData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('API Error Response:', errorData);
+
+            // Handle validation errors specifically
+            if (response.status === 422 && errorData.errors) {
+                const validationErrors = Object.entries(errorData.errors)
+                    .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
+                    .join('\n');
+                throw new Error(`Validation failed:\n${validationErrors}`);
+            }
+
+            throw new Error(errorData.message || `HTTP ${response.status}: Failed to enroll student`);
+        }
+
+        const responseData = await response.json();
+        console.log('Student enrolled successfully:', responseData);
 
         // Close dialog and show success
         newStudentDialog.value = false;
+        resetNewStudentForm();
 
         toast.add({
             severity: 'success',
             summary: 'Enrollment Successful',
-            detail: `${studentForDisplay.firstName} ${studentForDisplay.lastName} has been successfully enrolled and saved to database!`,
+            detail: `${newStudent.value.firstName} ${newStudent.value.lastName} has been successfully enrolled and saved to database!`,
             life: 5000
         });
 
-        // Reload data
+        // Reload data to reflect changes
         await loadAdmittedStudents();
         await loadEnrolledStudents();
     } catch (error) {
@@ -737,7 +787,6 @@ async function autoAssignAllStudents() {
         });
         return;
     }
-
 
     try {
         let assignedCount = 0;
@@ -1012,6 +1061,496 @@ defineExpose({
             </template>
         </Dialog>
 
+        <!-- New Student Enrollment Dialog -->
+        <Dialog v-model:visible="newStudentDialog" modal :style="{ width: '95vw', maxWidth: '1000px', maxHeight: '90vh' }" :dismissableMask="true" :closable="false" class="enrollment-dialog">
+            <template #header>
+                <div class="modern-enrollment-header">
+                    <div class="header-content">
+                        <div class="school-identity">
+                            <div class="logo-wrapper">
+                                <div class="school-logo-modern">
+                                    <i class="pi pi-graduation-cap"></i>
+                                </div>
+                            </div>
+                            <div class="school-details">
+                                <h1 class="school-title">Naawan Central School</h1>
+                                <p class="school-motto">Excellence in Education • Building Tomorrow's Leaders</p>
+                                <div class="enrollment-badge">
+                                    <span class="badge-text">Student Enrollment Portal</span>
+                                    <span class="academic-year">S.Y. 2025-2026</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="header-controls">
+                            <div class="step-indicator-header">
+                                <div class="step-counter">
+                                    <span class="current-step">{{ currentStep }}</span>
+                                    <span class="step-divider">/</span>
+                                    <span class="total-steps">{{ totalSteps }}</span>
+                                </div>
+                                <span class="step-label">Step Progress</span>
+                            </div>
+                            <button type="button" class="modern-close-btn" @click="newStudentDialog = false">
+                                <i class="pi pi-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <div class="modern-dialog-content">
+                <!-- Enhanced Progress Indicator -->
+                <div class="progress-section">
+                    <div class="progress-info">
+                        <h3 class="progress-title">Enrollment Progress</h3>
+                        <span class="progress-percentage">{{ Math.round((currentStep / totalSteps) * 100) }}% Complete</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" :style="{ width: (currentStep / totalSteps) * 100 + '%' }">
+                            <div class="progress-glow"></div>
+                        </div>
+                        <div class="progress-steps">
+                            <div v-for="step in totalSteps" :key="step" class="progress-step" :class="{ active: step <= currentStep, current: step === currentStep }">
+                                <div class="step-circle">
+                                    <i v-if="step < currentStep" class="pi pi-check"></i>
+                                    <span v-else>{{ step }}</span>
+                                </div>
+                                <span class="step-name">{{ step === 1 ? 'Information' : 'Review' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Form Fields -->
+                <div v-if="currentStep === 1" class="space-y-8">
+                    <!-- Student Type Section -->
+                    <div class="modern-form-section" data-section="student-type">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-user"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Student Type</h3>
+                                <p>Select the enrollment category</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="radio-grid">
+                                <div v-for="type in studentTypes" :key="type.value" class="radio-card" :class="{ selected: newStudent.studentType === type.value }">
+                                    <input type="radio" v-model="newStudent.studentType" :id="type.value" :value="type.value" class="radio-input" />
+                                    <label :for="type.value" class="radio-label">
+                                        <div class="radio-indicator"></div>
+                                        <span class="radio-text">{{ type.name }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- School Information Section -->
+                    <div class="modern-form-section" data-section="school-info">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-building"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>School Information</h3>
+                                <p>Academic details and enrollment data</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="input-grid">
+                                <div class="input-group">
+                                    <label class="modern-label">School Year *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.schoolYear" class="modern-input" readonly />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">LRN (Optional)</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.lrn" placeholder="Leave blank if none" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Grade Level *</label>
+                                    <div class="input-wrapper">
+                                        <Dropdown v-model="newStudent.gradeLevel" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select Grade Level" class="modern-dropdown" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Student ID</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.studentId" class="modern-input" readonly />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Student Information Section -->
+                    <div class="modern-form-section" data-section="student-info">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-id-card"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Student Information</h3>
+                                <p>Personal details and basic information</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="input-grid">
+                                <div class="input-group">
+                                    <label class="modern-label">Last Name *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.lastName" placeholder="Enter last name" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">First Name *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.firstName" placeholder="Enter first name" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Middle Name</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.middleName" placeholder="Enter middle name" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Extension Name</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.extensionName" placeholder="Jr., Sr., III, etc." class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Birthdate *</label>
+                                    <div class="input-wrapper">
+                                        <Calendar v-model="newStudent.birthdate" dateFormat="mm/dd/yy" placeholder="Select date" class="modern-calendar" @date-select="calculateAge" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Age</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.age" class="modern-input" readonly />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="additional-info">
+                                <div class="input-group gender-group">
+                                    <label class="modern-label">Sex *</label>
+                                    <div class="radio-inline">
+                                        <div class="radio-option">
+                                            <input type="radio" v-model="newStudent.sex" id="male" value="Male" class="radio-input-inline" />
+                                            <label for="male" class="radio-label-inline">Male</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" v-model="newStudent.sex" id="female" value="Female" class="radio-input-inline" />
+                                            <label for="female" class="radio-label-inline">Female</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Mother Tongue</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.motherTongue" placeholder="Enter mother tongue" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Address Information Section -->
+                    <div class="modern-form-section" data-section="address-info">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-map-marker"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Address Information</h3>
+                                <p>Current residential address</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="input-grid">
+                                <div class="input-group">
+                                    <label class="modern-label">House No.</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.houseNo" placeholder="Enter house number" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Street</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.street" placeholder="Enter street" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Barangay *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.barangay" placeholder="Enter barangay" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">City/Municipality *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.cityMunicipality" placeholder="Enter city/municipality" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Province *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.province" placeholder="Enter province" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Country</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.country" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Zip Code</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.zipCode" placeholder="Enter zip code" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Parent/Guardian Information Section -->
+                    <div class="modern-form-section" data-section="parent-info">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-users"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Parent/Guardian Information</h3>
+                                <p>Family contact details</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <!-- Father's Information -->
+                            <div class="parent-subsection">
+                                <h4 class="subsection-title">Father's Information</h4>
+                                <div class="input-grid">
+                                    <div class="input-group">
+                                        <label class="modern-label">Father's Last Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.fatherLastName" placeholder="Enter father's last name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Father's First Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.fatherFirstName" placeholder="Enter father's first name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Father's Middle Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.fatherMiddleName" placeholder="Enter father's middle name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Father's Contact Number</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.fatherContactNumber" placeholder="Enter father's contact number" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Mother's Information -->
+                            <div class="parent-subsection">
+                                <h4 class="subsection-title">Mother's Information</h4>
+                                <div class="input-grid">
+                                    <div class="input-group">
+                                        <label class="modern-label">Mother's Last Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.motherLastName" placeholder="Enter mother's last name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Mother's First Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.motherFirstName" placeholder="Enter mother's first name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Mother's Middle Name</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.motherMiddleName" placeholder="Enter mother's middle name" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label class="modern-label">Mother's Contact Number</label>
+                                        <div class="input-wrapper">
+                                            <InputText v-model="newStudent.motherContactNumber" placeholder="Enter mother's contact number" class="modern-input" />
+                                            <div class="input-accent"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Previous School Information Section -->
+                    <div class="modern-form-section" data-section="previous-school">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-book"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Previous School Information</h3>
+                                <p>Educational background</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="input-grid">
+                                <div class="input-group">
+                                    <label class="modern-label">Last Grade Completed</label>
+                                    <div class="input-wrapper">
+                                        <Dropdown v-model="newStudent.lastGradeCompleted" :options="gradeLevels" optionLabel="name" optionValue="code" placeholder="Select last grade completed" class="modern-dropdown" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label class="modern-label">Last School Year Completed</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.lastSchoolYearCompleted" placeholder="e.g., 2023-2024" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                                <div class="input-group full-width">
+                                    <label class="modern-label">Last School Attended</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.lastSchoolAttended" placeholder="Enter name of last school attended" class="modern-input" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact & Additional Information Section -->
+                    <div class="modern-form-section" data-section="additional-info">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="pi pi-info-circle"></i>
+                            </div>
+                            <div class="section-title">
+                                <h3>Contact & Additional Information</h3>
+                                <p>Email and household details</p>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="input-grid">
+                                <div class="input-group full-width">
+                                    <label class="modern-label">Email Address *</label>
+                                    <div class="input-wrapper">
+                                        <InputText v-model="newStudent.emailAddress" placeholder="Enter email address" class="modern-input" type="email" />
+                                        <div class="input-accent"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="income-section">
+                                <label class="modern-label">Monthly Household Income *</label>
+                                <div class="income-grid">
+                                    <div v-for="income in incomeOptions" :key="income.value" class="income-card" :class="{ selected: newStudent.householdIncome === income.value }">
+                                        <input type="radio" v-model="newStudent.householdIncome" :id="'income_' + income.value" :value="income.value" class="income-input" />
+                                        <label :for="'income_' + income.value" class="income-label">
+                                            <div class="income-indicator"></div>
+                                            <span class="income-text">{{ income.name }}</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Review and Submit -->
+                <div v-if="currentStep === 2" class="space-y-6">
+                    <div class="bg-blue-50 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Review Your Information</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="font-medium text-gray-700 mb-2">Student Information</h4>
+                                <div class="space-y-1 text-sm">
+                                    <p><span class="font-medium">Name:</span> {{ `${newStudent.firstName} ${newStudent.middleName} ${newStudent.lastName} ${newStudent.extensionName}`.trim() }}</p>
+                                    <p><span class="font-medium">Student Type:</span> {{ newStudent.studentType }}</p>
+                                    <p><span class="font-medium">Grade Level:</span> {{ gradeLevels.find((g) => g.code === newStudent.gradeLevel)?.name || newStudent.gradeLevel }}</p>
+                                    <p><span class="font-medium">Student ID:</span> {{ newStudent.studentId }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="font-medium text-gray-700 mb-2">Contact Information</h4>
+                                <div class="space-y-1 text-sm">
+                                    <p><span class="font-medium">Email:</span> {{ newStudent.emailAddress }}</p>
+                                    <p><span class="font-medium">Address:</span> {{ `${newStudent.houseNo} ${newStudent.street}, ${newStudent.barangay}, ${newStudent.cityMunicipality}`.trim() }}</p>
+                                    <p><span class="font-medium">Province:</span> {{ newStudent.province }}</p>
+                                    <p><span class="font-medium">Household Income:</span> {{ newStudent.householdIncome }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-white rounded border">
+                            <div class="flex items-start">
+                                <input type="checkbox" v-model="termsAccepted" id="termsAccepted" class="mr-3 mt-1" />
+                                <label for="termsAccepted" class="text-sm text-gray-700 cursor-pointer">
+                                    I hereby certify that the information provided above is true and correct to the best of my knowledge. I understand that any false information may result in the rejection of this enrollment application.
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Navigation Buttons -->
+                <div class="flex justify-between pt-6 border-t">
+                    <Button v-if="currentStep > 1" label="Previous" icon="pi pi-chevron-left" class="p-button-outlined" @click="prevStep" />
+                    <div v-else></div>
+
+                    <div class="flex gap-2">
+                        <Button label="Cancel" class="p-button-outlined p-button-secondary" @click="newStudentDialog = false" />
+                        <Button v-if="currentStep < totalSteps" label="Next" icon="pi pi-chevron-right" iconPos="right" @click="nextStep" />
+                        <Button v-else label="Submit Enrollment" icon="pi pi-check" :disabled="!termsAccepted" @click="submitNewStudent" />
+                    </div>
+                </div>
+            </div>
+        </Dialog>
+
         <Toast />
     </div>
 </template>
@@ -1237,6 +1776,37 @@ defineExpose({
     background-color: #eff6ff;
 }
 
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1.5rem;
+        text-align: center;
+    }
+
+    .header-actions {
+        align-items: center;
+        width: 100%;
+    }
+
+    .search-input {
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .header-title {
+        font-size: 1.5rem;
+    }
+
+    .grid > .col-12 {
+        padding: 0.5rem;
+    }
+
+    :deep(.p-tabview-panels) {
+        padding: 1rem 0;
+    }
+}
+
 /* Modern Header Styling - Matching Student Management System */
 .modern-header-container {
     margin: -2rem -2rem 2rem -2rem;
@@ -1278,15 +1848,17 @@ defineExpose({
 }
 
 .header-icon {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
+    position: relative;
+    z-index: 1;
     width: 4rem;
     height: 4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .header-icon i {
@@ -1408,34 +1980,709 @@ defineExpose({
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .header-content {
-        flex-direction: column;
-        gap: 1.5rem;
-        text-align: center;
-    }
+/* Modern Enrollment Dialog Styling */
+.modern-enrollment-header {
+    padding: 0;
+    background: linear-gradient(135deg, #4a90e2 0%, #5e35b1 100%);
+    border-radius: 12px 12px 0 0;
+    color: white;
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+}
 
-    .header-actions {
-        align-items: center;
-        width: 100%;
-    }
+.modern-enrollment-header .header-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    padding: 1.5rem 2rem;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
 
-    .search-input {
-        width: 100%;
-        max-width: 300px;
-    }
+.modern-enrollment-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
+}
 
-    .header-title {
-        font-size: 1.5rem;
-    }
+.modern-enrollment-header .school-identity {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
 
-    .grid > .col-12 {
-        padding: 0.5rem;
-    }
+.modern-enrollment-header .logo-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
 
-    :deep(.p-tabview-panels) {
-        padding: 1rem 0;
+.modern-enrollment-header .school-logo-modern {
+    font-size: 1.75rem;
+    color: white;
+}
+
+.modern-enrollment-header .school-details {
+    flex: 1;
+}
+
+.modern-enrollment-header .school-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.025em;
+    color: white !important;
+}
+
+.modern-enrollment-header .school-motto {
+    font-size: 1.1rem;
+    margin: 0 0 0.75rem 0;
+    opacity: 0.9;
+    font-weight: 400;
+    color: white !important;
+}
+
+.modern-enrollment-header .enrollment-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.9);
+    color: #1e40af;
+}
+
+.modern-enrollment-header .academic-year {
+    font-size: 0.9rem;
+    color: #1e40af;
+    opacity: 0.8;
+}
+
+.modern-enrollment-header .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.modern-enrollment-header .step-indicator-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.modern-enrollment-header .step-counter {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+}
+
+.modern-enrollment-header .step-divider {
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+    opacity: 0.5;
+}
+
+.modern-enrollment-header .step-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: white;
+    opacity: 0.8;
+}
+
+.modern-enrollment-header .modern-close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 50%;
+    padding: 0.75rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.modern-enrollment-header .modern-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modern-dialog-content {
+    padding: 1.5rem;
+}
+
+.progress-section {
+    padding: 1.5rem;
+    border-radius: 12px;
+    background: var(--surface-card);
+    border: 1px solid var(--surface-border);
+    margin-bottom: 1rem;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.progress-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.progress-percentage {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+}
+
+.progress-track {
+    position: relative;
+    height: 10px;
+    border-radius: 10px;
+    background: var(--surface-200);
+    overflow: hidden;
+}
+
+.progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4a90e2 0%, #5e35b1 100%);
+    transition: width 0.3s ease;
+}
+
+.progress-fill .progress-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #4a90e2 0%, #5e35b1 100%);
+    border-radius: 10px;
+    opacity: 0.5;
+}
+
+.progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+}
+
+.progress-step.active {
+    color: var(--primary-color);
+}
+
+.progress-step.current {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.step-circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--surface-200);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color-secondary);
+    transition: all 0.3s ease;
+}
+
+.progress-step.active .step-circle {
+    background: var(--primary-color);
+    color: white;
+}
+
+.progress-step.current .step-circle {
+    background: var(--primary-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+.step-circle i {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: white;
+}
+
+.step-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+}
+
+/* Modern Form Styling */
+.form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
     }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modern-form-section {
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 20px;
+    padding: 0;
+    box-shadow:
+        0 10px 25px rgba(0, 0, 0, 0.08),
+        0 4px 10px rgba(0, 0, 0, 0.03),
+        0 1px 3px 0 rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.modern-form-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #10b981, #059669);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modern-form-section:hover::before {
+    opacity: 1;
+}
+
+.modern-form-section:hover {
+    transform: translateY(-5px);
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.12),
+        0 8px 16px rgba(0, 0, 0, 0.06);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.section-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23dots)"/></svg>');
+    opacity: 0.3;
+}
+
+.section-icon {
+    position: relative;
+    z-index: 1;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.section-icon i {
+    font-size: 1.25rem;
+    color: white;
+}
+
+.section-title {
+    position: relative;
+    z-index: 1;
+}
+
+.section-title h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem 0;
+    color: white;
+}
+
+.section-title p {
+    font-size: 0.875rem;
+    margin: 0;
+    opacity: 0.9;
+    color: white;
+}
+
+.section-content {
+    padding: 2rem;
+}
+
+.input-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.input-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.modern-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.input-wrapper {
+    position: relative;
+}
+
+.modern-input,
+.modern-dropdown,
+.modern-calendar {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    background: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    z-index: 1;
+}
+
+.modern-input:focus,
+.modern-dropdown:focus,
+.modern-calendar:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow:
+        0 0 0 3px rgba(79, 70, 229, 0.1),
+        0 4px 12px rgba(79, 70, 229, 0.15);
+    transform: translateY(-2px);
+}
+
+.input-accent {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+    border-radius: 0 0 12px 12px;
+}
+
+.modern-input:focus + .input-accent,
+.modern-dropdown:focus + .input-accent,
+.modern-calendar:focus + .input-accent {
+    transform: scaleX(1);
+}
+
+.additional-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.radio-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+}
+
+.radio-card {
+    position: relative;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.radio-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.radio-card.selected::before {
+    opacity: 0.1;
+}
+
+.radio-card.selected {
+    border-color: #4f46e5;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(79, 70, 229, 0.15);
+}
+
+.radio-input {
+    display: none;
+}
+
+.radio-label {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    cursor: pointer;
+    font-weight: 500;
+    color: #374151;
+    transition: color 0.3s ease;
+}
+
+.radio-card.selected .radio-label {
+    color: #4f46e5;
+}
+
+.radio-indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+    background: white;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.radio-card.selected .radio-indicator {
+    border-color: #4f46e5;
+    background: #4f46e5;
+}
+
+.radio-card.selected .radio-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.radio-inline {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.radio-input-inline {
+    width: 18px;
+    height: 18px;
+    accent-color: #4f46e5;
+}
+
+.radio-label-inline {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+}
+
+.parent-subsection {
+    margin-bottom: 2rem;
+}
+
+.parent-subsection:last-child {
+    margin-bottom: 0;
+}
+
+.subsection-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #4f46e5;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e5e7eb;
+    position: relative;
+}
+
+.subsection-title::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+}
+
+.income-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.income-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.income-card {
+    position: relative;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.income-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #10b981, #059669);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.income-card.selected::before {
+    opacity: 0.1;
+}
+
+.income-card.selected {
+    border-color: #10b981;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.15);
+}
+
+.income-input {
+    display: none;
+}
+
+.income-label {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    cursor: pointer;
+    font-weight: 500;
+    color: #374151;
+    transition: color 0.3s ease;
+}
+
+.income-card.selected .income-label {
+    color: #10b981;
+}
+
+.income-indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+    background: white;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.income-card.selected .income-indicator {
+    border-color: #10b981;
+    background: #10b981;
+}
+
+.income-card.selected .income-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
 }
 </style>
