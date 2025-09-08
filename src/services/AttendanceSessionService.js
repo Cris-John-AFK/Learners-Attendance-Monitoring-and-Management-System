@@ -232,6 +232,77 @@ class AttendanceSessionService {
             throw error;
         }
     }
+
+    /**
+     * Edit a completed attendance session
+     */
+    async editSession(sessionId, editData) {
+        try {
+            const response = await axios.put(`${API_BASE_URL}/attendance-sessions/${sessionId}/edit`, editData);
+            return response.data;
+        } catch (error) {
+            console.error('Error editing session:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get session edit history
+     */
+    async getSessionHistory(sessionId) {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/attendance-sessions/${sessionId}/history`);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching session history:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Validate session data before submission
+     */
+    validateSessionData(sessionData) {
+        const errors = [];
+        
+        if (!sessionData.teacherId) {
+            errors.push('Teacher ID is required');
+        }
+        
+        if (!sessionData.sectionId) {
+            errors.push('Section ID is required');
+        }
+        
+        if (!sessionData.date) {
+            errors.push('Session date is required');
+        }
+        
+        // Check if date is not in the future
+        const sessionDate = new Date(sessionData.date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (sessionDate > today) {
+            errors.push('Cannot create sessions for future dates');
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors
+        };
+    }
+
+    /**
+     * Format edit data for API submission
+     */
+    formatEditData(editReason, editNotes, sessionChanges = {}, attendanceChanges = []) {
+        return {
+            edit_reason: editReason,
+            edit_notes: editNotes,
+            session_data: sessionChanges,
+            attendance_records: attendanceChanges
+        };
+    }
 }
 
 export default new AttendanceSessionService();

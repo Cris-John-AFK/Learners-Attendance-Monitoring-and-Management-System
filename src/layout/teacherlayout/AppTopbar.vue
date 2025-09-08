@@ -1,8 +1,10 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import Dialog from 'primevue/dialog';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import NotificationBell from '@/components/NotificationBell.vue';
+import NotificationService from '@/services/NotificationService';
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -59,6 +61,40 @@ const isProfileOpen = ref(false); // Controls dropdown visibility
 
 const isLogoutSuccess = ref(false); // Controls the log out confirmation modal
 
+// Notification state
+const notifications = ref([]);
+let unsubscribeNotifications = null;
+
+// Notification handlers
+const handleNotificationClick = (notification) => {
+    console.log('Notification clicked:', notification);
+    NotificationService.markAsRead(notification.id);
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
+    
+    if (notification.type === 'session_completed') {
+        // Navigate to attendance page or show session details
+        router.push('/teacher/subject/attendance');
+    }
+};
+
+const handleMarkAllRead = () => {
+    console.log('Mark all as read clicked');
+    NotificationService.markAllAsRead();
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
+};
+
+const handleRemoveNotification = (notificationId) => {
+    console.log('Remove notification:', notificationId);
+    NotificationService.removeNotification(notificationId);
+    
+    // Force reactive update
+    notifications.value = [...NotificationService.getNotifications()];
+};
+
 const logout = () => {
     // Clear user session data
     localStorage.removeItem('user');
@@ -67,6 +103,21 @@ const logout = () => {
     // Redirect to homepage
     router.push('/');
 };
+
+// Subscribe to notifications
+onMounted(() => {
+    notifications.value = NotificationService.getNotifications();
+    unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
+        console.log('Notifications updated:', updatedNotifications);
+        notifications.value = [...updatedNotifications]; // Force reactivity with new array
+    });
+});
+
+onUnmounted(() => {
+    if (unsubscribeNotifications) {
+        unsubscribeNotifications();
+    }
+});
 </script>
 
 <template>
@@ -87,6 +138,14 @@ const logout = () => {
                     <i class="pi pi-calendar"></i>
                     <span>Calendar</span>
                 </button>
+
+                <!-- Notification Bell -->
+                <NotificationBell
+                    :notifications="notifications"
+                    @notification-clicked="handleNotificationClick"
+                    @mark-all-read="handleMarkAllRead"
+                    @remove-notification="handleRemoveNotification"
+                />
 
                 <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
                     <i class="pi pi-cog"></i>

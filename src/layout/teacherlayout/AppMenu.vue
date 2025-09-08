@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 
 import AppMenuItem from './AppMenuItem.vue';
 
@@ -11,41 +12,14 @@ const model = ref([
     {
         label: 'Homeroom Subjects',
         icon: 'pi pi-fw pi-briefcase',
-        items: [
-            {
-                label: 'Mother Tongue',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/mother-tongue'
-            },
-            {
-                label: 'English',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/english'
-            },
-            {
-                label: 'Filipino',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/filipino'
-            },
-            {
-                label: 'Mathematics',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/mathematics'
-            }
-        ]
+        items: []
     },
     {
         separator: true
     },
     {
         label: 'Other Subjects',
-        items: [
-            {
-                label: 'MAPEH',
-                icon: 'pi pi-fw pi-book',
-                to: '/subject/mapeh'
-            }
-        ]
+        items: []
     },
     {
         separator: true
@@ -61,6 +35,64 @@ const model = ref([
         ]
     }
 ]);
+
+// Load real teacher assignments
+onMounted(async () => {
+    try {
+        const teacherId = 3; // Maria Santos
+        const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId);
+        
+        if (assignments && assignments.assignments && assignments.assignments.length > 0) {
+            const homeroomSubjects = [];
+            const otherSubjects = [];
+            
+            assignments.assignments.forEach(assignment => {
+                assignment.subjects.forEach(subject => {
+                    const menuItem = {
+                        label: subject.subject_name,
+                        icon: 'pi pi-fw pi-book',
+                        to: `/subject/${subject.subject_code.toLowerCase()}`
+                    };
+                    
+                    if (subject.role === 'homeroom_teacher' || subject.subject_code === 'HR') {
+                        homeroomSubjects.push(menuItem);
+                    } else {
+                        otherSubjects.push(menuItem);
+                    }
+                });
+            });
+            
+            // Update the menu model
+            const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom Subjects');
+            const otherIndex = model.value.findIndex(item => item.label === 'Other Subjects');
+            
+            if (homeroomIndex !== -1) {
+                model.value[homeroomIndex].items = homeroomSubjects;
+            }
+            if (otherIndex !== -1) {
+                model.value[otherIndex].items = otherSubjects;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading teacher assignments for menu:', error);
+        // Keep default menu items as fallback
+        const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom Subjects');
+        if (homeroomIndex !== -1) {
+            model.value[homeroomIndex].items = [
+                {
+                    label: 'Mathematics',
+                    icon: 'pi pi-fw pi-book',
+                    to: '/subject/mathematics'
+                },
+                {
+                    label: 'Homeroom',
+                    icon: 'pi pi-fw pi-book',
+                    to: '/subject/homeroom'
+                }
+            ];
+        }
+    }
+});
 </script>
 
 <template>

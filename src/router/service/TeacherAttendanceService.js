@@ -6,10 +6,59 @@ export const TeacherAttendanceService = {
      */
     async getStudentsForTeacherSubject(teacherId, sectionId, subjectId) {
         try {
-            const response = await api.get(`/api/teachers/${teacherId}/sections/${sectionId}/subjects/${subjectId}/students`);
+            const response = await api.get('/api/attendance-sessions/students', {
+                params: {
+                    teacher_id: teacherId,
+                    section_id: sectionId,
+                    subject_id: subjectId
+                }
+            });
+            console.log('Students API response:', response.data);
             return response.data;
         } catch (error) {
             console.error('Error loading students for teacher subject:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Create or get attendance session
+     */
+    async createAttendanceSession(sessionData) {
+        try {
+            const response = await api.post('/api/attendance-sessions', sessionData);
+            return response.data;
+        } catch (error) {
+            console.error('Error creating attendance session:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Mark attendance for session
+     */
+    async markSessionAttendance(sessionId, attendanceData) {
+        try {
+            const response = await api.post('/api/attendance-sessions/mark', {
+                session_id: sessionId,
+                attendance: attendanceData
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error marking session attendance:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Complete attendance session
+     */
+    async completeAttendanceSession(sessionId) {
+        try {
+            const response = await api.post(`/api/attendance-sessions/${sessionId}/complete`);
+            return response.data;
+        } catch (error) {
+            console.error('Error completing attendance session:', error);
             throw error;
         }
     },
@@ -23,6 +72,19 @@ export const TeacherAttendanceService = {
             return response.data;
         } catch (error) {
             console.error('Error loading teacher assignments:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get teacher data by ID
+     */
+    async getTeacherData(teacherId) {
+        try {
+            const response = await api.get(`/api/teachers/${teacherId}`);
+            return response.data;
+        } catch (error) {
+            console.error('Error loading teacher data:', error);
             throw error;
         }
     },

@@ -12,6 +12,7 @@ class Student extends Model
     protected $table = 'student_details';
 
     protected $fillable = [
+        'studentId',
         'name',
         'firstName',
         'lastName',
@@ -20,7 +21,6 @@ class Student extends Model
         'email',
         'gradeLevel',
         'section',
-        'studentId',
         'student_id',
         'lrn',
         'gender',
@@ -129,7 +129,7 @@ class Student extends Model
     public function scopeInSection($query, $sectionId)
     {
         return $query->whereHas('sections', function($q) use ($sectionId) {
-            $q->where('sections.id', $sectionId)->wherePivot('is_active', true);
+            $q->where('sections.id', $sectionId)->where('student_section.is_active', true);
         });
     }
 
@@ -161,14 +161,14 @@ class Student extends Model
     public function getAttendanceStats($startDate, $endDate)
     {
         $records = $this->getAttendanceForDateRange($startDate, $endDate);
-        
+
         return [
             'total_days' => $records->count(),
             'present' => $records->where('attendanceStatus.code', 'P')->count(),
             'absent' => $records->where('attendanceStatus.code', 'A')->count(),
             'late' => $records->where('attendanceStatus.code', 'L')->count(),
             'excused' => $records->where('attendanceStatus.code', 'E')->count(),
-            'attendance_rate' => $records->count() > 0 ? 
+            'attendance_rate' => $records->count() > 0 ?
                 ($records->whereIn('attendanceStatus.code', ['P', 'L'])->count() / $records->count()) * 100 : 0
         ];
     }

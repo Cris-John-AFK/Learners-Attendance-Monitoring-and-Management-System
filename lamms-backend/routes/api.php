@@ -209,12 +209,26 @@ Route::prefix('attendance-sessions')->group(function () {
     // Reports
     Route::get('/reports/weekly', [AttendanceSessionController::class, 'getWeeklyReport']);
     Route::get('/reports/monthly', [AttendanceSessionController::class, 'getMonthlyReport']);
+    
+    // Session editing and history (for maximum reliability)
+    Route::put('/{sessionId}/edit', [AttendanceSessionController::class, 'editSession']);
+    Route::get('/{sessionId}/history', [AttendanceSessionController::class, 'getSessionHistory']);
 });
 
 // Teacher-specific attendance routes
-Route::get('/teachers/{teacherId}/assignments', [AttendanceController::class, 'getTeacherAssignments']);
-Route::get('/teachers/{teacherId}/sections/{sectionId}/subjects/{subjectId}/students', [AttendanceController::class, 'getStudentsForTeacherSubject']);
+Route::get('/teachers/{teacherId}', [\App\Http\Controllers\AttendanceSessionController::class, 'getTeacherData']);
+Route::get('/teachers/{teacherId}/assignments', [\App\Http\Controllers\AttendanceSessionController::class, 'getTeacherAssignments']);
+Route::get('/teachers/{teacherId}/sections/{sectionId}/subjects/{subjectId}/students', [\App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 Route::post('/teachers/{teacherId}/attendance', [AttendanceController::class, 'markTeacherAttendance']);
+
+// Enhanced attendance session routes
+Route::post('/attendance-sessions', [AttendanceSessionController::class, 'createSession']);
+Route::post('/attendance-sessions/mark', [AttendanceSessionController::class, 'markAttendance']);
+Route::post('/attendance-sessions/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
+Route::get('/attendance/summary', [AttendanceSessionController::class, 'getAttendanceSummary']);
+
+// Students endpoint for attendance sessions
+Route::get('/attendance-sessions/students', [\App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 
 // Student Management routes for seating arrangements and student operations
 Route::prefix('student-management')->group(function () {
