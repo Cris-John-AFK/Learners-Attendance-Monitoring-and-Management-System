@@ -191,6 +191,59 @@
                     </div>
                 </div>
 
+                <!-- Official SF2 Header -->
+                <div class="sf2-official-header">
+                    <div class="header-top">
+                        <div class="deped-logo">
+                            <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="logo-img" />
+                        </div>
+                        <div class="header-center">
+                            <div class="form-title">
+                                <span class="form-number">(The replaced Form 1, Form 2 & SF Form 4 - Absenteeism and Dropout Profile)</span>
+                                <h2>School Form 2 (SF2) - Daily Attendance Report of Learners</h2>
+                            </div>
+                        </div>
+                        <div class="deped-text">
+                            <div class="deped-brand">
+                                <span class="dep">Dep</span><span class="ed">ED</span>
+                            </div>
+                            <p>DEPARTMENT OF EDUCATION</p>
+                        </div>
+                    </div>
+                    
+                    <div class="school-details-form">
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label>School ID:</label>
+                                <input type="text" class="form-input" value="123456" readonly />
+                            </div>
+                            <div class="form-field">
+                                <label>School Year:</label>
+                                <input type="text" class="form-input" value="2024-2025" readonly />
+                            </div>
+                            <div class="form-field">
+                                <label>Report for the Month of:</label>
+                                <input type="text" class="form-input" value="September 2025" readonly />
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-field wide">
+                                <label>Name of School:</label>
+                                <input type="text" class="form-input" value="Kagawasan Elementary School" readonly />
+                            </div>
+                            <div class="form-field">
+                                <label>Grade Level:</label>
+                                <input type="text" class="form-input" value="Kindergarten" readonly />
+                            </div>
+                            <div class="form-field">
+                                <label>Section:</label>
+                                <input type="text" class="form-input" :value="selectedSectionDetails.name" readonly />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Month Navigation -->
                 <div class="month-navigation">
                     <Button icon="pi pi-chevron-left" class="p-button-text p-button-sm" @click="previousMonth()" :disabled="!canGoPreviousMonth()" />
@@ -4189,6 +4242,273 @@ const reportTypes = ref([
     font-size: 0.9rem;
     opacity: 0.9;
     font-style: italic;
+}
+
+/* Official SF2 Header Styles */
+.sf2-official-header {
+    background: white;
+    border: 2px solid #000;
+    margin-bottom: 1rem;
+    padding: 0;
+}
+
+.header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid #000;
+}
+
+.deped-logo {
+    flex: 0 0 80px;
+}
+
+.logo-img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+.header-center {
+    flex: 1;
+    text-align: center;
+    padding: 0 1rem;
+}
+
+.form-number {
+    font-size: 0.8rem;
+    color: #666;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.form-title h2 {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin: 0;
+    color: #000;
+    text-transform: uppercase;
+}
+
+.deped-text {
+    flex: 0 0 120px;
+    text-align: center;
+}
+
+.deped-brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+.dep {
+    color: #1e40af;
+}
+
+.ed {
+    color: #dc2626;
+}
+
+.deped-text p {
+    font-size: 0.7rem;
+    margin: 0;
+    color: #000;
+    font-weight: 500;
+}
+
+.school-details-form {
+    padding: 1rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    align-items: end;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.form-field.wide {
+    flex: 2;
+}
+
+.form-field label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #000;
+}
+
+.form-input {
+    border: 1px solid #000;
+    border-bottom: 2px solid #000;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.9rem;
+    background: white;
+    min-height: 24px;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #1e40af;
+}
+
+/* Improved Table Styling to Match Official SF2 */
+.attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 2px solid #000;
+    background: white;
+    font-size: 0.8rem;
+}
+
+.attendance-table th,
+.attendance-table td {
+    border: 1px solid #000;
+    padding: 0.25rem;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.student-name-header {
+    background: #f0f0f0;
+    font-weight: bold;
+    text-align: center;
+    width: 200px;
+    border: 2px solid #000;
+}
+
+.day-header {
+    background: #f0f0f0;
+    font-weight: bold;
+    width: 30px;
+    border: 1px solid #000;
+}
+
+.day-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+}
+
+.day-number {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.day-name {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+}
+
+.summary-header {
+    background: #f0f0f0;
+    font-weight: bold;
+    width: 60px;
+    border: 2px solid #000;
+    display: table-cell;
+    vertical-align: middle;
+}
+
+/* Student Row Styling */
+.student-name-cell {
+    text-align: left;
+    padding: 0.5rem;
+    border-right: 2px solid #000;
+}
+
+.student-name {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.student-lrn {
+    font-size: 0.7rem;
+    color: #666;
+    display: block;
+}
+
+.attendance-cell {
+    width: 30px;
+    height: 30px;
+    position: relative;
+    background: white;
+}
+
+.attendance-mark {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.attendance-mark.present {
+    color: #059669;
+}
+
+.attendance-mark.absent {
+    color: #dc2626;
+}
+
+.attendance-mark.late {
+    color: #d97706;
+}
+
+/* Gender Section Styling */
+.gender-header {
+    background: #e5e7eb;
+    color: #000;
+    padding: 0.5rem;
+    font-weight: bold;
+    text-align: center;
+    border: 2px solid #000;
+}
+
+.gender-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Total Rows */
+.gender-total-row,
+.combined-total-row {
+    background: #f9fafb;
+    font-weight: bold;
+}
+
+.gender-total-row td,
+.combined-total-row td {
+    border: 1px solid #000;
+    padding: 0.5rem;
+}
+
+/* Line Numbers Row */
+.line-numbers-row {
+    background: #f0f0f0;
+    border-top: 2px solid #000;
+}
+
+.line-number-label {
+    font-weight: bold;
+    background: #e5e7eb;
+    border: 1px solid #000;
+    text-align: center;
+}
+
+.line-number-cell {
+    font-weight: bold;
+    font-size: 0.8rem;
+    background: #f9fafb;
+    border: 1px solid #000;
+    height: 25px;
+    vertical-align: middle;
+    padding: 0.2rem;
 }
 
 /* Gender-specific total rows */
