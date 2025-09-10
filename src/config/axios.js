@@ -39,7 +39,7 @@ api.interceptors.request.use(
 
         // Check if this path should never be cached
         const shouldNotCache = NO_CACHE_PATHS.some((path) => config.url.includes(path));
-        
+
         // Add cache-busting headers for no-cache paths
         if (shouldNotCache) {
             config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -48,7 +48,7 @@ api.interceptors.request.use(
             config.params = config.params || {};
             config.params._t = Date.now(); // Cache buster
         }
-        
+
         // For GET requests, try to use cached data while fetching fresh data (unless it's a no-cache path)
         if (config.method === 'get' && !config.background && !shouldNotCache) {
             const cacheKey = `${config.url}${JSON.stringify(config.params || {})}`;
@@ -120,7 +120,7 @@ api.interceptors.response.use(
 
         // Check if this path should never be cached
         const shouldNotCache = NO_CACHE_PATHS.some((path) => response.config.url.includes(path));
-        
+
         // Cache successful GET responses (unless it's a no-cache path)
         if (response.config.method === 'get' && !response.config.background && !shouldNotCache) {
             const cacheKey = `${response.config.url}${JSON.stringify(response.config.params || {})}`;

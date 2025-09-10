@@ -204,13 +204,11 @@
                             </div>
                         </div>
                         <div class="deped-text">
-                            <div class="deped-brand">
-                                <span class="dep">Dep</span><span class="ed">ED</span>
-                            </div>
+                            <div class="deped-brand"><span class="dep">Dep</span><span class="ed">ED</span></div>
                             <p>DEPARTMENT OF EDUCATION</p>
                         </div>
                     </div>
-                    
+
                     <div class="school-details-form">
                         <div class="form-row">
                             <div class="form-field">
@@ -226,7 +224,7 @@
                                 <input type="text" class="form-input" value="September 2025" readonly />
                             </div>
                         </div>
-                        
+
                         <div class="form-row">
                             <div class="form-field wide">
                                 <label>Name of School:</label>
@@ -413,7 +411,7 @@
                                         <strong>{{ getOverallAttendanceRate(selectedSectionDetails.name) }}%</strong>
                                     </td>
                                 </tr>
-                                
+
                                 <!-- Line Numbers Row -->
                                 <tr class="line-numbers-row">
                                     <td class="line-number-label">Line No.</td>
@@ -574,9 +572,9 @@
                     <div class="sf2-summary-section">
                         <div class="summary-box">
                             <div class="summary-header">
-                                <span class="month-label">Month: _____</span>
-                                <span class="days-label">No. of Days of Classes: _____</span>
-                                <span class="summary-title">Summary</span>
+                                <div class="header-box">Month: _____</div>
+                                <div class="header-box">No. of Days of Classes: _____</div>
+                                <div class="header-box summary-box-header">Summary</div>
                             </div>
 
                             <table class="sf2-summary-table">
@@ -4592,13 +4590,26 @@ const reportTypes = ref([
 
 .summary-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 1rem;
     border-bottom: 2px solid #333;
     background: #f8f9fa;
     font-weight: 600;
     font-size: 0.9rem;
+}
+
+.header-box {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    border-right: 2px solid #333;
+    text-align: center;
+}
+
+.header-box:last-child {
+    border-right: none;
+}
+
+.summary-box-header {
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .month-label,
