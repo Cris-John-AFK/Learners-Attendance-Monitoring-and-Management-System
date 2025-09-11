@@ -303,9 +303,9 @@ const playStatusSound = async (type) => {
     if (type === 'success') {
         sound = new Audio('/demo/sounds/success.wav');
     } else if (type === 'checkout') {
-        sound = new Audio('/demo/sounds/beep.mp3');
+        sound = new Audio('/demo/sounds/glass.wav');
     } else {
-        sound = new Audio('/demo/sounds/error.mp3');
+        sound = new Audio('/demo/sounds/glass.wav');
     }
 
     // Attempt to play the sound (may fail if sounds don't exist)

@@ -7,7 +7,7 @@ import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceServ
 import AttendanceSessionService from '@/services/AttendanceSessionService';
 import NotificationService from '@/services/NotificationService';
 import SeatingService from '@/services/SeatingService';
-import Calendar from 'primevue/calendar';
+import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
 import OverlayPanel from 'primevue/overlaypanel';
 import Menu from 'primevue/menu';
@@ -78,6 +78,12 @@ const showTemplateManager = ref(false);
 const showTemplateSaveDialog = ref(false);
 const isEditMode = ref(false);
 
+// QR Scanner states
+const showQRScanner = ref(false);
+const isScanning = ref(false);
+const scannedStudents = ref([]);
+const lastScannedStudent = ref(null);
+
 // Loading states
 const isCompletingSession = ref(false);
 const sessionCompletionProgress = ref(0);
@@ -117,13 +123,11 @@ const showStatusDialog = ref(false);
 
 // Attendance method selection
 const showAttendanceMethodModal = ref(false);
-const showQRScanner = ref(false);
 const showRollCall = ref(false);
 const scanning = ref(false);
 const cameraError = ref(null);
 const currentStudentIndex = ref(0);
 const currentStudent = ref(null);
-const scannedStudents = ref([]);
 
 // Rename to avoid conflict
 const showAttendanceDialog = ref(false);
@@ -507,6 +511,277 @@ const getStudentById = (studentId) => {
     }
 
     return student || null;
+};
+
+// Get student by QR code
+const getStudentByQRCode = (qrCode) => {
+    if (!qrCode) return null;
+    
+    // Find student with matching QR code
+    const student = students.value.find((s) => s.qr_code === qrCode || s.studentId === qrCode);
+    
+    if (!student) {
+        console.warn(`Student with QR code ${qrCode} not found`);
+    }
+    
+    return student || null;
+};
+
+// QR Scanner Functions
+const toggleScanning = () => {
+    scanning.value = !scanning.value;
+    if (scanning.value) {
+        initializeCamera();
+    } else {
+        stopCamera();
+    }
+};
+
+const initializeCamera = async () => {
+    try {
+        console.log('Initializing camera for QR scanning...');
+        // Camera initialization is handled by vue-qrcode-reader component
+        isScanning.value = true;
+    } catch (error) {
+        console.error('Error initializing camera:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Camera Error',
+            detail: 'Could not access camera for QR scanning',
+            life: 5000
+        });
+    }
+};
+
+const stopCamera = () => {
+    console.log('Stopping camera...');
+    isScanning.value = false;
+};
+
+const startQRScanner = async () => {
+    console.log('🚀 Starting QR Scanner...');
+    try {
+        showQRScanner.value = true;
+        scanning.value = true; // Start scanning immediately
+        console.log('📱 Scanner dialog opened, scanning set to:', scanning.value);
+        await initializeCamera();
+        
+        toast.add({
+            severity: 'info',
+            summary: 'QR Scanner Started',
+            detail: 'Hold QR codes in front of the camera to scan',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('❌ Error starting QR scanner:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Scanner Error',
+            detail: 'Could not start QR scanner',
+            life: 5000
+        });
+        scanning.value = false;
+    }
+};
+
+const selectQRMethod = async () => {
+    try {
+        await createAttendanceSession();
+        showAttendanceMethodModal.value = false;
+        await startQRScanner();
+    } catch (error) {
+        console.error('Error in selectQRMethod:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'QR Scanner Error',
+            detail: 'Failed to start QR scanner: ' + error.message,
+            life: 5000
+        });
+    }
+};
+
+const onQRCodeDetected = async (detectedCodes) => {
+    if (!detectedCodes || detectedCodes.length === 0) return;
+    
+    const qrCode = detectedCodes[0].rawValue;
+    console.log('QR Code detected:', qrCode);
+    
+    // Find student by QR code
+    const student = getStudentByQRCode(qrCode);
+    
+    if (!student) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Student Not Found',
+            detail: `No student found with QR code: ${qrCode}`,
+            life: 3000
+        });
+        return;
+    }
+    
+    // Check if already scanned
+    if (scannedStudents.value.includes(student.id)) {
+        toast.add({
+            severity: 'info',
+            summary: 'Already Scanned',
+            detail: `${student.name} has already been marked present`,
+            life: 3000
+        });
+        return;
+    }
+    
+    // Mark student as present
+    await markStudentPresent(student);
+    
+    // Add to scanned list
+    scannedStudents.value.push(student.id);
+    lastScannedStudent.value = student;
+    
+    // Show confirmation
+    toast.add({
+        severity: 'success',
+        summary: 'Attendance Marked',
+        detail: `${student.name} marked as Present`,
+        life: 3000
+    });
+    
+    // Check if all students are scanned
+    if (scannedStudents.value.length >= students.value.length) {
+        await autoCompleteSession();
+    }
+};
+
+const markStudentPresent = async (student) => {
+    try {
+        // Find student's seat if they have one
+        let studentSeat = null;
+        seatPlan.value.forEach((row, rowIndex) => {
+            row.forEach((seat, colIndex) => {
+                if (seat.isOccupied && seat.studentId === student.id) {
+                    studentSeat = seat;
+                }
+            });
+        });
+        
+        // If student has a seat, mark it
+        if (studentSeat) {
+            studentSeat.status = 'Present';
+        }
+        
+        // Add to attendance records
+        const attendanceRecord = {
+            studentId: student.id,
+            studentName: student.name,
+            status: 'Present',
+            timestamp: new Date().toISOString(),
+            method: 'QR_SCAN'
+        };
+        
+        attendanceRecords.value.push(attendanceRecord);
+        
+        // Save to localStorage
+        localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+        
+        console.log(`Marked ${student.name} as Present via QR scan`);
+        
+    } catch (error) {
+        console.error('Error marking student present:', error);
+        throw error;
+    }
+};
+
+const autoCompleteSession = async () => {
+    try {
+        console.log('Auto-completing session - all students scanned');
+        
+        // Close QR scanner first
+        showQRScanner.value = false;
+        isScanning.value = false;
+        
+        // Start loading animation (same as seating plan method)
+        isCompletingSession.value = true;
+        sessionCompletionProgress.value = 0;
+
+        // Start progressive animation that runs parallel to API calls
+        const progressInterval = setInterval(() => {
+            if (sessionCompletionProgress.value < 85) {
+                sessionCompletionProgress.value += Math.random() * 1.5 + 0.5; // Slower increment 0.5-2%
+            }
+        }, 150); // Slower interval
+
+        // Step 1: Initial progress
+        sessionCompletionProgress.value = 10;
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // Step 2: Start API call
+        sessionCompletionProgress.value = 25;
+        await new Promise(resolve => setTimeout(resolve, 600));
+        
+        const response = await AttendanceSessionService.completeSession(currentSession.value.id);
+        
+        // Step 3: Process response
+        sessionCompletionProgress.value = 60;
+        await new Promise(resolve => setTimeout(resolve, 700));
+        
+        sessionSummary.value = response.summary;
+        sessionActive.value = false;
+        currentSession.value = null;
+
+        // Step 4: Finalize
+        sessionCompletionProgress.value = 80;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 5: Prepare modal (keep loading visible)
+        sessionCompletionProgress.value = 95;
+        
+        // Save session data but don't show modal yet
+        saveCompletedSession(response.summary);
+        
+        // Final progress update
+        sessionCompletionProgress.value = 100;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Clear interval and hide loading
+        clearInterval(progressInterval);
+        isCompletingSession.value = false;
+        sessionCompletionProgress.value = 0;
+
+        // Show completion modal after loading is done
+        showCompletionModal.value = true;
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Session Auto-Completed',
+            detail: 'All students scanned. Attendance session completed automatically.',
+            life: 5000
+        });
+        
+    } catch (error) {
+        console.error('Error auto-completing session:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Completion Error',
+            detail: 'Could not complete session automatically',
+            life: 5000
+        });
+    }
+};
+
+const closeQRScanner = () => {
+    showQRScanner.value = false;
+    isScanning.value = false;
+    stopCamera();
+};
+
+const onScannerError = (error) => {
+    console.error('QR Scanner error:', error);
+    toast.add({
+        severity: 'error',
+        summary: 'Scanner Error',
+        detail: 'Camera access denied or not available',
+        life: 5000
+    });
+    isScanning.value = false;
 };
 
 // Clean up invalid student assignments from seating arrangement
@@ -1209,11 +1484,6 @@ const selectRollCallMethod = async () => {
     startRollCall();
 };
 
-const selectQRMethod = async () => {
-    await createAttendanceSession();
-    showAttendanceMethodModal.value = false;
-    startQRScanner();
-};
 
 // Complete attendance session
 const completeAttendanceSession = async () => {
@@ -1830,58 +2100,6 @@ const allowDrop = (event) => {
     }
 };
 
-// Function to mark a student as present
-const markStudentPresent = (student) => {
-    if (!student) return;
-
-    console.log(`Marking student ${student.name} (ID: ${student.id}) as present`);
-
-    // First check if the student is assigned to a seat
-    let seatFound = false;
-
-    // Search all seats
-    for (let i = 0; i < seatPlan.value.length && !seatFound; i++) {
-        for (let j = 0; j < seatPlan.value[i].length && !seatFound; j++) {
-            if (seatPlan.value[i][j].studentId === student.id) {
-                // Update seat status
-                seatPlan.value[i][j].status = 'Present';
-                seatFound = true;
-
-                console.log(`Found student ${student.name} in seat at row ${i}, col ${j}`);
-            }
-        }
-    }
-
-    // If student not found in any seat, log a warning but still mark attendance
-    if (!seatFound) {
-        console.warn(`Student ${student.name} not found in any seat. Marking attendance in records only.`);
-    }
-
-    // Save attendance record with timestamp
-    const recordKey = `${student.id}-${currentDate.value}`;
-    const timestamp = new Date().toISOString();
-
-    attendanceRecords.value[recordKey] = {
-        studentId: student.id,
-        date: currentDate.value,
-        status: 'Present',
-        remarks: '',
-        timestamp
-    };
-
-    // Save to localStorage
-    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
-
-    // Also update the cache to ensure our most recent changes persist across refreshes
-    const today = currentDate.value;
-    const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
-    const cacheData = {
-        timestamp,
-        seatPlan: JSON.parse(JSON.stringify(seatPlan.value))
-    };
-    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    console.log('Attendance for student marked as Present and saved to records and cache');
-};
 
 // Roll Call Methods
 const startRollCall = () => {
@@ -2064,26 +2282,6 @@ const qrScanLog = ref([]);
 const qrScanResults = ref([]);
 const cameraInitialized = ref(false);
 
-const startQRScanner = () => {
-    showQRScanner.value = true;
-    showRollCall.value = false;
-    scanning.value = true;
-
-    // Clear previous results
-    qrScanResults.value = [];
-    qrScanLog.value = [];
-
-    // Initialize camera
-    initializeCamera();
-
-    toast.add({
-        severity: 'info',
-        summary: 'QR Scanner',
-        detail: 'QR Scanner is active. Scan student ID QR codes.',
-        life: 3000
-    });
-};
-
 const stopQRScanner = () => {
     console.log('Stopping QR scanner...');
     scanning.value = false;
@@ -2150,13 +2348,15 @@ const restartCamera = () => {
 
 // Enhanced QR decode handler with gate log
 const onQRDecode = async (decodedText) => {
+    console.log('🔍 QR DECODE EVENT FIRED!');
+    console.log('Raw decoded text:', decodedText);
+    console.log('Type of decoded text:', typeof decodedText);
+    
     const timestamp = new Date().toLocaleTimeString();
     console.log('QR Code decoded:', decodedText);
+    console.log('Available students:', students.value.map(s => ({ id: s.id, name: s.name, studentId: s.studentId, student_id: s.student_id })));
 
     try {
-        // Parse the QR code data (assuming it contains student ID)
-        const studentId = parseInt(decodedText);
-
         // Add to scan log
         qrScanLog.value.unshift({
             timestamp,
@@ -2164,28 +2364,55 @@ const onQRDecode = async (decodedText) => {
             success: true
         });
 
-        // Find the student
-        const student = students.value.find(s => s.id === studentId);
+        // Parse LAMMS QR code format: LAMMS_STUDENT_[ID]_[timestamp]_[hash]
+        let student = null;
+        let extractedStudentId = null;
+        
+        // Method 1: Parse LAMMS format QR code
+        if (decodedText.startsWith('LAMMS_STUDENT_')) {
+            const parts = decodedText.split('_');
+            if (parts.length >= 3) {
+                extractedStudentId = parseInt(parts[2]); // Extract student ID from position 2
+                console.log('Extracted student ID from LAMMS format:', extractedStudentId);
+                student = students.value.find(s => s.id === extractedStudentId);
+            }
+        }
+        
+        // Method 2: Direct numeric ID match
+        if (!student && !isNaN(decodedText)) {
+            const studentId = parseInt(decodedText);
+            student = students.value.find(s => s.id === studentId);
+        }
+        
+        // Method 3: String match against student ID fields
+        if (!student) {
+            student = students.value.find(s => 
+                s.studentId?.toString() === decodedText || 
+                s.student_id?.toString() === decodedText
+            );
+        }
+        
+        console.log('Found student:', student);
 
         if (student) {
             // Check if already scanned
-            const existingIndex = qrScanResults.value.findIndex(s => s.studentId === studentId);
+            const existingIndex = qrScanResults.value.findIndex(s => s.studentId === student.id);
 
             if (existingIndex === -1) {
                 // New scan - mark as present
                 qrScanResults.value.push({
-                    id: studentId,
-                    studentId: studentId,
+                    id: student.id,
+                    studentId: student.id,
                     name: student.name,
                     status: 'Present',
                     scannedAt: new Date().toISOString()
                 });
 
                 // Save attendance record
-                await saveAttendanceRecord(studentId, 'Present', 'QR Code scan');
+                await saveAttendanceRecord(student.id, 'Present', 'QR Code scan');
 
                 // Update seat plan if student has a seat
-                const seat = findSeatByStudentId(studentId);
+                const seat = findSeatByStudentId(student.id);
                 if (seat) {
                     seat.status = 'Present';
                 }
@@ -2219,72 +2446,146 @@ const onQRDecode = async (decodedText) => {
                 });
             }
         } else {
-            // Student not found
+            // Student not found - show detailed info for debugging
+            console.warn('Student not found for QR code:', decodedText);
+            console.log('Tried matching against:', {
+                ids: students.value.map(s => s.id),
+                studentIds: students.value.map(s => s.studentId),
+                student_ids: students.value.map(s => s.student_id),
+                names: students.value.map(s => s.name)
+            });
+            
             qrScanLog.value.unshift({
                 timestamp,
-                message: `✗ Student ID ${studentId} not found`,
+                message: `❌ Student not found for QR: ${decodedText}`,
                 success: false
             });
 
             toast.add({
-                severity: 'error',
+                severity: 'warn',
                 summary: 'Student Not Found',
-                detail: `No student found with ID: ${studentId}`,
-                life: 3000
+                detail: `No student found with QR code: ${decodedText}. Check student database.`,
+                life: 5000
             });
         }
     } catch (error) {
         console.error('Error processing QR code:', error);
-
         qrScanLog.value.unshift({
             timestamp,
-            message: `✗ Invalid QR code format: ${decodedText}`,
+            message: `❌ Error processing QR: ${error.message}`,
             success: false
         });
-
+        
         toast.add({
             severity: 'error',
-            summary: 'QR Code Error',
-            detail: 'Invalid QR code format',
+            summary: 'QR Processing Error',
+            detail: error.message,
             life: 3000
         });
     }
 };
 
+const onQRDetect = async (detectedCodes) => {
+    console.log('🎯 QR DETECT EVENT FIRED!');
+    console.log('Detected codes:', detectedCodes);
+    
+    if (detectedCodes && detectedCodes.length > 0) {
+        const code = detectedCodes[0];
+        console.log('First detected code:', code);
+        if (code.rawValue) {
+            await onQRDecode(code.rawValue);
+        }
+    }
+};
+
 const onCameraInit = async (promise) => {
+    console.log('📷 Camera initialization started...');
     try {
         await promise;
         cameraInitialized.value = true;
         cameraError.value = null;
-
-        qrScanLog.value.unshift({
-            timestamp: new Date().toLocaleTimeString(),
-            message: '📷 Camera initialized successfully',
-            success: true
-        });
+        console.log('✅ Camera initialized successfully');
+        console.log('🔍 QR scanner should now be active and detecting codes');
     } catch (error) {
-        console.error('Camera initialization failed:', error);
-        cameraError.value = 'Failed to access camera. Please check permissions.';
+        console.error('❌ Camera initialization failed:', error);
+        cameraError.value = error.message || 'Failed to initialize camera';
         cameraInitialized.value = false;
-
-        qrScanLog.value.unshift({
-            timestamp: new Date().toLocaleTimeString(),
-            message: '✗ Camera initialization failed',
-            success: false
-        });
     }
+};
+
+const testQRDetection = async () => {
+    console.log('🧪 Testing QR Detection manually...');
+    
+    // Test with a sample student ID
+    const testStudentId = "1";
+    console.log('Testing with student ID:', testStudentId);
+    
+    // Simulate QR decode
+    await onQRDecode(testStudentId);
+    
+    toast.add({
+        severity: 'info',
+        summary: 'QR Test',
+        detail: `Tested QR detection with student ID: ${testStudentId}`,
+        life: 3000
+    });
 };
 
 const completeQRSession = async () => {
     try {
-        // Complete the session and show completion modal
+        // Close QR scanner first
+        showQRScanner.value = false;
+        
+        // Start loading animation (same as seating plan method)
+        isCompletingSession.value = true;
+        sessionCompletionProgress.value = 0;
+
+        // Start progressive animation that runs parallel to API calls
+        const progressInterval = setInterval(() => {
+            if (sessionCompletionProgress.value < 85) {
+                sessionCompletionProgress.value += Math.random() * 1.5 + 0.5; // Slower increment 0.5-2%
+            }
+        }, 150); // Slower interval
+
+        // Step 1: Initial progress
+        sessionCompletionProgress.value = 10;
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // Step 2: Start API call
+        sessionCompletionProgress.value = 25;
+        await new Promise(resolve => setTimeout(resolve, 600));
+        
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-        saveCompletedSession(response.summary);
+        
+        // Step 3: Process response
+        sessionCompletionProgress.value = 60;
+        await new Promise(resolve => setTimeout(resolve, 700));
+        
+        sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
 
-        // Close QR scanner
-        showQRScanner.value = false;
+        // Step 4: Finalize
+        sessionCompletionProgress.value = 80;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 5: Prepare modal (keep loading visible)
+        sessionCompletionProgress.value = 95;
+        
+        // Save session data but don't show modal yet
+        saveCompletedSession(response.summary);
+        
+        // Final progress update
+        sessionCompletionProgress.value = 100;
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Clear interval and hide loading
+        clearInterval(progressInterval);
+        isCompletingSession.value = false;
+        sessionCompletionProgress.value = 0;
+
+        // Show completion modal after loading is done
+        showCompletionModal.value = true;
 
         toast.add({
             severity: 'success',
@@ -3072,7 +3373,7 @@ const isDropTarget = ref(false);
                     <div class="header-info flex align-items-center gap-4">
                         <div class="calendar-section flex align-items-center gap-2 text-sm text-gray-600">
                             <i class="pi pi-calendar text-gray-500"></i>
-                            <Calendar v-model="currentDate" dateFormat="yy-mm-dd" :showIcon="false" />
+                            <DatePicker v-model="currentDate" dateFormat="yy-mm-dd" :showIcon="false" />
                         </div>
                         <!-- Session Status Indicator -->
                         <div v-if="sessionActive" class="session-status active">
@@ -3446,15 +3747,30 @@ const isDropTarget = ref(false);
                         </div>
 
                         <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden">
-                            <QrcodeStream v-if="!scanning" @decode="onQRDecode" @init="onCameraInit" class="qr-scanner w-full h-64" />
-                            <div v-if="scanning" class="scanner-paused h-64 bg-gray-100">
+                            <QrcodeStream 
+                                v-if="scanning" 
+                                @decode="onQRDecode"
+                                @detect="onQRDetect"
+                                @init="onCameraInit"
+                                @error="onCameraError"
+                                class="qr-scanner w-full h-64" 
+                            />
+                            <div v-if="!scanning" class="scanner-paused h-64 bg-gray-100 flex flex-column align-items-center justify-content-center">
                                 <i class="pi pi-pause-circle text-4xl mb-2"></i>
-                                <p>Scanner Paused</p>
+                                <p>Scanner Paused - Click Resume to start scanning</p>
                             </div>
+                        </div>
+                        
+                        <!-- Debug Info -->
+                        <div class="mt-2 text-xs text-gray-500">
+                            Scanner Status: {{ scanning ? 'ACTIVE' : 'PAUSED' }} | 
+                            Camera: {{ cameraInitialized ? 'READY' : 'INITIALIZING' }}
+                            <span v-if="cameraError" class="text-red-500"> | Error: {{ cameraError }}</span>
                         </div>
 
                         <div class="mt-3 flex gap-2">
-                            <Button :label="scanning ? 'Resume' : 'Pause'" :icon="scanning ? 'pi pi-play' : 'pi pi-pause'" @click="toggleScanning" />
+                            <Button :label="!scanning ? 'Resume' : 'Pause'" :icon="!scanning ? 'pi pi-play' : 'pi pi-pause'" @click="toggleScanning" />
+                            <Button label="Test QR" icon="pi pi-search" class="p-button-warning" @click="testQRDetection" />
                             <Button label="Complete Session" icon="pi pi-check" class="p-button-success" @click="completeQRSession" />
                             <Button label="Close Scanner" icon="pi pi-times" class="p-button-secondary" @click="stopQRScanner" />
                         </div>
