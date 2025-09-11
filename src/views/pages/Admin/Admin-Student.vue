@@ -992,7 +992,7 @@ function generateTempId() {
     const student = selectedStudent.value;
     const qrSrc = qrCodes.value[student.lrn] || '';
     const today = new Date().toISOString().slice(0, 10);
-    
+
     // Debug: Log student data to console
     console.log('Student data for ID generation:', {
         name: student.name,
@@ -1004,7 +1004,7 @@ function generateTempId() {
 
     const win = window.open('', '_blank');
     const timestamp = Date.now(); // Cache buster
-    
+
     // Force clear any cached content
     win.document.open();
     win.document.clear();
@@ -1036,7 +1036,7 @@ function generateTempId() {
                 
                 .id-card {
                     width: 320px;
-                    height: 550px;
+                    height: 600px;
                     border-radius: 15px;
                     overflow: hidden;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
@@ -1075,10 +1075,11 @@ function generateTempId() {
                 .school-logo {
                     position: absolute;
                     top: 20px;
-                    left: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
                     width: 60px;
                     height: 60px;
-                    background: rgba(255,255,255,0.9);
+                    background: white;
                     border-radius: 50%;
                     display: flex;
                     align-items: center;
@@ -1099,9 +1100,9 @@ function generateTempId() {
                 }
                 
                 .school-name {
-                    font-size: 20px;
+                    font-size: 18px;
                     font-weight: bold;
-                    margin-top: 50px;
+                    margin-top: 75px;
                     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                 }
                 
@@ -1133,20 +1134,20 @@ function generateTempId() {
                 }
                 
                 .qr-code {
-                    width: 70px;
-                    height: 70px;
+                    width: 160px;
+                    height: 160px;
                     background: white;
                     border-radius: 8px;
-                    padding: 5px;
+                    padding: 8px;
                     display: block;
-                    margin: 0 auto 15px;
+                    margin: 15px auto;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
                 
                 .student-info {
                     background: rgba(255,255,255,0.95);
-                    margin: 0 20px 6px;
-                    padding: 8px 12px;
+                    margin: 0 20px 15px;
+                    padding: 12px;
                     border-radius: 6px;
                     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     clear: both;
@@ -1343,15 +1344,6 @@ function generateTempId() {
                         <div class="info-value">${student.studentId || student.lrn}</div>
                     </div>
                     
-                    <div class="student-info">
-                        <div class="info-label">CLASS:</div>
-                        <div class="info-value">${student.gradeLevel || 'Grade 3'} - ${student.section || 'Section A'}</div>
-                    </div>
-                    
-                    <div class="student-info">
-                        <div class="info-label">DATE OF BIRTH:</div>
-                        <div class="info-value">${student.birthdate || 'JUNE 5, 2050'}</div>
-                    </div>
                 </div>
                 
                 <!-- BACK SIDE -->
