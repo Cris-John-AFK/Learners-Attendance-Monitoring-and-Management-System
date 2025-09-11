@@ -191,6 +191,77 @@
                 <Button label="Create Plan" icon="pi pi-check" @click="savePlan" />
             </template>
         </Dialog>
+
+        <!-- Progress Tracking Dialog -->
+        <Dialog v-model:visible="showProgressDialog" modal :header="`Progress Tracking - ${selectedStudentForProgress?.first_name} ${selectedStudentForProgress?.last_name}`" style="width: 60rem">
+            <div class="progress-content">
+                <!-- Weekly Attendance Chart -->
+                <div class="progress-section">
+                    <h5><i class="pi pi-chart-bar"></i> Weekly Attendance Overview</h5>
+                    <div class="weekly-grid">
+                        <div v-for="week in progressData.weeklyAttendance" :key="week.week" class="week-card">
+                            <div class="week-header">{{ week.week }}</div>
+                            <div class="attendance-stats">
+                                <div class="stat-item present">
+                                    <span class="stat-label">Present:</span>
+                                    <span class="stat-value">{{ week.present }}</span>
+                                </div>
+                                <div class="stat-item absent">
+                                    <span class="stat-label">Absent:</span>
+                                    <span class="stat-value">{{ week.absent }}</span>
+                                </div>
+                                <div class="stat-item late">
+                                    <span class="stat-label">Late:</span>
+                                    <span class="stat-value">{{ week.late }}</span>
+                                </div>
+                            </div>
+                            <div class="percentage-bar">
+                                <div class="percentage-fill" :style="{ width: week.percentage + '%' }"></div>
+                                <span class="percentage-text">{{ week.percentage }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Improvements Section -->
+                <div class="progress-section">
+                    <h5><i class="pi pi-check-circle"></i> Positive Improvements</h5>
+                    <ul class="improvement-list">
+                        <li v-for="improvement in progressData.improvements" :key="improvement" class="improvement-item">
+                            <i class="pi pi-check text-green-600"></i>
+                            {{ improvement }}
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Concerns Section -->
+                <div class="progress-section">
+                    <h5><i class="pi pi-exclamation-triangle"></i> Areas of Concern</h5>
+                    <ul class="concern-list">
+                        <li v-for="concern in progressData.concerns" :key="concern" class="concern-item">
+                            <i class="pi pi-exclamation-triangle text-orange-500"></i>
+                            {{ concern }}
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Next Steps Section -->
+                <div class="progress-section">
+                    <h5><i class="pi pi-arrow-right"></i> Recommended Next Steps</h5>
+                    <ul class="next-steps-list">
+                        <li v-for="step in progressData.nextSteps" :key="step" class="next-step-item">
+                            <i class="pi pi-arrow-circle-right text-blue-600"></i>
+                            {{ step }}
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Print Report" icon="pi pi-print" text />
+                <Button label="Schedule Follow-up" icon="pi pi-calendar-plus" />
+                <Button label="Close" icon="pi pi-times" @click="showProgressDialog = false" />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -217,9 +288,20 @@ const props = defineProps({
 const showPlanDialog = ref(false);
 const selectedStudentForPlan = ref(null);
 const newPlan = ref({
-    targetAttendance: 85,
-    description: '',
-    reviewDate: null
+    goals: '',
+    strategies: '',
+    timeline: '',
+    checkpoints: []
+});
+
+const showProgressDialog = ref(false);
+const selectedStudentForProgress = ref(null);
+const progressData = ref({
+    weeklyAttendance: [],
+    monthlyTrends: [],
+    improvements: [],
+    concerns: [],
+    nextSteps: []
 });
 
 // Computed properties for student categorization
@@ -334,16 +416,6 @@ function getRecommendedActions(student) {
         });
     }
     
-    if (student.riskLevel === 'warning' || student.riskLevel === 'critical') {
-        actions.push({
-            id: 'send-warning',
-            label: 'Issue Attendance Warning',
-            icon: 'pi pi-exclamation-triangle',
-            class: 'p-button-warning',
-            priority: 'medium'
-        });
-    }
-    
     if (student.riskFactors?.includes('Economic Risk')) {
         actions.push({
             id: 'refer-counselor',
@@ -437,9 +509,42 @@ function referToCounselor(student) {
 }
 
 function trackProgress(student) {
-    // Simulate progress tracking setup
-    console.log(`Setting up progress tracking for ${student.first_name} ${student.last_name}`);
-    // In real implementation, this would create monitoring alerts
+    selectedStudentForProgress.value = student;
+    showProgressDialog.value = true;
+    loadProgressData(student);
+}
+
+function loadProgressData(student) {
+    // Simulate loading progress data - in real implementation, this would fetch from API
+    progressData.value = {
+        weeklyAttendance: [
+            { week: 'Week 1', present: 4, absent: 1, late: 0, percentage: 80 },
+            { week: 'Week 2', present: 5, absent: 0, late: 0, percentage: 100 },
+            { week: 'Week 3', present: 3, absent: 2, late: 0, percentage: 60 },
+            { week: 'Week 4', present: 4, absent: 0, late: 1, percentage: 80 }
+        ],
+        monthlyTrends: [
+            { month: 'January', attendance: 85 },
+            { month: 'February', attendance: 78 },
+            { month: 'March', attendance: 82 }
+        ],
+        improvements: [
+            'Attendance improved by 15% in Week 2',
+            'No tardiness recorded in the last 2 weeks',
+            'Consistent morning arrival time'
+        ],
+        concerns: [
+            'Two consecutive absences in Week 3',
+            'Pattern of Monday absences observed',
+            'No communication from parents during absences'
+        ],
+        nextSteps: [
+            'Schedule parent conference to discuss attendance patterns',
+            'Implement morning check-in system',
+            'Create peer buddy system for accountability',
+            'Monitor for next 2 weeks and reassess'
+        ]
+    };
 }
 
 function savePlan() {
@@ -792,5 +897,139 @@ function formatDate(date) {
     margin-bottom: 0.5rem;
     font-weight: 600;
     color: #2c3e50;
+}
+
+/* Progress Tracking Dialog Styles */
+.progress-content {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.progress-section {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.progress-section h5 {
+    margin: 0 0 1rem 0;
+    color: #495057;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.weekly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.week-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+.week-header {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.attendance-stats {
+    margin-bottom: 1rem;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.stat-item.present .stat-value {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.stat-item.absent .stat-value {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.stat-item.late .stat-value {
+    color: #ffc107;
+    font-weight: 600;
+}
+
+.percentage-bar {
+    position: relative;
+    height: 20px;
+    background: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.percentage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745, #20c997);
+    transition: width 0.3s ease;
+}
+
+.percentage-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+}
+
+.improvement-list,
+.concern-list,
+.next-steps-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.improvement-item,
+.concern-item,
+.next-step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+}
+
+.improvement-item {
+    border-left-color: #28a745;
+}
+
+.concern-item {
+    border-left-color: #ffc107;
+}
+
+.next-step-item {
+    border-left-color: #007bff;
+}
+
+.improvement-item i,
+.concern-item i,
+.next-step-item i {
+    margin-top: 0.125rem;
+    flex-shrink: 0;
 }
 </style>

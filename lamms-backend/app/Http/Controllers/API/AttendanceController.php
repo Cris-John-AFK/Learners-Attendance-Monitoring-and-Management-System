@@ -372,7 +372,32 @@ class AttendanceController extends Controller
      */
     public function markAttendance(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        // Handle subject_id conversion from string to integer if needed
+        $requestData = $request->all();
+        if (isset($requestData['subject_id']) && !is_numeric($requestData['subject_id'])) {
+            $subject = \App\Models\Subject::where('name', 'ILIKE', $requestData['subject_id'])
+                ->orWhere('code', 'ILIKE', $requestData['subject_id'])
+                ->first();
+            
+            if ($subject) {
+                $requestData['subject_id'] = $subject->id;
+                Log::info('Converted subject identifier to ID in mark attendance', [
+                    'original' => $request->input('subject_id'),
+                    'resolved_id' => $subject->id,
+                    'subject_name' => $subject->name
+                ]);
+            } else {
+                Log::error('Subject not found for mark attendance', [
+                    'subject_identifier' => $requestData['subject_id']
+                ]);
+                return response()->json([
+                    'message' => 'Subject not found',
+                    'error' => 'Invalid subject identifier: ' . $requestData['subject_id']
+                ], 422);
+            }
+        }
+
+        $validator = Validator::make($requestData, [
             'section_id' => 'required|exists:sections,id',
             'subject_id' => 'nullable|exists:subjects,id',  // Made nullable for homeroom/general attendance
             'teacher_id' => 'required|exists:teachers,id',
@@ -388,11 +413,11 @@ class AttendanceController extends Controller
         }
 
         try {
-            $sectionId = $request->section_id;
-            $subjectId = $request->subject_id;
-            $teacherId = $request->teacher_id;
-            $date = $request->date;
-            $attendanceData = $request->attendance;
+            $sectionId = $requestData['section_id'];
+            $subjectId = $requestData['subject_id'];
+            $teacherId = $requestData['teacher_id'];
+            $date = $requestData['date'];
+            $attendanceData = $requestData['attendance'];
 
             $savedAttendance = [];
 

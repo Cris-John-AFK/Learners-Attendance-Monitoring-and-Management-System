@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\Storage;
@@ -235,10 +236,10 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Get seating arrangement from database or create default
+            // Get seating arrangement from database or create default (section-based, not subject-specific)
             $seatingData = DB::table('seating_arrangements')
                 ->where('section_id', $sectionId)
-                ->where('subject_id', $request->subject_id)
+                ->where('teacher_id', $request->teacher_id)
                 ->first();
 
             if ($seatingData) {
@@ -273,18 +274,71 @@ class StudentManagementController extends Controller
      */
     public function saveSeatingArrangement(Request $request)
     {
-        $request->validate([
-            'section_id' => 'required|integer|exists:sections,id',
-            'subject_id' => 'nullable|integer|exists:subjects,id',
-            'teacher_id' => 'required|integer|exists:teachers,id',
-            'seating_layout' => 'required|array'
+        Log::info('Seating arrangement save request received', [
+            'data' => $request->all(),
+            'headers' => $request->headers->all()
         ]);
+
+        try {
+            // Handle subject_id conversion from string to integer if needed
+            $requestData = $request->all();
+            if (isset($requestData['subject_id']) && !is_numeric($requestData['subject_id'])) {
+                // Try to find subject by name or code
+                $subject = \App\Models\Subject::where('name', 'ILIKE', $requestData['subject_id'])
+                    ->orWhere('code', 'ILIKE', $requestData['subject_id'])
+                    ->first();
+                
+                if ($subject) {
+                    $requestData['subject_id'] = $subject->id;
+                    Log::info('Converted subject identifier to ID', [
+                        'original' => $request->input('subject_id'),
+                        'resolved_id' => $subject->id,
+                        'subject_name' => $subject->name
+                    ]);
+                } else {
+                    Log::error('Subject not found for identifier', [
+                        'subject_identifier' => $requestData['subject_id']
+                    ]);
+                    return response()->json([
+                        'message' => 'Subject not found',
+                        'error' => 'Invalid subject identifier: ' . $requestData['subject_id']
+                    ], 422);
+                }
+            }
+
+            $validator = \Illuminate\Support\Facades\Validator::make($requestData, [
+                'section_id' => 'required|integer|exists:sections,id',
+                'subject_id' => 'nullable|integer|exists:subjects,id',
+                'teacher_id' => 'required|integer|exists:teachers,id',
+                'seating_layout' => 'required|array'
+            ]);
+
+            if ($validator->fails()) {
+                Log::error('Seating arrangement validation failed', [
+                    'errors' => $validator->errors()->toArray(),
+                    'input' => $requestData
+                ]);
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+        } catch (\Exception $e) {
+            Log::error('Validation exception in saveSeatingArrangement', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'message' => 'Validation error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
 
         try {
             // Verify teacher access
             $teacherAssignment = DB::table('teacher_section_subject')
-                ->where('teacher_id', $request->teacher_id)
-                ->where('section_id', $request->section_id)
+                ->where('teacher_id', $requestData['teacher_id'])
+                ->where('section_id', $requestData['section_id'])
                 ->where('is_active', true)
                 ->first();
 
@@ -294,23 +348,37 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Save or update seating arrangement
-            DB::table('seating_arrangements')->updateOrInsert(
-                [
-                    'section_id' => $request->section_id,
-                    'subject_id' => $request->subject_id
-                ],
-                [
-                    'layout' => json_encode($request->seating_layout),
-                    'teacher_id' => $request->teacher_id,
+            // Save or update seating arrangement (section-based, not subject-specific)
+            $existing = DB::table('seating_arrangements')
+                ->where('section_id', $requestData['section_id'])
+                ->where('teacher_id', $requestData['teacher_id'])
+                ->first();
+
+            if ($existing) {
+                // Update existing record
+                DB::table('seating_arrangements')
+                    ->where('id', $existing->id)
+                    ->update([
+                        'layout' => json_encode($requestData['seating_layout']),
+                        'subject_id' => null,
+                        'updated_at' => now()
+                    ]);
+            } else {
+                // Insert new record
+                DB::table('seating_arrangements')->insert([
+                    'section_id' => $requestData['section_id'],
+                    'teacher_id' => $requestData['teacher_id'],
+                    'layout' => json_encode($requestData['seating_layout']),
+                    'subject_id' => null,
+                    'created_at' => now(),
                     'updated_at' => now()
-                ]
-            );
+                ]);
+            }
 
             return response()->json([
                 'message' => 'Seating arrangement saved successfully',
-                'section_id' => $request->section_id,
-                'subject_id' => $request->subject_id
+                'section_id' => $requestData['section_id'],
+                'subject_id' => $requestData['subject_id']
             ]);
 
         } catch (\Exception $e) {
@@ -346,10 +414,10 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Delete seating arrangement from database
+            // Delete seating arrangement from database (section-based)
             $deleted = DB::table('seating_arrangements')
                 ->where('section_id', $request->section_id)
-                ->where('subject_id', $request->subject_id)
+                ->where('teacher_id', $request->teacher_id)
                 ->delete();
 
             return response()->json([

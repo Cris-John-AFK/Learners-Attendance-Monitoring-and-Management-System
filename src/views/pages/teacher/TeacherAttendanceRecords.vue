@@ -4,10 +4,13 @@ import { SubjectService } from '@/router/service/Subjects';
 import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
+import Checkbox from 'primevue/checkbox';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue'; // Added missing watch import
@@ -24,6 +27,9 @@ const subjects = ref([]);
 const selectedSubject = ref(null);
 const startDate = ref(new Date(new Date().setDate(1))); // First day of current month
 const endDate = ref(new Date()); // Today
+const showOnlyIssues = ref(false);
+const showStudentDialog = ref(false);
+const selectedStudentDetails = ref(null);
 
 // Get all students for the selected subject
 const students = ref([]);
@@ -78,14 +84,58 @@ const dateColumns = computed(() => {
     return columns;
 });
 
-// Filtered records based on search query
-const filteredRecords = computed(() => {
-    if (!searchQuery.value) return attendanceMatrix.value;
+// Helper function to calculate attendance issues
+const calculateAttendanceIssues = (studentRecord) => {
+    const totalDays = dateColumns.value.length;
+    let absentDays = 0;
+    let lateDays = 0;
 
-    const query = searchQuery.value.toLowerCase();
-    return attendanceMatrix.value.filter((record) => {
-        return record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || (record.gradeLevel && record.gradeLevel.toString().toLowerCase().includes(query)) || (record.section && record.section.toLowerCase().includes(query));
+    dateColumns.value.forEach((date) => {
+        const status = studentRecord[date];
+        if (status === 'Absent') absentDays++;
+        if (status === 'Late') lateDays++;
     });
+
+    const absentRate = totalDays > 0 ? (absentDays / totalDays) * 100 : 0;
+    const lateRate = totalDays > 0 ? (lateDays / totalDays) * 100 : 0;
+
+    // Define issue thresholds
+    const hasIssues = absentRate >= 20 || lateDays >= 3; // 20% absent rate or 3+ late days
+    const issueLevel = absentRate >= 30 || lateDays >= 5 ? 'Warning' : 'Normal';
+
+    return {
+        hasIssues,
+        issueLevel,
+        absentDays,
+        lateDays,
+        absentRate: Math.round(absentRate),
+        lateRate: Math.round(lateRate)
+    };
+};
+
+// Filtered records based on search query and issues filter
+const filteredRecords = computed(() => {
+    let records = attendanceMatrix.value;
+
+    // Apply search filter
+    if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        records = records.filter((record) => {
+            return (
+                record.name.toLowerCase().includes(query) || record.id.toString().includes(query) || (record.gradeLevel && record.gradeLevel.toString().toLowerCase().includes(query)) || (record.section && record.section.toLowerCase().includes(query))
+            );
+        });
+    }
+
+    // Apply issues filter
+    if (showOnlyIssues.value) {
+        records = records.filter((record) => {
+            const issues = calculateAttendanceIssues(record);
+            return issues.hasIssues;
+        });
+    }
+
+    return records;
 });
 
 // Load attendance records for the selected subject and date range
@@ -305,6 +355,16 @@ const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
+
+// Function to view student details
+const viewStudentDetails = (studentData) => {
+    const issues = calculateAttendanceIssues(studentData);
+    selectedStudentDetails.value = {
+        ...studentData,
+        issues
+    };
+    showStudentDialog.value = true;
+};
 </script>
 
 <template>
@@ -337,10 +397,22 @@ const formatDate = (dateString) => {
 
                 <div class="field">
                     <label for="search" class="block mb-1">Search</label>
-                    <span class="p-input-icon-left w-full">
-                        <i class="pi pi-search" />
+                    <div class="p-inputgroup w-full">
+                        <span class="p-inputgroup-addon">
+                            <i class="pi pi-search"></i>
+                        </span>
                         <InputText id="search" v-model="searchQuery" placeholder="Search students..." class="w-full" />
-                    </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Additional filters row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <div class="field">
+                    <div class="flex align-items-center">
+                        <Checkbox id="showIssues" v-model="showOnlyIssues" :binary="true" class="mr-2" />
+                        <label for="showIssues" class="text-sm font-medium">Show only students with issues</label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -348,10 +420,45 @@ const formatDate = (dateString) => {
         <!-- Attendance Records Table -->
         <DataTable :value="filteredRecords" :loading="loading" responsiveLayout="scroll" class="attendance-table" stripedRows scrollable scrollHeight="500px">
             <!-- Fixed columns for student info -->
-            <Column field="name" header="Student Name" :frozen="true" style="min-width: 200px" />
+            <Column field="name" header="Student Name" :frozen="true" style="min-width: 200px">
+                <template #body="{ data }">
+                    <div class="flex align-items-center">
+                        <span>{{ data.name }}</span>
+                        <i
+                            v-if="calculateAttendanceIssues(data).hasIssues"
+                            class="pi pi-exclamation-triangle text-orange-500 ml-2"
+                            :title="`${calculateAttendanceIssues(data).issueLevel} - ${calculateAttendanceIssues(data).absentDays} absent, ${calculateAttendanceIssues(data).lateDays} late`"
+                        ></i>
+                    </div>
+                </template>
+            </Column>
             <Column field="id" header="ID" :frozen="true" style="min-width: 100px" />
             <Column field="gradeLevel" header="Grade" :frozen="true" style="min-width: 80px" />
             <Column field="section" header="Section" :frozen="true" style="min-width: 100px" />
+            <Column header="Status" :frozen="true" style="min-width: 100px">
+                <template #body="{ data }">
+                    <div class="flex align-items-center">
+                        <Tag v-if="calculateAttendanceIssues(data).hasIssues" :value="calculateAttendanceIssues(data).issueLevel" :severity="calculateAttendanceIssues(data).issueLevel === 'Warning' ? 'warning' : 'info'" />
+                        <Tag v-else value="Normal" severity="success" />
+                    </div>
+                </template>
+            </Column>
+            <Column header="Absences" :frozen="true" style="min-width: 100px">
+                <template #body="{ data }">
+                    <div class="text-center">
+                        <span :class="calculateAttendanceIssues(data).absentDays >= 3 ? 'text-red-600 font-bold' : 'text-gray-600'">
+                            {{ calculateAttendanceIssues(data).absentDays }}
+                        </span>
+                    </div>
+                </template>
+            </Column>
+            <Column header="Actions" :frozen="true" style="min-width: 100px">
+                <template #body="{ data }">
+                    <div class="flex justify-center">
+                        <Button icon="pi pi-eye" class="p-button-text p-button-sm" @click="viewStudentDetails(data)" v-tooltip.top="'View student details'" />
+                    </div>
+                </template>
+            </Column>
 
             <!-- Dynamic columns for dates -->
             <Column v-for="date in dateColumns" :key="date" :field="date" :header="formatDate(date)" style="min-width: 100px">
@@ -372,6 +479,59 @@ const formatDate = (dateString) => {
                 {{ !selectedSubject ? 'Please select a subject to view attendance records.' : 'No attendance records match your search criteria.' }}
             </p>
         </div>
+
+        <!-- Student Details Dialog -->
+        <Dialog v-model:visible="showStudentDialog" header="Student Details" :modal="true" :style="{ width: '600px' }" :closeOnEscape="true" :dismissableMask="true">
+            <div v-if="selectedStudentDetails" class="p-4">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">{{ selectedStudentDetails.name }}</h4>
+                        <p><strong>ID:</strong> {{ selectedStudentDetails.id }}</p>
+                        <p><strong>Grade:</strong> {{ selectedStudentDetails.gradeLevel }}</p>
+                        <p><strong>Section:</strong> {{ selectedStudentDetails.section }}</p>
+                    </div>
+                    <div class="text-right">
+                        <Tag :value="selectedStudentDetails.issues.issueLevel" :severity="selectedStudentDetails.issues.issueLevel === 'Warning' ? 'warning' : 'success'" class="mb-2" />
+                        <div v-if="selectedStudentDetails.issues.hasIssues" class="text-orange-600">
+                            <i class="pi pi-exclamation-triangle mr-1"></i>
+                            Requires attention
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-red-50 p-3 rounded border">
+                        <h5 class="font-medium text-red-700 mb-1">Absences</h5>
+                        <div class="text-2xl font-bold text-red-600">{{ selectedStudentDetails.issues.absentDays }}</div>
+                        <div class="text-sm text-red-500">{{ selectedStudentDetails.issues.absentRate }}% of days</div>
+                    </div>
+                    <div class="bg-yellow-50 p-3 rounded border">
+                        <h5 class="font-medium text-yellow-700 mb-1">Late Days</h5>
+                        <div class="text-2xl font-bold text-yellow-600">{{ selectedStudentDetails.issues.lateDays }}</div>
+                        <div class="text-sm text-yellow-500">{{ selectedStudentDetails.issues.lateRate }}% of days</div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h5 class="font-medium mb-2">Recent Attendance Pattern</h5>
+                    <div class="flex flex-wrap gap-1">
+                        <div v-for="date in dateColumns.slice(-10)" :key="date" class="text-center">
+                            <div class="text-xs text-gray-500 mb-1">{{ formatDate(date) }}</div>
+                            <div :class="['w-8 h-8 rounded flex items-center justify-center text-xs font-medium', getStatusClass(selectedStudentDetails[date])]">
+                                <i v-if="selectedStudentDetails[date] === 'Present'" class="pi pi-check text-green-600"></i>
+                                <i v-else-if="selectedStudentDetails[date] === 'Absent'" class="pi pi-times text-red-600"></i>
+                                <i v-else-if="selectedStudentDetails[date] === 'Late'" class="pi pi-clock text-yellow-600"></i>
+                                <i v-else-if="selectedStudentDetails[date] === 'Excused'" class="pi pi-info-circle text-purple-600"></i>
+                                <span v-else class="text-gray-400">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="showStudentDialog = false" />
+            </template>
+        </Dialog>
     </div>
 </template>
 

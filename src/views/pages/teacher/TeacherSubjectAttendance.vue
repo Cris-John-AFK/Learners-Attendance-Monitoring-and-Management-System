@@ -2,23 +2,19 @@
 import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
-import { SubjectService } from '@/router/service/Subjects';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
 import NotificationService from '@/services/NotificationService';
 import SeatingService from '@/services/SeatingService';
 import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
-import OverlayPanel from 'primevue/overlaypanel';
-import Menu from 'primevue/menu';
+import RadioButton from 'primevue/radiobutton';
 import Tag from 'primevue/tag';
 import Textarea from 'primevue/textarea';
-import RadioButton from 'primevue/radiobutton';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 import { useRoute, useRouter } from 'vue-router';
-
 
 // Add Dialog component if not already imported
 
@@ -48,8 +44,8 @@ const getInitialSubjectInfo = () => {
         return { id: '1', name: 'Mathematics' };
     } else if (route.params.subjectId) {
         const id = route.params.subjectId;
-        const name = id === '1' ? 'Mathematics' : id === '2' ? 'Homeroom' : 'Subject';
-        return { id, name };
+        // Don't hardcode names - will be fetched dynamically
+        return { id, name: 'Subject' };
     }
     return { id: '1', name: 'Mathematics' };
 };
@@ -144,6 +140,45 @@ const modalDismissedToday = ref(false);
 const completionModalTimer = ref(null);
 const showSessionDetailsDialog = ref(false);
 
+// Function to fetch actual subject details from API
+const fetchSubjectDetails = async (subjectIdentifier) => {
+    console.log(`📡 Starting API call for subject: ${subjectIdentifier}`);
+    try {
+        // If it's already a number, fetch by ID
+        if (!isNaN(subjectIdentifier)) {
+            console.log(`🔢 Fetching by ID: ${subjectIdentifier}`);
+            const response = await fetch(`http://localhost:8000/api/subjects/${subjectIdentifier}`);
+            console.log(`📊 Response status: ${response.status}`);
+            if (response.ok) {
+                const subject = await response.json();
+                console.log(`📋 Subject data:`, subject);
+                return { id: subject.id, name: subject.name || 'Subject' };
+            }
+        } else {
+            // If it's a string (like "hekasi"), find by name/code
+            console.log(`🔤 Fetching all subjects to find: ${subjectIdentifier}`);
+            const response = await fetch(`http://localhost:8000/api/subjects`);
+            console.log(`📊 All subjects response status: ${response.status}`);
+            if (response.ok) {
+                const subjects = await response.json();
+                console.log(`📚 All subjects:`, subjects);
+                const subject = subjects.find(s => 
+                    s.name.toLowerCase() === subjectIdentifier.toLowerCase() || 
+                    s.code.toLowerCase() === subjectIdentifier.toLowerCase()
+                );
+                console.log(`🎯 Found matching subject:`, subject);
+                if (subject) {
+                    return { id: subject.id, name: subject.name };
+                }
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error fetching subject details:', error);
+    }
+    console.log(`⚠️ Returning default subject data`);
+    return { id: null, name: 'Subject' };
+};
+
 // Initialize attendance session system
 const initializeAttendanceSession = async () => {
     try {
@@ -186,7 +221,7 @@ const loadStudentsData = async () => {
             if (students.value.length > 0) {
                 const firstStudent = students.value[0];
                 sectionId.value = firstStudent.current_section_id || 13;
-                
+
                 // Only set subject info if not already set by props/route
                 if (!subjectId.value || !subjectName.value) {
                     subjectName.value = 'Mathematics (Grade 3)';
@@ -196,9 +231,9 @@ const loadStudentsData = async () => {
         } else {
             // Use the first assignment from the assignments array
             const assignmentData = assignments.assignments[0];
-            
+
             sectionId.value = assignmentData.section_id;
-            
+
             // Only set subject info if not already set by props/route
             if (!subjectId.value || !subjectName.value) {
                 const firstSubject = assignmentData.subjects[0];
@@ -219,6 +254,9 @@ const loadStudentsData = async () => {
                     studentId: student.studentId || student.id,
                     student_id: student.studentId || student.id
                 }));
+
+                // Load seating arrangement after students and sectionId are set
+                await loadSeatingArrangementFromDatabase();
             } else {
                 students.value = [];
             }
@@ -278,10 +316,17 @@ const saveCurrentLayout = async (showToast = true) => {
         };
 
         // Save to database via API
+        console.log('Saving layout with data:', {
+            sectionId: sectionId.value,
+            subjectId: subjectId.value,
+            teacherId: teacherId.value,
+            seatPlan: layout.seatPlan,
+            assignedSeats: layout.seatPlan.flat().filter((seat) => seat.isOccupied).length
+        });
         await SeatingService.saveSeatingArrangement(sectionId.value, subjectId.value, teacherId.value, layout);
 
-        // Also save to localStorage as backup
-        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        // Also save to localStorage as backup (section-based, not subject-specific)
+        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
 
         if (showToast) {
             toast.add({
@@ -302,7 +347,7 @@ const saveCurrentLayout = async (showToast = true) => {
             showTeacherDesk: showTeacherDesk.value,
             showStudentIds: showStudentIds.value
         };
-        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
 
         if (showToast) {
             toast.add({
@@ -322,13 +367,20 @@ const loadSeatingArrangementFromDatabase = async () => {
 
         if (!sectionId.value || !teacherId.value) {
             console.log('Missing sectionId or teacherId, falling back to localStorage');
+            console.log('Current values - sectionId:', sectionId.value, 'teacherId:', teacherId.value);
             return loadSavedLayout();
         }
 
+        console.log('Loading with sectionId:', sectionId.value, 'teacherId:', teacherId.value);
+
         const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, subjectId.value);
+
+        console.log('Loading seating arrangement response:', response);
 
         if (response && response.seating_layout) {
             const layout = response.seating_layout;
+            console.log('Loaded layout data:', layout);
+            console.log('Loaded assigned seats:', layout.seatPlan ? layout.seatPlan.flat().filter((seat) => seat.isOccupied).length : 0);
 
             // Apply the loaded layout
             rows.value = layout.rows || rows.value;
@@ -339,10 +391,15 @@ const loadSeatingArrangementFromDatabase = async () => {
             // Set the seat plan with deep copy to avoid reference issues
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
-                
-                // Clean up invalid student assignments after loading
-                cleanupInvalidStudentAssignments();
-                
+
+                // Only clean up if students are already loaded to avoid removing valid assignments
+                if (students.value && students.value.length > 0) {
+                    console.log('Running cleanup after loading seating arrangement');
+                    cleanupInvalidStudentAssignments();
+                } else {
+                    console.log('Skipping cleanup - students not loaded yet');
+                }
+
                 console.log('Loaded seating arrangement from database');
                 return true;
             }
@@ -516,14 +573,14 @@ const getStudentById = (studentId) => {
 // Get student by QR code
 const getStudentByQRCode = (qrCode) => {
     if (!qrCode) return null;
-    
+
     // Find student with matching QR code
     const student = students.value.find((s) => s.qr_code === qrCode || s.studentId === qrCode);
-    
+
     if (!student) {
         console.warn(`Student with QR code ${qrCode} not found`);
     }
-    
+
     return student || null;
 };
 
@@ -565,7 +622,7 @@ const startQRScanner = async () => {
         scanning.value = true; // Start scanning immediately
         console.log('📱 Scanner dialog opened, scanning set to:', scanning.value);
         await initializeCamera();
-        
+
         toast.add({
             severity: 'info',
             summary: 'QR Scanner Started',
@@ -602,13 +659,13 @@ const selectQRMethod = async () => {
 
 const onQRCodeDetected = async (detectedCodes) => {
     if (!detectedCodes || detectedCodes.length === 0) return;
-    
+
     const qrCode = detectedCodes[0].rawValue;
     console.log('QR Code detected:', qrCode);
-    
+
     // Find student by QR code
     const student = getStudentByQRCode(qrCode);
-    
+
     if (!student) {
         toast.add({
             severity: 'warn',
@@ -618,7 +675,7 @@ const onQRCodeDetected = async (detectedCodes) => {
         });
         return;
     }
-    
+
     // Check if already scanned
     if (scannedStudents.value.includes(student.id)) {
         toast.add({
@@ -629,14 +686,14 @@ const onQRCodeDetected = async (detectedCodes) => {
         });
         return;
     }
-    
+
     // Mark student as present
     await markStudentPresent(student);
-    
+
     // Add to scanned list
     scannedStudents.value.push(student.id);
     lastScannedStudent.value = student;
-    
+
     // Show confirmation
     toast.add({
         severity: 'success',
@@ -644,7 +701,7 @@ const onQRCodeDetected = async (detectedCodes) => {
         detail: `${student.name} marked as Present`,
         life: 3000
     });
-    
+
     // Check if all students are scanned
     if (scannedStudents.value.length >= students.value.length) {
         await autoCompleteSession();
@@ -662,12 +719,12 @@ const markStudentPresent = async (student) => {
                 }
             });
         });
-        
+
         // If student has a seat, mark it
         if (studentSeat) {
             studentSeat.status = 'Present';
         }
-        
+
         // Add to attendance records
         const attendanceRecord = {
             studentId: student.id,
@@ -676,14 +733,13 @@ const markStudentPresent = async (student) => {
             timestamp: new Date().toISOString(),
             method: 'QR_SCAN'
         };
-        
+
         attendanceRecords.value.push(attendanceRecord);
-        
+
         // Save to localStorage
         localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
-        
+
         console.log(`Marked ${student.name} as Present via QR scan`);
-        
     } catch (error) {
         console.error('Error marking student present:', error);
         throw error;
@@ -693,11 +749,11 @@ const markStudentPresent = async (student) => {
 const autoCompleteSession = async () => {
     try {
         console.log('Auto-completing session - all students scanned');
-        
+
         // Close QR scanner first
         showQRScanner.value = false;
         isScanning.value = false;
-        
+
         // Start loading animation (same as seating plan method)
         isCompletingSession.value = true;
         sessionCompletionProgress.value = 0;
@@ -711,35 +767,35 @@ const autoCompleteSession = async () => {
 
         // Step 1: Initial progress
         sessionCompletionProgress.value = 10;
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 800));
 
         // Step 2: Start API call
         sessionCompletionProgress.value = 25;
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-        
+
         // Step 3: Process response
         sessionCompletionProgress.value = 60;
-        await new Promise(resolve => setTimeout(resolve, 700));
-        
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
 
         // Step 4: Finalize
         sessionCompletionProgress.value = 80;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Step 5: Prepare modal (keep loading visible)
         sessionCompletionProgress.value = 95;
-        
+
         // Save session data but don't show modal yet
         saveCompletedSession(response.summary);
-        
+
         // Final progress update
         sessionCompletionProgress.value = 100;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Clear interval and hide loading
         clearInterval(progressInterval);
@@ -748,14 +804,13 @@ const autoCompleteSession = async () => {
 
         // Show completion modal after loading is done
         showCompletionModal.value = true;
-        
+
         toast.add({
             severity: 'success',
             summary: 'Session Auto-Completed',
             detail: 'All students scanned. Attendance session completed automatically.',
             life: 5000
         });
-        
     } catch (error) {
         console.error('Error auto-completing session:', error);
         toast.add({
@@ -787,12 +842,19 @@ const onScannerError = (error) => {
 // Clean up invalid student assignments from seating arrangement
 const cleanupInvalidStudentAssignments = () => {
     let cleanedCount = 0;
-    
+
+    console.log(
+        'Running cleanup - current students:',
+        students.value.map((s) => ({ id: s.id, name: s.name }))
+    );
+
     seatPlan.value.forEach((row, rowIndex) => {
         row.forEach((seat, colIndex) => {
             if (seat.isOccupied && seat.studentId) {
                 const student = getStudentById(seat.studentId);
+                console.log(`Checking seat [${rowIndex}][${colIndex}] with studentId ${seat.studentId}:`, student ? 'FOUND' : 'NOT FOUND');
                 if (!student) {
+                    console.log(`Removing invalid student assignment: ${seat.studentId}`);
                     // Clear the invalid assignment
                     seat.isOccupied = false;
                     seat.studentId = null;
@@ -802,7 +864,7 @@ const cleanupInvalidStudentAssignments = () => {
             }
         });
     });
-    
+
     if (cleanedCount > 0) {
         console.log(`Cleaned up ${cleanedCount} invalid student assignments from seating arrangement`);
         // Recalculate unassigned students after cleanup
@@ -1407,7 +1469,6 @@ const createAttendanceSession = async () => {
         const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
         localStorage.removeItem(cacheKey);
         scannedStudents.value = [];
-
     } catch (error) {
         console.error('Error starting session:', error);
         toast.add({
@@ -1429,11 +1490,11 @@ const calculateSessionStatistics = () => {
     let markedCount = 0;
 
     // Count students and their statuses from seat plan
-    seatPlan.value.forEach(row => {
-        row.forEach(seat => {
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
             if (seat.isOccupied && seat.studentId) {
                 totalStudents++;
-                
+
                 if (seat.status) {
                     markedCount++;
                     switch (seat.status) {
@@ -1484,7 +1545,6 @@ const selectRollCallMethod = async () => {
     startRollCall();
 };
 
-
 // Complete attendance session
 const completeAttendanceSession = async () => {
     if (!sessionActive.value || !currentSession.value) {
@@ -1511,29 +1571,29 @@ const completeAttendanceSession = async () => {
     try {
         // Step 1: Initial progress
         sessionCompletionProgress.value = 10;
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 800));
 
         // Step 2: Start API call
         sessionCompletionProgress.value = 25;
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-        
+
         // Step 3: Process response
         sessionCompletionProgress.value = 60;
-        await new Promise(resolve => setTimeout(resolve, 700));
-        
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
 
         // Step 4: Prepare modal data
         sessionCompletionProgress.value = 80;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Step 5: Prepare modal (keep loading visible)
         sessionCompletionProgress.value = 95;
-        
+
         // Save session data but don't show modal yet
         const today = new Date().toISOString().split('T')[0];
         const completionKey = `attendance_completion_${today}`;
@@ -1543,21 +1603,21 @@ const completeAttendanceSession = async () => {
         };
         localStorage.setItem(completionKey, JSON.stringify(completionData));
         completedSessionData.value = response.summary;
-        
+
         // Add notification
         console.log('Adding session completion notification:', response.summary);
         const notification = NotificationService.addSessionCompletionNotification(response.summary);
         console.log('Notification added:', notification);
-        
+
         // Step 6: Final completion
         sessionCompletionProgress.value = 100;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Clear interval and hide loading
         clearInterval(progressInterval);
         isCompletingSession.value = false;
         sessionCompletionProgress.value = 0;
-        
+
         // Show modal immediately
         showCompletionModal.value = true;
         modalDismissedToday.value = false;
@@ -1573,16 +1633,15 @@ const completeAttendanceSession = async () => {
         });
 
         console.log('Completed attendance session:', response);
-
     } catch (error) {
         // Clear interval on error
         clearInterval(progressInterval);
         console.error('Error completing attendance session:', error);
-        
+
         // Hide loading on error
         isCompletingSession.value = false;
         sessionCompletionProgress.value = 0;
-        
+
         toast.add({
             severity: 'error',
             summary: 'Session Error',
@@ -1811,7 +1870,7 @@ const initializeComponent = async () => {
     try {
         // Subject info is already set during component creation, just log it
         console.log(`Initializing component for: ${subjectName.value} (ID: ${subjectId.value})`);
-        
+
         // Skip subject info setting since it's already done
 
         // Load students data in background (non-blocking)
@@ -1826,8 +1885,7 @@ const initializeComponent = async () => {
         // Initialize an empty seat plan for grid layout
         initializeSeatPlan();
 
-        // Load seating arrangement in background (non-blocking for faster UI)
-        loadSeatingArrangementFromDatabase();
+        // Load seating arrangement after student data is loaded (moved to loadStudentsData)
 
         // Update time every second
         timeInterval.value = setInterval(() => {
@@ -1881,6 +1939,11 @@ const initializeComponent = async () => {
                     // Apply attendance statuses after loading template
                     applyAttendanceStatusesToSeatPlan();
                 }
+
+                // Clean up seating assignments after students are fully loaded
+                if (seatPlan.value && seatPlan.value.length > 0) {
+                    cleanupInvalidStudentAssignments();
+                }
             }
         } else {
             toast.add({
@@ -1923,11 +1986,54 @@ watchEffect(() => {
 
 // Initialize component when mounted
 onMounted(async () => {
-    console.log(`Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
-    
+    console.log(`🔄 Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
+    console.log(`🔍 Checking if subject ID needs resolution: isNaN(${subjectId.value}) = ${isNaN(subjectId.value)}`);
+
+    // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
+    if (subjectId.value && (subjectName.value === 'Subject' || isNaN(subjectId.value))) {
+        console.log(`🚀 Fetching subject details for identifier: ${subjectId.value}`);
+        const subjectDetails = await fetchSubjectDetails(subjectId.value);
+        console.log(`📋 Received subject details:`, subjectDetails);
+        
+        if (subjectDetails.id) {
+            const newSubjectName = subjectDetails.name;
+            const newSubjectId = subjectDetails.id;
+            
+            subjectId.value = newSubjectId;
+            subjectName.value = newSubjectName;
+            console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
+            
+            // Force Vue to update the DOM
+            await nextTick();
+            console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
+            
+            // Use template ref for direct access with the resolved name
+            await nextTick();
+            if (titleRef.value) {
+                titleRef.value.textContent = `${newSubjectName} Attendance`;
+                console.log(`🎯 Template ref update applied: ${titleRef.value.textContent}`);
+                
+                // Force multiple updates to ensure it sticks
+                setTimeout(() => {
+                    if (titleRef.value) {
+                        titleRef.value.textContent = `${newSubjectName} Attendance`;
+                        titleRef.value.innerHTML = `${newSubjectName} Attendance`;
+                        console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
+                    }
+                }, 200);
+            }
+        } else {
+            console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
+        }
+    } else {
+        console.log(`⏭️ No subject ID resolution needed`);
+    }
+
+    console.log(`🎯 Final subject values - Name: ${subjectName.value}, ID: ${subjectId.value}`);
+
     // Initialize component in background without blocking UI
     initializeComponent();
-    
+
     // Load today's attendance in background
     loadTodayAttendanceFromDatabase();
 });
@@ -2027,7 +2133,7 @@ const showStatusSelection = (rowIndex, colIndex) => {
     const seat = seatPlan.value[rowIndex][colIndex];
 
     // Find the student data
-    const student = students.value.find(s => s.id === seat.studentId);
+    const student = students.value.find((s) => s.id === seat.studentId);
 
     if (!student) {
         console.error('Student not found for seat:', rowIndex, colIndex);
@@ -2100,7 +2206,6 @@ const allowDrop = (event) => {
     }
 };
 
-
 // Roll Call Methods
 const startRollCall = () => {
     showRollCall.value = true;
@@ -2169,10 +2274,10 @@ const handleSeatClick = async (rowIndex, colIndex) => {
     // Save to database if status is not null
     if (newStatus) {
         try {
-            const student = students.value.find(s => s.id === seat.studentId);
+            const student = students.value.find((s) => s.id === seat.studentId);
             if (student) {
                 await saveAttendanceToDatabase(student.id, newStatus, '');
-                
+
                 toast.add({
                     severity: 'success',
                     summary: 'Attendance Updated',
@@ -2184,7 +2289,7 @@ const handleSeatClick = async (rowIndex, colIndex) => {
             console.error('Error saving attendance:', error);
             // Revert the change if save failed
             seatPlan.value[rowIndex][colIndex].status = statusCycle[currentIndex];
-            
+
             toast.add({
                 severity: 'error',
                 summary: 'Error',
@@ -2194,7 +2299,7 @@ const handleSeatClick = async (rowIndex, colIndex) => {
         }
     } else {
         // Status is null - just show cleared message
-        const student = students.value.find(s => s.id === seat.studentId);
+        const student = students.value.find((s) => s.id === seat.studentId);
         if (student) {
             toast.add({
                 severity: 'info',
@@ -2351,10 +2456,13 @@ const onQRDecode = async (decodedText) => {
     console.log('🔍 QR DECODE EVENT FIRED!');
     console.log('Raw decoded text:', decodedText);
     console.log('Type of decoded text:', typeof decodedText);
-    
+
     const timestamp = new Date().toLocaleTimeString();
     console.log('QR Code decoded:', decodedText);
-    console.log('Available students:', students.value.map(s => ({ id: s.id, name: s.name, studentId: s.studentId, student_id: s.student_id })));
+    console.log(
+        'Available students:',
+        students.value.map((s) => ({ id: s.id, name: s.name, studentId: s.studentId, student_id: s.student_id }))
+    );
 
     try {
         // Add to scan log
@@ -2367,36 +2475,33 @@ const onQRDecode = async (decodedText) => {
         // Parse LAMMS QR code format: LAMMS_STUDENT_[ID]_[timestamp]_[hash]
         let student = null;
         let extractedStudentId = null;
-        
+
         // Method 1: Parse LAMMS format QR code
         if (decodedText.startsWith('LAMMS_STUDENT_')) {
             const parts = decodedText.split('_');
             if (parts.length >= 3) {
                 extractedStudentId = parseInt(parts[2]); // Extract student ID from position 2
                 console.log('Extracted student ID from LAMMS format:', extractedStudentId);
-                student = students.value.find(s => s.id === extractedStudentId);
+                student = students.value.find((s) => s.id === extractedStudentId);
             }
         }
-        
+
         // Method 2: Direct numeric ID match
         if (!student && !isNaN(decodedText)) {
             const studentId = parseInt(decodedText);
-            student = students.value.find(s => s.id === studentId);
+            student = students.value.find((s) => s.id === studentId);
         }
-        
+
         // Method 3: String match against student ID fields
         if (!student) {
-            student = students.value.find(s => 
-                s.studentId?.toString() === decodedText || 
-                s.student_id?.toString() === decodedText
-            );
+            student = students.value.find((s) => s.studentId?.toString() === decodedText || s.student_id?.toString() === decodedText);
         }
-        
+
         console.log('Found student:', student);
 
         if (student) {
             // Check if already scanned
-            const existingIndex = qrScanResults.value.findIndex(s => s.studentId === student.id);
+            const existingIndex = qrScanResults.value.findIndex((s) => s.studentId === student.id);
 
             if (existingIndex === -1) {
                 // New scan - mark as present
@@ -2449,12 +2554,12 @@ const onQRDecode = async (decodedText) => {
             // Student not found - show detailed info for debugging
             console.warn('Student not found for QR code:', decodedText);
             console.log('Tried matching against:', {
-                ids: students.value.map(s => s.id),
-                studentIds: students.value.map(s => s.studentId),
-                student_ids: students.value.map(s => s.student_id),
-                names: students.value.map(s => s.name)
+                ids: students.value.map((s) => s.id),
+                studentIds: students.value.map((s) => s.studentId),
+                student_ids: students.value.map((s) => s.student_id),
+                names: students.value.map((s) => s.name)
             });
-            
+
             qrScanLog.value.unshift({
                 timestamp,
                 message: `❌ Student not found for QR: ${decodedText}`,
@@ -2475,7 +2580,7 @@ const onQRDecode = async (decodedText) => {
             message: `❌ Error processing QR: ${error.message}`,
             success: false
         });
-        
+
         toast.add({
             severity: 'error',
             summary: 'QR Processing Error',
@@ -2488,7 +2593,7 @@ const onQRDecode = async (decodedText) => {
 const onQRDetect = async (detectedCodes) => {
     console.log('🎯 QR DETECT EVENT FIRED!');
     console.log('Detected codes:', detectedCodes);
-    
+
     if (detectedCodes && detectedCodes.length > 0) {
         const code = detectedCodes[0];
         console.log('First detected code:', code);
@@ -2515,14 +2620,14 @@ const onCameraInit = async (promise) => {
 
 const testQRDetection = async () => {
     console.log('🧪 Testing QR Detection manually...');
-    
+
     // Test with a sample student ID
-    const testStudentId = "1";
+    const testStudentId = '1';
     console.log('Testing with student ID:', testStudentId);
-    
+
     // Simulate QR decode
     await onQRDecode(testStudentId);
-    
+
     toast.add({
         severity: 'info',
         summary: 'QR Test',
@@ -2535,7 +2640,7 @@ const completeQRSession = async () => {
     try {
         // Close QR scanner first
         showQRScanner.value = false;
-        
+
         // Start loading animation (same as seating plan method)
         isCompletingSession.value = true;
         sessionCompletionProgress.value = 0;
@@ -2549,35 +2654,35 @@ const completeQRSession = async () => {
 
         // Step 1: Initial progress
         sessionCompletionProgress.value = 10;
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 800));
 
         // Step 2: Start API call
         sessionCompletionProgress.value = 25;
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-        
+
         // Step 3: Process response
         sessionCompletionProgress.value = 60;
-        await new Promise(resolve => setTimeout(resolve, 700));
-        
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
 
         // Step 4: Finalize
         sessionCompletionProgress.value = 80;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Step 5: Prepare modal (keep loading visible)
         sessionCompletionProgress.value = 95;
-        
+
         // Save session data but don't show modal yet
         saveCompletedSession(response.summary);
-        
+
         // Final progress update
         sessionCompletionProgress.value = 100;
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Clear interval and hide loading
         clearInterval(progressInterval);
@@ -2642,7 +2747,6 @@ const saveAttendanceStatus = async () => {
             detail: `${student.name} marked as ${pendingStatus.value}`,
             life: 3000
         });
-
     } catch (error) {
         console.error('Error saving attendance status:', error);
         toast.add({
@@ -2663,10 +2767,10 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
 
         // Map status names to attendance_status_id (assuming standard IDs)
         const statusMapping = {
-            'Present': 1,
-            'Absent': 2, 
-            'Late': 3,
-            'Excused': 4
+            Present: 1,
+            Absent: 2,
+            Late: 3,
+            Excused: 4
         };
 
         const attendanceStatusId = statusMapping[status];
@@ -2686,7 +2790,7 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
         console.log('Saving session attendance with data:', attendanceData);
         const response = await AttendanceSessionService.markSessionAttendance(currentSession.value.id, [attendanceData]);
         console.log('Session attendance saved successfully:', response);
-        
+
         return response;
     } catch (error) {
         console.error('Error saving session attendance to database:', error);
@@ -2708,9 +2812,9 @@ const loadTodayAttendanceFromDatabase = async () => {
             attendanceRecords.value = {};
 
             // Apply attendance status to seat plan and rebuild attendance records
-            response.students.forEach(student => {
+            response.students.forEach((student) => {
                 // Check if student has attendance for today
-                const todayAttendance = student.attendance?.find(a => a.date === today);
+                const todayAttendance = student.attendance?.find((a) => a.date === today);
 
                 if (todayAttendance) {
                     // Update attendance records object
@@ -2737,7 +2841,6 @@ const loadTodayAttendanceFromDatabase = async () => {
 
             console.log('Loaded attendance records from database:', attendanceRecords.value);
         }
-
     } catch (error) {
         console.error('Error loading attendance from database:', error);
         toast.add({
@@ -3250,7 +3353,7 @@ const applyAttendanceStatusesToSeatPlan = () => {
 // Update the loadSavedLayout function to apply attendance statuses after loading the layout
 const loadSavedLayout = () => {
     try {
-        const storageKey = `seatPlan_${subjectId.value}`;
+        const storageKey = `seatPlan_section_${sectionId.value}`;
         const savedData = localStorage.getItem(storageKey);
 
         if (savedData) {
@@ -3303,22 +3406,22 @@ onUnmounted(() => {
     if (refreshInterval) {
         clearInterval(refreshInterval);
     }
-    
+
     // Clear all timers
     if (completionModalTimer.value) {
         clearTimeout(completionModalTimer.value);
     }
-    
+
     // Clear any active loading states
     if (isCompletingSession.value) {
         isCompletingSession.value = false;
         sessionCompletionProgress.value = 0;
     }
-    
+
     // Reset session states
     sessionActive.value = false;
     currentSession.value = null;
-    
+
     // Close any open modals
     showCompletionModal.value = false;
     showQRScanner.value = false;
@@ -3361,6 +3464,9 @@ watch(showStudentIds, (newValue) => {
 
 // Fix reference to isDropTarget
 const isDropTarget = ref(false);
+
+// Template ref for title element
+const titleRef = ref(null);
 </script>
 
 <template>
@@ -3369,7 +3475,7 @@ const isDropTarget = ref(false);
         <div class="header-section mb-4">
             <div class="flex justify-content-between align-items-start">
                 <div class="header-left">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-3">{{ subjectName }} Attendance</h2>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-3" ref="titleRef">{{ subjectName }} Attendance</h2>
                     <div class="header-info flex align-items-center gap-4">
                         <div class="calendar-section flex align-items-center gap-2 text-sm text-gray-600">
                             <i class="pi pi-calendar text-gray-500"></i>
@@ -3403,30 +3509,18 @@ const isDropTarget = ref(false);
 
             <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" />
 
-            <Button 
-                icon="pi pi-check-circle" 
-                label="Mark All Present" 
-                class="p-button-success" 
-                @click="markAllPresent" 
-                :disabled="isCompletingSession"
-            />
+            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
 
-            <Button 
-                :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'" 
-                :label="isCompletingSession ? 'Completing...' : 'Complete Session'" 
-                class="p-button-warning" 
-                @click="completeAttendanceSession" 
+            <Button
+                :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
+                :label="isCompletingSession ? 'Completing...' : 'Complete Session'"
+                class="p-button-warning"
+                @click="completeAttendanceSession"
                 v-if="sessionActive"
                 :disabled="isCompletingSession"
             />
 
-            <Button 
-                icon="pi pi-refresh" 
-                label="Reset Attendance" 
-                class="p-button-outlined" 
-                @click="resetAllAttendance" 
-                :disabled="isCompletingSession"
-            />
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession" />
 
             <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
         </div>
@@ -3446,7 +3540,7 @@ const isDropTarget = ref(false);
                                 <label for="rows" class="mr-1 whitespace-nowrap">Rows:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementRows" :disabled="rows <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
                                     <Button icon="pi pi-plus" @click="incrementRows" :disabled="rows >= 10" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
@@ -3455,7 +3549,7 @@ const isDropTarget = ref(false);
                                 <label for="columns" class="mr-1 whitespace-nowrap">Columns:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementColumns" :disabled="columns <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
                                     <Button icon="pi pi-plus" @click="incrementColumns" :disabled="columns >= 10" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
@@ -3747,24 +3841,16 @@ const isDropTarget = ref(false);
                         </div>
 
                         <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden">
-                            <QrcodeStream 
-                                v-if="scanning" 
-                                @decode="onQRDecode"
-                                @detect="onQRDetect"
-                                @init="onCameraInit"
-                                @error="onCameraError"
-                                class="qr-scanner w-full h-64" 
-                            />
+                            <QrcodeStream v-if="scanning" @decode="onQRDecode" @detect="onQRDetect" @init="onCameraInit" @error="onCameraError" class="qr-scanner w-full h-64" />
                             <div v-if="!scanning" class="scanner-paused h-64 bg-gray-100 flex flex-column align-items-center justify-content-center">
                                 <i class="pi pi-pause-circle text-4xl mb-2"></i>
                                 <p>Scanner Paused - Click Resume to start scanning</p>
                             </div>
                         </div>
-                        
+
                         <!-- Debug Info -->
                         <div class="mt-2 text-xs text-gray-500">
-                            Scanner Status: {{ scanning ? 'ACTIVE' : 'PAUSED' }} | 
-                            Camera: {{ cameraInitialized ? 'READY' : 'INITIALIZING' }}
+                            Scanner Status: {{ scanning ? 'ACTIVE' : 'PAUSED' }} | Camera: {{ cameraInitialized ? 'READY' : 'INITIALIZING' }}
                             <span v-if="cameraError" class="text-red-500"> | Error: {{ cameraError }}</span>
                         </div>
 
@@ -3884,7 +3970,7 @@ const isDropTarget = ref(false);
                     <h3>Generating Session Summary</h3>
                     <p>Please wait while we process your attendance data...</p>
                 </div>
-                
+
                 <!-- Animated Character -->
                 <div class="character-container">
                     <div class="character">🏃‍♂️</div>
@@ -3894,7 +3980,7 @@ const isDropTarget = ref(false);
                         <div class="obstacle obstacle-3">📊</div>
                     </div>
                 </div>
-                
+
                 <!-- Progress Bar -->
                 <div class="progress-container">
                     <div class="progress-bar">
@@ -3902,7 +3988,7 @@ const isDropTarget = ref(false);
                     </div>
                     <div class="progress-text">{{ sessionCompletionProgress }}%</div>
                 </div>
-                
+
                 <div class="loading-message">
                     <span v-if="sessionCompletionProgress <= 10">Initializing session completion...</span>
                     <span v-else-if="sessionCompletionProgress <= 25">Connecting to server...</span>

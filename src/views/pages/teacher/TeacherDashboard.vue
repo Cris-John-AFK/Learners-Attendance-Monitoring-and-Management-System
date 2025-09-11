@@ -27,6 +27,7 @@ const studentsWithAbsenceIssues = ref([]);
 const selectedStudent = ref(null);
 const studentProfileVisible = ref(false);
 const loading = ref(true);
+const subjectLoading = ref(false);
 const chartOptions = ref({});
 const attendanceChartData = ref(null);
 const selectedSubject = ref(null);
@@ -896,9 +897,14 @@ function prepareCalendarData(student) {
 }
 
 // Handle subject change
-function onSubjectChange() {
-    loadAttendanceData();
-    prepareChartData();
+async function onSubjectChange() {
+    subjectLoading.value = true;
+    try {
+        await loadAttendanceData();
+        await prepareChartData();
+    } finally {
+        subjectLoading.value = false;
+    }
 }
 
 // Handle view type change (subject-specific vs all students)
@@ -1167,10 +1173,10 @@ function ensureStudentAttendanceService() {
                     </h2>
 
                     <div class="flex flex-col sm:flex-row gap-3 mt-2 sm:mt-0">
-                        <span class="p-input-icon-left w-full sm:w-64">
-                            <i class="pi pi-search" />
+                        <div class="p-inputgroup w-full sm:w-64">
+                            <span class="p-inputgroup-addon"> </span>
                             <InputText v-model="searchQuery" placeholder="Search students..." class="w-full rounded-lg" />
-                        </span>
+                        </div>
 
                         <div class="flex items-center bg-gray-50 p-2 rounded-lg">
                             <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
@@ -1263,7 +1269,7 @@ function ensureStudentAttendanceService() {
 
                     <Column header="Actions" style="width: 100px">
                         <template #body="slotProps">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" tooltip="View Attendance History" />
+                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View student details'" />
                         </template>
                     </Column>
                 </DataTable>
@@ -1410,6 +1416,16 @@ function ensureStudentAttendanceService() {
             </details>
         </div>
     </div>
+
+    <!-- Subject Loading Overlay -->
+    <div v-if="subjectLoading" class="subject-loading-overlay">
+        <div class="loading-content">
+            <div class="loading-animation">
+                <div class="prismatic-square"></div>
+            </div>
+            <h3 class="loading-text">HULATA KAY WA TA NAG DALI</h3>
+        </div>
+    </div>
 </template>
 
 <style scoped>
@@ -1550,5 +1566,88 @@ function ensureStudentAttendanceService() {
     .chart-container {
         height: 250px !important;
     }
+}
+/* Subject Loading Overlay Styles */
+.subject-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loading-content {
+    text-align: center;
+    color: white;
+}
+
+.loading-animation {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 120px;
+}
+
+.prismatic-square {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffeaa7, #dda0dd, #ff6b6b);
+    background-size: 400% 400%;
+    border-radius: 8px;
+    animation:
+        prismaticRotate 4s ease-in-out infinite,
+        gradientShift 3s ease-in-out infinite;
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes prismaticRotate {
+    0% {
+        transform: rotate(0deg) scale(1);
+        border-radius: 8px;
+    }
+    25% {
+        transform: rotate(45deg) scale(1.1);
+        border-radius: 50%;
+    }
+    50% {
+        transform: rotate(90deg) scale(1);
+        border-radius: 0;
+    }
+    75% {
+        transform: rotate(135deg) scale(1.1);
+        border-radius: 50%;
+    }
+    100% {
+        transform: rotate(180deg) scale(1);
+        border-radius: 8px;
+    }
+}
+
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.loading-text {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: black;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: 1px;
+    margin: 0;
 }
 </style>

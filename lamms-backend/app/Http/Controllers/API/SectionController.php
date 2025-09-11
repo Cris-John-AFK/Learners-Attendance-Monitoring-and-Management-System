@@ -640,14 +640,41 @@ class SectionController extends Controller
             // Add the subject to the section using the pivot table
             $section->directSubjects()->syncWithoutDetaching([$validated['subject_id']]);
 
+            // Auto-assign the subject to the homeroom teacher if one exists
+            if ($section->homeroom_teacher_id) {
+                $existingAssignment = TeacherSectionSubject::where([
+                    'teacher_id' => $section->homeroom_teacher_id,
+                    'section_id' => $sectionId,
+                    'subject_id' => $validated['subject_id']
+                ])->first();
+
+                if (!$existingAssignment) {
+                    DB::table('teacher_section_subject')->insert([
+                        'teacher_id' => $section->homeroom_teacher_id,
+                        'section_id' => $sectionId,
+                        'subject_id' => $validated['subject_id'],
+                        'role' => 'teacher',
+                        'is_primary' => true,
+                        'is_active' => true
+                    ]);
+                    
+                    Log::info("Auto-assigned subject {$validated['subject_id']} to homeroom teacher {$section->homeroom_teacher_id} for section {$sectionId}");
+                } else {
+                    Log::info("Subject {$validated['subject_id']} already assigned to teacher {$section->homeroom_teacher_id} for section {$sectionId}");
+                }
+            } else {
+                Log::warning("No homeroom teacher assigned to section {$sectionId}, subject added but not assigned to any teacher");
+            }
+
             Log::info("Successfully added subject {$validated['subject_id']} to section {$sectionId}");
 
             return response()->json([
-                'message' => 'Subject added to section successfully',
+                'message' => 'Subject added to section and assigned to homeroom teacher successfully',
                 'section_id' => $sectionId,
                 'subject_id' => $validated['subject_id'],
                 'curriculum_id' => $curriculumId,
-                'grade_id' => $gradeId
+                'grade_id' => $gradeId,
+                'auto_assigned' => $section->homeroom_teacher_id ? true : false
             ]);
         } catch (\Exception $e) {
             Log::error("Error adding subject to section via nested route: " . $e->getMessage());
@@ -677,12 +704,39 @@ class SectionController extends Controller
             // Add the subject to the section using the pivot table
             $section->directSubjects()->syncWithoutDetaching([$validated['subject_id']]);
 
+            // Auto-assign the subject to the homeroom teacher if one exists
+            if ($section->homeroom_teacher_id) {
+                $existingAssignment = TeacherSectionSubject::where([
+                    'teacher_id' => $section->homeroom_teacher_id,
+                    'section_id' => $sectionId,
+                    'subject_id' => $validated['subject_id']
+                ])->first();
+
+                if (!$existingAssignment) {
+                    DB::table('teacher_section_subject')->insert([
+                        'teacher_id' => $section->homeroom_teacher_id,
+                        'section_id' => $sectionId,
+                        'subject_id' => $validated['subject_id'],
+                        'role' => 'teacher',
+                        'is_primary' => true,
+                        'is_active' => true
+                    ]);
+                    
+                    Log::info("Auto-assigned subject {$validated['subject_id']} to homeroom teacher {$section->homeroom_teacher_id} for section {$sectionId}");
+                } else {
+                    Log::info("Subject {$validated['subject_id']} already assigned to teacher {$section->homeroom_teacher_id} for section {$sectionId}");
+                }
+            } else {
+                Log::warning("No homeroom teacher assigned to section {$sectionId}, subject added but not assigned to any teacher");
+            }
+
             Log::info("Successfully added subject {$validated['subject_id']} to section {$sectionId}");
 
             return response()->json([
-                'message' => 'Subject added to section successfully',
+                'message' => 'Subject added to section and assigned to homeroom teacher successfully',
                 'section_id' => $sectionId,
-                'subject_id' => $validated['subject_id']
+                'subject_id' => $validated['subject_id'],
+                'auto_assigned' => $section->homeroom_teacher_id ? true : false
             ]);
         } catch (\Exception $e) {
             Log::error("Error adding subject to section via direct route: " . $e->getMessage());
