@@ -219,6 +219,9 @@ const loadStudentsData = async () => {
                     studentId: student.studentId || student.id,
                     student_id: student.studentId || student.id
                 }));
+
+                // Load seating arrangement after students and sectionId are set
+                await loadSeatingArrangementFromDatabase();
             } else {
                 students.value = [];
             }
@@ -278,10 +281,17 @@ const saveCurrentLayout = async (showToast = true) => {
         };
 
         // Save to database via API
+        console.log('Saving layout with data:', {
+            sectionId: sectionId.value,
+            subjectId: subjectId.value, 
+            teacherId: teacherId.value,
+            seatPlan: layout.seatPlan,
+            assignedSeats: layout.seatPlan.flat().filter(seat => seat.isOccupied).length
+        });
         await SeatingService.saveSeatingArrangement(sectionId.value, subjectId.value, teacherId.value, layout);
 
-        // Also save to localStorage as backup
-        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        // Also save to localStorage as backup (section-based, not subject-specific)
+        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
 
         if (showToast) {
             toast.add({
@@ -302,7 +312,7 @@ const saveCurrentLayout = async (showToast = true) => {
             showTeacherDesk: showTeacherDesk.value,
             showStudentIds: showStudentIds.value
         };
-        localStorage.setItem(`seatPlan_${subjectId.value}`, JSON.stringify(layout));
+        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
 
         if (showToast) {
             toast.add({
@@ -322,13 +332,20 @@ const loadSeatingArrangementFromDatabase = async () => {
 
         if (!sectionId.value || !teacherId.value) {
             console.log('Missing sectionId or teacherId, falling back to localStorage');
+            console.log('Current values - sectionId:', sectionId.value, 'teacherId:', teacherId.value);
             return loadSavedLayout();
         }
 
+        console.log('Loading with sectionId:', sectionId.value, 'teacherId:', teacherId.value);
+
         const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, subjectId.value);
 
+        console.log('Loading seating arrangement response:', response);
+        
         if (response && response.seating_layout) {
             const layout = response.seating_layout;
+            console.log('Loaded layout data:', layout);
+            console.log('Loaded assigned seats:', layout.seatPlan ? layout.seatPlan.flat().filter(seat => seat.isOccupied).length : 0);
 
             // Apply the loaded layout
             rows.value = layout.rows || rows.value;
@@ -340,8 +357,13 @@ const loadSeatingArrangementFromDatabase = async () => {
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
                 
-                // Clean up invalid student assignments after loading
-                cleanupInvalidStudentAssignments();
+                // Only clean up if students are already loaded to avoid removing valid assignments
+                if (students.value && students.value.length > 0) {
+                    console.log('Running cleanup after loading seating arrangement');
+                    cleanupInvalidStudentAssignments();
+                } else {
+                    console.log('Skipping cleanup - students not loaded yet');
+                }
                 
                 console.log('Loaded seating arrangement from database');
                 return true;
@@ -788,11 +810,15 @@ const onScannerError = (error) => {
 const cleanupInvalidStudentAssignments = () => {
     let cleanedCount = 0;
     
+    console.log('Running cleanup - current students:', students.value.map(s => ({ id: s.id, name: s.name })));
+    
     seatPlan.value.forEach((row, rowIndex) => {
         row.forEach((seat, colIndex) => {
             if (seat.isOccupied && seat.studentId) {
                 const student = getStudentById(seat.studentId);
+                console.log(`Checking seat [${rowIndex}][${colIndex}] with studentId ${seat.studentId}:`, student ? 'FOUND' : 'NOT FOUND');
                 if (!student) {
+                    console.log(`Removing invalid student assignment: ${seat.studentId}`);
                     // Clear the invalid assignment
                     seat.isOccupied = false;
                     seat.studentId = null;
@@ -1826,8 +1852,7 @@ const initializeComponent = async () => {
         // Initialize an empty seat plan for grid layout
         initializeSeatPlan();
 
-        // Load seating arrangement in background (non-blocking for faster UI)
-        loadSeatingArrangementFromDatabase();
+        // Load seating arrangement after student data is loaded (moved to loadStudentsData)
 
         // Update time every second
         timeInterval.value = setInterval(() => {
@@ -1880,6 +1905,11 @@ const initializeComponent = async () => {
 
                     // Apply attendance statuses after loading template
                     applyAttendanceStatusesToSeatPlan();
+                }
+
+                // Clean up seating assignments after students are fully loaded
+                if (seatPlan.value && seatPlan.value.length > 0) {
+                    cleanupInvalidStudentAssignments();
                 }
             }
         } else {
@@ -3250,7 +3280,7 @@ const applyAttendanceStatusesToSeatPlan = () => {
 // Update the loadSavedLayout function to apply attendance statuses after loading the layout
 const loadSavedLayout = () => {
     try {
-        const storageKey = `seatPlan_${subjectId.value}`;
+        const storageKey = `seatPlan_section_${sectionId.value}`;
         const savedData = localStorage.getItem(storageKey);
 
         if (savedData) {
@@ -3446,7 +3476,7 @@ const isDropTarget = ref(false);
                                 <label for="rows" class="mr-1 whitespace-nowrap">Rows:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementRows" :disabled="rows <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
                                     <Button icon="pi pi-plus" @click="incrementRows" :disabled="rows >= 10" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
@@ -3455,7 +3485,7 @@ const isDropTarget = ref(false);
                                 <label for="columns" class="mr-1 whitespace-nowrap">Columns:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementColumns" :disabled="columns <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" showButtons="false" />
+                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
                                     <Button icon="pi pi-plus" @click="incrementColumns" :disabled="columns >= 10" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>

@@ -235,10 +235,10 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Get seating arrangement from database or create default
+            // Get seating arrangement from database or create default (section-based, not subject-specific)
             $seatingData = DB::table('seating_arrangements')
                 ->where('section_id', $sectionId)
-                ->where('subject_id', $request->subject_id)
+                ->where('teacher_id', $request->teacher_id)
                 ->first();
 
             if ($seatingData) {
@@ -294,15 +294,15 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Save or update seating arrangement
+            // Save or update seating arrangement (section-based, not subject-specific)
             DB::table('seating_arrangements')->updateOrInsert(
                 [
                     'section_id' => $request->section_id,
-                    'subject_id' => $request->subject_id
+                    'teacher_id' => $request->teacher_id
                 ],
                 [
                     'layout' => json_encode($request->seating_layout),
-                    'teacher_id' => $request->teacher_id,
+                    'subject_id' => null, // Make it section-based, not subject-specific
                     'updated_at' => now()
                 ]
             );
@@ -346,10 +346,10 @@ class StudentManagementController extends Controller
                 ], 403);
             }
 
-            // Delete seating arrangement from database
+            // Delete seating arrangement from database (section-based)
             $deleted = DB::table('seating_arrangements')
                 ->where('section_id', $request->section_id)
-                ->where('subject_id', $request->subject_id)
+                ->where('teacher_id', $request->teacher_id)
                 ->delete();
 
             return response()->json([

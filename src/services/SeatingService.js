@@ -4,17 +4,14 @@ const API_BASE_URL = 'http://localhost:8000/api'; // Adjust this to your Laravel
 
 export default {
     /**
-     * Get seating arrangement for a section and subject
+     * Get seating arrangement for a section (shared across all subjects)
      */
     async getSeatingArrangement(sectionId, teacherId, subjectId = null) {
         try {
             const params = {
                 teacher_id: teacherId
+                // Remove subject_id to make seating section-based, not subject-specific
             };
-            
-            if (subjectId) {
-                params.subject_id = subjectId;
-            }
 
             const response = await axios.get(`${API_BASE_URL}/student-management/sections/${sectionId}/seating-arrangement`, {
                 params
