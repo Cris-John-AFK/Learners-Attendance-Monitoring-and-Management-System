@@ -21,7 +21,32 @@ class AttendanceSessionController extends Controller
      */
     public function createSession(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        // Handle subject_id conversion from string to integer if needed
+        $requestData = $request->all();
+        if (isset($requestData['subject_id']) && !is_numeric($requestData['subject_id'])) {
+            $subject = \App\Models\Subject::where('name', 'ILIKE', $requestData['subject_id'])
+                ->orWhere('code', 'ILIKE', $requestData['subject_id'])
+                ->first();
+            
+            if ($subject) {
+                $requestData['subject_id'] = $subject->id;
+                Log::info('Converted subject identifier to ID in attendance session', [
+                    'original' => $request->input('subject_id'),
+                    'resolved_id' => $subject->id,
+                    'subject_name' => $subject->name
+                ]);
+            } else {
+                Log::error('Subject not found for attendance session', [
+                    'subject_identifier' => $requestData['subject_id']
+                ]);
+                return response()->json([
+                    'message' => 'Subject not found',
+                    'error' => 'Invalid subject identifier: ' . $requestData['subject_id']
+                ], 422);
+            }
+        }
+
+        $validator = Validator::make($requestData, [
             'teacher_id' => 'required|exists:teachers,id',
             'section_id' => 'required|exists:sections,id',
             'subject_id' => 'nullable|exists:subjects,id',
@@ -38,15 +63,15 @@ class AttendanceSessionController extends Controller
         try {
             // Check if there's already an active session for this combination
             $existingSession = AttendanceSession::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id,
-                'subject_id' => $request->subject_id,
-                'session_date' => $request->session_date,
+                'teacher_id' => $requestData['teacher_id'],
+                'section_id' => $requestData['section_id'],
+                'subject_id' => $requestData['subject_id'],
+                'session_date' => $requestData['session_date'],
                 'status' => 'active'
             ])->first();
 
             if ($existingSession) {
-                Log::info("Active session already exists for teacher {$request->teacher_id}, section {$request->section_id}, subject {$request->subject_id}, date {$request->session_date}");
+                Log::info("Active session already exists for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
                 return response()->json([
                     'message' => 'Active session already exists',
                     'session' => $existingSession->load(['teacher', 'section', 'subject'])
@@ -55,26 +80,26 @@ class AttendanceSessionController extends Controller
 
             // Allow multiple sessions per day, but log for tracking
             $completedSessionsCount = AttendanceSession::where([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id,
-                'subject_id' => $request->subject_id,
-                'session_date' => $request->session_date,
+                'teacher_id' => $requestData['teacher_id'],
+                'section_id' => $requestData['section_id'],
+                'subject_id' => $requestData['subject_id'],
+                'session_date' => $requestData['session_date'],
                 'status' => 'completed'
             ])->count();
 
             if ($completedSessionsCount > 0) {
-                Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$request->teacher_id}, section {$request->section_id}, subject {$request->subject_id}, date {$request->session_date}");
+                Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
             }
 
             $session = AttendanceSession::create([
-                'teacher_id' => $request->teacher_id,
-                'section_id' => $request->section_id,
-                'subject_id' => $request->subject_id,
-                'session_date' => $request->session_date,
-                'session_start_time' => $request->session_start_time,
-                'session_type' => $request->session_type ?? 'regular',
+                'teacher_id' => $requestData['teacher_id'],
+                'section_id' => $requestData['section_id'],
+                'subject_id' => $requestData['subject_id'],
+                'session_date' => $requestData['session_date'],
+                'session_start_time' => $requestData['session_start_time'],
+                'session_type' => $requestData['session_type'] ?? 'regular',
                 'status' => 'active',
-                'metadata' => $request->metadata ?? []
+                'metadata' => $requestData['metadata'] ?? []
             ]);
 
             return response()->json([

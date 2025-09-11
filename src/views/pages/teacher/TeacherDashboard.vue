@@ -1173,10 +1173,10 @@ function ensureStudentAttendanceService() {
                     </h2>
 
                     <div class="flex flex-col sm:flex-row gap-3 mt-2 sm:mt-0">
-                        <span class="p-input-icon-left w-full sm:w-64">
-                            <i class="pi pi-search" />
+                        <div class="p-inputgroup w-full sm:w-64">
+                            <span class="p-inputgroup-addon"> </span>
                             <InputText v-model="searchQuery" placeholder="Search students..." class="w-full rounded-lg" />
-                        </span>
+                        </div>
 
                         <div class="flex items-center bg-gray-50 p-2 rounded-lg">
                             <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
@@ -1269,7 +1269,7 @@ function ensureStudentAttendanceService() {
 
                     <Column header="Actions" style="width: 100px">
                         <template #body="slotProps">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" tooltip="View Attendance History" />
+                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View student details'" />
                         </template>
                     </Column>
                 </DataTable>
