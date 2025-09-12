@@ -295,7 +295,7 @@ const generateStudentQR = async (student) => {
         try {
             // Import QRCodeAPIService
             const { QRCodeAPIService } = await import('@/router/service/QRCodeAPIService');
-            
+
             // Generate QR code using new API
             const result = await QRCodeAPIService.generateQRCode(student.id);
             console.log('QR code generated:', result);
@@ -304,9 +304,9 @@ const generateStudentQR = async (student) => {
                 // Update the student's QR code path to use the new API endpoint
                 const qrImageUrl = QRCodeAPIService.getQRCodeImageURL(student.id);
                 qrCodes.value[student.lrn || student.id] = qrImageUrl;
-                
+
                 // Update the student object if needed
-                const studentIndex = students.value.findIndex(s => s.id === student.id);
+                const studentIndex = students.value.findIndex((s) => s.id === student.id);
                 if (studentIndex !== -1) {
                     students.value[studentIndex].qrCodePath = qrImageUrl;
                 }
@@ -993,111 +993,415 @@ function generateTempId() {
     const qrSrc = qrCodes.value[student.lrn] || '';
     const today = new Date().toISOString().slice(0, 10);
 
+    // Debug: Log student data to console
+    console.log('Student data for ID generation:', {
+        name: student.name,
+        gradeLevel: student.gradeLevel,
+        section: student.section,
+        lrn: student.lrn,
+        birthdate: student.birthdate
+    });
+
     const win = window.open('', '_blank');
+    const timestamp = Date.now(); // Cache buster
+
+    // Force clear any cached content
+    win.document.open();
+    win.document.clear();
     win.document.write(`
         <html>
         <head>
-            <title>Temporary ID - ${student.name}</title>
+            <title>Temporary ID - ${student.name} - ${timestamp}</title>
+            <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+            <meta http-equiv="Pragma" content="no-cache">
+            <meta http-equiv="Expires" content="0">
             <style>
-                * { box-sizing: border-box; }
-                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-                .card-wrapper { display: flex; gap: 20px; }
-                .front, .back {
-                    width: 350px;
-                    height: 550px;
-                    border: 1px solid #000;
-                    border-radius: 12px;
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { 
+                    font-family: 'Arial', sans-serif; 
+                    background: #f0f2f5;
+                    padding: 20px;
+                    min-height: 100vh;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                
+                .card-wrapper { 
+                    display: flex; 
+                    gap: 30px; 
+                    justify-content: center;
+                    align-items: center;
+                }
+                
+                .id-card {
+                    width: 320px;
+                    height: 600px;
+                    border-radius: 15px;
                     overflow: hidden;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                     position: relative;
                 }
+                
+                /* FRONT SIDE */
                 .front {
-                    background: #fff url('https://via.placeholder.com/350x550?text=Background') no-repeat center/cover;
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    position: relative;
+                    overflow: hidden;
                 }
-                .vertical-ribbon {
+                
+                .front::before {
+                    content: '';
                     position: absolute;
-                    left: 0;
-                    top: 0;
                     bottom: 0;
-                    width: 40px;
-                    background:#7a0c0c;
-                    color:#fff;
-                    writing-mode: vertical-rl;
-                    text-orientation: mixed;
-                    font-weight: bold;
-                    display:flex;
-                    align-items:center;
-                    justify-content:center;
-                    letter-spacing:2px;
+                    left: 0;
+                    width: 100%;
+                    height: 60%;
+                    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 320'%3E%3Cpath fill='%23ffffff' fill-opacity='0.1' d='M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E") no-repeat bottom;
+                    background-size: cover;
                 }
-                .school-header { padding: 15px 20px 10px 70px; text-align: center; background: #fff; border-bottom: 2px solid #7a0c0c; }
-                .logos-container { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 8px; }
-                .school-logo { width: 50px; height: 50px; object-fit: contain; }
-                .school-name { font-size: 14px; font-weight: bold; color: #7a0c0c; margin: 0; line-height: 1.2; }
-                .school-subtitle { font-size: 10px; color: #666; margin: 2px 0 0; }
-                .front-content { padding: 20px 20px 20px 70px; text-align:center; }
-                .front-content img.photo { width: 120px; height: 120px; object-fit:cover; border:2px solid #000; margin-bottom: 10px; border-radius: 50%; }
-                .front-content h3 { margin:5px 0 0; font-size:18px; font-weight: bold; }
-                .front-content h2 { margin:2px 0 5px; font-size:16px; color: #7a0c0c; }
-                .front-content p { margin:2px 0; font-size:14px; }
-                .qr-small { width:180px; height:180px; margin:10px auto 0; }
-                /* back */
-                .back-content { padding:20px; font-size:14px; }
-                .field { margin:4px 0; }
-                .label { font-weight:bold; }
-                .ribbon-back { position:absolute; right:0; top:0; bottom:0; width:40px; background:#7a0c0c; color:#fff; writing-mode: vertical-rl; text-orientation: mixed; display:flex;align-items:center;justify-content:center; letter-spacing:2px; font-weight:bold; }
-                @media print { .no-print { display:none; } }
+                
+                .front::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -50px;
+                    right: -50px;
+                    width: 200px;
+                    height: 200px;
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 50%;
+                }
+                
+                .school-logo {
+                    position: absolute;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 60px;
+                    height: 60px;
+                    background: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .school-logo img {
+                    width: 40px;
+                    height: 40px;
+                    object-fit: contain;
+                }
+                
+                .school-header {
+                    text-align: center;
+                    padding: 20px 20px 30px;
+                    color: white;
+                }
+                
+                .school-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-top: 75px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                }
+                
+                .student-photo {
+                    width: 100px;
+                    height: 100px;
+                    border-radius: 50%;
+                    object-fit: cover;
+                    border: 4px solid white;
+                    display: block;
+                    margin: 15px auto;
+                    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+                }
+                
+                .student-name {
+                    color: white;
+                    font-size: 20px;
+                    font-weight: bold;
+                    text-align: center;
+                    margin: 10px 0 5px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                }
+                
+                .name-label {
+                    color: rgba(255,255,255,0.8);
+                    font-size: 11px;
+                    text-align: center;
+                    margin-bottom: 15px;
+                }
+                
+                .qr-code {
+                    width: 160px;
+                    height: 160px;
+                    background: white;
+                    border-radius: 8px;
+                    padding: 8px;
+                    display: block;
+                    margin: 15px auto;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .student-info {
+                    background: rgba(255,255,255,0.95);
+                    margin: 0 20px 15px;
+                    padding: 12px;
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    clear: both;
+                }
+                
+                .info-label {
+                    color: #2a5298;
+                    font-size: 10px;
+                    font-weight: bold;
+                    margin-bottom: 1px;
+                    text-transform: uppercase;
+                }
+                
+                .info-value {
+                    color: #333;
+                    font-size: 12px;
+                    font-weight: 600;
+                    line-height: 1.2;
+                }
+                
+                /* BACK SIDE */
+                .back {
+                    background: #f8f9fa;
+                    color: #333;
+                }
+                
+                .deped-header {
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                }
+                
+                .deped-logo {
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                }
+                
+                .deped-subtitle {
+                    font-size: 12px;
+                    opacity: 0.9;
+                }
+                
+                .back-content {
+                    padding: 25px 20px;
+                }
+                
+                .info-section {
+                    margin-bottom: 20px;
+                }
+                
+                .section-title {
+                    color: #2a5298;
+                    font-weight: bold;
+                    font-size: 13px;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                }
+                
+                .info-box {
+                    background: white;
+                    padding: 10px;
+                    border-radius: 6px;
+                    border-left: 4px solid #2a5298;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                }
+                
+                .signature-area {
+                    text-align: center;
+                    margin: 25px 0;
+                    padding: 15px;
+                    background: white;
+                    border-radius: 8px;
+                    border: 2px dashed #ddd;
+                }
+                
+                .signature-line {
+                    border-bottom: 2px solid #333;
+                    width: 120px;
+                    margin: 0 auto 8px;
+                    height: 25px;
+                }
+                
+                .signature-label {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #666;
+                }
+                
+                .validity-box {
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: white;
+                    padding: 12px;
+                    text-align: center;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 13px;
+                    margin-bottom: 10px;
+                }
+                
+                .non-transferable {
+                    text-align: center;
+                    font-size: 10px;
+                    color: #666;
+                    font-style: italic;
+                }
+                
+                /* Buttons */
+                .no-print {
+                    text-align: center;
+                    margin-top: 30px;
+                }
+                
+                .btn {
+                    background: linear-gradient(135deg, #2a5298, #1e3c72);
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    margin: 0 8px;
+                    border-radius: 25px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+                }
+                
+                /* Print Styles */
+                @media print {
+                    * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+                    body { 
+                        background: white !important; 
+                        padding: 0 !important; 
+                        margin: 0 !important;
+                    }
+                    .card-wrapper { 
+                        gap: 15px; 
+                        page-break-inside: avoid;
+                        display: flex !important;
+                        flex-direction: row !important;
+                    }
+                    .id-card { 
+                        box-shadow: none !important; 
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+                    .front {
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .back {
+                        background: #f8f9fa !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .deped-header {
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .no-print { display: none !important; }
+                }
             </style>
         </head>
         <body>
             <div class="card-wrapper">
                 <!-- FRONT SIDE -->
-                <div class="front">
-                    <div class="vertical-ribbon">TEMPORARY ID</div>
+                <div class="id-card front">
+                    <div class="school-logo">
+                        <img src="/demo/images/logo.png" alt="School Logo" />
+                    </div>
+                    
                     <div class="school-header">
-                        <div class="logos-container">
-                            <img src="/demo/images/logo.png" class="school-logo" />
-                            <img src="/demo/images/logo-msunaawan.jpg" class="school-logo" />
-                            <img src="/demo/images/logo-cmas.jpg" class="school-logo" />
-                        </div>
-                        <div class="school-name">NAAWAN CENTRAL SCHOOL</div>
-                        <div class="school-subtitle">NAAWAN, MIS OR.</div>
+                        <div class="school-name">Naawan Central School</div>
                     </div>
-                    <div class="front-content">
-                        <img src="${student.photo ? (student.photo.startsWith('data:') ? student.photo : `http://localhost:8000/${student.photo}`) : 'https://via.placeholder.com/120x150?text=Photo'}" class="photo" />
-                        <h3>${student.name.toUpperCase()}</h3>
-                        <h2>${student.studentId || student.lrn}</h2>
-                        <p>${student.gradeLevel} - ${student.section}</p>
-                        <img src="${qrSrc}" class="qr-small" />
+                    
+                    <img src="${student.photo ? (student.photo.startsWith('data:') ? student.photo : `http://localhost:8000/${student.photo}`) : 'https://via.placeholder.com/120x120?text=Photo'}" class="student-photo" />
+                    
+                    <div class="student-name">${student.name.toUpperCase()}</div>
+                    <div class="name-label">NAME</div>
+                    
+                    <img src="${qrSrc}" class="qr-code" />
+                    
+                    <div class="student-info">
+                        <div class="info-label">LRN:</div>
+                        <div class="info-value">${student.studentId || student.lrn}</div>
                     </div>
+                    
                 </div>
+                
                 <!-- BACK SIDE -->
-                <div class="back">
-                    <div class="ribbon-back">TEMPORARY ID</div>
+                <div class="id-card back">
+                    <div class="deped-header">
+                        <div class="deped-logo">DepED</div>
+                        <div class="deped-subtitle">DEPARTMENT OF EDUCATION</div>
+                    </div>
+                    
                     <div class="back-content">
-                        <div class="field"><span class="label">DATE ISSUED:</span> ${today}</div>
-                        <div class="field"><span class="label">DATE OF BIRTH:</span> ${student.birthdate || 'N/A'}</div>
-                        <div class="field"><span class="label">CONTACT:</span> ${student.contact || 'N/A'}</div>
-                        <div class="field"><span class="label">ADDRESS:</span> ${student.address || 'N/A'}</div>
-                        <div style="margin:20px 0; text-align:center;">
-                            <img src="${student.signature || 'https://via.placeholder.com/120x40?text=Signature'}" style="width:120px; height:40px; object-fit:contain;" />
-                            <div style="font-size:12px; font-weight:bold; margin-top:4px;">${student.name.toUpperCase()}</div>
+                        <div class="info-section">
+                            <div class="section-title">Emergency Contact</div>
+                            <div class="info-box">
+                                <strong>PARENT/GUARDIAN:</strong> ${student.parentName || 'MARK MILLER'}<br>
+                                <strong>PHONE:</strong> ${student.contact || '484-421-377'}
+                            </div>
                         </div>
-                        <div style="border:2px solid #000; padding:6px; text-align:center; font-weight:bold; margin-top:10px;">VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
-                        <div style="font-size:11px; text-align:center; margin-top:6px;">THIS ID CARD IS NON-TRANSFERABLE</div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">Allergies/Medical Conditions:</div>
+                            <div class="info-box">${student.medicalConditions || 'PEANUT ALLERGY'}</div>
+                        </div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">Home Address:</div>
+                            <div class="info-box">${student.address || '1244 HORSESHOE LANE NEWARK, PA 19714'}</div>
+                        </div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">School Year:</div>
+                            <div class="info-box">${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
+                        </div>
+                        
+                        <div class="signature-area">
+                            <div class="signature-line"></div>
+                            <div class="signature-label">SIGNATURE</div>
+                        </div>
+                        
+                        <div class="validity-box">
+                            VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}
+                        </div>
+                        
+                        <div class="non-transferable">
+                            THIS ID CARD IS NON-TRANSFERABLE
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="no-print" style="margin-top:20px; text-align:center;">
-                <button onclick="window.print()">Print</button>
-                <button onclick="window.close()">Close</button>
+            
+            <div class="no-print">
+                <button class="btn" onclick="window.print()">Print</button>
+                <button class="btn" onclick="window.close()">Close</button>
             </div>
         </body>
         </html>
     `);
     win.document.close();
 }
-
-// -- ACTION BUTTON HANDLERS --
 function updatePhoto(studentData) {
     if (fileInput.value) {
         fileInput.value.click();

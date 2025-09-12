@@ -1324,6 +1324,91 @@
         }
     ]);
 
+    // Grade 5 sections data
+    const grade5Sections = ref([
+        {
+            id: 1,
+            name: 'Grade 5-A',
+            teacher: 'Ms. Patricia Wilson',
+            studentCount: 30,
+            presentCount: 29,
+            absentCount: 1,
+            attendanceRate: 97,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        },
+        {
+            id: 2,
+            name: 'Grade 5-B',
+            teacher: 'Mr. Robert Chen',
+            studentCount: 28,
+            presentCount: 26,
+            absentCount: 2,
+            attendanceRate: 93,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        },
+        {
+            id: 3,
+            name: 'Grade 5-C',
+            teacher: 'Ms. Jennifer Lopez',
+            studentCount: 31,
+            presentCount: 30,
+            absentCount: 1,
+            attendanceRate: 97,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        }
+    ]);
+
+    // Grade 6 sections data
+    const grade6Sections = ref([
+        {
+            id: 1,
+            name: 'Grade 6-A',
+            teacher: 'Mr. Michael Rodriguez',
+            studentCount: 29,
+            presentCount: 28,
+            absentCount: 1,
+            attendanceRate: 97,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        },
+        {
+            id: 2,
+            name: 'Grade 6-B',
+            teacher: 'Ms. Angela Davis',
+            studentCount: 32,
+            presentCount: 30,
+            absentCount: 2,
+            attendanceRate: 94,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        },
+        {
+            id: 3,
+            name: 'Grade 6-C',
+            teacher: 'Mr. Thomas Anderson',
+            studentCount: 30,
+            presentCount: 29,
+            absentCount: 1,
+            attendanceRate: 97,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        },
+        {
+            id: 4,
+            name: 'Grade 6-D',
+            teacher: 'Ms. Lisa Martinez',
+            studentCount: 33,
+            presentCount: 31,
+            absentCount: 2,
+            attendanceRate: 94,
+            status: 'EXCELLENT',
+            statusClass: 'status-excellent'
+        }
+    ]);
+
     // Attendance days for September 2025
     const attendanceDays = ref([
         { date: '2025-09-01', day: 1, dayName: 'M' },
@@ -2425,6 +2510,10 @@
                 return grade3Sections.value;
             case 'Grade 4':
                 return grade4Sections.value;
+            case 'Grade 5':
+                return grade5Sections.value;
+            case 'Grade 6':
+                return grade6Sections.value;
             default:
                 return [];
         }
@@ -2467,6 +2556,20 @@
                 emoji: '🔬',
                 sections: grade4Sections.value,
                 color: '#FFEAA7'
+            },
+            {
+                grade: 'Grade 5',
+                level: 'Elementary',
+                emoji: '🌟',
+                sections: grade5Sections.value,
+                color: '#DDA0DD'
+            },
+            {
+                grade: 'Grade 6',
+                level: 'Elementary',
+                emoji: '🎓',
+                sections: grade6Sections.value,
+                color: '#20B2AA'
             }
         ];
 
@@ -2524,6 +2627,10 @@
             case 'Grade 3':
                 return 'Records: 3 / 4';
             case 'Grade 4':
+                return 'Records: 4 / 4';
+            case 'Grade 5':
+                return 'Records: 3 / 3';
+            case 'Grade 6':
                 return 'Records: 4 / 4';
             default:
                 return 'Records: 0 / 0';
