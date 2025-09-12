@@ -51,7 +51,6 @@ class AttendanceSessionController extends Controller
             'section_id' => 'required|exists:sections,id',
             'subject_id' => 'nullable|exists:subjects,id',
             'session_date' => 'required|date',
-            'session_start_time' => 'required|date_format:H:i:s',
             'session_type' => 'nullable|in:regular,makeup,special',
             'metadata' => 'nullable|array'
         ]);
@@ -91,12 +90,13 @@ class AttendanceSessionController extends Controller
                 Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
             }
 
+            // Create the session - always use current time as start time
             $session = AttendanceSession::create([
                 'teacher_id' => $requestData['teacher_id'],
                 'section_id' => $requestData['section_id'],
                 'subject_id' => $requestData['subject_id'],
                 'session_date' => $requestData['session_date'],
-                'session_start_time' => $requestData['session_start_time'],
+                'session_start_time' => now()->format('H:i:s'), // Use current time
                 'session_type' => $requestData['session_type'] ?? 'regular',
                 'status' => 'active',
                 'metadata' => $requestData['metadata'] ?? []

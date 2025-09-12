@@ -10,8 +10,9 @@ import ProgressSpinner from 'primevue/progressspinner';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import NotificationService from '@/services/NotificationService';
 
 const router = useRouter();
 const toast = useToast();
@@ -52,8 +53,12 @@ const sessionsByDate = computed(() => {
 const loadAttendanceSessions = async () => {
     loading.value = true;
     try {
+        console.log('Loading attendance sessions for teacher:', teacherId.value);
         const response = await TeacherAttendanceService.getTeacherAttendanceSessions(teacherId.value);
+        console.log('API Response:', response);
+        console.log('Sessions received:', response.sessions?.length || 0);
         sessions.value = response.sessions || [];
+        console.log('Sessions stored in reactive variable:', sessions.value.length);
     } catch (error) {
         console.error('Error loading attendance sessions:', error);
         toast.add({
@@ -226,8 +231,36 @@ const getAttendanceSummary = (session) => {
     return { total, present, absent, late, excused };
 };
 
+// Listen for session completion notifications
+let unsubscribeNotifications = null;
+
+const handleNotificationUpdate = (notifications) => {
+    console.log('Notification update received:', notifications.length, 'notifications');
+    // Check if there's a new session_completed notification
+    const latestSessionCompleted = notifications.find(n => 
+        n.type === 'session_completed' && !n.read
+    );
+    
+    if (latestSessionCompleted) {
+        console.log('Found new session_completed notification, refreshing sessions...');
+        // Refresh sessions when a new one is completed
+        loadAttendanceSessions();
+    } else {
+        console.log('No new session_completed notifications found');
+    }
+};
+
 onMounted(() => {
     loadAttendanceSessions();
+    // Subscribe to notifications for auto-refresh
+    unsubscribeNotifications = NotificationService.subscribe(handleNotificationUpdate);
+});
+
+onUnmounted(() => {
+    // Clean up notification listener
+    if (unsubscribeNotifications) {
+        unsubscribeNotifications();
+    }
 });
 </script>
 
@@ -266,9 +299,15 @@ onMounted(() => {
                                         <h4 class="font-semibold text-lg">{{ session.subject_name }}</h4>
                                         <p class="text-blue-100 text-sm">{{ session.section_name }}</p>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="text-blue-100 text-sm">{{ formatTime(session.start_time) }}</p>
-                                        <p class="text-blue-100 text-xs">{{ formatTime(session.end_time) }}</p>
+                                    <div class="text-right text-xs">
+                                        <div class="mb-1">
+                                            <span class="text-blue-200">Started:</span>
+                                            <span class="text-white font-medium">{{ formatTime(session.start_time) }}</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-blue-200">Ended:</span>
+                                            <span class="text-white font-medium">{{ formatTime(session.end_time) }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
