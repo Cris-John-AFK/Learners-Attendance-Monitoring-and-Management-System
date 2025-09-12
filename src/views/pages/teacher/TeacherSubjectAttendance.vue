@@ -3263,8 +3263,11 @@ const handleViewDetails = () => {
 };
 
 const handleEditAttendance = () => {
-    // TODO: Implement edit attendance functionality
     console.log('Edit attendance clicked');
+    // Navigate to attendance sessions page
+    router.push({
+        name: 'teacher-attendance-sessions'
+    });
 };
 
 const handleStartNewSession = async () => {

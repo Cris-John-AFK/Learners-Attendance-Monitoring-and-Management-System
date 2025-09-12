@@ -801,6 +801,157 @@ class AttendanceSessionController extends Controller
     }
 
     /**
+     * Get teacher's attendance sessions
+     */
+    public function getTeacherAttendanceSessions($teacherId)
+    {
+        try {
+            $sessions = AttendanceSession::with(['section', 'subject'])
+                ->where('teacher_id', $teacherId)
+                ->orderBy('session_date', 'desc')
+                ->orderBy('session_start_time', 'desc')
+                ->get()
+                ->map(function ($session) {
+                    // Get attendance counts
+                    $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)->get();
+                    $statusCounts = $attendanceRecords->groupBy('attendance_status_id')->map->count();
+                    
+                    return [
+                        'id' => $session->id,
+                        'session_date' => $session->session_date,
+                        'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
+                        'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
+                        'subject_name' => $session->subject->name ?? 'Unknown Subject',
+                        'section_name' => $session->section->name ?? 'Unknown Section',
+                        'total_students' => $attendanceRecords->count(),
+                        'present_count' => $statusCounts->get(1, 0), // Present status ID = 1
+                        'absent_count' => $statusCounts->get(2, 0),  // Absent status ID = 2
+                        'late_count' => $statusCounts->get(3, 0),    // Late status ID = 3
+                        'excused_count' => $statusCounts->get(4, 0), // Excused status ID = 4
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'sessions' => $sessions
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching teacher attendance sessions: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch attendance sessions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get session attendance details with students
+     */
+    public function getSessionAttendanceDetails($sessionId)
+    {
+        try {
+            $session = AttendanceSession::with(['section', 'subject'])->findOrFail($sessionId);
+            
+            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus'])
+                ->where('attendance_session_id', $sessionId)
+                ->get();
+
+            $students = $attendanceRecords->map(function ($record) {
+                return [
+                    'id' => $record->student->id,
+                    'student_id' => $record->student->student_id,
+                    'name' => $record->student->first_name . ' ' . $record->student->last_name,
+                    'status' => $record->attendanceStatus->name ?? 'Present'
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'session' => [
+                    'id' => $session->id,
+                    'session_date' => $session->session_date,
+                    'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
+                    'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
+                    'subject_name' => $session->subject->name ?? 'Unknown Subject',
+                    'section_name' => $session->section->name ?? 'Unknown Section',
+                ],
+                'students' => $students
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching session attendance details: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch session details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update student attendance status in a session
+     */
+    public function updateStudentAttendance(Request $request, $sessionId, $studentId)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|string|in:Present,Absent,Late,Excused'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Get the attendance status ID
+            $statusMap = [
+                'Present' => 1,
+                'Absent' => 2,
+                'Late' => 3,
+                'Excused' => 4
+            ];
+
+            $statusId = $statusMap[$request->status];
+
+            // Update the attendance record
+            $attendanceRecord = AttendanceRecord::where('attendance_session_id', $sessionId)
+                ->where('student_id', $studentId)
+                ->first();
+
+            if ($attendanceRecord) {
+                $attendanceRecord->update([
+                    'attendance_status_id' => $statusId,
+                    'updated_at' => now()
+                ]);
+            } else {
+                // Create new attendance record if it doesn't exist
+                AttendanceRecord::create([
+                    'attendance_session_id' => $sessionId,
+                    'student_id' => $studentId,
+                    'attendance_status_id' => $statusId,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating student attendance: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update attendance',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Log audit events
      */
     private function logAuditEvent($entityType, $entityId, $action, $teacherId, $context = [])
