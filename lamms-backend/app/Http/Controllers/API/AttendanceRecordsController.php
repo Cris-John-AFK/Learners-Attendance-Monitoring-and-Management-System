@@ -73,14 +73,14 @@ class AttendanceRecordsController extends Controller
                     ];
                 });
 
-            // Transform into sessions format
+            // Transform into sessions format - group by session_id to preserve individual sessions
             $sessions = [];
-            $sessionGroups = $records->groupBy('session_date');
+            $sessionGroups = $records->groupBy('session_id');
             
-            foreach ($sessionGroups as $date => $sessionRecords) {
+            foreach ($sessionGroups as $sessionId => $sessionRecords) {
                 $session = [
-                    'id' => $sessionRecords->first()->session_id,
-                    'session_date' => $date,
+                    'id' => $sessionId,
+                    'session_date' => $sessionRecords->first()->session_date,
                     'subject' => [
                         'id' => $sessionRecords->first()->subject_id,
                         'name' => $sessionRecords->first()->subject_name

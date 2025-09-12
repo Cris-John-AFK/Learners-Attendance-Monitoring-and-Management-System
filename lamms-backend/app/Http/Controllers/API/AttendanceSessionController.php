@@ -861,7 +861,7 @@ class AttendanceSessionController extends Controller
                 return [
                     'id' => $record->student->id,
                     'student_id' => $record->student->student_id,
-                    'name' => $record->student->first_name . ' ' . $record->student->last_name,
+                    'name' => $record->student->firstName . ' ' . $record->student->lastName,
                     'status' => $record->attendanceStatus->name ?? 'Present'
                 ];
             });
