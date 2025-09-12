@@ -22,6 +22,8 @@ axios.defaults.withCredentials = false;
 const toast = useToast();
 const loading = ref(true);
 const isLoading = ref(false);
+const quickRangeLoading = ref(false);
+let loadingTimeout = null;
 const searchQuery = ref('');
 const attendanceRecords = ref([]);
 const subjects = ref([]);
@@ -64,8 +66,8 @@ const getTeacherId = () => {
         }
     }
     
-    // Default fallback - we'll test with different IDs
-    return 1;
+    // Default fallback - Maria Santos teacher ID
+    return 3;
 };
 
 const teacherId = ref(getTeacherId());
@@ -188,6 +190,8 @@ const loadAttendanceRecords = async () => {
         students.value = [];
         return;
     }
+    
+    isLoading.value = true;
 
     try {
         isLoading.value = true;
@@ -359,69 +363,65 @@ const initializeComponent = async () => {
         const sectionsResponse = await axios.get('http://127.0.0.1:8000/api/sections');
         console.log('Available sections:', sectionsResponse.data);
         
-        // Try different teacher IDs if current one doesn't work
-        const teacherIds = [teacherId.value, 1, 2, 3];
-        let foundValidTeacher = false;
-        
-        for (const testId of teacherIds) {
-            try {
-                console.log(`Testing teacher ID: ${testId}`);
-                const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${testId}/assignments`);
-                console.log(`Response for teacher ${testId}:`, response.data);
+        // Use authenticated teacher's ID directly - no testing needed
+        try {
+            console.log(`Loading assignments for authenticated teacher ID: ${teacherId.value}`);
+            const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${teacherId.value}/assignments`);
+            console.log(`Response for teacher ${teacherId.value}:`, response.data);
+            
+            if (response.data.success && response.data.assignments?.length > 0) {
                 
-                if (response.data.success && response.data.assignments?.length > 0) {
-                    console.log(`Found valid teacher with ID: ${testId}`);
-                    teacherId.value = testId;
-                    foundValidTeacher = true;
-                    
-                    const assignments = response.data.assignments || [];
-                    const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
-                    
-                    // Filter homeroom sections
-                    const homeroomSections = allSections.filter(section => 
-                        section.homeroom_teacher_id === parseInt(testId)
-                    );
-                    console.log(`Homeroom sections for teacher ${testId}:`, homeroomSections);
-                    
-                    if (homeroomSections.length === 0) {
-                        // If no homeroom sections, use all assigned sections for now
-                        console.log('No homeroom sections found, using all assigned sections');
-                        teacherSections.value = assignments.map(assignment => ({
-                            id: assignment.section_id,
-                            name: assignment.section_name,
-                            subjects: assignment.subjects || []
-                        }));
-                    } else {
-                        // Add subjects to homeroom sections
-                        teacherSections.value = homeroomSections.map(section => {
-                            const sectionAssignment = assignments.find(assignment => 
-                                assignment.section_id === section.id
-                            );
-                            return {
-                                id: section.id,
-                                name: section.name,
-                                homeroom_teacher_id: section.homeroom_teacher_id,
-                                subjects: sectionAssignment?.subjects || []
-                            };
-                        });
-                    }
-                    
-                    // All teacher sections for search
-                    allTeacherSections.value = assignments.map(assignment => ({
+                const assignments = response.data.assignments || [];
+                const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
+                
+                // Filter homeroom sections for this specific teacher only
+                const homeroomSections = allSections.filter(section => 
+                    section.homeroom_teacher_id === parseInt(teacherId.value)
+                );
+                console.log(`Homeroom sections for teacher ${teacherId.value}:`, homeroomSections);
+                
+                if (homeroomSections.length === 0) {
+                    // If no homeroom sections, use all assigned sections for now
+                    console.log('No homeroom sections found, using all assigned sections');
+                    teacherSections.value = assignments.map(assignment => ({
                         id: assignment.section_id,
                         name: assignment.section_name,
                         subjects: assignment.subjects || []
                     }));
-                    
-                    break;
+                } else {
+                    // Add subjects to homeroom sections
+                    teacherSections.value = homeroomSections.map(section => {
+                        const sectionAssignment = assignments.find(assignment => 
+                            assignment.section_id === section.id
+                        );
+                        return {
+                            id: section.id,
+                            name: section.name,
+                            homeroom_teacher_id: section.homeroom_teacher_id,
+                            subjects: sectionAssignment?.subjects || []
+                        };
+                    });
                 }
-            } catch (error) {
-                console.log(`Error testing teacher ID ${testId}:`, error);
+                
+                // All teacher sections for search
+                allTeacherSections.value = assignments.map(assignment => ({
+                    id: assignment.section_id,
+                    name: assignment.section_name,
+                    subjects: assignment.subjects || []
+                }));
+                
+            } else {
+                console.error('No assignments found for authenticated teacher');
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Data',
+                    detail: 'No section assignments found for your account.',
+                    life: 5000
+                });
+                return;
             }
-        }
-        
-        if (!foundValidTeacher) {
-            console.error('No valid teacher found with assignments');
+        } catch (error) {
+            console.error('Error loading teacher assignments:', error);
             toast.add({
                 severity: 'warn',
                 summary: 'No Sections Found',
@@ -642,11 +642,38 @@ const datePresets = [
     }
 ];
 
-// Apply date preset
-const applyDatePreset = (preset) => {
-    const [start, end] = preset.value();
-    startDate.value = start;
-    endDate.value = end;
+// Apply date preset with loading and debouncing
+const applyDatePreset = async (preset) => {
+    // Clear any existing timeout
+    if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+    }
+    
+    // Show loading immediately
+    quickRangeLoading.value = true;
+    
+    try {
+        const [start, end] = preset.value();
+        startDate.value = start;
+        endDate.value = end;
+        
+        // Add small delay to prevent rapid clicking issues
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+    } catch (error) {
+        console.error('Error applying date preset:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to apply date range. Please try again.',
+            life: 3000
+        });
+    } finally {
+        // Set timeout to hide loading after a minimum duration
+        loadingTimeout = setTimeout(() => {
+            quickRangeLoading.value = false;
+        }, 500);
+    }
 };
 
 // Check if date has attendance data
@@ -790,6 +817,8 @@ const showDayDetails = (student, date) => {
                     :key="preset.label"
                     :label="preset.label" 
                     @click="applyDatePreset(preset)"
+                    :loading="quickRangeLoading"
+                    :disabled="quickRangeLoading"
                     class="p-button-sm p-button-outlined p-button-secondary"
                     size="small"
                 />
@@ -843,8 +872,26 @@ const showDayDetails = (student, date) => {
             </div>
         </div>
 
+        <!-- Loading Overlay for Page -->
+        <div v-if="loading" class="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <h3 class="text-lg font-semibold text-gray-700">Loading Attendance Records</h3>
+                <p class="text-gray-500">Please wait while we fetch the data...</p>
+            </div>
+        </div>
+
+        <!-- Data Processing Loading Overlay -->
+        <div v-if="isLoading && !loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+            <div class="bg-white rounded-lg p-6 text-center shadow-xl">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <h3 class="text-lg font-semibold text-gray-700">Processing Data</h3>
+                <p class="text-gray-500">Updating attendance records...</p>
+            </div>
+        </div>
+
         <!-- Attendance Records Table -->
-        <DataTable :value="filteredRecords" :loading="loading" responsiveLayout="scroll" class="attendance-table" stripedRows scrollable scrollHeight="500px">
+        <DataTable :value="filteredRecords" :loading="isLoading" responsiveLayout="scroll" class="attendance-table" stripedRows scrollable scrollHeight="500px">
             <!-- Fixed columns for student info -->
             <Column field="name" header="Student Name" :frozen="true" style="min-width: 200px">
                 <template #body="slotProps">
