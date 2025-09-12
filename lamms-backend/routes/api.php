@@ -287,5 +287,11 @@ Route::prefix('student-management')->group(function () {
     Route::post('/sections/{sectionId}/generate-qr-bulk', [\App\Http\Controllers\API\StudentManagementController::class, 'generateQRCodesBulk']);
     Route::get('/sections/{sectionId}/seating-arrangement', [\App\Http\Controllers\API\StudentManagementController::class, 'getSeatingArrangement']);
     Route::post('/seating-arrangement/save', [\App\Http\Controllers\API\StudentManagementController::class, 'saveSeatingArrangement']);
+});
+
+// Attendance Records routes (simplified direct database access)
+Route::prefix('attendance-records')->group(function () {
+    Route::get('/section/{sectionId}', [\App\Http\Controllers\API\AttendanceRecordsController::class, 'getAttendanceRecords']);
+    Route::get('/students/{sectionId}', [\App\Http\Controllers\API\AttendanceRecordsController::class, 'getStudentsBySection']);
     Route::post('/students/import', [\App\Http\Controllers\API\StudentManagementController::class, 'importStudents']);
 });

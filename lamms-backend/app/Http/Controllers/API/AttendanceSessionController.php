@@ -470,6 +470,9 @@ class AttendanceSessionController extends Controller
             $weekEnd = $weekStart->copy()->endOfWeek();
 
             $query = AttendanceSession::with([
+                'attendanceRecords' => function($query) {
+                    $query->where('is_current_version', true);
+                },
                 'attendanceRecords.student',
                 'attendanceRecords.attendanceStatus',
                 'subject'
@@ -483,45 +486,23 @@ class AttendanceSessionController extends Controller
 
             $sessions = $query->get();
 
-            // Group by student and calculate weekly stats
-            $studentStats = [];
-            foreach ($sessions as $session) {
-                foreach ($session->attendanceRecords as $record) {
-                    $studentId = $record->student_id;
-                    if (!isset($studentStats[$studentId])) {
-                        $studentStats[$studentId] = [
-                            'student' => $record->student,
-                            'days' => [],
-                            'summary' => ['present' => 0, 'absent' => 0, 'late' => 0, 'excused' => 0]
-                        ];
-                    }
-
-                    $day = $session->session_date;
-                    $status = $record->attendanceStatus->code;
-                    
-                    $studentStats[$studentId]['days'][$day] = [
-                        'status' => $status,
-                        'status_name' => $record->attendanceStatus->name,
-                        'subject' => $session->subject->name ?? 'General',
-                        'arrival_time' => $record->arrival_time
-                    ];
-
-                    // Update summary
-                    switch ($status) {
-                        case 'P': $studentStats[$studentId]['summary']['present']++; break;
-                        case 'A': $studentStats[$studentId]['summary']['absent']++; break;
-                        case 'L': $studentStats[$studentId]['summary']['late']++; break;
-                        case 'E': $studentStats[$studentId]['summary']['excused']++; break;
-                    }
-                }
-            }
+            // Return available dates for the date picker
+            $availableDates = $sessions->pluck('session_date')
+                ->map(function($date) {
+                    return $date->format('Y-m-d');
+                })
+                ->unique()
+                ->values()
+                ->toArray();
 
             return response()->json([
+                'success' => true,
                 'week_start' => $weekStart->toDateString(),
                 'week_end' => $weekEnd->toDateString(),
                 'section_id' => $request->section_id,
                 'subject_id' => $request->subject_id,
-                'student_attendance' => array_values($studentStats)
+                'available_dates' => $availableDates,
+                'sessions_count' => $sessions->count()
             ]);
 
         } catch (\Exception $e) {
