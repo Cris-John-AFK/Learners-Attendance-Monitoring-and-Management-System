@@ -1,6 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { onMounted, ref, watch, computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const { getPrimary, getSurface, isDarkTheme } = useLayout();
 const chartData = ref(null);
@@ -126,14 +126,14 @@ function setChartData() {
                     type: 'bar',
                     label: 'Absent',
                     backgroundColor: documentStyle.getPropertyValue('--p-red-400'),
-                    data: data.data.map(d => d.absent),
+                    data: data.data.map((d) => d.absent),
                     barThickness: 32
                 },
                 {
                     type: 'bar',
                     label: 'Tardy',
                     backgroundColor: documentStyle.getPropertyValue('--p-orange-400'),
-                    data: data.data.map(d => d.tardy),
+                    data: data.data.map((d) => d.tardy),
                     barThickness: 32,
                     borderRadius: { topLeft: 8, topRight: 8 }
                 },
@@ -141,7 +141,7 @@ function setChartData() {
                     type: 'bar',
                     label: 'Present',
                     backgroundColor: documentStyle.getPropertyValue('--p-green-400'),
-                    data: data.data.map(d => d.present),
+                    data: data.data.map((d) => d.present),
                     borderRadius: { topLeft: 8, topRight: 8 },
                     borderSkipped: true,
                     barThickness: 20
@@ -157,14 +157,14 @@ function setChartData() {
                     type: 'bar',
                     label: 'Absent',
                     backgroundColor: documentStyle.getPropertyValue('--p-red-400'),
-                    data: data.data.map(d => d.absent),
+                    data: data.data.map((d) => d.absent),
                     barThickness: 32
                 },
                 {
                     type: 'bar',
                     label: 'Tardy',
                     backgroundColor: documentStyle.getPropertyValue('--p-orange-400'),
-                    data: data.data.map(d => d.tardy),
+                    data: data.data.map((d) => d.tardy),
                     barThickness: 32,
                     borderRadius: { topLeft: 8, topRight: 8 }
                 },
@@ -172,7 +172,7 @@ function setChartData() {
                     type: 'bar',
                     label: 'Present',
                     backgroundColor: documentStyle.getPropertyValue('--p-green-400'),
-                    data: data.data.map(d => d.present),
+                    data: data.data.map((d) => d.present),
                     borderRadius: { topLeft: 8, topRight: 8 },
                     borderSkipped: true,
                     barThickness: 20
@@ -213,8 +213,7 @@ onMounted(() => {
 
         <!-- Insights Row -->
         <div class="grid grid-cols-3 gap-4 mb-6">
-            <div v-for="(metric, index) in insightMetrics" :key="index"
-                 class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex items-center">
+            <div v-for="(metric, index) in insightMetrics" :key="index" class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex items-center">
                 <div class="mr-3 w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900">
                     <i :class="metric.icon" class="text-blue-500"></i>
                 </div>
@@ -222,14 +221,14 @@ onMounted(() => {
                     <div class="text-sm text-gray-500 dark:text-gray-400">{{ metric.label }}</div>
                     <div class="font-semibold">{{ metric.value }}</div>
                     <div class="flex items-center mt-1 text-xs">
-                        <span :class="{
-                            'text-green-500': metric.trend === 'up',
-                            'text-red-500': metric.trend === 'down',
-                            'text-gray-500': metric.trend === 'neutral'
-                        }">
-                            <i :class="metric.trend === 'up' ? 'pi pi-arrow-up' :
-                                     metric.trend === 'down' ? 'pi pi-arrow-down' : ''"
-                               class="mr-1"></i>
+                        <span
+                            :class="{
+                                'text-green-500': metric.trend === 'up',
+                                'text-red-500': metric.trend === 'down',
+                                'text-gray-500': metric.trend === 'neutral'
+                            }"
+                        >
+                            <i :class="metric.trend === 'up' ? 'pi pi-arrow-up' : metric.trend === 'down' ? 'pi pi-arrow-down' : ''" class="mr-1"></i>
                             {{ metric.trendValue }}
                         </span>
                     </div>
