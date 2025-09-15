@@ -51,7 +51,6 @@ class AttendanceSessionController extends Controller
             'section_id' => 'required|exists:sections,id',
             'subject_id' => 'nullable|exists:subjects,id',
             'session_date' => 'required|date',
-            'session_start_time' => 'required|date_format:H:i:s',
             'session_type' => 'nullable|in:regular,makeup,special',
             'metadata' => 'nullable|array'
         ]);
@@ -91,12 +90,13 @@ class AttendanceSessionController extends Controller
                 Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
             }
 
+            // Create the session - always use current time as start time
             $session = AttendanceSession::create([
                 'teacher_id' => $requestData['teacher_id'],
                 'section_id' => $requestData['section_id'],
                 'subject_id' => $requestData['subject_id'],
                 'session_date' => $requestData['session_date'],
-                'session_start_time' => $requestData['session_start_time'],
+                'session_start_time' => now()->format('H:i:s'), // Use current time
                 'session_type' => $requestData['session_type'] ?? 'regular',
                 'status' => 'active',
                 'metadata' => $requestData['metadata'] ?? []
@@ -470,6 +470,9 @@ class AttendanceSessionController extends Controller
             $weekEnd = $weekStart->copy()->endOfWeek();
 
             $query = AttendanceSession::with([
+                'attendanceRecords' => function($query) {
+                    $query->where('is_current_version', true);
+                },
                 'attendanceRecords.student',
                 'attendanceRecords.attendanceStatus',
                 'subject'
@@ -483,45 +486,23 @@ class AttendanceSessionController extends Controller
 
             $sessions = $query->get();
 
-            // Group by student and calculate weekly stats
-            $studentStats = [];
-            foreach ($sessions as $session) {
-                foreach ($session->attendanceRecords as $record) {
-                    $studentId = $record->student_id;
-                    if (!isset($studentStats[$studentId])) {
-                        $studentStats[$studentId] = [
-                            'student' => $record->student,
-                            'days' => [],
-                            'summary' => ['present' => 0, 'absent' => 0, 'late' => 0, 'excused' => 0]
-                        ];
-                    }
-
-                    $day = $session->session_date;
-                    $status = $record->attendanceStatus->code;
-                    
-                    $studentStats[$studentId]['days'][$day] = [
-                        'status' => $status,
-                        'status_name' => $record->attendanceStatus->name,
-                        'subject' => $session->subject->name ?? 'General',
-                        'arrival_time' => $record->arrival_time
-                    ];
-
-                    // Update summary
-                    switch ($status) {
-                        case 'P': $studentStats[$studentId]['summary']['present']++; break;
-                        case 'A': $studentStats[$studentId]['summary']['absent']++; break;
-                        case 'L': $studentStats[$studentId]['summary']['late']++; break;
-                        case 'E': $studentStats[$studentId]['summary']['excused']++; break;
-                    }
-                }
-            }
+            // Return available dates for the date picker
+            $availableDates = $sessions->pluck('session_date')
+                ->map(function($date) {
+                    return $date->format('Y-m-d');
+                })
+                ->unique()
+                ->values()
+                ->toArray();
 
             return response()->json([
+                'success' => true,
                 'week_start' => $weekStart->toDateString(),
                 'week_end' => $weekEnd->toDateString(),
                 'section_id' => $request->section_id,
                 'subject_id' => $request->subject_id,
-                'student_attendance' => array_values($studentStats)
+                'available_dates' => $availableDates,
+                'sessions_count' => $sessions->count()
             ]);
 
         } catch (\Exception $e) {
@@ -817,6 +798,157 @@ class AttendanceSessionController extends Controller
                 'updated_at' => now()
             ])
         );
+    }
+
+    /**
+     * Get teacher's attendance sessions
+     */
+    public function getTeacherAttendanceSessions($teacherId)
+    {
+        try {
+            $sessions = AttendanceSession::with(['section', 'subject'])
+                ->where('teacher_id', $teacherId)
+                ->orderBy('session_date', 'desc')
+                ->orderBy('session_start_time', 'desc')
+                ->get()
+                ->map(function ($session) {
+                    // Get attendance counts
+                    $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)->get();
+                    $statusCounts = $attendanceRecords->groupBy('attendance_status_id')->map->count();
+                    
+                    return [
+                        'id' => $session->id,
+                        'session_date' => $session->session_date,
+                        'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
+                        'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
+                        'subject_name' => $session->subject->name ?? 'Unknown Subject',
+                        'section_name' => $session->section->name ?? 'Unknown Section',
+                        'total_students' => $attendanceRecords->count(),
+                        'present_count' => $statusCounts->get(1, 0), // Present status ID = 1
+                        'absent_count' => $statusCounts->get(2, 0),  // Absent status ID = 2
+                        'late_count' => $statusCounts->get(3, 0),    // Late status ID = 3
+                        'excused_count' => $statusCounts->get(4, 0), // Excused status ID = 4
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'sessions' => $sessions
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching teacher attendance sessions: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch attendance sessions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get session attendance details with students
+     */
+    public function getSessionAttendanceDetails($sessionId)
+    {
+        try {
+            $session = AttendanceSession::with(['section', 'subject'])->findOrFail($sessionId);
+            
+            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus'])
+                ->where('attendance_session_id', $sessionId)
+                ->get();
+
+            $students = $attendanceRecords->map(function ($record) {
+                return [
+                    'id' => $record->student->id,
+                    'student_id' => $record->student->student_id,
+                    'name' => $record->student->firstName . ' ' . $record->student->lastName,
+                    'status' => $record->attendanceStatus->name ?? 'Present'
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'session' => [
+                    'id' => $session->id,
+                    'session_date' => $session->session_date,
+                    'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
+                    'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
+                    'subject_name' => $session->subject->name ?? 'Unknown Subject',
+                    'section_name' => $session->section->name ?? 'Unknown Section',
+                ],
+                'students' => $students
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching session attendance details: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch session details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update student attendance status in a session
+     */
+    public function updateStudentAttendance(Request $request, $sessionId, $studentId)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|string|in:Present,Absent,Late,Excused'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Get the attendance status ID
+            $statusMap = [
+                'Present' => 1,
+                'Absent' => 2,
+                'Late' => 3,
+                'Excused' => 4
+            ];
+
+            $statusId = $statusMap[$request->status];
+
+            // Update the attendance record
+            $attendanceRecord = AttendanceRecord::where('attendance_session_id', $sessionId)
+                ->where('student_id', $studentId)
+                ->first();
+
+            if ($attendanceRecord) {
+                $attendanceRecord->update([
+                    'attendance_status_id' => $statusId,
+                    'updated_at' => now()
+                ]);
+            } else {
+                // Create new attendance record if it doesn't exist
+                AttendanceRecord::create([
+                    'attendance_session_id' => $sessionId,
+                    'student_id' => $studentId,
+                    'attendance_status_id' => $statusId,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating student attendance: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update attendance',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

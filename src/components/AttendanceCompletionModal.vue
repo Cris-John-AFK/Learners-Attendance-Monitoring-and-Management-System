@@ -9,7 +9,7 @@
                     <h2 class="modal-title">Attendance Completed</h2>
                     <p class="modal-subtitle">{{ subjectName }} - {{ sessionDate }}</p>
                 </div>
-                
+
                 <div class="modal-stats" v-if="sessionData && sessionData.statistics">
                     <div class="stats-grid">
                         <div class="stat-card present">
@@ -49,7 +49,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="session-summary">
                         <div class="summary-row">
                             <span class="summary-label">Total Students:</span>
@@ -71,60 +71,23 @@
                 </div>
 
                 <div class="modal-actions">
-                    <Button 
-                        label="View Details" 
-                        icon="pi pi-eye" 
-                        class="p-button-outlined p-button-info"
-                        @click="$emit('view-details')"
-                    />
-                    <Button 
-                        label="Edit Attendance" 
-                        icon="pi pi-pencil" 
-                        class="p-button-outlined p-button-warning"
-                        @click="$emit('edit-attendance')"
-                    />
-                    <Button 
-                        label="Start New Session" 
-                        icon="pi pi-plus" 
-                        class="p-button-success"
-                        @click="$emit('start-new-session')"
-                    />
+                    <Button label="View Details" icon="pi pi-eye" class="p-button-outlined p-button-info" @click="$emit('view-details')" />
+                    <Button label="Edit Attendance" icon="pi pi-pencil" class="p-button-outlined p-button-warning" @click="$emit('edit-attendance')" />
+                    <Button label="Start New Session" icon="pi pi-plus" class="p-button-success" @click="$emit('start-new-session')" />
                 </div>
 
-                <div class="modal-footer">
-                    <div class="dont-show-again">
-                        <label class="checkbox-label">
-                            <input 
-                                type="checkbox" 
-                                v-model="dontShowAgainToday"
-                                @change="handleDontShowAgainChange"
-                            />
-                            <span class="checkmark"></span>
-                            Don't show again today
-                        </label>
-                    </div>
-                    
-                    <Button 
-                        icon="pi pi-times" 
-                        class="p-button-text p-button-rounded close-btn"
-                        @click="handleClose"
-                    />
-                </div>
-                
-                <Button 
-                    icon="pi pi-times" 
-                    class="modal-close-btn p-button-text p-button-plain"
-                    @click="$emit('close')"
-                    v-tooltip.left="'Dismiss'"
-                />
+                <!-- Windows-style close button -->
+                <button class="windows-close-btn" @click="$emit('close')" title="Close">
+                    <i class="pi pi-times"></i>
+                </button>
             </div>
         </div>
     </Teleport>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
 import Button from 'primevue/button';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     visible: {
@@ -152,24 +115,19 @@ const dontShowAgainToday = ref(false);
 // Helper functions for session data display
 const formatSessionDuration = () => {
     // Try different possible property names from the backend response
-    const startTime = props.sessionData?.session_start_time || 
-                     props.sessionData?.start_time || 
-                     props.sessionData?.created_at;
-    const endTime = props.sessionData?.session_end_time || 
-                   props.sessionData?.end_time || 
-                   props.sessionData?.completed_at ||
-                   new Date().toISOString(); // Use current time if no end time
-    
+    const startTime = props.sessionData?.session_start_time || props.sessionData?.start_time || props.sessionData?.created_at;
+    const endTime = props.sessionData?.session_end_time || props.sessionData?.end_time || props.sessionData?.completed_at || new Date().toISOString(); // Use current time if no end time
+
     if (!startTime) {
         return 'N/A';
     }
-    
+
     try {
         const start = new Date(startTime);
         const end = new Date(endTime);
         const diffMs = end - start;
         const diffMins = Math.floor(diffMs / 60000);
-        
+
         if (diffMins < 1) {
             return '< 1 min';
         } else if (diffMins < 60) {
@@ -187,11 +145,11 @@ const formatSessionDuration = () => {
 
 const calculateAttendanceRate = () => {
     if (!props.sessionData?.statistics) return 0;
-    
+
     const stats = props.sessionData.statistics;
     const totalMarked = stats.marked_students || 0;
     const presentAndLate = (stats.present || 0) + (stats.late || 0);
-    
+
     if (totalMarked === 0) return 0;
     return Math.round((presentAndLate / totalMarked) * 100);
 };
@@ -205,18 +163,15 @@ const getAttendanceRateClass = () => {
 };
 
 const presentCount = computed(() => {
-    return props.sessionData?.statistics?.present || 
-           props.sessionData?.attendance_records?.filter(r => r.status_code === 'P').length || 0;
+    return props.sessionData?.statistics?.present || props.sessionData?.attendance_records?.filter((r) => r.status_code === 'P').length || 0;
 });
 
 const absentCount = computed(() => {
-    return props.sessionData?.statistics?.absent || 
-           props.sessionData?.attendance_records?.filter(r => r.status_code === 'A').length || 0;
+    return props.sessionData?.statistics?.absent || props.sessionData?.attendance_records?.filter((r) => r.status_code === 'A').length || 0;
 });
 
 const lateCount = computed(() => {
-    return props.sessionData?.statistics?.late || 
-           props.sessionData?.attendance_records?.filter(r => r.status_code === 'L').length || 0;
+    return props.sessionData?.statistics?.late || props.sessionData?.attendance_records?.filter((r) => r.status_code === 'L').length || 0;
 });
 
 const handleOverlayClick = () => {
@@ -457,7 +412,7 @@ const handleDontShowAgainChange = () => {
     user-select: none;
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
     display: none;
 }
 
@@ -471,12 +426,12 @@ const handleDontShowAgainChange = () => {
     transition: all 0.2s ease;
 }
 
-.checkbox-label input[type="checkbox"]:checked + .checkmark {
+.checkbox-label input[type='checkbox']:checked + .checkmark {
     background-color: #3b82f6;
     border-color: #3b82f6;
 }
 
-.checkbox-label input[type="checkbox"]:checked + .checkmark::after {
+.checkbox-label input[type='checkbox']:checked + .checkmark::after {
     content: '';
     position: absolute;
     left: 5px;
@@ -488,34 +443,50 @@ const handleDontShowAgainChange = () => {
     transform: rotate(45deg);
 }
 
-.close-btn {
-    width: 2rem !important;
-    height: 2rem !important;
-    padding: 0 !important;
-    min-width: auto !important;
+.windows-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #6b7280;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    z-index: 10;
 }
 
-.modal-close-btn {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 2rem !important;
-    height: 2rem !important;
-    padding: 0 !important;
-    min-width: auto !important;
+.windows-close-btn:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.windows-close-btn:active {
+    background: #dc2626;
+    transform: scale(0.95);
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes modalSlideUp {
-    from { 
+    from {
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
-    to { 
+    to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
@@ -527,24 +498,24 @@ const handleDontShowAgainChange = () => {
         padding: 2rem;
         margin: 1rem;
     }
-    
+
     .modal-title {
         font-size: 1.5rem;
     }
-    
+
     .modal-stats {
         flex-direction: column;
         gap: 1rem;
     }
-    
+
     .stat-number {
         font-size: 2rem;
     }
-    
+
     .modal-actions {
         flex-direction: column;
     }
-    
+
     .modal-actions .p-button {
         width: 100%;
     }

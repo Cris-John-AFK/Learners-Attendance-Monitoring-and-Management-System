@@ -25,6 +25,24 @@ const model = ref([
         separator: true
     },
     {
+        label: 'Attendance',
+        items: [
+            {
+                label: 'Attendance Records',
+                icon: 'pi pi-fw pi-calendar-plus',
+                to: '/teacher/attendance-records'
+            },
+            {
+                label: 'Attendance Sessions',
+                icon: 'pi pi-fw pi-calendar-times',
+                to: '/teacher/attendance-sessions'
+            }
+        ]
+    },
+    {
+        separator: true
+    },
+    {
         label: 'Tools',
         items: [
             {

@@ -1423,7 +1423,7 @@ function ensureStudentAttendanceService() {
             <div class="loading-animation">
                 <div class="prismatic-square"></div>
             </div>
-            <h3 class="loading-text">HULATA KAY WA TA NAG DALI</h3>
+            <h3 class="loading-text">Please wait while we prepare your dashboard...</h3>
         </div>
     </div>
 </template>

@@ -3249,13 +3249,25 @@ const handleDontShowAgain = () => {
 };
 
 const handleViewDetails = () => {
-    // TODO: Implement view details functionality
     console.log('View details clicked');
+    // Navigate to attendance records page with current session data
+    router.push({
+        name: 'teacher-attendance-records',
+        query: {
+            sessionId: completedSessionData.value?.id,
+            subjectId: subjectId.value,
+            subjectName: subjectName.value,
+            sessionDate: new Date().toISOString().split('T')[0]
+        }
+    });
 };
 
 const handleEditAttendance = () => {
-    // TODO: Implement edit attendance functionality
     console.log('Edit attendance clicked');
+    // Navigate to attendance sessions page
+    router.push({
+        name: 'teacher-attendance-sessions'
+    });
 };
 
 const handleStartNewSession = async () => {

@@ -201,10 +201,12 @@ Route::prefix('attendance-sessions')->group(function () {
     Route::get('/teacher/{teacherId}/active', [AttendanceSessionController::class, 'getActiveSessionsForTeacher']);
     Route::post('/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
     Route::get('/{sessionId}/summary', [AttendanceSessionController::class, 'getSessionSummary']);
+    Route::get('/{sessionId}/details', [AttendanceSessionController::class, 'getSessionAttendanceDetails']);
     
     // Attendance marking within sessions
     Route::post('/{sessionId}/attendance', [AttendanceSessionController::class, 'markSessionAttendance']);
     Route::post('/{sessionId}/qr-attendance', [AttendanceSessionController::class, 'markQRAttendance']);
+    Route::put('/{sessionId}/students/{studentId}', [AttendanceSessionController::class, 'updateStudentAttendance']);
     
     // Reports
     Route::get('/reports/weekly', [AttendanceSessionController::class, 'getWeeklyReport']);
@@ -219,6 +221,7 @@ Route::prefix('attendance-sessions')->group(function () {
 Route::prefix('teachers/{teacherId}')->group(function () {
     Route::get('/assignments', [App\Http\Controllers\AttendanceSessionController::class, 'getTeacherAssignments']);
     Route::get('/', [App\Http\Controllers\AttendanceSessionController::class, 'getTeacherData']);
+    Route::get('/attendance-sessions', [AttendanceSessionController::class, 'getTeacherAttendanceSessions']);
 });
 
 // Attendance summary routes
@@ -287,5 +290,11 @@ Route::prefix('student-management')->group(function () {
     Route::post('/sections/{sectionId}/generate-qr-bulk', [\App\Http\Controllers\API\StudentManagementController::class, 'generateQRCodesBulk']);
     Route::get('/sections/{sectionId}/seating-arrangement', [\App\Http\Controllers\API\StudentManagementController::class, 'getSeatingArrangement']);
     Route::post('/seating-arrangement/save', [\App\Http\Controllers\API\StudentManagementController::class, 'saveSeatingArrangement']);
+});
+
+// Attendance Records routes (simplified direct database access)
+Route::prefix('attendance-records')->group(function () {
+    Route::get('/section/{sectionId}', [\App\Http\Controllers\API\AttendanceRecordsController::class, 'getAttendanceRecords']);
+    Route::get('/students/{sectionId}', [\App\Http\Controllers\API\AttendanceRecordsController::class, 'getStudentsBySection']);
     Route::post('/students/import', [\App\Http\Controllers\API\StudentManagementController::class, 'importStudents']);
 });

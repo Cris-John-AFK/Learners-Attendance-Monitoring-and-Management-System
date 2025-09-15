@@ -152,5 +152,46 @@ export const TeacherAttendanceService = {
             console.error('Error loading attendance summary:', error);
             throw error;
         }
+    },
+
+    /**
+     * Get teacher's attendance sessions
+     */
+    async getTeacherAttendanceSessions(teacherId) {
+        try {
+            const response = await api.get(`/api/teachers/${teacherId}/attendance-sessions`);
+            return response.data;
+        } catch (error) {
+            console.error('Error loading teacher attendance sessions:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get session attendance details with students
+     */
+    async getSessionAttendanceDetails(sessionId) {
+        try {
+            const response = await api.get(`/api/attendance-sessions/${sessionId}/details`);
+            return response.data;
+        } catch (error) {
+            console.error('Error loading session attendance details:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Update student attendance status in a session
+     */
+    async updateStudentAttendance(sessionId, studentId, status) {
+        try {
+            const response = await api.put(`/api/attendance-sessions/${sessionId}/students/${studentId}`, {
+                status: status
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error updating student attendance:', error);
+            throw error;
+        }
     }
 };

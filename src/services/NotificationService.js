@@ -41,6 +41,16 @@ class NotificationService {
             type: 'session_completed',
             title: 'Attendance Session Completed',
             message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || sessionData.present_count || 0} present, ${sessionData.statistics?.absent || sessionData.absent_count || 0} absent`,
+            sessionId: sessionData.session_id || sessionData.id, // Include session ID for database lookup
+            subject: sessionData.subject_name,
+            section: sessionData.section_name,
+            method: sessionData.method || 'Manual Entry',
+            metadata: {
+                sessionId: sessionData.session_id || sessionData.id,
+                teacherId: sessionData.teacher_id,
+                sectionId: sessionData.section_id,
+                subjectId: sessionData.subject_id
+            },
             data: sessionData
         };
 
