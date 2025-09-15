@@ -21,11 +21,61 @@ class TeacherController extends Controller
     public function index()
     {
         try {
-            // Lightweight query with only essential fields and relationships (removed 'status' column that doesn't exist)
+            // Get teachers with their assignments and homeroom data
             $teachers = Teacher::select(['id', 'first_name', 'last_name', 'phone_number', 'user_id'])
-                ->with(['user:id,email,username,is_active'])
+                ->with([
+                    'user:id,email,username,is_active',
+                    // Get teacher assignments with section and subject details
+                    'assignments' => function($query) {
+                        $query->select(['id', 'teacher_id', 'section_id', 'subject_id', 'role'])
+                            ->with([
+                                'section:id,name',
+                                'subject:id,name'
+                            ]);
+                    }
+                ])
                 ->get()
                 ->map(function ($teacher) {
+                    // Find primary/homeroom assignment
+                    $primaryAssignment = null;
+                    $subjectAssignments = [];
+                    
+                    foreach ($teacher->assignments as $assignment) {
+                        if ($assignment->role === 'homeroom_teacher' || $assignment->role === 'primary') {
+                            $primaryAssignment = [
+                                'id' => $assignment->id,
+                                'section' => [
+                                    'id' => $assignment->section->id,
+                                    'name' => $assignment->section->name,
+                                    'grade' => [
+                                        'id' => null,
+                                        'name' => 'Grade 3' // Simplified for now
+                                    ]
+                                ],
+                                'subject' => [
+                                    'id' => $assignment->subject->id ?? null,
+                                    'name' => $assignment->subject->name ?? 'Homeroom'
+                                ]
+                            ];
+                        } else {
+                            $subjectAssignments[] = [
+                                'id' => $assignment->id,
+                                'section' => [
+                                    'id' => $assignment->section->id,
+                                    'name' => $assignment->section->name,
+                                    'grade' => [
+                                        'id' => null,
+                                        'name' => 'Grade 3' // Simplified for now
+                                    ]
+                                ],
+                                'subject' => [
+                                    'id' => $assignment->subject->id ?? null,
+                                    'name' => $assignment->subject->name ?? 'N/A'
+                                ]
+                            ];
+                        }
+                    }
+
                     return [
                         'id' => $teacher->id,
                         'first_name' => $teacher->first_name,
@@ -34,6 +84,8 @@ class TeacherController extends Controller
                         'email' => $teacher->user->email ?? null,
                         'username' => $teacher->user->username ?? null,
                         'is_active' => $teacher->user->is_active ?? false,
+                        'primary_assignment' => $primaryAssignment,
+                        'subject_assignments' => $subjectAssignments,
                     ];
                 });
 
