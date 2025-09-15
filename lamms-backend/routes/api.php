@@ -228,6 +228,15 @@ Route::prefix('teachers/{teacherId}')->group(function () {
 Route::get('/attendance/summary', [App\Http\Controllers\API\AttendanceSummaryController::class, 'getTeacherAttendanceSummary']);
 Route::get('/attendance/trends', [App\Http\Controllers\API\AttendanceSummaryController::class, 'getTeacherAttendanceTrends']);
 
+// Admin attendance analytics routes
+Route::get('/admin/attendance/analytics', [App\Http\Controllers\API\AdminAttendanceAnalyticsController::class, 'getAttendanceAnalytics']);
+Route::get('/admin/attendance/trends', [App\Http\Controllers\API\AdminAttendanceAnalyticsController::class, 'getAttendanceTrends']);
+
+// Test routes
+Route::get('/test', [App\Http\Controllers\API\TestController::class, 'test']);
+Route::get('/test/db', [App\Http\Controllers\API\TestController::class, 'testDb']);
+Route::get('/test/attendance', [App\Http\Controllers\API\TestController::class, 'testAttendance']);
+
 // Enhanced attendance session routes
 Route::post('/attendance-sessions', [AttendanceSessionController::class, 'createSession']);
 Route::post('/attendance-sessions/mark', [AttendanceSessionController::class, 'markAttendance']);
