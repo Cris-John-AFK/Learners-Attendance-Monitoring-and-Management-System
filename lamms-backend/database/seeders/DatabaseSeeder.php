@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             NaawaanCurriculumSeeder::class,
             NaawaanTeachersSeeder::class,
             NaawaanSectionsSeeder::class,
+            CollectedReportSeeder::class,
         ]);
     }
 }

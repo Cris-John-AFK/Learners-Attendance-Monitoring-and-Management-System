@@ -124,55 +124,60 @@ const chartOptions = ref({
     colors: ['#10B981', '#EF4444', '#F59E0B', '#8B5CF6']
 });
 
-watch(() => props.chartData, (newData) => {
-    if (newData) {
-        chartOptions.value.series = newData.datasets.map(dataset => ({
-            name: dataset.label,
-            data: dataset.data
-        }));
-        chartOptions.value.xaxis.categories = newData.labels;
-    }
-}, { immediate: true });
+watch(
+    () => props.chartData,
+    (newData) => {
+        if (newData) {
+            chartOptions.value.series = newData.datasets.map((dataset) => ({
+                name: dataset.label,
+                data: dataset.data,
+                // Set darker colors
+                color:
+                    dataset.label === 'Present'
+                        ? '#2E7D32' // Darker Green
+                        : dataset.label === 'Absent'
+                          ? '#C62828' // Darker Red
+                          : '#FF8F00' // Darker Yellow
+            }));
+            chartOptions.value.xaxis.categories = newData.labels;
+        }
+    },
+    { immediate: true }
+);
 </script>
 
 <template>
-  <div class="chart-container">
-    <div class="chart-header">
-      <h3 class="chart-title">Attendance Overview by Grade Level</h3>
-      <p class="chart-subtitle">Real-time student attendance data across all grade levels</p>
-    </div>
-    <VueApexCharts type="bar" height="400" width="100%" :options="chartOptions" :series="chartOptions.series" />
-  </div>
+    <VueApexCharts type="bar" height="350" width="900" :options="chartOptions" :series="chartOptions.series" />
 </template>
 
 <style scoped>
 .chart-container {
-  width: 100%;
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    width: 100%;
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .chart-header {
-  text-align: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #f1f5f9;
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #f1f5f9;
 }
 
 .chart-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 8px 0;
-  letter-spacing: -0.025em;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.025em;
 }
 
 .chart-subtitle {
-  font-size: 0.95rem;
-  color: #64748b;
-  margin: 0;
-  font-weight: 400;
+    font-size: 0.95rem;
+    color: #64748b;
+    margin: 0;
+    font-weight: 400;
 }
 </style>

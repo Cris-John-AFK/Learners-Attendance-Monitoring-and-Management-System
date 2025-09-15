@@ -6,9 +6,7 @@
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Total Absentees</span>
                     <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">3</div>
-                    <span class="text-green-500 font-medium flex items-center" v-if="improvementFromYesterday">
-                        <i class="pi pi-arrow-up mr-1"></i> 5%
-                    </span>
+                    <span class="text-green-500 font-medium flex items-center" v-if="improvementFromYesterday"> <i class="pi pi-arrow-up mr-1"></i> 5% </span>
                 </div>
                 <div class="flex items-center justify-center icon-container bg-orange-100 dark:bg-blue-400/10">
                     <i class="pi pi-user-minus text-red-500"></i>
@@ -52,16 +50,11 @@
 
     <!-- Most Absences -->
     <div class="col-span-12 lg:col-span-6 xl:col-span-3">
-        <div
-            class="card fixed-size-card cursor-pointer transition-transform transform hover:scale-105 hover:bg-gray-100 dark:hover:bg-gray-800 shadow-lg"
-            @click="showModal = true"
-        >
+        <div class="card fixed-size-card cursor-pointer transition-transform transform hover:scale-105 hover:bg-gray-100 dark:hover:bg-gray-800 shadow-lg" @click="showModal = true">
             <div class="flex justify-between mb-1">
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Most Absences</span>
-                    <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">
-                        {{ mostAbsentStudent.name }} - {{ mostAbsentStudent.absences }} absents
-                    </div>
+                    <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">{{ mostAbsentStudent.name }} - {{ mostAbsentStudent.absences }} absents</div>
                     <span class="text-blue-500 text-sm font-medium mt-2 block">Click to view details</span>
                 </div>
             </div>
@@ -100,10 +93,10 @@ const showModal = ref(false);
 const improvementFromYesterday = ref(true);
 
 const students = ref([
-    { name: "Cris John Canales", section: "A", absences: 20 },
-    { name: "Jane Doe", section: "B", absences: 15 },
-    { name: "John Smith", section: "C", absences: 10 },
-    { name: "Emily Johnson", section: "D", absences: 8 }
+    { name: 'Cris John Canales', section: 'A', absences: 20 },
+    { name: 'Jane Doe', section: 'B', absences: 15 },
+    { name: 'John Smith', section: 'C', absences: 10 },
+    { name: 'Emily Johnson', section: 'D', absences: 8 }
 ]);
 
 const formattedDate = computed(() => {
@@ -122,7 +115,9 @@ const mostAbsentStudent = computed(() => {
     border-radius: 8px;
     background-color: white;
     box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease-in-out, background-color 0.2s ease-in-out;
+    transition:
+        transform 0.2s ease-in-out,
+        background-color 0.2s ease-in-out;
 }
 
 /* Each card has the same static width and height */

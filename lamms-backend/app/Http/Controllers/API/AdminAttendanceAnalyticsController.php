@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AdminAttendanceAnalyticsController extends Controller
@@ -18,38 +19,111 @@ class AdminAttendanceAnalyticsController extends Controller
             $dateRange = $request->query('date_range', 'current_year');
             $gradeId = $request->query('grade_id');
 
-            // Simple test first - just return grades with mock data
-            $grades = DB::table('grades')->where('is_active', true)->get();
+            // Get date range
+            $dates = $this->getDateRange($dateRange);
+            $startDate = $dates['start'];
+            $endDate = $dates['end'];
+
+            // Get grades
+            $gradesQuery = DB::table('grades')->where('is_active', true);
+            if ($gradeId) {
+                $gradesQuery->where('id', $gradeId);
+            }
+            $grades = $gradesQuery->get();
             
             $analyticsData = [];
+            $totalPresent = 0;
+            $totalAbsent = 0;
+            $totalLate = 0;
+            $totalExcused = 0;
+            $totalRecords = 0;
+
             foreach ($grades as $grade) {
+                // Get students in this grade through sections
+                $studentIds = DB::table('student_section as ss')
+                    ->join('sections as s', 'ss.section_id', '=', 's.id')
+                    ->join('curriculum_grade as cg', 's.curriculum_grade_id', '=', 'cg.id')
+                    ->where('cg.grade_id', $grade->id)
+                    ->where('ss.is_active', true)
+                    ->pluck('ss.student_id');
+
+
+                if ($studentIds->isEmpty()) {
+                    $analyticsData[] = [
+                        'grade_id' => $grade->id,
+                        'grade_name' => $grade->name,
+                        'grade_code' => $grade->code ?? $grade->name,
+                        'present' => 0,
+                        'absent' => 0,
+                        'late' => 0,
+                        'excused' => 0,
+                        'total_records' => 0,
+                        'attendance_rate' => 0
+                    ];
+                    continue;
+                }
+
+                // Check if we have attendance_records table (production) or attendances table (basic)
+                $hasAttendanceRecords = true;
+                try {
+                    DB::table('attendance_records')->limit(1)->get();
+                } catch (\Exception $e) {
+                    $hasAttendanceRecords = false;
+                }
+
+                if ($hasAttendanceRecords) {
+                    // Use production attendance system
+                    $attendanceData = $this->getProductionAttendanceData($studentIds, $startDate, $endDate);
+                } else {
+                    // Use basic attendance system
+                    $attendanceData = $this->getBasicAttendanceData($studentIds, $startDate, $endDate);
+                }
+
+                $present = $attendanceData['present'];
+                $absent = $attendanceData['absent'];
+                $late = $attendanceData['late'];
+                $excused = $attendanceData['excused'];
+                $records = $present + $absent + $late + $excused;
+                $rate = $records > 0 ? round(($present + $late) / $records * 100, 1) : 0;
+
                 $analyticsData[] = [
                     'grade_id' => $grade->id,
                     'grade_name' => $grade->name,
                     'grade_code' => $grade->code ?? $grade->name,
-                    'present' => rand(20, 50),
-                    'absent' => rand(2, 10),
-                    'late' => rand(1, 8),
-                    'excused' => rand(0, 5),
-                    'total_records' => rand(25, 60),
-                    'attendance_rate' => rand(75, 95)
+                    'present' => $present,
+                    'absent' => $absent,
+                    'late' => $late,
+                    'excused' => $excused,
+                    'total_records' => $records,
+                    'attendance_rate' => $rate,
+                    'student_count' => $studentIds->count()
                 ];
+
+                $totalPresent += $present;
+                $totalAbsent += $absent;
+                $totalLate += $late;
+                $totalExcused += $excused;
+                $totalRecords += $records;
             }
+
+            $overallRate = $totalRecords > 0 ? round(($totalPresent + $totalLate) / $totalRecords * 100, 1) : 0;
+            $totalStudents = array_sum(array_column($analyticsData, 'student_count'));
 
             return response()->json([
                 'success' => true,
                 'data' => [
                     'date_range' => $dateRange,
-                    'start_date' => '2024-06-01',
-                    'end_date' => '2025-05-31',
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
                     'grades' => $analyticsData,
                     'summary' => [
-                        'total_present' => array_sum(array_column($analyticsData, 'present')),
-                        'total_absent' => array_sum(array_column($analyticsData, 'absent')),
-                        'total_late' => array_sum(array_column($analyticsData, 'late')),
-                        'total_excused' => array_sum(array_column($analyticsData, 'excused')),
-                        'total_records' => array_sum(array_column($analyticsData, 'total_records')),
-                        'overall_attendance_rate' => 85.5
+                        'total_present' => $totalPresent,
+                        'total_absent' => $totalAbsent,
+                        'total_late' => $totalLate,
+                        'total_excused' => $totalExcused,
+                        'total_records' => $totalRecords,
+                        'total_students' => $totalStudents,
+                        'overall_attendance_rate' => $overallRate
                     ]
                 ]
             ]);
@@ -379,5 +453,127 @@ class AdminAttendanceAnalyticsController extends Controller
             ->where('ases.session_date', $date)
             ->where('ar.attendance_status_id', $statusId)
             ->count();
+    }
+
+    /**
+     * Get attendance data from production attendance system
+     */
+    private function getProductionAttendanceData($studentIds, $startDate, $endDate)
+    {
+        // Check if attendance_statuses table exists
+        $hasStatusTable = true;
+        try {
+            DB::table('attendance_statuses')->limit(1)->get();
+        } catch (\Exception $e) {
+            $hasStatusTable = false;
+        }
+
+        if ($hasStatusTable) {
+            // Use status names
+            $present = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ast.name', 'Present')
+                ->count();
+
+            $absent = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ast.name', 'Absent')
+                ->count();
+
+            $late = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ast.name', 'Late')
+                ->count();
+
+            $excused = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ast.name', 'Excused')
+                ->count();
+        } else {
+            // Use status IDs (1=Present, 2=Absent, 3=Late, 4=Excused)
+            $present = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ar.attendance_status_id', 1)
+                ->count();
+
+            $absent = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ar.attendance_status_id', 2)
+                ->count();
+
+            $late = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ar.attendance_status_id', 3)
+                ->count();
+
+            $excused = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->whereBetween('ases.session_date', [$startDate, $endDate])
+                ->where('ar.attendance_status_id', 4)
+                ->count();
+        }
+
+        return [
+            'present' => $present,
+            'absent' => $absent,
+            'late' => $late,
+            'excused' => $excused
+        ];
+    }
+
+    /**
+     * Get attendance data from basic attendance system
+     */
+    private function getBasicAttendanceData($studentIds, $startDate, $endDate)
+    {
+        $present = DB::table('attendances')
+            ->whereIn('student_id', $studentIds)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->where('status', 'present')
+            ->count();
+
+        $absent = DB::table('attendances')
+            ->whereIn('student_id', $studentIds)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->where('status', 'absent')
+            ->count();
+
+        $late = DB::table('attendances')
+            ->whereIn('student_id', $studentIds)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->where('status', 'late')
+            ->count();
+
+        $excused = DB::table('attendances')
+            ->whereIn('student_id', $studentIds)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->where('status', 'excused')
+            ->count();
+
+        return [
+            'present' => $present,
+            'absent' => $absent,
+            'late' => $late,
+            'excused' => $excused
+        ];
     }
 }

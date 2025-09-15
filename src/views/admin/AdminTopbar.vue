@@ -7,6 +7,8 @@ const { toggleMenu } = useLayout();
 const router = useRouter();
 const isCalendarOpen = ref(false);
 const isProfileOpen = ref(false);
+const isNotificationOpen = ref(false);
+const notificationCount = ref(3); // Example notification count
 
 const logout = () => {
     // Clear user session data
@@ -36,6 +38,49 @@ const logout = () => {
                     <i class="pi pi-calendar"></i>
                     <span>Calendar</span>
                 </button>
+                
+                <!-- Notification Button with Badge -->
+                <div class="relative">
+                    <button type="button" class="layout-topbar-action notification-button" @click="isNotificationOpen = !isNotificationOpen">
+                        <i class="pi pi-bell" style="font-size: 1.2rem; color: #fbbf24; text-shadow: 0 2px 4px rgba(251, 191, 36, 0.3);"></i>
+                        <span>Notifications</span>
+                        <span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
+                    </button>
+                    <!-- Notification Dropdown -->
+                    <div v-if="isNotificationOpen" class="notification-dropdown">
+                        <div class="notification-header">
+                            <h4>Notifications</h4>
+                            <span class="notification-count">{{ notificationCount }} new</span>
+                        </div>
+                        <div class="notification-list">
+                            <div class="notification-item">
+                                <i class="pi pi-user-plus text-blue-500"></i>
+                                <div>
+                                    <p class="notification-title">New Student Registration</p>
+                                    <p class="notification-time">2 minutes ago</p>
+                                </div>
+                            </div>
+                            <div class="notification-item">
+                                <i class="pi pi-exclamation-triangle text-orange-500"></i>
+                                <div>
+                                    <p class="notification-title">Attendance Report Due</p>
+                                    <p class="notification-time">1 hour ago</p>
+                                </div>
+                            </div>
+                            <div class="notification-item">
+                                <i class="pi pi-check-circle text-green-500"></i>
+                                <div>
+                                    <p class="notification-title">System Backup Completed</p>
+                                    <p class="notification-time">3 hours ago</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="notification-footer">
+                            <button class="view-all-btn">View All Notifications</button>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Profile Button with Dropdown -->
                 <div class="relative">
                     <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
@@ -150,5 +195,161 @@ const logout = () => {
     box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
     min-width: 120px;
     z-index: 100;
+}
+
+/* Notification Styles */
+.notification-button {
+    position: relative;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background: #ef4444;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+.notification-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 8px;
+    background: var(--surface-card);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    min-width: 320px;
+    max-width: 400px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.notification-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--surface-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface-ground);
+}
+
+.notification-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.notification-count {
+    background: #3b82f6;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.notification-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--surface-border);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.notification-item:hover {
+    background: var(--surface-hover);
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.notification-item i {
+    font-size: 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.notification-title {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    line-height: 1.3;
+}
+
+.notification-time {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-color-secondary);
+}
+
+.notification-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--surface-border);
+    background: var(--surface-ground);
+}
+
+.view-all-btn {
+    width: 100%;
+    padding: 8px 16px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.view-all-btn:hover {
+    background: #2563eb;
+}
+
+.text-blue-500 {
+    color: #3b82f6;
+}
+
+.text-orange-500 {
+    color: #f97316;
+}
+
+.text-green-500 {
+    color: #10b981;
+}
+
+.relative {
+    position: relative;
 }
 </style>

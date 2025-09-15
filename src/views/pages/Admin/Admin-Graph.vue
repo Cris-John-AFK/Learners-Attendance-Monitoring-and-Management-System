@@ -1,224 +1,280 @@
 <template>
-    <div class="attendance-container">
-        <!-- Header Section -->
-        <div class="header-section">
-            <div class="welcome-header">
-                <h1 class="welcome-title">Welcome, Admin</h1>
-                <p class="text-blue-100 font-normal">
-                    {{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
-                </p>
+    <div class="grid" style="margin: 0 1rem">
+        <!-- Loading State -->
+        <div v-if="loading" class="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
+            <ProgressSpinner strokeWidth="4" style="width: 50px; height: 50px" class="text-blue-500" />
+            <p class="ml-3 text-gray-500 font-normal">Loading dashboard data...</p>
+        </div>
+
+        <!-- Error State -->
+        <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="pi pi-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                    <div>
+                        <h3 class="text-red-800 font-semibold">Error Loading Data</h3>
+                        <p class="text-red-600 text-sm mt-1">{{ error }}</p>
+                    </div>
+                </div>
+                <button @click="retryLoadData" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"><i class="pi pi-refresh mr-2"></i>Retry</button>
             </div>
         </div>
 
-        <!-- Statistics Cards -->
-        <div class="stats-container">
-            <div class="stat-card">
-                <div class="stat-icon blue">
-                    <i class="pi pi-users"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>{{ summaryStats.totalStudents }}</h3>
-                    <p>Total Records</p>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon green">
-                    <i class="pi pi-check-circle"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>{{ summaryStats.averageAttendance }}%</h3>
-                    <p>Average Attendance</p>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon yellow">
-                    <i class="pi pi-exclamation-triangle"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>{{ summaryStats.warningCount }}</h3>
-                    <p>Warning (&lt;80% attendance)</p>
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-icon red">
-                    <i class="pi pi-times-circle"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>{{ summaryStats.criticalCount }}</h3>
-                    <p>Critical (&lt;70% attendance)</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content White Box -->
-        <div class="content-box">
-            <div v-if="loading" class="loading-container">
-                <ProgressSpinner />
-                <p>Loading attendance data...</p>
-            </div>
-            <div v-else-if="defaultGradeChartData.labels.length > 0" class="chart-wrapper">
-                <div class="chart-controls">
-                    <div class="chart-info">
-                        <h2 class="chart-main-title">Student Attendance Analytics</h2>
-                        <p class="chart-description">Monitor attendance patterns across all grade levels with detailed breakdowns</p>
+        <div v-else>
+            <!-- Modern Header with Admin Welcome -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-md p-6 mb-6 text-white">
+                <div class="grid grid-cols-12 gap-4 items-center">
+                    <div class="col-span-12 sm:col-span-7">
+                        <h1
+                            class="text-2xl font-bold mb-1"
+                            style="
+                                color: #ffffff;
+                                text-shadow:
+                                    0 0 1px #fff,
+                                    0 0 2px #fff;
+                            "
+                        >
+                            Welcome, Admin
+                        </h1>
+                        <p class="text-blue-100 font-normal">
+                            {{ currentDateTime }}
+                        </p>
                     </div>
-                    <div class="chart-filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Date Range:</label>
-                            <select v-model="selectedDateRange" @change="onDateRangeChange" class="filter-select">
-                                <option v-for="option in dateRangeOptions" :key="option.value" :value="option.value">
-                                    {{ option.label }}
-                                </option>
-                            </select>
+
+                    <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
+                        <!-- Attendance Insights placeholder -->
+                        <div class="text-right"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Stats Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-blue-100 p-3 rounded-lg">
+                        <i class="pi pi-users text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
+                        <div class="text-2xl font-bold">{{ totalStudents }}</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-green-100 p-3 rounded-lg">
+                        <i class="pi pi-check-circle text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                        <div class="flex items-end">
+                            <span class="text-2xl font-bold mr-1">{{ averageAttendance }}%</span>
+                            <ProgressBar
+                                :value="averageAttendance"
+                                class="h-1.5 w-16 mb-1.5"
+                                :class="{
+                                    'attendance-good': averageAttendance >= 85,
+                                    'attendance-warning': averageAttendance < 85 && averageAttendance >= 70,
+                                    'attendance-poor': averageAttendance < 70
+                                }"
+                            />
                         </div>
-                        <div class="filter-group">
-                            <label class="filter-label">View by:</label>
-                            <select v-model="selectedGrade" @change="onGradeChange" class="filter-select">
-                                <option v-for="option in gradeOptions" :key="option.value" :value="option.value">
-                                    {{ option.label }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="summary-stats">
-                            <div class="mini-stat">
-                                <span class="mini-stat-value">{{ summaryStats.totalStudents }}</span>
-                                <span class="mini-stat-label">Total Records</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-yellow-100 p-3 rounded-lg">
+                        <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Warning (3+ absences)</div>
+                        <div class="text-2xl font-bold">{{ warningCount }}</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                    <div class="mr-4 bg-red-100 p-3 rounded-lg">
+                        <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">Critical (5+ absences)</div>
+                        <div class="text-2xl font-bold">{{ criticalCount }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Chart & Insights -->
+            <div class="grid grid-cols-12 gap-6 mb-6">
+                <!-- Attendance Trends Chart -->
+                <div class="col-span-12 lg:col-span-8">
+                    <div class="bg-white rounded-xl shadow-sm p-5">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                            <h2 class="text-lg font-semibold">Attendance Trends</h2>
+                            <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                                <!-- Time Period Toggle -->
+                                <div class="flex items-center gap-2">
+                                    <label class="text-sm font-medium text-gray-600">Period:</label>
+                                    <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartViewChange" />
+                                </div>
                             </div>
-                            <div class="mini-stat">
-                                <span class="mini-stat-value">{{ summaryStats.averageAttendance }}%</span>
-                                <span class="mini-stat-label">Attendance Rate</span>
+                        </div>
+
+                        <div v-if="loading" class="flex flex-col items-center justify-center py-12">
+                            <ProgressSpinner strokeWidth="4" style="width: 50px; height: 50px" class="text-blue-500" />
+                            <p class="mt-3 text-gray-500 font-normal">Loading chart data...</p>
+                        </div>
+
+                        <div v-else-if="error" class="flex flex-col items-center justify-center py-12">
+                            <i class="pi pi-chart-bar text-gray-400 text-4xl mb-3"></i>
+                            <p class="text-gray-500 font-medium mb-2">Unable to load chart data</p>
+                            <button @click="retryLoadData" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"><i class="pi pi-refresh mr-1"></i>Retry</button>
+                        </div>
+
+                        <div v-else-if="!defaultGradeChartData || defaultGradeChartData.labels.length === 0" class="flex flex-col items-center justify-center py-12">
+                            <i class="pi pi-chart-bar text-gray-400 text-4xl mb-3"></i>
+                            <p class="text-gray-500 font-medium">No attendance data available</p>
+                            <p class="text-gray-400 text-sm">Check back later or contact your administrator</p>
+                        </div>
+
+                        <div v-else class="chart-container">
+                            <Chart :type="chartType" :data="defaultGradeChartData" :options="chartOptions" style="height: 300px" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attendance Insights Card -->
+                <div class="col-span-12 lg:col-span-4">
+                    <div class="bg-white rounded-xl shadow-sm p-5">
+                        <h3 class="text-lg font-semibold mb-4">Attendance Insights</h3>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-500 mb-2">{{ insights.bestPerformingGrade || 'Overall Statistics' }}</div>
+                            <div v-if="!loading && !error" class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600">Present</span>
+                                    <div class="flex items-center">
+                                        <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                                        <span class="font-semibold">{{ averageAttendance }}%</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600">Absent</span>
+                                    <div class="flex items-center">
+                                        <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                                        <span class="font-semibold">{{ Math.max(0, Math.round(100 - averageAttendance - 5)) }}%</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600">Late</span>
+                                    <div class="flex items-center">
+                                        <div class="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                                        <span class="font-semibold">5%</span>
+                                    </div>
+                                </div>
+                                <div v-if="insights.trendAnalysis" class="mt-4 pt-3 border-t border-gray-200">
+                                    <p class="text-xs text-gray-500">{{ insights.trendAnalysis }}</p>
+                                </div>
+                            </div>
+                            <div v-else-if="loading" class="flex justify-center py-8">
+                                <ProgressSpinner strokeWidth="4" style="width: 30px; height: 30px" class="text-blue-500" />
+                            </div>
+                            <div v-else class="text-gray-400 text-sm py-8">
+                                <i class="pi pi-info-circle mb-2 text-lg block"></i>
+                                No insights available
                             </div>
                         </div>
                     </div>
-                </div>
-                <AttendanceChart :chartData="defaultGradeChartData" />
-                <div class="chart-insights">
-                    <div class="insight-card">
-                        <div class="insight-icon green">
-                            <i class="pi pi-check-circle"></i>
-                        </div>
-                        <div class="insight-content">
-                            <h4>Highest Attendance</h4>
-                            <p>{{ insights.bestPerformingGrade }} with {{ insights.highestAttendanceRate }}% attendance rate</p>
-                        </div>
-                    </div>
-                    <div class="insight-card">
-                        <div class="insight-icon orange">
-                            <i class="pi pi-exclamation-triangle"></i>
-                        </div>
-                        <div class="insight-content">
-                            <h4>Needs Attention</h4>
-                            <p>{{ insights.worstPerformingGrade }} requires follow-up with {{ insights.lowestAttendanceRate }}% attendance</p>
-                        </div>
-                    </div>
-                    <div class="insight-card">
-                        <div class="insight-icon blue">
-                            <i class="pi pi-chart-bar"></i>
-                        </div>
-                        <div class="insight-content">
-                            <h4>Overall Trend</h4>
-                            <p>{{ insights.trendAnalysis }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div v-else-if="error" class="error-message">
-                <div class="error-icon">
-                    <i class="pi pi-times-circle"></i>
-                </div>
-                <div class="error-content">
-                    <h3>Unable to Load Data</h3>
-                    <p>{{ error }}</p>
-                    <button @click="loadAttendanceData" class="retry-button">
-                        <i class="pi pi-refresh"></i> Try Again
-                    </button>
-                </div>
-            </div>
-            <div v-else class="no-data-message">
-                <div class="no-data-icon">
-                    <i class="pi pi-info-circle"></i>
-                </div>
-                <div class="no-data-content">
-                    <h3>No Data Available</h3>
-                    <p>No attendance records found for the selected date range.</p>
-                    <p class="no-data-suggestion">Try selecting a different date range or check if attendance has been recorded.</p>
                 </div>
             </div>
         </div>
     </div>
-
-    <Dialog v-model:visible="showModal" modal header="Section Attendance Overview" :style="{ width: '80vw' }">
-        <div v-if="sectionLoading" class="loading-container">
-            <ProgressSpinner />
-            <p>Loading section data...</p>
-        </div>
-        <div v-else-if="selectedGradeData && selectedGradeData.labels.length > 0" class="chart-wrapper">
-            <AttendanceChart :chartData="selectedGradeData" />
-        </div>
-        <div v-else class="no-data-message">
-            <i class="pi pi-info-circle"></i>
-            <p>No attendance data available for this grade</p>
-        </div>
-    </Dialog>
 </template>
 
 <script setup>
-import AttendanceChart from '@/components/Admin/AttendanceChart.vue';
-import { AdminAttendanceService } from '@/services/AdminAttendanceService';
 import { GradeService } from '@/router/service/Grades';
-import Dialog from 'primevue/dialog';
+import { AdminAttendanceService } from '@/services/AdminAttendanceService';
+import Chart from 'primevue/chart';
+import ProgressBar from 'primevue/progressbar';
 import ProgressSpinner from 'primevue/progressspinner';
-import { onMounted, ref } from 'vue';
+import SelectButton from 'primevue/selectbutton';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 const loading = ref(true);
+const currentDateTime = ref('');
+let timeInterval = null;
 const sectionLoading = ref(false);
+const selectedGrade = ref(null);
+const gradeOptions = ref([]);
+const chartOptions = ref({});
 const error = ref(null);
 
-// Filter options
-const selectedDateRange = ref('current_year');
-const selectedGrade = ref('all');
+// Statistics data - will be populated from API
+const totalStudents = ref(0);
+const averageAttendance = ref(0);
+const warningCount = ref(0);
+const criticalCount = ref(0);
 
-const dateRangeOptions = ref([
-    { label: 'Current School Year', value: 'current_year' },
+// Summary stats and insights from API
+const summaryStats = ref({});
+const insights = ref({});
+const selectedDateRange = ref('current_year');
+const chartType = ref('bar');
+
+// Chart view options - updated to match API date ranges
+const chartViewOptions = [
+    { label: 'Current Year', value: 'current_year' },
     { label: 'Last 30 Days', value: 'last_30_days' },
     { label: 'Last 7 Days', value: 'last_7_days' }
-]);
+];
+const chartView = ref('current_year');
 
-const gradeOptions = ref([
-    { label: 'All Grades', value: 'all' }
-]);
-
-// Data states
-const summaryStats = ref({
-    totalStudents: 0,
-    averageAttendance: 0,
-    warningCount: 0,
-    criticalCount: 0
-});
-
-const insights = ref({
-    bestPerformingGrade: 'N/A',
-    highestAttendanceRate: 0,
-    worstPerformingGrade: 'N/A',
-    lowestAttendanceRate: 0,
-    trendAnalysis: 'Loading...'
-});
+// View type options
+const viewTypeOptions = [
+    { label: 'Subject-Specific', value: 'subject' },
+    { label: 'All Students', value: 'all_students' }
+];
+const viewType = ref('subject');
 
 // Chart data for grade-level attendance
 const defaultGradeChartData = ref({
     labels: [],
     datasets: [
-        { label: 'Present', backgroundColor: '#10b981', data: [] },
-        { label: 'Absent', backgroundColor: '#ef4444', data: [] },
-        { label: 'Late', backgroundColor: '#f59e0b', data: [] },
-        { label: 'Excused', backgroundColor: '#8b5cf6', data: [] }
+        {
+            label: 'Present',
+            backgroundColor: '#10b981',
+            borderColor: '#10b981',
+            borderWidth: 1,
+            data: [],
+            stack: 'attendance'
+        },
+        {
+            label: 'Absent',
+            backgroundColor: '#ef4444',
+            borderColor: '#ef4444',
+            borderWidth: 1,
+            data: [],
+            stack: 'attendance'
+        },
+        {
+            label: 'Late',
+            backgroundColor: '#f59e0b',
+            borderColor: '#f59e0b',
+            borderWidth: 1,
+            data: [],
+            stack: 'attendance'
+        },
+        {
+            label: 'Excused',
+            backgroundColor: '#8b5cf6',
+            borderColor: '#8b5cf6',
+            borderWidth: 1,
+            data: [],
+            stack: 'attendance'
+        }
     ]
 });
 
-// Modal data
+// Section-wise attendance data
+const gradeSectionsData = ref({});
+
 const showModal = ref(false);
 const selectedGradeData = ref(null);
 
@@ -233,8 +289,8 @@ const loadAttendanceData = async () => {
         const gradeId = selectedGrade.value === 'all' ? null : getGradeIdByName(selectedGrade.value);
 
         // Fetch attendance analytics
-        const response = await AdminAttendanceService.getAttendanceAnalytics(selectedDateRange.value, gradeId);
-        
+        const response = await AdminAttendanceService.getAttendanceAnalytics(chartView.value, gradeId);
+
         if (!response.success) {
             throw new Error(response.message || 'Failed to fetch attendance data');
         }
@@ -245,20 +301,41 @@ const loadAttendanceData = async () => {
         // Transform data to chart format
         defaultGradeChartData.value = AdminAttendanceService.transformToChartData(analyticsData);
 
-        // Update summary statistics
-        summaryStats.value = AdminAttendanceService.calculateSummaryStats(analyticsData);
+        // Determine chart type based on number of grades
+        chartType.value = analyticsData.grades && analyticsData.grades.length > 1 ? 'horizontalBar' : 'bar';
 
-        // Update insights
-        insights.value = AdminAttendanceService.getInsights(analyticsData);
+        // Update summary statistics
+        const stats = AdminAttendanceService.calculateSummaryStats(analyticsData);
+        totalStudents.value = stats.totalStudents;
+        averageAttendance.value = Math.round(stats.averageAttendance);
+        warningCount.value = stats.warningCount;
+        criticalCount.value = stats.criticalCount;
+
+        // Update insights - pass current grade data if viewing single grade
+        const currentGradeData = analyticsData.grades && analyticsData.grades.length === 1 ? analyticsData.grades[0] : null;
+        insights.value = AdminAttendanceService.getInsights(analyticsData, currentGradeData);
 
         console.log('Chart data updated:', defaultGradeChartData.value);
+        console.log('Summary stats updated:', stats);
         loading.value = false;
-
     } catch (err) {
         console.error('Error loading attendance data:', err);
         error.value = err.message || 'Failed to load attendance data';
         loading.value = false;
     }
+};
+
+// Helper function to get grade ID by name
+const getGradeIdByName = (gradeName) => {
+    if (!gradeOptions.value || gradeName === 'all') return null;
+    const grade = gradeOptions.value.find((g) => g.value === gradeName);
+    return grade ? grade.id : null;
+};
+
+// Retry loading data
+const retryLoadData = async () => {
+    console.log('Retrying data load...');
+    await loadAttendanceData();
 };
 
 // Load grades for dropdown options
@@ -267,31 +344,78 @@ const loadGradeOptions = async () => {
         const gradesData = await GradeService.getGrades();
         console.log('Grades data received:', gradesData);
 
-        if (gradesData && gradesData.length > 0) {
-            gradeOptions.value = [
-                { label: 'All Grades', value: 'all' },
-                ...gradesData.map((g) => ({
-                    label: g.name,
-                    value: g.name,
-                    id: g.id
-                }))
-            ];
+        if (!gradesData || gradesData.length === 0) {
+            console.warn('No grades data received');
+            loading.value = false;
+            return;
         }
-    } catch (err) {
-        console.error('Error loading grades:', err);
+
+        // Create dropdown options for grades
+        gradeOptions.value = [
+            { label: 'All Grades', value: 'all' },
+            ...gradesData.map((g) => ({
+                label: `${g.name} - Mathematics`,
+                value: g.name
+            }))
+        ];
+
+        // Set default selection
+        selectedGrade.value = 'all';
+
+        // Load real attendance data from API first
+        await loadAttendanceData();
+
+        // Setup chart options after data is loaded
+        setupChartOptions();
+
+        // Now build the sections data using the real sections from Grades.js
+        gradesData.forEach((grade) => {
+            if (!grade.sections || grade.sections.length === 0) {
+                console.warn(`No sections found for grade ${grade.name}`);
+                return;
+            }
+
+            // For each grade, create an entry in gradeSectionsData with its sections
+            gradeSectionsData.value[grade.name] = {
+                labels: grade.sections || [],
+                datasets: [
+                    {
+                        label: 'Present',
+                        backgroundColor: '#90EE90',
+                        data: (grade.sections || []).map(() => Math.floor(Math.random() * 15) + 75)
+                    },
+                    {
+                        label: 'Absent',
+                        backgroundColor: '#FFB6C1',
+                        data: (grade.sections || []).map(() => Math.floor(Math.random() * 8) + 2)
+                    },
+                    {
+                        label: 'Late',
+                        backgroundColor: '#FFD580',
+                        data: (grade.sections || []).map(() => Math.floor(Math.random() * 10) + 5)
+                    }
+                ]
+            };
+        });
+
+        console.log('Sections data prepared:', gradeSectionsData.value);
+        loading.value = false;
+    } catch (error) {
+        console.error('Error loading grade data:', error);
+        loading.value = false;
     }
 };
 
-// Helper function to get grade ID by name
-const getGradeIdByName = (gradeName) => {
-    const grade = gradeOptions.value.find(g => g.value === gradeName);
-    return grade ? grade.id : null;
-};
+const showSections = (gradeName) => {
+    sectionLoading.value = true;
+    showModal.value = true;
 
-// Event handlers
-const onDateRangeChange = () => {
-    console.log('Date range changed to:', selectedDateRange.value);
-    loadAttendanceData();
+    // Short timeout to show loading state even if data is immediately available
+    setTimeout(() => {
+        console.log(`Showing sections for ${gradeName}:`, gradeSectionsData.value[gradeName]);
+        selectedGradeData.value = gradeSectionsData.value[gradeName] || null;
+        sectionLoading.value = false;
+    }, 300);
 };
 
 const onGradeChange = () => {
@@ -299,339 +423,236 @@ const onGradeChange = () => {
     loadAttendanceData();
 };
 
-// Initialize component
+const filterByGrade = (gradeName) => {
+    console.log('Filtering by grade:', gradeName);
+
+    // Find the index of the selected grade
+    const gradeIndex = defaultGradeChartData.value.labels.indexOf(gradeName);
+
+    if (gradeIndex !== -1) {
+        // Create filtered data with only the selected grade
+        defaultGradeChartData.value.labels = [gradeName];
+        defaultGradeChartData.value.datasets[0].data = [defaultGradeChartData.value.datasets[0].data[gradeIndex]];
+        defaultGradeChartData.value.datasets[1].data = [defaultGradeChartData.value.datasets[1].data[gradeIndex]];
+        defaultGradeChartData.value.datasets[2].data = [defaultGradeChartData.value.datasets[2].data[gradeIndex]];
+    }
+};
+
+// Setup chart options
+const setupChartOptions = () => {
+    const isHorizontal = chartType.value === 'horizontalBar';
+
+    chartOptions.value = {
+        indexAxis: isHorizontal ? 'y' : 'x',
+        plugins: {
+            legend: {
+                position: 'top',
+                align: 'center',
+                labels: {
+                    font: {
+                        family: 'Inter, sans-serif',
+                        size: 12,
+                        weight: 500
+                    },
+                    usePointStyle: true,
+                    pointStyle: 'circle',
+                    padding: 20
+                }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                titleColor: '#333',
+                titleFont: {
+                    family: 'Inter, sans-serif',
+                    size: 13,
+                    weight: 600
+                },
+                bodyColor: '#555',
+                bodyFont: {
+                    family: 'Inter, sans-serif',
+                    size: 12
+                },
+                borderColor: '#e1e1e1',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+                boxPadding: 4,
+                callbacks: {
+                    label: function (context) {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed[isHorizontal ? 'x' : 'y'];
+                        const total = context.chart.data.datasets.reduce((sum, dataset) => {
+                            return sum + (dataset.data[context.dataIndex] || 0);
+                        }, 0);
+                        const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                        return `${label}: ${value} (${percentage}%)`;
+                    }
+                }
+            }
+        },
+        responsive: true,
+        maintainAspectRatio: false,
+        barPercentage: 0.7,
+        categoryPercentage: 0.8,
+        animation: {
+            duration: 1000,
+            easing: 'easeOutQuart'
+        },
+        scales: {
+            x: {
+                stacked: isHorizontal,
+                grid: {
+                    display: !isHorizontal,
+                    drawBorder: false,
+                    color: 'rgba(0, 0, 0, 0.05)'
+                },
+                ticks: {
+                    font: {
+                        family: 'Inter, sans-serif',
+                        size: 11
+                    },
+                    color: '#666',
+                    padding: 8
+                },
+                border: {
+                    display: false
+                }
+            },
+            y: {
+                stacked: !isHorizontal,
+                grid: {
+                    display: isHorizontal,
+                    drawBorder: false,
+                    color: 'rgba(0, 0, 0, 0.05)'
+                },
+                ticks: {
+                    font: {
+                        family: 'Inter, sans-serif',
+                        size: 11
+                    },
+                    color: '#666',
+                    padding: 8
+                },
+                border: {
+                    display: false
+                }
+            }
+        }
+    };
+};
+
+// Handle view type change
+const onViewTypeChange = () => {
+    console.log('View type changed to:', viewType.value);
+    loadAttendanceData();
+};
+
+// Handle chart view change
+const onChartViewChange = () => {
+    console.log('Chart view changed to:', chartView.value);
+    loadAttendanceData();
+};
+
+// Function to update current date and time
+const updateDateTime = () => {
+    const now = new Date();
+    currentDateTime.value =
+        now.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) +
+        ' - ' +
+        now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+};
+
 onMounted(async () => {
     console.log('Admin-Graph component mounted');
+
+    // Initialize date/time and start real-time updates
+    updateDateTime();
+    timeInterval = setInterval(updateDateTime, 1000); // Update every second
+
     await loadGradeOptions();
-    await loadAttendanceData();
+});
+
+onUnmounted(() => {
+    if (timeInterval) {
+        clearInterval(timeInterval);
+    }
 });
 </script>
 
 <style scoped>
-.attendance-container {
+/* Modern chart container styling */
+.chart-container {
     width: 100%;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 30px;
+    height: 300px;
+    position: relative;
 }
 
-.header-section {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 24px 32px;
+/* Progress bar styling for attendance */
+:deep(.attendance-good .p-progressbar-value) {
+    background: linear-gradient(90deg, #10b981, #059669);
+}
+
+:deep(.attendance-warning .p-progressbar-value) {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+:deep(.attendance-poor .p-progressbar-value) {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+/* Modern table styling */
+:deep(.modern-table) {
     border-radius: 12px;
-    margin-bottom: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.stats-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin: 0 16px 24px 16px;
-}
-
-.stat-card {
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-.stat-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: white;
-}
-
-.stat-icon.blue {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.stat-icon.green {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-
-.stat-icon.yellow {
-    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-
-.stat-icon.red {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-}
-
-.stat-content h3 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0 0 4px 0;
-    color: #2c3e50;
-}
-
-.stat-content p {
-    font-size: 0.9rem;
-    color: #7f8c8d;
-    margin: 0;
-}
-
-.welcome-header {
-    color: white;
-}
-
-.welcome-title {
-    font-size: 1.8rem;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: white;
-}
-
-.welcome-date {
-    font-size: 0.95rem;
-    margin: 0;
-    opacity: 0.9;
-    color: white;
-}
-
-.search-section {
-    min-width: 300px;
-}
-
-.search-dropdown {
-    width: 100%;
-    min-width: 300px;
-}
-
-.search-dropdown :deep(.p-dropdown) {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border: none;
-    border-radius: 8px;
-    padding: 4px;
-}
-
-.search-dropdown :deep(.p-dropdown-label) {
-    padding: 8px 12px;
-    font-size: 0.95rem;
-    color: #495057;
-}
-
-.search-dropdown :deep(.p-dropdown:focus) {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-}
-
-.content-box {
-    background: white;
-    border-radius: 12px;
-    padding: 0;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    margin: 0 16px;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.chart-wrapper {
-    width: 100%;
-    margin: 0 auto;
-}
-
-.chart-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 24px 24px 0 24px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 20px;
-}
-
-.chart-info {
-    flex: 1;
-    min-width: 300px;
-}
-
-.chart-main-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0 0 8px 0;
-    letter-spacing: -0.025em;
-}
-
-.chart-description {
-    font-size: 1rem;
-    color: #64748b;
-    margin: 0;
-    line-height: 1.5;
-}
-
-.chart-filters {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    align-items: flex-end;
-}
-
-.filter-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.filter-label {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #374151;
-    white-space: nowrap;
-}
-
-.filter-select {
-    padding: 8px 12px;
-    border: 2px solid #e5e7eb;
-    border-radius: 8px;
-    background: white;
-    font-size: 0.9rem;
-    color: #374151;
-    min-width: 200px;
-    transition: border-color 0.2s ease;
-}
-
-.filter-select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.summary-stats {
-    display: flex;
-    gap: 20px;
-}
-
-.mini-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px 16px;
+:deep(.modern-table .p-datatable-header) {
     background: #f8fafc;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
+    border: none;
+    padding: 1rem;
 }
 
-.mini-stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-    line-height: 1;
-}
-
-.mini-stat-label {
-    font-size: 0.75rem;
-    color: #64748b;
-    margin-top: 4px;
-    text-align: center;
-}
-
-.chart-insights {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    padding: 24px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-}
-
-.insight-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 20px;
-    background: white;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.insight-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.insight-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    color: white;
-    flex-shrink: 0;
-}
-
-.insight-icon.green {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.insight-icon.orange {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-
-.insight-icon.blue {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-}
-
-.insight-content h4 {
-    font-size: 1.1rem;
+:deep(.modern-table .p-datatable-thead > tr > th) {
+    background: #f1f5f9;
+    border: none;
     font-weight: 600;
-    color: #1e293b;
-    margin: 0 0 8px 0;
+    color: #475569;
+    padding: 0.75rem 1rem;
 }
 
-.insight-content p {
-    font-size: 0.9rem;
-    color: #64748b;
-    margin: 0;
-    line-height: 1.5;
+:deep(.modern-table .p-datatable-tbody > tr) {
+    border: none;
+    transition: background-color 0.2s;
 }
 
-@media (max-width: 768px) {
-    .chart-controls {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .chart-filters {
-        align-items: stretch;
-    }
-    
-    .summary-stats {
-        justify-content: space-between;
-    }
-    
-    .filter-select {
-        min-width: auto;
-        width: 100%;
-    }
+:deep(.modern-table .p-datatable-tbody > tr:hover) {
+    background: #f8fafc;
 }
 
+:deep(.modern-table .p-datatable-tbody > tr > td) {
+    border: none;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* Student name hover effect */
+.student-name {
+    transition: color 0.2s;
+    font-weight: 500;
+}
+
+/* Loading and empty state styling */
 .loading-container {
     display: flex;
     flex-direction: column;
@@ -639,7 +660,7 @@ onMounted(async () => {
     justify-content: center;
     padding: 2rem;
     gap: 1rem;
-    min-height: 300px;
+    min-height: 200px;
 }
 
 .no-data-message {
@@ -650,110 +671,11 @@ onMounted(async () => {
     padding: 2rem;
     color: #6c757d;
     gap: 0.5rem;
-    min-height: 300px;
+    min-height: 200px;
 }
 
-.no-data-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-}
-
-.no-data-icon i {
+.no-data-message i {
     font-size: 2rem;
-    color: #1976d2;
-}
-
-.no-data-content h3 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1e293b;
-    margin: 0 0 1rem 0;
-}
-
-.no-data-content p {
-    font-size: 1rem;
-    color: #64748b;
-    margin: 0 0 0.5rem 0;
-    line-height: 1.6;
-}
-
-.no-data-suggestion {
-    font-size: 0.9rem;
-    color: #94a3b8;
-    font-style: italic;
-}
-
-.error-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 2rem;
-    min-height: 300px;
-    text-align: center;
-}
-
-.error-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-}
-
-.error-icon i {
-    font-size: 2rem;
-    color: #d32f2f;
-}
-
-.error-content h3 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1e293b;
-    margin: 0 0 1rem 0;
-}
-
-.error-content p {
-    font-size: 1rem;
-    color: #64748b;
-    margin: 0 0 1.5rem 0;
-    line-height: 1.6;
-}
-
-.retry-button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
-}
-
-.retry-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.title {
-    margin-bottom: 1.5rem;
-    color: #495057;
-    font-size: 1.75rem;
-    text-align: center;
-    font-weight: 600;
+    margin-bottom: 0.5rem;
 }
 </style>

@@ -67,10 +67,38 @@ export class AdminAttendanceService {
         return {
             labels,
             datasets: [
-                { label: 'Present', backgroundColor: '#10b981', data: presentData },
-                { label: 'Absent', backgroundColor: '#ef4444', data: absentData },
-                { label: 'Late', backgroundColor: '#f59e0b', data: lateData },
-                { label: 'Excused', backgroundColor: '#8b5cf6', data: excusedData }
+                { 
+                    label: 'Present', 
+                    backgroundColor: '#10b981', 
+                    borderColor: '#10b981',
+                    borderWidth: 1,
+                    data: presentData,
+                    stack: 'attendance'
+                },
+                { 
+                    label: 'Absent', 
+                    backgroundColor: '#ef4444', 
+                    borderColor: '#ef4444',
+                    borderWidth: 1,
+                    data: absentData,
+                    stack: 'attendance'
+                },
+                { 
+                    label: 'Late', 
+                    backgroundColor: '#f59e0b', 
+                    borderColor: '#f59e0b',
+                    borderWidth: 1,
+                    data: lateData,
+                    stack: 'attendance'
+                },
+                { 
+                    label: 'Excused', 
+                    backgroundColor: '#8b5cf6', 
+                    borderColor: '#8b5cf6',
+                    borderWidth: 1,
+                    data: excusedData,
+                    stack: 'attendance'
+                }
             ]
         };
     }
@@ -106,7 +134,7 @@ export class AdminAttendanceService {
         }
 
         return {
-            totalStudents: summary.total_records || 0,
+            totalStudents: summary.total_students || 0,
             averageAttendance: summary.overall_attendance_rate || 0,
             warningCount,
             criticalCount
@@ -114,27 +142,26 @@ export class AdminAttendanceService {
     }
 
     /**
-     * Get insights from analytics data
+     * Get insights and recommendations from analytics data
      * @param {Object} analyticsData - Data from getAttendanceAnalytics API
+     * @param {Object} currentGrade - Optional specific grade data for grade-specific insights
      */
-    static getInsights(analyticsData) {
+    static getInsights(analyticsData, currentGrade = null) {
         if (!analyticsData || !analyticsData.grades || analyticsData.grades.length === 0) {
             return {
-                bestPerformingGrade: 'N/A',
+                bestPerformingGrade: 'No data available',
                 highestAttendanceRate: 0,
-                worstPerformingGrade: 'N/A',
+                worstPerformingGrade: 'No data available',
                 lowestAttendanceRate: 0,
-                trendAnalysis: 'No data available'
+                trendAnalysis: 'Insufficient data for analysis'
             };
         }
 
-        const grades = analyticsData.grades;
-        
         // Find best and worst performing grades
-        let bestGrade = grades[0];
-        let worstGrade = grades[0];
-        
-        grades.forEach(grade => {
+        let bestGrade = analyticsData.grades[0];
+        let worstGrade = analyticsData.grades[0];
+
+        analyticsData.grades.forEach(grade => {
             if (grade.attendance_rate > bestGrade.attendance_rate) {
                 bestGrade = grade;
             }
@@ -143,18 +170,18 @@ export class AdminAttendanceService {
             }
         });
 
-        // Generate trend analysis
-        const overallRate = analyticsData.summary.overall_attendance_rate || 0;
+        // Generate trend analysis based on current grade or overall rate
+        const rateToAnalyze = currentGrade ? currentGrade.attendance_rate : (analyticsData.summary.overall_attendance_rate || 0);
         let trendAnalysis = '';
         
-        if (overallRate >= 90) {
-            trendAnalysis = 'Excellent attendance across all grades';
-        } else if (overallRate >= 80) {
-            trendAnalysis = 'Good attendance with room for improvement';
-        } else if (overallRate >= 70) {
-            trendAnalysis = 'Moderate attendance - intervention needed';
+        if (rateToAnalyze >= 90) {
+            trendAnalysis = currentGrade ? 'Excellent attendance for this grade' : 'Excellent attendance across all grades';
+        } else if (rateToAnalyze >= 80) {
+            trendAnalysis = currentGrade ? 'Good attendance with room for improvement' : 'Good attendance with room for improvement';
+        } else if (rateToAnalyze >= 70) {
+            trendAnalysis = currentGrade ? 'Moderate attendance - monitor closely' : 'Moderate attendance - intervention needed';
         } else {
-            trendAnalysis = 'Poor attendance - immediate action required';
+            trendAnalysis = currentGrade ? 'Poor attendance - immediate action required' : 'Poor attendance - immediate action required';
         }
 
         return {
