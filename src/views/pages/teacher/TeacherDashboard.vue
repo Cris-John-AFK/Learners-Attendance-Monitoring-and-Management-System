@@ -742,30 +742,36 @@ async function prepareChartData() {
             datasets: [
                 {
                     label: 'Present',
-                    backgroundColor: 'rgba(76, 175, 80, 0.8)',
-                    borderColor: '#4CAF50',
-                    borderWidth: 1,
-                    borderRadius: 4,
+                    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+                    borderColor: '#10b981',
+                    borderWidth: 0,
+                    borderRadius: 8,
+                    borderSkipped: false,
                     data: attendanceData.present,
-                    hoverBackgroundColor: 'rgba(76, 175, 80, 1)'
+                    hoverBackgroundColor: 'rgba(16, 185, 129, 1)',
+                    barThickness: 'flex'
                 },
                 {
                     label: 'Absent',
-                    backgroundColor: 'rgba(244, 67, 54, 0.8)',
-                    borderColor: '#F44336',
-                    borderWidth: 1,
-                    borderRadius: 4,
+                    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                    borderColor: '#ef4444',
+                    borderWidth: 0,
+                    borderRadius: 8,
+                    borderSkipped: false,
                     data: attendanceData.absent,
-                    hoverBackgroundColor: 'rgba(244, 67, 54, 1)'
+                    hoverBackgroundColor: 'rgba(239, 68, 68, 1)',
+                    barThickness: 'flex'
                 },
                 {
                     label: 'Late',
-                    backgroundColor: 'rgba(255, 193, 7, 0.8)',
-                    borderColor: '#FFC107',
-                    borderWidth: 1,
-                    borderRadius: 4,
+                    backgroundColor: 'rgba(245, 158, 11, 0.9)',
+                    borderColor: '#f59e0b',
+                    borderWidth: 0,
+                    borderRadius: 8,
+                    borderSkipped: false,
                     data: attendanceData.late,
-                    hoverBackgroundColor: 'rgba(255, 193, 7, 1)'
+                    hoverBackgroundColor: 'rgba(245, 158, 11, 1)',
+                    barThickness: 'flex'
                 }
             ]
         };
@@ -811,8 +817,8 @@ async function prepareChartData() {
             },
             responsive: true,
             maintainAspectRatio: false,
-            barPercentage: 0.8,
-            categoryPercentage: 0.9,
+            barPercentage: 1.0,
+            categoryPercentage: 1.0,
             animation: {
                 duration: 1000,
                 easing: 'easeOutQuart'
@@ -1060,19 +1066,33 @@ function ensureStudentAttendanceService() {
                     <div class="mr-4 bg-green-100 p-3 rounded-lg">
                         <i class="pi pi-check-circle text-green-600 text-xl"></i>
                     </div>
-                    <div>
-                        <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
-                        <div class="flex items-end">
-                            <span class="text-2xl font-bold mr-1">{{ attendanceSummary?.averageAttendance || 0 }}%</span>
-                            <ProgressBar
-                                :value="attendanceSummary?.averageAttendance || 0"
-                                class="h-1.5 w-16 mb-1.5"
-                                :class="{
-                                    'attendance-good': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                    'attendance-warning': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
-                                    'attendance-poor': (attendanceSummary?.averageAttendance || 0) < 70
-                                }"
-                            />
+                    <div class="flex-1">
+                        <div class="text-sm text-gray-500 mb-2 font-medium">Average Attendance</div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</span>
+                            <div class="flex items-center">
+                                <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div
+                                        class="h-2 rounded-full transition-all duration-500"
+                                        :class="{
+                                            'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 85,
+                                            'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
+                                            'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 70
+                                        }"
+                                        :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
+                                    ></div>
+                                </div>
+                                <span
+                                    class="text-xs px-2 py-1 rounded-full font-medium"
+                                    :class="{
+                                        'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 85,
+                                        'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
+                                        'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 70
+                                    }"
+                                >
+                                    {{ (attendanceSummary?.averageAttendance || 0) >= 85 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 70 ? 'Fair' : 'Low' }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1130,7 +1150,7 @@ function ensureStudentAttendanceService() {
                         </div>
 
                         <div v-else class="chart-container">
-                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 300px" />
+                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 300px" class="stylish-chart" />
                         </div>
 
                         <!-- Fallback for chart rendering issues -->

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div class="card p-8 shadow-xl rounded-xl bg-white border border-gray-100">
         <!-- Modern Gradient Header -->
         <div class="modern-header-container mb-8">
@@ -81,7 +81,7 @@
                     <!-- Action Buttons -->
                     <div class="teacher-card-actions">
                         <div class="action-buttons-row">
-                            <button class="action-btn details-btn" @click="viewTeacherDetails(teacher)" title="View Details">
+                            <button class="action-btn details-btn" @click="viewTeacher(teacher)" title="View Details">
                                 <i class="pi pi-eye"></i>
                                 <span>Details</span>
                             </button>
@@ -173,67 +173,92 @@
         </Dialog>
 
         <!-- Teacher Details Dialog -->
-        <Dialog v-model:visible="teacherDetailsDialog" modal header="Teacher Details" :style="{ width: '550px' }" class="teacher-details-dialog">
-            <div class="p-fluid" v-if="selectedTeacher">
-                <div class="teacher-details-header">
-                    <div class="teacher-avatar">
-                        <div class="teacher-initials">{{ getInitials(selectedTeacher) }}</div>
+        <Dialog v-model:visible="teacherDetailsDialog" modal :style="{ width: '600px', maxHeight: '80vh', padding: '0' }" class="teacher-details-dialog" :showHeader="false" :contentStyle="{ padding: '0', margin: '0' }">
+            <div class="teacher-details-content" v-if="selectedTeacher">
+                <!-- Custom Header -->
+                <div class="dialog-header">
+                    <div class="header-content">
+                        <div class="teacher-avatar">
+                            <span class="avatar-text">{{ getInitials(selectedTeacher) }}</span>
+                        </div>
+                        <div class="teacher-basic-info">
+                            <h2 class="teacher-name">{{ selectedTeacher?.first_name }} {{ selectedTeacher?.last_name }}</h2>
+                            <p class="teacher-email">{{ selectedTeacher?.email || 'No email provided' }}</p>
+                        </div>
                     </div>
-                    <div class="teacher-details-name">
-                        <div class="teacher-info-header">
-                            <div class="name-status">
-                                <h1>{{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h1>
-                            </div>
-                            <button @click="forceRefreshTeacher(selectedTeacher.id)" class="refresh-button">
-                                <i class="pi pi-refresh"></i>
-                                Refresh Data
-                            </button>
+                    <div class="header-actions">
+                        <button @click="forceRefreshTeacher(selectedTeacher?.id)" class="refresh-btn" title="Refresh Data">
+                            <i class="pi pi-refresh"></i>
+                        </button>
+                        <button @click="teacherDetailsDialog = false" class="close-btn" title="Close">
+                            <i class="pi pi-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Personal Information -->
+                <div class="info-card">
+                    <h3 class="section-title">
+                        <i class="pi pi-user section-icon"></i>
+                        Personal Information
+                    </h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Phone</span>
+                            <span class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Gender</span>
+                            <span class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</span>
+                        </div>
+                        <div class="info-item full-width">
+                            <span class="info-label">Address</span>
+                            <span class="info-value">{{ selectedTeacher.address || 'Not provided' }}</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="teacher-details-info">
-                    <div class="info-section">
-                        <div class="info-row">
-                            <div class="info-label">Email</div>
-                            <div class="info-value">{{ selectedTeacher.email || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Phone</div>
-                            <div class="info-value">{{ selectedTeacher.phone_number || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Address</div>
-                            <div class="info-value">{{ selectedTeacher.address || 'Not provided' }}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Gender</div>
-                            <div class="info-value">{{ selectedTeacher.gender || 'Not provided' }}</div>
-                        </div>
-                    </div>
-
-                    <!-- Homeroom Section -->
-                    <div class="homeroom-section">
-                        <h3>Homeroom</h3>
-                        <div v-if="selectedTeacher.primary_assignment" class="assignment-info">
-                            <div class="section-info">
-                                <div class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'N/A' }}</div>
-                                <div class="grade-level">{{ selectedTeacher.primary_assignment.section?.grade?.name || 'N/A' }}</div>
+                <!-- Homeroom Assignment -->
+                <div class="info-card">
+                    <h3 class="section-title">
+                        <i class="pi pi-home section-icon"></i>
+                        Homeroom Assignment
+                    </h3>
+                    <div v-if="selectedTeacher.primary_assignment" class="homeroom-card">
+                        <div class="homeroom-info">
+                            <div class="section-badge">
+                                <span class="section-name">{{ selectedTeacher.primary_assignment.section?.name || 'N/A' }}</span>
+                                <span class="grade-badge">{{ selectedTeacher.primary_assignment.section?.grade?.name || 'Grade 3' }}</span>
                             </div>
                         </div>
-                        <div v-else class="no-assignment">No homeroom assigned</div>
                     </div>
+                    <div v-else class="empty-state">
+                        <i class="pi pi-exclamation-triangle empty-icon"></i>
+                        <span class="empty-text">No homeroom assigned</span>
+                    </div>
+                </div>
 
-                    <!-- Teaching Subjects Section -->
-                    <div class="teaching-subjects-section">
-                        <h3>Teaching Subjects</h3>
-                        <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-list">
-                            <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-item">
-                                <div class="subject-name">{{ assignment.subject?.name }}</div>
-                                <div class="section-name">{{ assignment.section?.name }}</div>
+                <!-- Teaching Subjects -->
+                <div class="info-card">
+                    <h3 class="section-title">
+                        <i class="pi pi-book section-icon"></i>
+                        Teaching Subjects
+                    </h3>
+                    <div v-if="selectedTeacher.subject_assignments && selectedTeacher.subject_assignments.length > 0" class="subjects-grid">
+                        <div v-for="assignment in selectedTeacher.subject_assignments" :key="assignment.id" class="subject-card">
+                            <div class="subject-header">
+                                <i class="pi pi-book subject-icon"></i>
+                                <span class="subject-name">{{ assignment.subject?.name || 'Unknown Subject' }}</span>
+                            </div>
+                            <div class="subject-section">
+                                <span class="section-label">Section:</span>
+                                <span class="section-value">{{ assignment.section?.name || 'N/A' }}</span>
                             </div>
                         </div>
-                        <div v-else class="no-assignment">No subjects assigned</div>
+                    </div>
+                    <div v-else class="empty-state">
+                        <i class="pi pi-exclamation-triangle empty-icon"></i>
+                        <span class="empty-text">No subjects assigned</span>
                     </div>
                 </div>
             </div>
@@ -2597,7 +2622,7 @@ const archiveTeacher = async (teacher) => {
 }
 
 .teacher-card-header {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     padding: 1.5rem;
     border-bottom: 1px solid #e5e7eb;
 }
@@ -2611,7 +2636,7 @@ const archiveTeacher = async (teacher) => {
 .teacher-name {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #1f2937;
+    color: white;
     margin: 0;
 }
 
@@ -2812,6 +2837,354 @@ const archiveTeacher = async (teacher) => {
         flex-direction: column;
         gap: 0.5rem;
     }
+}
+
+/* Teacher Details Dialog Styles */
+.teacher-details-dialog .p-dialog-header {
+    padding: 0 !important;
+    border-bottom: none !important;
+    background: transparent !important;
+}
+
+.teacher-details-dialog .p-dialog-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+}
+
+.teacher-details-dialog .p-dialog-mask .p-dialog {
+    padding: 0 !important;
+}
+
+.teacher-details-dialog .p-dialog-content > * {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.teacher-details-dialog .p-dialog-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.teacher-details-dialog .p-dialog-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.teacher-details-dialog .p-dialog-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.teacher-details-dialog .p-dialog-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+.teacher-details-dialog .p-dialog-content {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+.teacher-details-dialog .p-dialog {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.teacher-details-dialog .p-dialog .p-dialog-content {
+    border-radius: 6px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.teacher-details-dialog {
+    padding: 1px !important;
+}
+
+.teacher-details-dialog .p-component {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.dialog-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 35px !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    border-radius: 6px 6px 0 0 !important;
+    position: relative !important;
+    margin: -1.5rem -1.5rem 1.5rem -1.5rem !important;
+    width: calc(100% + 3rem) !important;
+    box-sizing: border-box !important;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.teacher-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.avatar-text {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+}
+
+.teacher-basic-info {
+    flex: 1;
+}
+
+.teacher-name {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: white;
+}
+
+.teacher-email {
+    margin: 0.25rem 0 0 0;
+    opacity: 0.9;
+    font-size: 0.875rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.refresh-btn,
+.close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 0.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.refresh-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(180deg);
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.teacher-details-content {
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    max-height: calc(80vh - 60px) !important;
+    overflow-y: auto !important;
+    position: relative !important;
+}
+
+.teacher-details-content::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+.teacher-details-content::-webkit-scrollbar-track {
+    background: #f8f9fa !important;
+    border-radius: 3px !important;
+}
+
+.teacher-details-content::-webkit-scrollbar-thumb {
+    background: #dee2e6 !important;
+    border-radius: 3px !important;
+}
+
+.teacher-details-content::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd !important;
+}
+
+.teacher-details-content {
+    scrollbar-width: thin !important;
+    scrollbar-color: #dee2e6 #f8f9fa !important;
+}
+
+.teacher-details-content .info-card:first-of-type {
+    margin-top: 1.5rem !important;
+}
+
+.teacher-details-content .info-card {
+    margin: 0 1.5rem 1.5rem 1.5rem !important;
+}
+
+.info-card {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.section-icon {
+    color: #667eea;
+    font-size: 1.25rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.info-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.info-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.info-value {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.homeroom-card {
+    background: white;
+    border: 2px solid #10b981;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.section-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #065f46;
+}
+
+.grade-badge {
+    background: #10b981;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.subjects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.subject-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.2s ease;
+}
+
+.subject-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.subject-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.subject-icon {
+    color: #667eea;
+    font-size: 1rem;
+}
+
+.subject-name {
+    font-weight: 600;
+    color: #374151;
+    font-size: 1rem;
+}
+
+.subject-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.section-value {
+    font-size: 0.875rem;
+    color: #374151;
+    font-weight: 600;
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 2rem;
+    color: #d1d5db;
+}
+
+.empty-text {
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-weight: 500;
 }
 
 @media (max-width: 480px) {
