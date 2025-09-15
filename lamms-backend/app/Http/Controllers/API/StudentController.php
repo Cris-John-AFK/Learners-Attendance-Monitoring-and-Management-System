@@ -254,6 +254,13 @@ class StudentController extends Controller
 
         $data = $request->all();
 
+        // Generate studentId and student_id if not provided
+        if (!$request->has('studentId') || !$request->studentId) {
+            $nextId = Student::count() + 1;
+            $data['studentId'] = 'STU' . str_pad($nextId, 8, '0', STR_PAD_LEFT);
+            $data['student_id'] = $nextId;
+        }
+
         // Set default placeholder photo if no photo provided
         if (!$request->has('photo') || !$request->photo) {
             $data['photo'] = '/demo/images/student-photo.jpg';

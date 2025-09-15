@@ -42,7 +42,7 @@ const logout = () => {
                 <!-- Notification Button with Badge -->
                 <div class="relative">
                     <button type="button" class="layout-topbar-action notification-button" @click="isNotificationOpen = !isNotificationOpen">
-                        <i class="pi pi-bell"></i>
+                        <i class="pi pi-bell" style="font-size: 1.2rem; color: #fbbf24; text-shadow: 0 2px 4px rgba(251, 191, 36, 0.3);"></i>
                         <span>Notifications</span>
                         <span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
                     </button>
