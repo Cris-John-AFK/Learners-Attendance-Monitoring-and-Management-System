@@ -38,6 +38,28 @@
                     <p class="statistics-subtitle">Section counts and student distribution by grade level</p>
                 </div>
 
+                <!-- Month Navigation -->
+                <div class="month-navigation-header">
+                    <Button 
+                        icon="pi pi-chevron-left" 
+                        class="p-button-text p-button-rounded month-nav-btn" 
+                        @click="previousOverviewMonth()" 
+                        :disabled="!canGoPreviousOverviewMonth()"
+                        v-tooltip.top="'Previous Month'"
+                    />
+                    <div class="current-month-display">
+                        <h3 class="month-title">{{ getCurrentOverviewMonthDisplay() }}</h3>
+                        <p class="month-subtitle">{{ getActiveSectionsCount() }} sections active</p>
+                    </div>
+                    <Button 
+                        icon="pi pi-chevron-right" 
+                        class="p-button-text p-button-rounded month-nav-btn" 
+                        @click="nextOverviewMonth()" 
+                        :disabled="!canGoNextOverviewMonth()"
+                        v-tooltip.top="'Next Month'"
+                    />
+                </div>
+
                 <div class="grade-stats-grid">
                     <div v-for="gradeStats in gradeStatistics" :key="gradeStats.grade" class="grade-stat-card">
                         <div class="grade-header">
@@ -898,13 +920,19 @@ const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
 const selectedStatus = ref(null);
 
-// Month navigation
-const currentMonth = ref(8); // September = 8 (0-based index)
+// Current month and year for navigation
+const currentMonth = ref(8); // September (0-indexed)
 const currentYear = ref(2025);
+
+// Overview month navigation (separate from section details)
+const currentOverviewMonth = ref(8); // September (0-indexed)
+const currentOverviewYear = ref(2025);
+
+// Available months for navigation
 const availableMonths = ref([
-    { month: 7, year: 2025, name: 'August 2025' },
-    { month: 8, year: 2025, name: 'September 2025' },
-    { month: 9, year: 2025, name: 'October 2025' }
+    { month: 7, year: 2025, display: 'August 2025' },
+    { month: 8, year: 2025, display: 'September 2025' },
+    { month: 9, year: 2025, display: 'October 2025' }
 ]);
 
 // Historical section data with different teachers per month
@@ -2516,56 +2544,133 @@ const getGradeSections = (grade) => {
     }
 };
 
-// Computed property for grade statistics
+// Month-specific section data
+const monthlyGradeData = ref({
+    'August 2025': {
+        'Kindergarten': {
+            sections: [
+                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 22, presentCount: 20, absentCount: 2, attendanceRate: 91, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 25, presentCount: 23, absentCount: 2, attendanceRate: 92, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 21, presentCount: 18, absentCount: 3, attendanceRate: 86, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 1': {
+            sections: [
+                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 28, presentCount: 26, absentCount: 2, attendanceRate: 93, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 27, presentCount: 23, absentCount: 4, attendanceRate: 85, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 2': {
+            sections: [
+                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 25, presentCount: 24, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 27, presentCount: 26, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 26, presentCount: 23, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        }
+    },
+    'September 2025': {
+        'Kindergarten': {
+            sections: kinderSections.value
+        },
+        'Grade 1': {
+            sections: grade1Sections.value
+        },
+        'Grade 2': {
+            sections: grade2Sections.value
+        },
+        'Grade 3': {
+            sections: grade3Sections.value
+        },
+        'Grade 4': {
+            sections: grade4Sections.value
+        },
+        'Grade 5': {
+            sections: grade5Sections.value
+        },
+        'Grade 6': {
+            sections: grade6Sections.value
+        }
+    },
+    'October 2025': {
+        'Kindergarten': {
+            sections: [
+                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 26, presentCount: 25, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 29, presentCount: 28, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 25, presentCount: 22, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' },
+                { id: 4, name: 'Kinder D', teacher: 'Ms. Anna Rodriguez', studentCount: 27, presentCount: 20, absentCount: 7, attendanceRate: 74, status: 'NEEDS ATTENTION', statusClass: 'status-warning' }
+            ]
+        },
+        'Grade 1': {
+            sections: [
+                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 31, presentCount: 29, absentCount: 2, attendanceRate: 94, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 30, presentCount: 26, absentCount: 4, attendanceRate: 87, status: 'GOOD', statusClass: 'status-good' },
+                { id: 3, name: 'Grade 1-C', teacher: 'Ms. Rebecca Davis', studentCount: 29, presentCount: 24, absentCount: 5, attendanceRate: 83, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 2': {
+            sections: [
+                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 28, presentCount: 27, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 30, presentCount: 29, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 29, presentCount: 26, absentCount: 3, attendanceRate: 90, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 4, name: 'Grade 2-D', teacher: 'Ms. Elena Reyes', studentCount: 31, presentCount: 30, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' }
+            ]
+        }
+    }
+});
+
+// Computed property for grade statistics based on selected month
 const gradeStatistics = computed(() => {
+    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
+    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    
     const grades = [
         {
             grade: 'Kindergarten',
             level: 'Pre-Elementary',
             emoji: '🎨',
-            sections: kinderSections.value,
+            sections: monthData['Kindergarten']?.sections || [],
             color: '#FF6B6B'
         },
         {
             grade: 'Grade 1',
             level: 'Elementary',
             emoji: '📚',
-            sections: grade1Sections.value,
+            sections: monthData['Grade 1']?.sections || [],
             color: '#4ECDC4'
         },
         {
             grade: 'Grade 2',
             level: 'Elementary',
             emoji: '✏️',
-            sections: grade2Sections.value,
+            sections: monthData['Grade 2']?.sections || [],
             color: '#45B7D1'
         },
         {
             grade: 'Grade 3',
             level: 'Elementary',
             emoji: '📖',
-            sections: grade3Sections.value,
+            sections: monthData['Grade 3']?.sections || [],
             color: '#96CEB4'
         },
         {
             grade: 'Grade 4',
             level: 'Elementary',
             emoji: '🔬',
-            sections: grade4Sections.value,
+            sections: monthData['Grade 4']?.sections || [],
             color: '#FFEAA7'
         },
         {
             grade: 'Grade 5',
             level: 'Elementary',
             emoji: '🌟',
-            sections: grade5Sections.value,
+            sections: monthData['Grade 5']?.sections || [],
             color: '#DDA0DD'
         },
         {
             grade: 'Grade 6',
             level: 'Elementary',
             emoji: '🎓',
-            sections: grade6Sections.value,
+            sections: monthData['Grade 6']?.sections || [],
             color: '#20B2AA'
         }
     ];
@@ -2585,7 +2690,7 @@ const gradeStatistics = computed(() => {
             teacherCount,
             attendanceRate
         };
-    });
+    }).filter(grade => grade.sectionCount > 0); // Only show grades with sections
 });
 
 const getAttendanceBarClass = (rate) => {
@@ -3088,6 +3193,54 @@ const nextMonth = () => {
         currentMonth.value = nextMonth.month;
         currentYear.value = nextMonth.year;
     }
+};
+
+// Overview month navigation functions
+const getCurrentOverviewMonthDisplay = () => {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[currentOverviewMonth.value]} ${currentOverviewYear.value}`;
+};
+
+const canGoPreviousOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    return currentIndex > 0;
+};
+
+const canGoNextOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    return currentIndex < availableMonths.value.length - 1;
+};
+
+const previousOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    if (currentIndex > 0) {
+        const prevMonth = availableMonths.value[currentIndex - 1];
+        currentOverviewMonth.value = prevMonth.month;
+        currentOverviewYear.value = prevMonth.year;
+    }
+};
+
+const nextOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    if (currentIndex < availableMonths.value.length - 1) {
+        const nextMonth = availableMonths.value[currentIndex + 1];
+        currentOverviewMonth.value = nextMonth.month;
+        currentOverviewYear.value = nextMonth.year;
+    }
+};
+
+const getActiveSectionsCount = () => {
+    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
+    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    
+    let totalSections = 0;
+    Object.values(monthData).forEach(gradeData => {
+        if (gradeData.sections) {
+            totalSections += gradeData.sections.length;
+        }
+    });
+    
+    return totalSections;
 };
 
 const downloadSF2Report = async () => {
@@ -3639,6 +3792,70 @@ const reportTypes = ref([
 .status-transferred-in {
     background-color: #4caf50;
     color: white;
+}
+
+/* Grade Level Statistics */
+.grade-statistics-section {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Month Navigation Header */
+.month-navigation-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.month-nav-btn {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+}
+
+.month-nav-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: scale(1.1);
+}
+
+.month-nav-btn:disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+}
+
+.current-month-display {
+    text-align: center;
+    color: white;
+    min-width: 250px;
+}
+
+.month-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.month-subtitle {
+    font-size: 1rem;
+    margin: 0.5rem 0 0 0;
+    opacity: 0.9;
+    font-weight: 500;
 }
 
 /* Filter section */
