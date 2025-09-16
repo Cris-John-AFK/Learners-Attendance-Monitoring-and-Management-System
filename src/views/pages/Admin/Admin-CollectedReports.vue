@@ -3257,107 +3257,70 @@ const downloadSF2Report = async () => {
     try {
         // Get current section data
         const section = selectedSectionDetails.value;
-        const sectionName = section.name;
-        const teacher = getCurrentTeacher();
+        const sectionId = section.id;
         const monthDisplay = getCurrentMonthDisplay();
-        const students = getSectionStudents(sectionName);
-        const maleStudents = getMaleStudents(sectionName);
-        const femaleStudents = getFemaleStudents(sectionName);
+        
+        // Convert month display to YYYY-MM format for API
+        const monthParts = monthDisplay.split(' ');
+        const monthName = monthParts[0];
+        const year = monthParts[1];
+        const monthNumber = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
+        const monthParam = `${year}-${monthNumber.toString().padStart(2, '0')}`;
 
-        // Load the Excel template
-        const templatePath = '/templates/School Form Attendance Report of Learners.xlsx';
-        const response = await fetch(templatePath);
+        toast.add({
+            severity: 'info',
+            summary: 'Generating Report',
+            detail: 'Please wait while we generate your SF2 report...',
+            life: 3000
+        });
+
+        // Call Laravel backend API to generate and download SF2 report
+        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/download/${sectionId}/${monthParam}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Type': 'application/json',
+            }
+        });
 
         if (!response.ok) {
-            throw new Error('Template file not found');
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        const wb = XLSX.read(arrayBuffer, { type: 'array' });
+        // Get the filename from response headers or create default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `SF2_Daily_Attendance_${section.name}_${monthDisplay.replace(/\s+/g, '_')}.xlsx`;
+        
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (filenameMatch) {
+                filename = filenameMatch[1];
+            }
+        }
 
-        // Get the first worksheet from the template
-        const wsName = wb.SheetNames[0];
-        const ws = wb.Sheets[wsName];
-
-        // Populate template with actual data
-        // Update school information
-        if (ws['B3']) ws['B3'].v = 'Kagawasan Elementary School';
-        if (ws['B4']) ws['B4'].v = sectionName;
-        if (ws['B5']) ws['B5'].v = teacher;
-        if (ws['B6']) ws['B6'].v = monthDisplay;
-
-        // Summary data (from the modal)
-        const summaryData = {
-            maleEnrollment: getMaleStudents(sectionName).length,
-            femaleEnrollment: getFemaleStudents(sectionName).length,
-            totalEnrollment: students.length,
-            maleDroppedOut: getMaleDroppedOutCount(sectionName),
-            femaleDroppedOut: getFemaleDroppedOutCount(sectionName),
-            maleTransferredOut: getMaleTransferredOutCount(sectionName),
-            femaleTransferredOut: getFemaleTransferredOutCount(sectionName),
-            maleTransferredIn: getMaleTransferredInCount(sectionName),
-            femaleTransferredIn: getFemaleTransferredInCount(sectionName),
-            maleAttendanceRate: getMaleAttendanceRate(sectionName),
-            femaleAttendanceRate: getFemaleAttendanceRate(sectionName),
-            overallAttendanceRate: getOverallAttendanceRate(sectionName)
-        };
-
-        // Populate summary section (adjust cell references based on your template)
-        // Male column (M)
-        if (ws['M10']) ws['M10'].v = summaryData.maleEnrollment;
-        if (ws['M11']) ws['M11'].v = 0; // Late enrollment during month
-        if (ws['M12']) ws['M12'].v = summaryData.maleEnrollment;
-        if (ws['M13']) ws['M13'].v = '100%'; // Percentage of enrollment
-        if (ws['M14']) ws['M14'].v = `${summaryData.maleAttendanceRate}%`;
-        if (ws['M15']) ws['M15'].v = `${summaryData.maleAttendanceRate}%`;
-        if (ws['M16']) ws['M16'].v = 0; // Absent for 5 consecutive days
-        if (ws['M17']) ws['M17'].v = summaryData.maleDroppedOut;
-        if (ws['M18']) ws['M18'].v = summaryData.maleTransferredOut;
-        if (ws['M19']) ws['M19'].v = summaryData.maleTransferredIn;
-
-        // Female column (F)
-        if (ws['F10']) ws['F10'].v = summaryData.femaleEnrollment;
-        if (ws['F11']) ws['F11'].v = 0; // Late enrollment during month
-        if (ws['F12']) ws['F12'].v = summaryData.femaleEnrollment;
-        if (ws['F13']) ws['F13'].v = '100%'; // Percentage of enrollment
-        if (ws['F14']) ws['F14'].v = `${summaryData.femaleAttendanceRate}%`;
-        if (ws['F15']) ws['F15'].v = `${summaryData.femaleAttendanceRate}%`;
-        if (ws['F16']) ws['F16'].v = 0; // Absent for 5 consecutive days
-        if (ws['F17']) ws['F17'].v = summaryData.femaleDroppedOut;
-        if (ws['F18']) ws['F18'].v = summaryData.femaleTransferredOut;
-        if (ws['F19']) ws['F19'].v = summaryData.femaleTransferredIn;
-
-        // Total column (TOTAL)
-        if (ws['H10']) ws['H10'].v = summaryData.totalEnrollment;
-        if (ws['H11']) ws['H11'].v = 0; // Late enrollment during month
-        if (ws['H12']) ws['H12'].v = summaryData.totalEnrollment;
-        if (ws['H13']) ws['H13'].v = '100%'; // Percentage of enrollment
-        if (ws['H14']) ws['H14'].v = `${summaryData.overallAttendanceRate}%`;
-        if (ws['H15']) ws['H15'].v = `${summaryData.overallAttendanceRate}%`;
-        if (ws['H16']) ws['H16'].v = 0; // Absent for 5 consecutive days
-        if (ws['H17']) ws['H17'].v = summaryData.maleDroppedOut + summaryData.femaleDroppedOut;
-        if (ws['H18']) ws['H18'].v = summaryData.maleTransferredOut + summaryData.femaleTransferredOut;
-        if (ws['H19']) ws['H19'].v = summaryData.maleTransferredIn + summaryData.femaleTransferredIn;
-
-        // Generate filename
-        const currentDate = new Date().toISOString().split('T')[0];
-        const filename = `SF-2-Daily-Attendance_${sectionName.replace(/\s+/g, '_')}_${monthDisplay.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
-
-        // Save the file
-        XLSX.writeFile(wb, filename);
+        // Convert response to blob and trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
 
         toast.add({
             severity: 'success',
-            summary: 'Excel Download Complete',
-            detail: `SF2 Excel report for ${sectionName} has been downloaded.`,
+            summary: 'SF2 Report Downloaded',
+            detail: `SF2 Excel report for ${section.name} (${monthDisplay}) has been downloaded successfully.`,
             life: 5000
         });
     } catch (error) {
-        console.error('Error generating SF2 Excel report:', error);
+        console.error('Error downloading SF2 report:', error);
         toast.add({
             severity: 'error',
             summary: 'Download Failed',
-            detail: 'Failed to generate SF2 Excel report. Please try again.',
+            detail: 'Failed to download SF2 report from server. Please try again.',
             life: 5000
         });
     }

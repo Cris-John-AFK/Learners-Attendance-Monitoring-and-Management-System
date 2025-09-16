@@ -5,6 +5,7 @@ use App\Http\Controllers\API\TeacherController;
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\SubjectController;
+use App\Http\Controllers\API\SF2ReportController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -35,3 +36,12 @@ Route::get('grades/{grade}/sections', [GradeController::class, 'sections']);
 // Subject routes
 Route::apiResource('subjects', SubjectController::class);
 Route::get('subjects/grade/{grade}', [SubjectController::class, 'byGrade']);
+
+// Test route
+Route::get('test-sf2', function() {
+    return response()->json(['message' => 'SF2 routes working']);
+});
+
+// SF2 Report routes
+Route::get('admin/reports/sf2/download/{sectionId}', [SF2ReportController::class, 'download'])->name('sf2.download');
+Route::get('admin/reports/sf2/download/{sectionId}/{month}', [SF2ReportController::class, 'downloadByMonth'])->name('sf2.download.month');

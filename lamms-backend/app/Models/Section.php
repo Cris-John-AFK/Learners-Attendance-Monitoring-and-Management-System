@@ -58,6 +58,12 @@ class Section extends Model
         return $this->belongsTo(Teacher::class, 'homeroom_teacher_id');
     }
 
+    // Alias for easier access in SF2 reports
+    public function teacher()
+    {
+        return $this->belongsTo(Teacher::class, 'homeroom_teacher_id');
+    }
+
     public function teachers()
     {
         return $this->belongsToMany(Teacher::class, 'teacher_section_subject')
