@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\TeacherController;
+use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\SubjectController;
@@ -37,6 +38,7 @@ Route::get('grades/{grade}/sections', [GradeController::class, 'sections']);
 Route::apiResource('subjects', SubjectController::class);
 Route::get('subjects/grade/{grade}', [SubjectController::class, 'byGrade']);
 
+<<<<<<< HEAD
 // Test route
 Route::get('test-sf2', function() {
     return response()->json(['message' => 'SF2 routes working']);
@@ -45,3 +47,11 @@ Route::get('test-sf2', function() {
 // SF2 Report routes
 Route::get('admin/reports/sf2/download/{sectionId}', [SF2ReportController::class, 'download'])->name('sf2.download');
 Route::get('admin/reports/sf2/download/{sectionId}/{month}', [SF2ReportController::class, 'downloadByMonth'])->name('sf2.download.month');
+=======
+// Teacher Authentication routes
+Route::prefix('teacher')->group(function () {
+    Route::post('login', [TeacherAuthController::class, 'login']);
+    Route::post('logout', [TeacherAuthController::class, 'logout']);
+    Route::get('profile', [TeacherAuthController::class, 'profile']);
+});
+>>>>>>> e80ba0155fba6d9e16788e15b9438db18ce31d78

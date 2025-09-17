@@ -26,6 +26,7 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import CustomDialog from './components/CustomDialog.vue';
 import router from './router';
+import TeacherAuthService from './services/TeacherAuthService';
 
 const app = createApp(App);
 
@@ -60,5 +61,8 @@ app.component('InputText', InputText);
 app.component('Textarea', Textarea);
 app.component('InputNumber', InputNumber);
 app.component('Dropdown', Dropdown);
+
+// Initialize teacher authentication on app start
+TeacherAuthService.initializeAuth();
 
 app.mount('#app');

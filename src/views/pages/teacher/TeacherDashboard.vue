@@ -19,6 +19,9 @@ import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
+// Import teacher authentication service
+import TeacherAuthService from '@/services/TeacherAuthService';
+
 // Dashboard components
 const currentTeacher = ref(null);
 const teacherSubjects = ref([]);
@@ -146,100 +149,151 @@ async function refreshDashboardData() {
 // Set up auto-refresh every 30 seconds to catch new enrollments
 let refreshInterval;
 
+// Initialize authentication and load teacher data
+const initializeTeacherData = async () => {
+    try {
+        // Check if teacher is authenticated
+        if (!TeacherAuthService.isAuthenticated()) {
+            // Redirect to login if not authenticated
+            window.location.href = '/teacher-login';
+            return;
+        }
+
+        // Get authenticated teacher data
+        const teacherData = TeacherAuthService.getTeacherData();
+        if (teacherData) {
+            currentTeacher.value = {
+                id: teacherData.teacher.id,
+                name: teacherData.teacher.full_name || `${teacherData.teacher.first_name} ${teacherData.teacher.last_name}`,
+                email: teacherData.user.email,
+                section: teacherData.assignments.find(a => a.role === 'homeroom')?.section_name || 
+                        teacherData.assignments.find(a => a.role === 'subject_teacher')?.section_name || 
+                        'No section assigned',
+                assignedGrades: []
+            };
+
+            // Get unique subjects from assignments
+            const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
+            availableSubjects.value = uniqueSubjects.map(subject => ({
+                id: subject.id,
+                name: subject.name,
+                grade: subject.sections[0]?.grade || 'Unknown',
+                originalSubject: { id: subject.id, name: subject.name }
+            }));
+
+            // Set default selected subject
+            if (availableSubjects.value.length > 0) {
+                selectedSubject.value = availableSubjects.value[0];
+            }
+
+            console.log('Teacher data loaded:', currentTeacher.value);
+            console.log('Available subjects:', availableSubjects.value);
+        }
+    } catch (error) {
+        console.error('Error initializing teacher data:', error);
+    }
+};
+
 // Load teacher data and subjects
 onMounted(async () => {
     loading.value = true;
     try {
-        // Use Maria Santos as the default teacher (ID: 3)
-        const teacherId = 3;
+        // Initialize authentication and load teacher data
+        await initializeTeacherData();
+        
+        // If no teacher data loaded, use fallback
+        if (!currentTeacher.value) {
+            // Use Maria Santos as the default teacher (ID: 3)
+            const teacherId = 3;
 
-        // Set teacher data directly (skip API call for now)
-        currentTeacher.value = {
-            id: teacherId,
-            name: 'Maria Santos',
-            email: 'maria.santos@naawan.edu.ph',
-            section: 'Malikhain (Grade 3)'
-        };
-        console.log('Set currentTeacher:', currentTeacher.value);
+            // Set teacher data directly (skip API call for now)
+            currentTeacher.value = {
+                id: teacherId,
+                name: 'Maria Santos',
+                email: 'maria.santos@naawan.edu.ph',
+                section: 'Malikhain (Grade 3)'
+            };
+            console.log('Set currentTeacher:', currentTeacher.value);
 
-        // Test direct API call to bypass service layer
-        console.log('Testing direct API call for teacher assignments...');
-        try {
-            const directResponse = await fetch(`http://localhost:8000/api/teachers/${teacherId}/assignments`, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-            const assignments = await directResponse.json();
-            console.log('Direct API response:', assignments);
-            if (assignments && assignments.assignments && assignments.assignments.length > 0) {
-                // Update section name from assignments (only if currentTeacher exists)
-                const firstAssignment = assignments.assignments[0];
-                if (firstAssignment.section_name && currentTeacher.value) {
-                    currentTeacher.value.section = `${firstAssignment.section_name} (Grade 3)`;
-                }
+            // Test direct API call to bypass service layer
+            console.log('Testing direct API call for teacher assignments...');
+            try {
+                const directResponse = await fetch(`http://localhost:8000/api/teachers/${teacherId}/assignments`, {
+                    method: 'GET',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const assignments = await directResponse.json();
+                console.log('Direct API response:', assignments);
+                if (assignments && assignments.assignments && assignments.assignments.length > 0) {
+                    // Update section name from assignments (only if currentTeacher exists)
+                    const firstAssignment = assignments.assignments[0];
+                    if (firstAssignment.section_name && currentTeacher.value) {
+                        currentTeacher.value.section = `${firstAssignment.section_name} (Grade 3)`;
+                    }
 
-                const realSubjects = assignments.assignments.flatMap((assignment) =>
-                    assignment.subjects.map((subject) => ({
-                        id: subject.subject_id,
-                        name: subject.subject_name,
-                        grade: 'Grade 3',
-                        sectionId: assignment.section_id,
-                        originalSubject: {
+                    const realSubjects = assignments.assignments.flatMap((assignment) =>
+                        assignment.subjects.map((subject) => ({
                             id: subject.subject_id,
                             name: subject.subject_name,
-                            sectionId: assignment.section_id
-                        }
-                    }))
-                );
+                            grade: 'Grade 3',
+                            sectionId: assignment.section_id,
+                            originalSubject: {
+                                id: subject.subject_id,
+                                name: subject.subject_name,
+                                sectionId: assignment.section_id
+                            }
+                        }))
+                    );
 
-                teacherSubjects.value = realSubjects;
-                availableSubjects.value = realSubjects.map((subject) => ({
+                    teacherSubjects.value = realSubjects;
+                    availableSubjects.value = realSubjects.map((subject) => ({
+                        id: subject.id,
+                        name: `${subject.name} (${subject.grade})`,
+                        grade: subject.grade,
+                        sectionId: subject.sectionId,
+                        originalSubject: subject.originalSubject
+                    }));
+                } else {
+                    // Fallback to mock data
+                    teacherSubjects.value = MOCK_SUBJECTS;
+                    availableSubjects.value = MOCK_SUBJECTS.map((subject) => ({
+                        id: subject.id,
+                        name: `${subject.name} (${subject.grade})`,
+                        grade: subject.grade,
+                        originalSubject: subject
+                    }));
+                }
+            } catch (error) {
+                console.error('Error loading teacher assignments:', error);
+                // Fallback to hardcoded subjects with sectionId
+                const fallbackSubjects = [
+                    {
+                        id: 1,
+                        name: 'Mathematics',
+                        grade: 'Grade 3',
+                        sectionId: 3,
+                        originalSubject: { id: 1, name: 'Mathematics', sectionId: 3 }
+                    },
+                    {
+                        id: 2,
+                        name: 'Homeroom',
+                        grade: 'Grade 3',
+                        sectionId: 3,
+                        originalSubject: { id: 2, name: 'Homeroom', sectionId: 3 }
+                    }
+                ];
+                teacherSubjects.value = fallbackSubjects;
+                availableSubjects.value = fallbackSubjects.map((subject) => ({
                     id: subject.id,
                     name: `${subject.name} (${subject.grade})`,
                     grade: subject.grade,
                     sectionId: subject.sectionId,
                     originalSubject: subject.originalSubject
                 }));
-            } else {
-                // Fallback to mock data
-                teacherSubjects.value = MOCK_SUBJECTS;
-                availableSubjects.value = MOCK_SUBJECTS.map((subject) => ({
-                    id: subject.id,
-                    name: `${subject.name} (${subject.grade})`,
-                    grade: subject.grade,
-                    originalSubject: subject
-                }));
             }
-        } catch (error) {
-            console.error('Error loading teacher assignments:', error);
-            // Fallback to hardcoded subjects with sectionId
-            const fallbackSubjects = [
-                {
-                    id: 1,
-                    name: 'Mathematics',
-                    grade: 'Grade 3',
-                    sectionId: 3,
-                    originalSubject: { id: 1, name: 'Mathematics', sectionId: 3 }
-                },
-                {
-                    id: 2,
-                    name: 'Homeroom',
-                    grade: 'Grade 3',
-                    sectionId: 3,
-                    originalSubject: { id: 2, name: 'Homeroom', sectionId: 3 }
-                }
-            ];
-            teacherSubjects.value = fallbackSubjects;
-            availableSubjects.value = fallbackSubjects.map((subject) => ({
-                id: subject.id,
-                name: `${subject.name} (${subject.grade})`,
-                grade: subject.grade,
-                sectionId: subject.sectionId,
-                originalSubject: subject.originalSubject
-            }));
         }
 
         // Set default selected subject
@@ -247,16 +301,12 @@ onMounted(async () => {
             selectedSubject.value = availableSubjects.value[0];
         }
 
-        // Load attendance data for default subject
+        // Load attendance data
         console.log('About to call loadAttendanceData with:', {
             selectedSubject: selectedSubject.value,
             currentTeacher: currentTeacher.value
         });
-        try {
-            await loadAttendanceData();
-        } catch (error) {
-            console.error('Error in loadAttendanceData:', error);
-        }
+        await loadAttendanceData();
 
         // Prepare chart data which includes setting up chart options
         prepareChartData();

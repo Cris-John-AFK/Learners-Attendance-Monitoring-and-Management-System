@@ -33,7 +33,10 @@
                     <div class="form-group">
                         <div class="input-icon">
                             <i class="pi pi-lock"></i>
-                            <input type="password" id="password" v-model="password" placeholder="Password" required />
+                            <input :type="showPassword ? 'text' : 'password'" id="password" v-model="password" placeholder="Password" required />
+                            <button type="button" @click="showPassword = !showPassword" class="password-toggle">
+                                <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+                            </button>
                         </div>
                     </div>
 
@@ -54,6 +57,7 @@
 </template>
 
 <script setup>
+import api from '@/config/axios';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -63,6 +67,7 @@ const password = ref('');
 const rememberMe = ref(false);
 const isLoading = ref(false);
 const errorMessage = ref('');
+const showPassword = ref(false);
 
 const handleLogin = async () => {
     try {
@@ -72,6 +77,46 @@ const handleLogin = async () => {
         if (!username.value || !password.value) {
             errorMessage.value = 'Please enter both username and password';
             return;
+        }
+
+        // Check if this is a teacher login attempt first
+        if (username.value.includes('.')) {
+            try {
+                // Authenticate with the backend API
+                const response = await api.post('/api/teacher/login', {
+                    username: username.value,
+                    password: password.value
+                });
+
+                if (response.data.success) {
+                    const teacherData = response.data.data;
+                    const token = teacherData.token;
+
+                    // Store authentication data
+                    localStorage.setItem('teacher_token', token);
+                    localStorage.setItem('teacher_data', JSON.stringify(teacherData));
+                    sessionStorage.setItem('teacher_token', token);
+                    sessionStorage.setItem('teacher_data', JSON.stringify(teacherData));
+                    window.teacherAuth = { token, data: teacherData };
+
+                    console.log('Teacher login successful via API:', teacherData);
+
+                    // Redirect to teacher dashboard
+                    window.location.href = '/teacher';
+                    return;
+                }
+            } catch (apiError) {
+                console.error('Teacher login failed:', apiError);
+
+                if (apiError.response?.status === 422) {
+                    errorMessage.value = 'Invalid username or password';
+                } else if (apiError.response?.status === 404) {
+                    errorMessage.value = 'Teacher profile not found';
+                } else {
+                    errorMessage.value = 'Login failed. Please check your credentials and try again.';
+                }
+                return;
+            }
         }
 
         // Hardcoded authentication for different user types
@@ -85,7 +130,7 @@ const handleLogin = async () => {
         const userType = username.value.toLowerCase();
 
         if (!validCredentials[userType]) {
-            errorMessage.value = 'Invalid username. Please use: admin, teacher, guardian, or gate';
+            errorMessage.value = 'Invalid username. Please use: admin, teacher, guardian, gate, or teacher credentials (e.g., maria.santos)';
             return;
         }
 
@@ -144,6 +189,20 @@ const handleLogin = async () => {
     bottom: 0;
     background: linear-gradient(135deg, rgba(177, 240, 247, 0.9) 0%, rgba(129, 191, 218, 0.8) 100%);
     z-index: 1;
+}
+
+.teacher-hint {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 20px;
+}
+
+.hint-text {
+    margin: 4px 0;
+    font-size: 14px;
+    color: #495057;
 }
 
 .left-content {
@@ -263,6 +322,20 @@ const handleLogin = async () => {
 .input-icon input::placeholder {
     color: #999;
     font-size: 1.1rem;
+}
+
+.password-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: #666;
+    font-size: 1.2rem;
+    transition: color 0.3s ease;
+}
+
+.password-toggle:hover {
+    color: #81bfda;
 }
 
 .form-group {

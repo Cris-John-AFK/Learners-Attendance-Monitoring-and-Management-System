@@ -10,6 +10,7 @@ import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import TeacherAuthService from '@/services/TeacherAuthService';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -36,6 +37,7 @@ const router = createRouter({
         {
             path: '/teacher',
             component: AppLayout,
+            meta: { requiresAuth: true },
             children: [
                 {
                     path: '/teacher',
@@ -249,6 +251,31 @@ const router = createRouter({
             component: ApiTest
         }
     ]
+});
+
+// Route guard for teacher authentication
+router.beforeEach((to, from, next) => {
+    // Check if route requires authentication
+    if (to.matched.some(record => record.meta.requiresAuth)) {
+        try {
+            // Check if teacher is authenticated (synchronous method)
+            const isAuthenticated = TeacherAuthService.isAuthenticated();
+            
+            if (!isAuthenticated) {
+                console.log('Teacher not authenticated, redirecting to login');
+                // Redirect to general login (homepage) if not authenticated
+                next('/');
+            } else {
+                console.log('Teacher authenticated, allowing access');
+                next();
+            }
+        } catch (error) {
+            console.error('Authentication check failed:', error);
+            next('/');
+        }
+    } else {
+        next();
+    }
 });
 
 export default router;

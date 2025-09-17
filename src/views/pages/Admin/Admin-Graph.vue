@@ -6,6 +6,20 @@
             <p class="ml-3 text-gray-500 font-normal">Loading dashboard data...</p>
         </div>
 
+        <!-- Error State -->
+        <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="pi pi-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                    <div>
+                        <h3 class="text-red-800 font-semibold">Error Loading Data</h3>
+                        <p class="text-red-600 text-sm mt-1">{{ error }}</p>
+                    </div>
+                </div>
+                <button @click="retryLoadData" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"><i class="pi pi-refresh mr-2"></i>Retry</button>
+            </div>
+        </div>
+
         <div v-else>
             <!-- Modern Header with Admin Welcome -->
             <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-md p-6 mb-6 text-white">
@@ -29,9 +43,7 @@
 
                     <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
                         <!-- Attendance Insights placeholder -->
-                        <div class="text-right">
-                            <div class="text-blue-100 text-sm">Attendance Insights</div>
-                        </div>
+                        <div class="text-right"></div>
                     </div>
                 </div>
             </div>
@@ -98,11 +110,6 @@
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                             <h2 class="text-lg font-semibold">Attendance Trends</h2>
                             <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                                <!-- View Type Toggle -->
-                                <div class="flex items-center gap-2">
-                                    <label class="text-sm font-medium text-gray-600">View:</label>
-                                    <SelectButton v-model="viewType" :options="viewTypeOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onViewTypeChange" />
-                                </div>
                                 <!-- Time Period Toggle -->
                                 <div class="flex items-center gap-2">
                                     <label class="text-sm font-medium text-gray-600">Period:</label>
@@ -111,13 +118,25 @@
                             </div>
                         </div>
 
-                        <div v-if="!defaultGradeChartData || defaultGradeChartData.labels.length === 0" class="flex flex-col items-center justify-center py-12">
+                        <div v-if="loading" class="flex flex-col items-center justify-center py-12">
                             <ProgressSpinner strokeWidth="4" style="width: 50px; height: 50px" class="text-blue-500" />
                             <p class="mt-3 text-gray-500 font-normal">Loading chart data...</p>
                         </div>
 
+                        <div v-else-if="error" class="flex flex-col items-center justify-center py-12">
+                            <i class="pi pi-chart-bar text-gray-400 text-4xl mb-3"></i>
+                            <p class="text-gray-500 font-medium mb-2">Unable to load chart data</p>
+                            <button @click="retryLoadData" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"><i class="pi pi-refresh mr-1"></i>Retry</button>
+                        </div>
+
+                        <div v-else-if="!defaultGradeChartData || defaultGradeChartData.labels.length === 0" class="flex flex-col items-center justify-center py-12">
+                            <i class="pi pi-chart-bar text-gray-400 text-4xl mb-3"></i>
+                            <p class="text-gray-500 font-medium">No attendance data available</p>
+                            <p class="text-gray-400 text-sm">Check back later or contact your administrator</p>
+                        </div>
+
                         <div v-else class="chart-container">
-                            <Chart type="bar" :data="defaultGradeChartData" :options="chartOptions" style="height: 300px" />
+                            <Chart :type="chartType" :data="defaultGradeChartData" :options="chartOptions" style="height: 300px" />
                         </div>
                     </div>
                 </div>
@@ -127,20 +146,20 @@
                     <div class="bg-white rounded-xl shadow-sm p-5">
                         <h3 class="text-lg font-semibold mb-4">Attendance Insights</h3>
                         <div class="text-center">
-                            <div class="text-sm text-gray-500 mb-2">Mathematics (Grade 3)</div>
-                            <div class="space-y-3">
+                            <div class="text-sm text-gray-500 mb-2">{{ insights.bestPerformingGrade || 'Overall Statistics' }}</div>
+                            <div v-if="!loading && !error" class="space-y-3">
                                 <div class="flex justify-between items-center">
                                     <span class="text-sm text-gray-600">Present</span>
                                     <div class="flex items-center">
                                         <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                                        <span class="font-semibold">{{ Math.round(averageAttendance) }}%</span>
+                                        <span class="font-semibold">{{ averageAttendance }}%</span>
                                     </div>
                                 </div>
                                 <div class="flex justify-between items-center">
                                     <span class="text-sm text-gray-600">Absent</span>
                                     <div class="flex items-center">
                                         <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                                        <span class="font-semibold">{{ Math.round(100 - averageAttendance - 5) }}%</span>
+                                        <span class="font-semibold">{{ Math.max(0, Math.round(100 - averageAttendance - 5)) }}%</span>
                                     </div>
                                 </div>
                                 <div class="flex justify-between items-center">
@@ -150,6 +169,16 @@
                                         <span class="font-semibold">5%</span>
                                     </div>
                                 </div>
+                                <div v-if="insights.trendAnalysis" class="mt-4 pt-3 border-t border-gray-200">
+                                    <p class="text-xs text-gray-500">{{ insights.trendAnalysis }}</p>
+                                </div>
+                            </div>
+                            <div v-else-if="loading" class="flex justify-center py-8">
+                                <ProgressSpinner strokeWidth="4" style="width: 30px; height: 30px" class="text-blue-500" />
+                            </div>
+                            <div v-else class="text-gray-400 text-sm py-8">
+                                <i class="pi pi-info-circle mb-2 text-lg block"></i>
+                                No insights available
                             </div>
                         </div>
                     </div>
@@ -161,6 +190,7 @@
 
 <script setup>
 import { GradeService } from '@/router/service/Grades';
+import { AdminAttendanceService } from '@/services/AdminAttendanceService';
 import Chart from 'primevue/chart';
 import ProgressBar from 'primevue/progressbar';
 import ProgressSpinner from 'primevue/progressspinner';
@@ -174,20 +204,27 @@ const sectionLoading = ref(false);
 const selectedGrade = ref(null);
 const gradeOptions = ref([]);
 const chartOptions = ref({});
+const error = ref(null);
 
-// Statistics data
-const totalStudents = ref(10);
-const averageAttendance = ref(85);
-const warningCount = ref(3);
-const criticalCount = ref(2);
+// Statistics data - will be populated from API
+const totalStudents = ref(0);
+const averageAttendance = ref(0);
+const warningCount = ref(0);
+const criticalCount = ref(0);
 
-// Chart view options
+// Summary stats and insights from API
+const summaryStats = ref({});
+const insights = ref({});
+const selectedDateRange = ref('current_year');
+const chartType = ref('bar');
+
+// Chart view options - updated to match API date ranges
 const chartViewOptions = [
-    { label: 'Daily', value: 'day' },
-    { label: 'Weekly', value: 'week' },
-    { label: 'Monthly', value: 'month' }
+    { label: 'Current Year', value: 'current_year' },
+    { label: 'Last 30 Days', value: 'last_30_days' },
+    { label: 'Last 7 Days', value: 'last_7_days' }
 ];
-const chartView = ref('week');
+const chartView = ref('current_year');
 
 // View type options
 const viewTypeOptions = [
@@ -196,36 +233,41 @@ const viewTypeOptions = [
 ];
 const viewType = ref('subject');
 
-// Default chart data for grade-level attendance
+// Chart data for grade-level attendance
 const defaultGradeChartData = ref({
     labels: [],
     datasets: [
         {
             label: 'Present',
-            backgroundColor: 'rgba(76, 175, 80, 0.8)',
-            borderColor: '#4CAF50',
+            backgroundColor: '#10b981',
+            borderColor: '#10b981',
             borderWidth: 1,
-            borderRadius: 4,
             data: [],
-            hoverBackgroundColor: 'rgba(76, 175, 80, 1)'
+            stack: 'attendance'
         },
         {
             label: 'Absent',
-            backgroundColor: 'rgba(244, 67, 54, 0.8)',
-            borderColor: '#F44336',
+            backgroundColor: '#ef4444',
+            borderColor: '#ef4444',
             borderWidth: 1,
-            borderRadius: 4,
             data: [],
-            hoverBackgroundColor: 'rgba(244, 67, 54, 1)'
+            stack: 'attendance'
         },
         {
             label: 'Late',
-            backgroundColor: 'rgba(255, 193, 7, 0.8)',
-            borderColor: '#FFC107',
+            backgroundColor: '#f59e0b',
+            borderColor: '#f59e0b',
             borderWidth: 1,
-            borderRadius: 4,
             data: [],
-            hoverBackgroundColor: 'rgba(255, 193, 7, 1)'
+            stack: 'attendance'
+        },
+        {
+            label: 'Excused',
+            backgroundColor: '#8b5cf6',
+            borderColor: '#8b5cf6',
+            borderWidth: 1,
+            data: [],
+            stack: 'attendance'
         }
     ]
 });
@@ -236,12 +278,69 @@ const gradeSectionsData = ref({});
 const showModal = ref(false);
 const selectedGradeData = ref(null);
 
-const loadGradeData = async () => {
+// Load attendance data from API
+const loadAttendanceData = async () => {
     try {
         loading.value = true;
-        console.log('Loading grade data...');
+        error.value = null;
+        console.log('Loading attendance data...');
 
-        // Fetch grades from the centralized GradeService
+        // Get grade ID for filtering if not 'all'
+        const gradeId = selectedGrade.value === 'all' ? null : getGradeIdByName(selectedGrade.value);
+
+        // Fetch attendance analytics
+        const response = await AdminAttendanceService.getAttendanceAnalytics(chartView.value, gradeId);
+
+        if (!response.success) {
+            throw new Error(response.message || 'Failed to fetch attendance data');
+        }
+
+        const analyticsData = response.data;
+        console.log('Analytics data received:', analyticsData);
+
+        // Transform data to chart format
+        defaultGradeChartData.value = AdminAttendanceService.transformToChartData(analyticsData);
+
+        // Determine chart type based on number of grades
+        chartType.value = analyticsData.grades && analyticsData.grades.length > 1 ? 'horizontalBar' : 'bar';
+
+        // Update summary statistics
+        const stats = AdminAttendanceService.calculateSummaryStats(analyticsData);
+        totalStudents.value = stats.totalStudents;
+        averageAttendance.value = Math.round(stats.averageAttendance);
+        warningCount.value = stats.warningCount;
+        criticalCount.value = stats.criticalCount;
+
+        // Update insights - pass current grade data if viewing single grade
+        const currentGradeData = analyticsData.grades && analyticsData.grades.length === 1 ? analyticsData.grades[0] : null;
+        insights.value = AdminAttendanceService.getInsights(analyticsData, currentGradeData);
+
+        console.log('Chart data updated:', defaultGradeChartData.value);
+        console.log('Summary stats updated:', stats);
+        loading.value = false;
+    } catch (err) {
+        console.error('Error loading attendance data:', err);
+        error.value = err.message || 'Failed to load attendance data';
+        loading.value = false;
+    }
+};
+
+// Helper function to get grade ID by name
+const getGradeIdByName = (gradeName) => {
+    if (!gradeOptions.value || gradeName === 'all') return null;
+    const grade = gradeOptions.value.find((g) => g.value === gradeName);
+    return grade ? grade.id : null;
+};
+
+// Retry loading data
+const retryLoadData = async () => {
+    console.log('Retrying data load...');
+    await loadAttendanceData();
+};
+
+// Load grades for dropdown options
+const loadGradeOptions = async () => {
+    try {
         const gradesData = await GradeService.getGrades();
         console.log('Grades data received:', gradesData);
 
@@ -263,21 +362,10 @@ const loadGradeData = async () => {
         // Set default selection
         selectedGrade.value = 'all';
 
-        // Update the labels in the default chart data
-        defaultGradeChartData.value.labels = gradesData.map((g) => g.name);
+        // Load real attendance data from API first
+        await loadAttendanceData();
 
-        // Generate mock attendance data for each grade (this would be replaced with real data)
-        const presentData = gradesData.map(() => Math.floor(Math.random() * 20) + 30);
-        const absentData = gradesData.map(() => Math.floor(Math.random() * 10) + 3);
-        const lateData = gradesData.map(() => Math.floor(Math.random() * 8) + 2);
-
-        defaultGradeChartData.value.datasets[0].data = presentData;
-        defaultGradeChartData.value.datasets[1].data = absentData;
-        defaultGradeChartData.value.datasets[2].data = lateData;
-
-        console.log('Chart data updated:', defaultGradeChartData.value);
-
-        // Setup chart options
+        // Setup chart options after data is loaded
         setupChartOptions();
 
         // Now build the sections data using the real sections from Grades.js
@@ -332,13 +420,7 @@ const showSections = (gradeName) => {
 
 const onGradeChange = () => {
     console.log('Grade changed to:', selectedGrade.value);
-    if (selectedGrade.value === 'all') {
-        // Show all grades data
-        loadGradeData();
-    } else {
-        // Filter to show only selected grade
-        filterByGrade(selectedGrade.value);
-    }
+    loadAttendanceData();
 };
 
 const filterByGrade = (gradeName) => {
@@ -358,7 +440,10 @@ const filterByGrade = (gradeName) => {
 
 // Setup chart options
 const setupChartOptions = () => {
+    const isHorizontal = chartType.value === 'horizontalBar';
+
     chartOptions.value = {
+        indexAxis: isHorizontal ? 'y' : 'x',
         plugins: {
             legend: {
                 position: 'top',
@@ -391,35 +476,35 @@ const setupChartOptions = () => {
                 borderWidth: 1,
                 cornerRadius: 8,
                 padding: 12,
-                boxPadding: 4
+                boxPadding: 4,
+                callbacks: {
+                    label: function (context) {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed[isHorizontal ? 'x' : 'y'];
+                        const total = context.chart.data.datasets.reduce((sum, dataset) => {
+                            return sum + (dataset.data[context.dataIndex] || 0);
+                        }, 0);
+                        const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                        return `${label}: ${value} (${percentage}%)`;
+                    }
+                }
             }
         },
         responsive: true,
         maintainAspectRatio: false,
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
+        barPercentage: 0.7,
+        categoryPercentage: 0.8,
         animation: {
             duration: 1000,
             easing: 'easeOutQuart'
         },
         scales: {
             x: {
+                stacked: isHorizontal,
                 grid: {
-                    display: false,
-                    drawBorder: false
-                },
-                ticks: {
-                    font: {
-                        family: 'Inter, sans-serif',
-                        size: 11
-                    },
-                    color: '#666'
-                }
-            },
-            y: {
-                grid: {
-                    color: 'rgba(0, 0, 0, 0.05)',
-                    drawBorder: false
+                    display: !isHorizontal,
+                    drawBorder: false,
+                    color: 'rgba(0, 0, 0, 0.05)'
                 },
                 ticks: {
                     font: {
@@ -430,7 +515,26 @@ const setupChartOptions = () => {
                     padding: 8
                 },
                 border: {
-                    dash: [4, 4]
+                    display: false
+                }
+            },
+            y: {
+                stacked: !isHorizontal,
+                grid: {
+                    display: isHorizontal,
+                    drawBorder: false,
+                    color: 'rgba(0, 0, 0, 0.05)'
+                },
+                ticks: {
+                    font: {
+                        family: 'Inter, sans-serif',
+                        size: 11
+                    },
+                    color: '#666',
+                    padding: 8
+                },
+                border: {
+                    display: false
                 }
             }
         }
@@ -440,39 +544,42 @@ const setupChartOptions = () => {
 // Handle view type change
 const onViewTypeChange = () => {
     console.log('View type changed to:', viewType.value);
-    loadGradeData();
+    loadAttendanceData();
 };
 
 // Handle chart view change
 const onChartViewChange = () => {
     console.log('Chart view changed to:', chartView.value);
-    loadGradeData();
+    loadAttendanceData();
 };
 
 // Function to update current date and time
 const updateDateTime = () => {
     const now = new Date();
-    currentDateTime.value = now.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    }) + ' - ' + now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
+    currentDateTime.value =
+        now.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) +
+        ' - ' +
+        now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
 };
 
 onMounted(async () => {
     console.log('Admin-Graph component mounted');
-    
+
     // Initialize date/time and start real-time updates
     updateDateTime();
     timeInterval = setInterval(updateDateTime, 1000); // Update every second
-    
-    await loadGradeData();
+
+    await loadGradeOptions();
 });
 
 onUnmounted(() => {

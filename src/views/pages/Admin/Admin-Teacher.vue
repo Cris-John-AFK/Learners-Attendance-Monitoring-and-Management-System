@@ -64,11 +64,17 @@
                             <h4>Teaching Subjects</h4>
                             <div v-if="teacher.subject_assignments && teacher.subject_assignments.length > 0" class="subjects-list">
                                 <div v-for="(assignment, index) in teacher.subject_assignments" :key="assignment.id || index" class="subject-item">
-                                    <div class="subject-name">
-                                        <i class="pi pi-book subject-icon"></i>
-                                        {{ assignment.subject?.name || 'Unknown Subject' }}
+                                    <div class="subject-header">
+                                        <div class="subject-name">
+                                            <i class="pi pi-book subject-icon"></i>
+                                            {{ assignment.subject?.name || 'Unknown Subject' }}
+                                        </div>
+                                        <div class="grade-badge">{{ assignment.section?.grade?.name || 'N/A' }}</div>
                                     </div>
-                                    <div class="section-name">{{ assignment.section?.name || 'N/A' }}</div>
+                                    <div class="section-info">
+                                        <span class="section-label">Section:</span>
+                                        <span class="section-name">{{ assignment.section?.name || 'N/A' }}</span>
+                                    </div>
                                 </div>
                             </div>
                             <div v-else class="not-assigned">
@@ -249,6 +255,7 @@
                             <div class="subject-header">
                                 <i class="pi pi-book subject-icon"></i>
                                 <span class="subject-name">{{ assignment.subject?.name || 'Unknown Subject' }}</span>
+                                <span class="grade-badge">{{ assignment.section?.grade?.name || 'N/A' }}</span>
                             </div>
                             <div class="subject-section">
                                 <span class="section-label">Section:</span>
@@ -3131,8 +3138,30 @@ const archiveTeacher = async (teacher) => {
 .subject-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
     margin-bottom: 0.75rem;
+}
+
+.subject-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.section-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.section-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
 }
 
 .subject-icon {
