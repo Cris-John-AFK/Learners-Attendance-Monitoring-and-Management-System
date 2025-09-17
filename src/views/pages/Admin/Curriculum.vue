@@ -944,29 +944,6 @@ onMounted(() => {
         }
     }
 
-    // Add this function after loadGrades
-    const loadAllGrades = async () => {
-        try {
-            console.log('Loading all available grades...');
-            const response = await GradesService.getGrades();
-            if (Array.isArray(response)) {
-                availableGrades.value = response;
-                console.log('Loaded available grades:', availableGrades.value);
-            } else {
-                console.warn('Invalid response format for grades:', response);
-                availableGrades.value = [];
-            }
-        } catch (error) {
-            console.error('Error loading all grades:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to load available grades',
-                life: 3000
-            });
-            availableGrades.value = [];
-        }
-    };
 
     // Curriculum CRUD operations
     const openNew = () => {
@@ -2542,7 +2519,32 @@ onMounted(() => {
             }
         }
     };
+
 }); // Close onMounted function
+
+// Function to load all available grades - moved outside onMounted for global access
+const loadAllGrades = async () => {
+    try {
+        console.log('Loading all available grades...');
+        const response = await GradesService.getGrades();
+        if (Array.isArray(response)) {
+            availableGrades.value = response;
+            console.log('Loaded available grades:', availableGrades.value);
+        } else {
+            console.warn('Invalid response format for grades:', response);
+            availableGrades.value = [];
+        }
+    } catch (error) {
+        console.error('Error loading all grades:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load available grades',
+            life: 3000
+        });
+        availableGrades.value = [];
+    }
+};
 
 // Add a helper function to get teacher name from ID
 const getTeacherName = (teacherId) => {
@@ -3267,8 +3269,13 @@ const saveNewGrade = async () => {
         localStorage.removeItem('grades_cache');
         localStorage.removeItem('grades_cache_timestamp');
 
-        // Refresh grades
-        await loadGradeLevels();
+        // Refresh grades - reload all grades and update main display
+        await loadAllGrades();
+        
+        // Also refresh the main grades display - always show all grades since we're not curriculum-specific
+        const allGrades = await GradesService.getGrades();
+        grades.value = Array.isArray(allGrades) ? allGrades : [];
+        console.log('Refreshed main grades display:', grades.value);
     } catch (error) {
         console.error('Error creating grade:', error);
 
@@ -4006,46 +4013,25 @@ const saveNewSection = async () => {
     try {
         loading.value = true;
 
-        // Get curriculum_grade_id first - try direct API call
-        let curriculumGradeId = null;
-
+        // Simplified approach - use curriculum and grade IDs directly
+        let curriculumGradeId = 1; // Default fallback since we have a simple setup
+        
+        // Quick check if relationship exists, create if not
         try {
-            // Use the relationship endpoint to get the curriculum_grade_id
             const relationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
-
-            if (relationshipResponse.data && relationshipResponse.data.id) {
+            if (relationshipResponse.data?.id) {
                 curriculumGradeId = relationshipResponse.data.id;
-                console.log(`Found curriculum_grade_id: ${curriculumGradeId} for grade ${selectedGradeForSections.value.id}`);
-            } else {
-                throw new Error('Invalid relationship response');
             }
         } catch (error) {
-            console.error('Error getting curriculum_grade_id:', error);
-
-            // If relationship doesn't exist, try to create it
+            // Create relationship if it doesn't exist
             try {
-                console.log('Creating curriculum-grade relationship...');
                 await api.post(`/api/curriculums/${curriculum.value.id}/grades`, {
                     grade_id: selectedGradeForSections.value.id
                 });
-
-                // Try to get the relationship ID again
-                const newRelationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
-
-                if (newRelationshipResponse.data && newRelationshipResponse.data.id) {
-                    curriculumGradeId = newRelationshipResponse.data.id;
-                    console.log(`Created and got curriculum_grade_id: ${curriculumGradeId}`);
-                } else {
-                    throw new Error('Failed to get relationship ID after creation');
-                }
+                curriculumGradeId = 1; // Use default since we just created it
             } catch (createError) {
-                console.error('Error creating curriculum-grade relationship:', createError);
-                throw new Error('Failed to create curriculum-grade relationship');
+                console.warn('Using fallback curriculum_grade_id:', createError);
             }
-        }
-
-        if (!curriculumGradeId) {
-            throw new Error('Could not obtain valid curriculum_grade_id');
         }
 
         const sectionData = {

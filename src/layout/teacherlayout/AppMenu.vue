@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 
 import AppMenuItem from './AppMenuItem.vue';
 
@@ -10,15 +11,16 @@ const model = ref([
         items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/teacher' }]
     },
     {
-        label: 'Homeroom Subjects',
-        icon: 'pi pi-fw pi-briefcase',
+        label: 'Homeroom',
+        icon: 'pi pi-fw pi-home',
         items: []
     },
     {
         separator: true
     },
     {
-        label: 'Other Subjects',
+        label: 'Subjects',
+        icon: 'pi pi-fw pi-briefcase',
         items: []
     },
     {
@@ -57,55 +59,67 @@ const model = ref([
 // Load real teacher assignments
 onMounted(async () => {
     try {
-        const teacherId = 3; // Maria Santos
-        const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId);
+        // Check if teacher is authenticated
+        if (!TeacherAuthService.isAuthenticated()) {
+            console.log('Teacher not authenticated, using fallback menu');
+            return;
+        }
         
-        if (assignments && assignments.assignments && assignments.assignments.length > 0) {
+        const assignments = TeacherAuthService.getAssignments();
+        
+        if (assignments && assignments.length > 0) {
             const homeroomSubjects = [];
             const otherSubjects = [];
             
-            assignments.assignments.forEach(assignment => {
-                assignment.subjects.forEach(subject => {
+            assignments.forEach(assignment => {
+                if (assignment.subject_name) {
                     const menuItem = {
-                        label: subject.subject_name,
+                        label: assignment.subject_name,
                         icon: 'pi pi-fw pi-book',
-                        to: `/subject/${subject.subject_name.toLowerCase()}`
+                        to: `/subject/${assignment.subject_name.toLowerCase().replace(/\s+/g, '')}`
                     };
                     
-                    if (subject.role === 'homeroom_teacher' || subject.subject_code === 'HR') {
+                    if (assignment.subject_name.toLowerCase() === 'homeroom' || assignment.role === 'homeroom_teacher') {
                         homeroomSubjects.push(menuItem);
                     } else {
                         otherSubjects.push(menuItem);
                     }
-                });
+                }
             });
             
             // Update the menu model
-            const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom Subjects');
-            const otherIndex = model.value.findIndex(item => item.label === 'Other Subjects');
+            const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom');
+            const subjectsIndex = model.value.findIndex(item => item.label === 'Subjects');
             
             if (homeroomIndex !== -1) {
                 model.value[homeroomIndex].items = homeroomSubjects;
             }
-            if (otherIndex !== -1) {
-                model.value[otherIndex].items = otherSubjects;
+            if (subjectsIndex !== -1) {
+                model.value[subjectsIndex].items = otherSubjects;
             }
         }
     } catch (error) {
         console.error('Error loading teacher assignments for menu:', error);
         // Keep default menu items as fallback
-        const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom Subjects');
+        const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom');
+        const subjectsIndex = model.value.findIndex(item => item.label === 'Subjects');
+        
         if (homeroomIndex !== -1) {
             model.value[homeroomIndex].items = [
+                {
+                    label: 'Homeroom',
+                    icon: 'pi pi-fw pi-home',
+                    to: '/subject/homeroom'
+                }
+            ];
+        }
+        
+        if (subjectsIndex !== -1) {
+            model.value[subjectsIndex].items = [
                 {
                     label: 'Mathematics',
                     icon: 'pi pi-fw pi-book',
                     to: '/subject/mathematics'
-                },
-                {
-                    label: 'Homeroom',
-                    icon: 'pi pi-fw pi-book',
-                    to: '/subject/homeroom'
                 }
             ];
         }

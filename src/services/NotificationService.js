@@ -168,11 +168,60 @@ class NotificationService {
                 this.notifications = JSON.parse(saved);
                 // Clean up old notifications on load
                 this.clearOldNotifications();
+            } else {
+                // Create sample notifications for demo
+                this.createSampleNotifications();
             }
         } catch (error) {
             console.error('Error loading notifications:', error);
             this.notifications = [];
+            this.createSampleNotifications();
         }
+    }
+
+    /**
+     * Create sample notifications for demo
+     */
+    createSampleNotifications() {
+        const sampleNotifications = [
+            {
+                id: Date.now() + 1,
+                type: 'attendance_alert',
+                title: 'Student Attendance Alert',
+                message: 'Cris John has been absent for 3 consecutive days',
+                timestamp: new Date().toISOString(),
+                read: false,
+                priority: 'high',
+                studentName: 'Cris John',
+                section: 'Grade 3-A',
+                subject: 'Mathematics'
+            },
+            {
+                id: Date.now() + 2,
+                type: 'session_completed',
+                title: 'Attendance Session Completed',
+                message: 'Mathematics - 18 present, 2 absent',
+                timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+                read: false,
+                priority: 'medium',
+                subject: 'Mathematics',
+                section: 'Grade 3-A',
+                method: 'QR Code Scan'
+            },
+            {
+                id: Date.now() + 3,
+                type: 'system_update',
+                title: 'System Update',
+                message: 'New attendance tracking features are now available',
+                timestamp: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+                read: true,
+                priority: 'low'
+            }
+        ];
+
+        this.notifications = sampleNotifications;
+        this.saveNotifications();
+        console.log('Sample notifications created:', this.notifications.length);
     }
 
     /**

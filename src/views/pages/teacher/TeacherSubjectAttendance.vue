@@ -6,6 +6,7 @@ import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceServ
 import AttendanceSessionService from '@/services/AttendanceSessionService';
 import NotificationService from '@/services/NotificationService';
 import SeatingService from '@/services/SeatingService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
 import RadioButton from 'primevue/radiobutton';
@@ -54,7 +55,7 @@ const initialSubject = getInitialSubjectInfo();
 const subjectName = ref(initialSubject.name);
 const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
-const teacherId = ref(3); // Maria Santos teacher ID
+const teacherId = ref(null); // Will be set from authenticated teacher
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
 
@@ -203,10 +204,44 @@ const initializeAttendanceSession = async () => {
     }
 };
 
+// Initialize authenticated teacher data
+const initializeTeacherData = async () => {
+    try {
+        // Check if teacher is authenticated first
+        if (!TeacherAuthService.isAuthenticated()) {
+            console.warn('Teacher not authenticated, redirecting to login');
+            router.push('/');
+            return;
+        }
+
+        // Get teacher data from stored authentication
+        const teacherData = TeacherAuthService.getTeacherData();
+        if (teacherData && teacherData.teacher) {
+            teacherId.value = teacherData.teacher.id;
+            console.log('Initialized teacher ID from stored data:', teacherId.value);
+        } else {
+            console.warn('No stored teacher data found, redirecting to login');
+            router.push('/');
+        }
+    } catch (error) {
+        console.error('Error initializing teacher data:', error);
+        router.push('/');
+    }
+};
+
 // Function to load students data from database
 const loadStudentsData = async () => {
     try {
         console.log('Loading students from database...');
+
+        // Ensure teacher is initialized first
+        if (!teacherId.value) {
+            await initializeTeacherData();
+        }
+
+        if (!teacherId.value) {
+            throw new Error('Teacher not authenticated');
+        }
 
         // First get teacher assignments to determine section/subject
         const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
@@ -1987,6 +2022,10 @@ watchEffect(() => {
 // Initialize component when mounted
 onMounted(async () => {
     console.log(`🔄 Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
+    
+    // Initialize teacher authentication first
+    await initializeTeacherData();
+    
     console.log(`🔍 Checking if subject ID needs resolution: isNaN(${subjectId.value}) = ${isNaN(subjectId.value)}`);
 
     // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)

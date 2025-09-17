@@ -13,6 +13,7 @@ use App\Http\Controllers\API\CurriculumGradeController;
 use App\Http\Controllers\API\ScheduleController;
 use App\Http\Controllers\API\EnrollmentController;
 use App\Http\Controllers\API\QRCodeController;
+use App\Http\Controllers\API\TeacherAuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -299,6 +300,13 @@ Route::prefix('student-management')->group(function () {
     Route::post('/sections/{sectionId}/generate-qr-bulk', [\App\Http\Controllers\API\StudentManagementController::class, 'generateQRCodesBulk']);
     Route::get('/sections/{sectionId}/seating-arrangement', [\App\Http\Controllers\API\StudentManagementController::class, 'getSeatingArrangement']);
     Route::post('/seating-arrangement/save', [\App\Http\Controllers\API\StudentManagementController::class, 'saveSeatingArrangement']);
+});
+
+// Teacher Authentication routes
+Route::prefix('teacher')->group(function () {
+    Route::post('/login', [TeacherAuthController::class, 'login']);
+    Route::post('/logout', [TeacherAuthController::class, 'logout']);
+    Route::get('/profile', [TeacherAuthController::class, 'profile']);
 });
 
 // Attendance Records routes (simplified direct database access)

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\TeacherController;
+use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\SubjectController;
@@ -35,3 +36,10 @@ Route::get('grades/{grade}/sections', [GradeController::class, 'sections']);
 // Subject routes
 Route::apiResource('subjects', SubjectController::class);
 Route::get('subjects/grade/{grade}', [SubjectController::class, 'byGrade']);
+
+// Teacher Authentication routes
+Route::prefix('teacher')->group(function () {
+    Route::post('login', [TeacherAuthController::class, 'login']);
+    Route::post('logout', [TeacherAuthController::class, 'logout']);
+    Route::get('profile', [TeacherAuthController::class, 'profile']);
+});

@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router';
 import NotificationBell from '@/components/NotificationBell.vue';
 import NotificationService from '@/services/NotificationService';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -227,18 +228,34 @@ const handleRemoveNotification = (notificationId) => {
     notifications.value = [...NotificationService.getNotifications()];
 };
 
-const logout = () => {
-    // Clear user session data
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('user');
-
-    // Redirect to homepage
-    router.push('/');
+const logout = async () => {
+    try {
+        // Use TeacherAuthService to properly logout
+        await TeacherAuthService.logout();
+        
+        // Show success message
+        isLogoutSuccess.value = true;
+        
+        // Redirect to teacher login page after a short delay
+        setTimeout(() => {
+            router.push('/teacher/login');
+        }, 1500);
+    } catch (error) {
+        console.error('Logout error:', error);
+        // Even if logout fails, clear local data and redirect
+        localStorage.removeItem('teacher_token');
+        localStorage.removeItem('teacher_data');
+        router.push('/');
+    }
 };
 
 // Subscribe to notifications
 onMounted(() => {
+    // Force refresh notifications on mount
+    NotificationService.loadNotifications();
     notifications.value = NotificationService.getNotifications();
+    console.log('Initial notifications loaded:', notifications.value.length);
+    
     unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
         console.log('Notifications updated:', updatedNotifications);
         notifications.value = [...updatedNotifications]; // Force reactivity with new array
