@@ -22,35 +22,42 @@ class TeacherController extends Controller
     {
         try {
             // Get teachers with their assignments and homeroom data
-            $teachers = Teacher::select(['id', 'first_name', 'last_name', 'phone_number', 'user_id'])
-                ->with([
-                    'user:id,email,username,is_active',
-                    // Get teacher assignments with section and subject details
-                    'assignments' => function($query) {
-                        $query->select(['id', 'teacher_id', 'section_id', 'subject_id', 'role'])
-                            ->with([
-                                'section:id,name',
-                                'subject:id,name'
-                            ]);
-                    }
-                ])
+            $teachers = Teacher::with(['user', 'assignments.section', 'assignments.subject'])
                 ->get()
                 ->map(function ($teacher) {
-                    // Find primary/homeroom assignment
                     $primaryAssignment = null;
                     $subjectAssignments = [];
                     
+                    // First, check if this teacher is a homeroom teacher for any section
+                    $homeroomSection = DB::table('sections')
+                        ->where('homeroom_teacher_id', $teacher->id)
+                        ->first();
+                    
+                    if ($homeroomSection) {
+                        $primaryAssignment = [
+                            'id' => 'homeroom_' . $homeroomSection->id,
+                            'section' => [
+                                'id' => $homeroomSection->id,
+                                'name' => $homeroomSection->name,
+                                'grade' => $this->getGradeFromSection($homeroomSection)
+                            ],
+                            'subject' => [
+                                'id' => null,
+                                'name' => 'Homeroom'
+                            ]
+                        ];
+                    }
+                    
+                    // Then process regular subject assignments
                     foreach ($teacher->assignments as $assignment) {
-                        if ($assignment->role === 'homeroom_teacher' || $assignment->role === 'primary') {
+                        // If no homeroom assignment found, check for primary role assignments
+                        if (!$primaryAssignment && ($assignment->role === 'homeroom_teacher' || $assignment->role === 'primary')) {
                             $primaryAssignment = [
                                 'id' => $assignment->id,
                                 'section' => [
                                     'id' => $assignment->section->id,
                                     'name' => $assignment->section->name,
-                                    'grade' => [
-                                        'id' => null,
-                                        'name' => 'Grade 3' // Simplified for now
-                                    ]
+                                    'grade' => $this->getGradeFromSection($assignment->section)
                                 ],
                                 'subject' => [
                                     'id' => $assignment->subject->id ?? null,
@@ -63,10 +70,7 @@ class TeacherController extends Controller
                                 'section' => [
                                     'id' => $assignment->section->id,
                                     'name' => $assignment->section->name,
-                                    'grade' => [
-                                        'id' => null,
-                                        'name' => 'Grade 3' // Simplified for now
-                                    ]
+                                    'grade' => $this->getGradeFromSection($assignment->section)
                                 ],
                                 'subject' => [
                                     'id' => $assignment->subject->id ?? null,
@@ -92,8 +96,53 @@ class TeacherController extends Controller
             Log::info("Retrieved {$teachers->count()} teachers successfully");
             return response()->json($teachers);
         } catch (\Exception $e) {
-            Log::error('Error fetching teachers: ' . $e->getMessage());
+            Log::error('Error retrieving teachers: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to fetch teachers'], 500);
+        }
+    }
+
+    /**
+     * Get grade information from section
+     */
+    private function getGradeFromSection($section)
+    {
+        try {
+            // Get the curriculum_grade relationship for this section
+            $curriculumGrade = DB::table('curriculum_grade as cg')
+                ->join('grades as g', 'cg.grade_id', '=', 'g.id')
+                ->where('cg.id', $section->curriculum_grade_id ?? 0)
+                ->select('g.id', 'g.name', 'g.code')
+                ->first();
+
+            if ($curriculumGrade) {
+                return [
+                    'id' => $curriculumGrade->id,
+                    'name' => $curriculumGrade->name,
+                    'code' => $curriculumGrade->code
+                ];
+            }
+
+            // Fallback: try to infer grade from section name
+            $sectionName = strtolower($section->name);
+            if (strpos($sectionName, 'kinder') !== false) {
+                if (strpos($sectionName, 'one') !== false || strpos($sectionName, '1') !== false) {
+                    return ['id' => null, 'name' => 'Kindergarten 1', 'code' => 'K1'];
+                } elseif (strpos($sectionName, 'two') !== false || strpos($sectionName, '2') !== false) {
+                    return ['id' => null, 'name' => 'Kindergarten 2', 'code' => 'K2'];
+                }
+                return ['id' => null, 'name' => 'Kindergarten', 'code' => 'K'];
+            }
+
+            // Extract grade number from section name
+            if (preg_match('/grade\s*(\d+)|\bgrade\s*(\d+)\b|\b(\d+)\b/', $sectionName, $matches)) {
+                $gradeNum = $matches[1] ?? $matches[2] ?? $matches[3];
+                return ['id' => null, 'name' => "Grade {$gradeNum}", 'code' => "G{$gradeNum}"];
+            }
+
+            return ['id' => null, 'name' => 'Unknown Grade', 'code' => 'UNK'];
+        } catch (\Exception $e) {
+            Log::warning('Error getting grade from section: ' . $e->getMessage());
+            return ['id' => null, 'name' => 'Unknown Grade', 'code' => 'UNK'];
         }
     }
 

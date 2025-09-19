@@ -1,5 +1,7 @@
 <script setup>
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import { AttendanceRecordsService } from '@/services/AttendanceRecordsService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
@@ -123,28 +125,59 @@ const availableDates = ref([]);
 const isLoadingDates = ref(false);
 // Try to get teacher ID from multiple sources
 const getTeacherId = () => {
-    // Try localStorage first
+    console.log('🔍 DEBUG: Getting teacher ID...');
+
+    // First, try to get from TeacherAuthService (proper authentication)
+    const teacherData = TeacherAuthService.getTeacherData();
+    console.log('🔍 DEBUG: TeacherAuthService data:', teacherData);
+
+    if (teacherData && teacherData.teacher && teacherData.teacher.id) {
+        console.log('✅ DEBUG: Using authenticated teacher ID:', teacherData.teacher.id);
+        console.log('✅ DEBUG: Teacher name:', teacherData.teacher.first_name, teacherData.teacher.last_name);
+        return parseInt(teacherData.teacher.id);
+    }
+
+    // Debug all localStorage keys
+    console.log('🔍 DEBUG: All localStorage keys:', Object.keys(localStorage));
+    console.log('🔍 DEBUG: teacher_data in localStorage:', localStorage.getItem('teacher_data'));
+    console.log('🔍 DEBUG: teacher_token in localStorage:', localStorage.getItem('teacher_token'));
+
+    // Try localStorage fallback
     let id = localStorage.getItem('teacherId');
-    if (id) return parseInt(id);
+    if (id) {
+        console.log('⚠️ DEBUG: Using localStorage teacher ID:', id);
+        return parseInt(id);
+    }
 
     // Try sessionStorage
     id = sessionStorage.getItem('teacherId');
-    if (id) return parseInt(id);
+    if (id) {
+        console.log('⚠️ DEBUG: Using sessionStorage teacher ID:', id);
+        return parseInt(id);
+    }
 
     // Try user data in localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
         try {
             const user = JSON.parse(userData);
-            if (user.teacher_id) return parseInt(user.teacher_id);
-            if (user.id) return parseInt(user.id);
+            console.log('🔍 DEBUG: User data from localStorage:', user);
+            if (user.teacher_id) {
+                console.log('⚠️ DEBUG: Using user.teacher_id:', user.teacher_id);
+                return parseInt(user.teacher_id);
+            }
+            if (user.id) {
+                console.log('⚠️ DEBUG: Using user.id:', user.id);
+                return parseInt(user.id);
+            }
         } catch (e) {
-            console.error('Error parsing user data:', e);
+            console.error('❌ DEBUG: Error parsing user data:', e);
         }
     }
 
     // Default fallback - Maria Santos teacher ID
-    return 3;
+    console.warn('❌ DEBUG: No authenticated teacher found, using fallback ID: 1 (Maria Santos)');
+    return 1;
 };
 
 const teacherId = ref(getTeacherId());
@@ -248,6 +281,26 @@ const filteredRecords = computed(() => {
     return records;
 });
 
+// Force refresh function that clears cache and reloads data
+const forceRefresh = async () => {
+    // Clear the service cache
+    AttendanceRecordsService.cache.clear();
+
+    // Show loading state
+    isLoading.value = true;
+
+    // Reload attendance records
+    await loadAttendanceRecords();
+
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Refreshed',
+        detail: 'Attendance records have been refreshed',
+        life: 3000
+    });
+};
+
 // Load attendance records for selected section and date range
 const loadAttendanceRecords = async () => {
     if (!selectedSection.value || !startDate.value || !endDate.value) {
@@ -266,15 +319,29 @@ const loadAttendanceRecords = async () => {
             studentsResponse = await AttendanceRecordsService.getStudentsInSection(selectedSection.value.id, teacherId.value);
             console.log('Students response:', studentsResponse);
         } catch (error) {
-            console.log('Student management endpoint failed, trying alternative...');
-            // Fallback: use the student IDs that match our sample attendance data
-            studentsResponse = {
-                students: [
-                    { id: 11, name: 'G3 TEst', first_name: 'G3', last_name: 'TEst', grade_level: '3' },
-                    { id: 12, name: 'Cris John', first_name: 'Cris', last_name: 'John', grade_level: '3' },
-                    { id: 13, name: 'newa new', first_name: 'newa', last_name: 'new', grade_level: '3' }
-                ]
-            };
+            console.error('Student management endpoint failed:', error);
+            // Try alternative endpoint - use TeacherAttendanceService
+            try {
+                const altResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, selectedSection.value.id, selectedSubject.value?.id);
+                if (altResponse && altResponse.students) {
+                    studentsResponse = {
+                        students: altResponse.students.map((student) => ({
+                            id: student.id,
+                            name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+                            firstName: student.first_name || student.firstName || '',
+                            lastName: student.last_name || student.lastName || '',
+                            gradeLevel: student.gradeLevel || 'K'
+                        }))
+                    };
+                    console.log('Alternative students response:', studentsResponse);
+                } else {
+                    throw new Error('No students found in alternative endpoint');
+                }
+            } catch (altError) {
+                console.error('Alternative endpoint also failed:', altError);
+                // Last resort: Use empty array to avoid showing wrong data
+                studentsResponse = { students: [] };
+            }
         }
 
         // Get attendance sessions for the date range using new direct API
@@ -380,28 +447,28 @@ const exportToExcel = async () => {
 
         // Prepare enhanced data for Excel export
         const excelData = [];
-        
+
         // Add main title row
         excelData.push({
             'Student Name': '📊 STUDENT ATTENDANCE REPORT',
             'Student ID': '',
             'Grade Level': '',
-            'Section': '',
-            'Status': '',
+            Section: '',
+            Status: '',
             'Total Absences': '',
             'Total Late': ''
         });
-        
+
         // Add empty row for spacing
         excelData.push({});
-        
+
         // Add report details in a more organized way
         excelData.push({
             'Student Name': '🏫 REPORT DETAILS',
             'Student ID': '',
             'Grade Level': '',
-            'Section': '',
-            'Status': '',
+            Section: '',
+            Status: '',
             'Total Absences': '',
             'Total Late': ''
         });
@@ -409,20 +476,20 @@ const exportToExcel = async () => {
             'Student Name': `Section: ${selectedSection.value?.name || 'N/A'}`,
             'Student ID': `Subject: ${selectedSubject.value?.name || 'All Subjects'}`,
             'Grade Level': `Grade Level: ${selectedSection.value?.grade_level || 'N/A'}`,
-            'Section': `Period: ${startDateStr} to ${endDateStr}`,
-            'Status': `Total Days: ${dateColumns.value.length}`,
+            Section: `Period: ${startDateStr} to ${endDateStr}`,
+            Status: `Total Days: ${dateColumns.value.length}`,
             'Total Absences': `Students: ${filteredRecords.value.length}`,
             'Total Late': `Generated: ${new Date().toLocaleDateString()}`
         });
-        
+
         // Add legend section
         excelData.push({});
         excelData.push({
             'Student Name': '📋 ATTENDANCE STATUS LEGEND',
             'Student ID': '',
             'Grade Level': '',
-            'Section': '',
-            'Status': '',
+            Section: '',
+            Status: '',
             'Total Absences': '',
             'Total Late': ''
         });
@@ -430,12 +497,12 @@ const exportToExcel = async () => {
             'Student Name': 'P = Present',
             'Student ID': 'A = Absent',
             'Grade Level': 'L = Late',
-            'Section': 'E = Excused',
-            'Status': 'M = Mixed',
+            Section: 'E = Excused',
+            Status: 'M = Mixed',
             'Total Absences': 'N = No Data',
             'Total Late': ''
         });
-        
+
         // Add empty rows for spacing
         excelData.push({});
         excelData.push({});
@@ -445,37 +512,37 @@ const exportToExcel = async () => {
             'Student Name': '👤 STUDENT NAME',
             'Student ID': '🆔 ID',
             'Grade Level': '📚 GRADE',
-            'Section': '🏛️ SECTION',
-            'Status': '📈 OVERALL STATUS',
+            Section: '🏛️ SECTION',
+            Status: '📈 OVERALL STATUS',
             'Total Absences': '❌ ABSENCES',
             'Total Late': '⏰ LATE DAYS'
         };
-        
+
         // Add date columns with day names
-        dateColumns.value.forEach(date => {
+        dateColumns.value.forEach((date) => {
             const dateObj = new Date(date);
             const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
             const monthDay = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             headers[date] = `${dayName}\n${monthDay}`;
         });
-        
+
         excelData.push(headers);
 
         // Add student data with enhanced formatting
-        filteredRecords.value.forEach(student => {
+        filteredRecords.value.forEach((student) => {
             const stats = AttendanceRecordsService.calculateStudentStats(student, dateColumns.value);
             const row = {
                 'Student Name': student.name || 'Unknown Student',
                 'Student ID': student.id || 'N/A',
                 'Grade Level': student.gradeLevel || selectedSection.value?.grade_level || 'Grade 3',
-                'Section': selectedSection.value?.name || 'Unknown Section',
-                'Status': getOverallStatus(student),
+                Section: selectedSection.value?.name || 'Unknown Section',
+                Status: getOverallStatus(student),
                 'Total Absences': stats.absent || 0,
                 'Total Late': stats.late || 0
             };
-            
+
             // Add attendance data for each date with letters
-            dateColumns.value.forEach(date => {
+            dateColumns.value.forEach((date) => {
                 const status = student[date];
                 if (status === null || status === undefined) {
                     row[date] = 'N';
@@ -501,7 +568,7 @@ const exportToExcel = async () => {
                     }
                 }
             });
-            
+
             excelData.push(row);
         });
 
@@ -511,12 +578,12 @@ const exportToExcel = async () => {
             'Student Name': '📊 SUMMARY STATISTICS',
             'Student ID': '',
             'Grade Level': '',
-            'Section': '',
-            'Status': '',
+            Section: '',
+            Status: '',
             'Total Absences': '',
             'Total Late': ''
         });
-        
+
         const totalStudents = filteredRecords.value.length;
         const totalAbsences = filteredRecords.value.reduce((sum, student) => {
             const stats = AttendanceRecordsService.calculateStudentStats(student, dateColumns.value);
@@ -528,13 +595,13 @@ const exportToExcel = async () => {
         }, 0);
         const averageAbsences = totalStudents > 0 ? (totalAbsences / totalStudents).toFixed(1) : 0;
         const averageLate = totalStudents > 0 ? (totalLate / totalStudents).toFixed(1) : 0;
-        
+
         excelData.push({
             'Student Name': `Total Students: ${totalStudents}`,
             'Student ID': `Total Absences: ${totalAbsences}`,
             'Grade Level': `Total Late: ${totalLate}`,
-            'Section': `Avg Absences/Student: ${averageAbsences}`,
-            'Status': `Avg Late/Student: ${averageLate}`,
+            Section: `Avg Absences/Student: ${averageAbsences}`,
+            Status: `Avg Late/Student: ${averageLate}`,
             'Total Absences': `Attendance Rate: ${((1 - totalAbsences / (totalStudents * dateColumns.value.length)) * 100).toFixed(1)}%`,
             'Total Late': ''
         });
@@ -550,32 +617,32 @@ const exportToExcel = async () => {
             { wch: 18 }, // Section
             { wch: 18 }, // Status
             { wch: 12 }, // Total Absences
-            { wch: 12 }  // Total Late
+            { wch: 12 } // Total Late
         ];
-        
+
         // Add widths for date columns
         dateColumns.value.forEach(() => {
             colWidths.push({ wch: 8 });
         });
-        
+
         ws['!cols'] = colWidths;
 
         // Enhanced styling
         const range = XLSX.utils.decode_range(ws['!ref']);
-        
+
         // Style main title (row 1) with gradient-like effect
         for (let col = range.s.c; col <= range.e.c; col++) {
             const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
             if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
             ws[cellAddress].s = {
-                font: { bold: true, sz: 18, color: { rgb: "FFFFFF" } },
-                fill: { fgColor: { rgb: "1E40AF" } }, // Deep blue
-                alignment: { horizontal: "center", vertical: "center" },
+                font: { bold: true, sz: 18, color: { rgb: 'FFFFFF' } },
+                fill: { fgColor: { rgb: '1E40AF' } }, // Deep blue
+                alignment: { horizontal: 'center', vertical: 'center' },
                 border: {
-                    top: { style: "thick", color: { rgb: "1E40AF" } },
-                    bottom: { style: "thick", color: { rgb: "1E40AF" } },
-                    left: { style: "thick", color: { rgb: "1E40AF" } },
-                    right: { style: "thick", color: { rgb: "1E40AF" } }
+                    top: { style: 'thick', color: { rgb: '1E40AF' } },
+                    bottom: { style: 'thick', color: { rgb: '1E40AF' } },
+                    left: { style: 'thick', color: { rgb: '1E40AF' } },
+                    right: { style: 'thick', color: { rgb: '1E40AF' } }
                 }
             };
         }
@@ -586,14 +653,14 @@ const exportToExcel = async () => {
                 const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
                 ws[cellAddress].s = {
-                    font: { bold: row === 2, sz: row === 2 ? 12 : 10, color: { rgb: row === 2 ? "1F2937" : "374151" } },
-                    fill: { fgColor: { rgb: row === 2 ? "E5E7EB" : "F9FAFB" } },
-                    alignment: { horizontal: "left", vertical: "center" },
+                    font: { bold: row === 2, sz: row === 2 ? 12 : 10, color: { rgb: row === 2 ? '1F2937' : '374151' } },
+                    fill: { fgColor: { rgb: row === 2 ? 'E5E7EB' : 'F9FAFB' } },
+                    alignment: { horizontal: 'left', vertical: 'center' },
                     border: {
-                        top: { style: "thin", color: { rgb: "D1D5DB" } },
-                        bottom: { style: "thin", color: { rgb: "D1D5DB" } },
-                        left: { style: "thin", color: { rgb: "D1D5DB" } },
-                        right: { style: "thin", color: { rgb: "D1D5DB" } }
+                        top: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                        bottom: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                        left: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                        right: { style: 'thin', color: { rgb: 'D1D5DB' } }
                     }
                 };
             }
@@ -605,14 +672,14 @@ const exportToExcel = async () => {
                 const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
                 ws[cellAddress].s = {
-                    font: { bold: row === 5, sz: row === 5 ? 12 : 10, color: { rgb: row === 5 ? "059669" : "065F46" } },
-                    fill: { fgColor: { rgb: row === 5 ? "D1FAE5" : "ECFDF5" } },
-                    alignment: { horizontal: "center", vertical: "center" },
+                    font: { bold: row === 5, sz: row === 5 ? 12 : 10, color: { rgb: row === 5 ? '059669' : '065F46' } },
+                    fill: { fgColor: { rgb: row === 5 ? 'D1FAE5' : 'ECFDF5' } },
+                    alignment: { horizontal: 'center', vertical: 'center' },
                     border: {
-                        top: { style: "thin", color: { rgb: "10B981" } },
-                        bottom: { style: "thin", color: { rgb: "10B981" } },
-                        left: { style: "thin", color: { rgb: "10B981" } },
-                        right: { style: "thin", color: { rgb: "10B981" } }
+                        top: { style: 'thin', color: { rgb: '10B981' } },
+                        bottom: { style: 'thin', color: { rgb: '10B981' } },
+                        left: { style: 'thin', color: { rgb: '10B981' } },
+                        right: { style: 'thin', color: { rgb: '10B981' } }
                     }
                 };
             }
@@ -624,14 +691,14 @@ const exportToExcel = async () => {
             const cellAddress = XLSX.utils.encode_cell({ r: headerRowIndex, c: col });
             if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
             ws[cellAddress].s = {
-                font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
-                fill: { fgColor: { rgb: "374151" } }, // Dark gray
-                alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } },
+                fill: { fgColor: { rgb: '374151' } }, // Dark gray
+                alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
                 border: {
-                    top: { style: "medium", color: { rgb: "000000" } },
-                    bottom: { style: "medium", color: { rgb: "000000" } },
-                    left: { style: "thin", color: { rgb: "000000" } },
-                    right: { style: "thin", color: { rgb: "000000" } }
+                    top: { style: 'medium', color: { rgb: '000000' } },
+                    bottom: { style: 'medium', color: { rgb: '000000' } },
+                    left: { style: 'thin', color: { rgb: '000000' } },
+                    right: { style: 'thin', color: { rgb: '000000' } }
                 }
             };
         }
@@ -639,68 +706,70 @@ const exportToExcel = async () => {
         // Style data rows with alternating colors and status-based formatting
         for (let row = headerRowIndex + 1; row < range.e.r - 3; row++) {
             const isEvenRow = (row - headerRowIndex) % 2 === 0;
-            const bgColor = isEvenRow ? "FFFFFF" : "F8FAFC";
-            
+            const bgColor = isEvenRow ? 'FFFFFF' : 'F8FAFC';
+
             for (let col = range.s.c; col <= range.e.c; col++) {
                 const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
                 if (!ws[cellAddress]) continue;
-                
+
                 // Get cell value for status-based coloring
                 const cellValue = ws[cellAddress].v;
                 let fillColor = bgColor;
-                let fontColor = "374151";
-                
+                let fontColor = '374151';
+
                 // Color code attendance status cells
-                if (col >= 7) { // Date columns start from column 7
+                if (col >= 7) {
+                    // Date columns start from column 7
                     switch (cellValue) {
                         case 'P':
-                            fillColor = "DCFCE7"; // Light green
+                            fillColor = 'DCFCE7'; // Light green
                             break;
                         case 'A':
-                            fillColor = "FEE2E2"; // Light red
+                            fillColor = 'FEE2E2'; // Light red
                             break;
                         case 'L':
-                            fillColor = "FEF3C7"; // Light yellow
+                            fillColor = 'FEF3C7'; // Light yellow
                             break;
                         case 'E':
-                            fillColor = "DBEAFE"; // Light blue
+                            fillColor = 'DBEAFE'; // Light blue
                             break;
                         case 'M':
-                            fillColor = "F3E8FF"; // Light purple
+                            fillColor = 'F3E8FF'; // Light purple
                             break;
                         case 'N':
-                            fillColor = "F1F5F9"; // Light gray
+                            fillColor = 'F1F5F9'; // Light gray
                             break;
                     }
                 }
-                
+
                 // Color code overall status column
-                if (col === 4) { // Status column
+                if (col === 4) {
+                    // Status column
                     switch (cellValue) {
                         case 'Warning':
-                            fillColor = "FEE2E2";
-                            fontColor = "DC2626";
+                            fillColor = 'FEE2E2';
+                            fontColor = 'DC2626';
                             break;
                         case 'At Risk':
-                            fillColor = "FEF3C7";
-                            fontColor = "D97706";
+                            fillColor = 'FEF3C7';
+                            fontColor = 'D97706';
                             break;
                         case 'Normal':
-                            fillColor = "DCFCE7";
-                            fontColor = "16A34A";
+                            fillColor = 'DCFCE7';
+                            fontColor = '16A34A';
                             break;
                     }
                 }
-                
+
                 ws[cellAddress].s = {
                     font: { sz: 10, color: { rgb: fontColor } },
                     fill: { fgColor: { rgb: fillColor } },
-                    alignment: { horizontal: col <= 6 ? "left" : "center", vertical: "center" },
+                    alignment: { horizontal: col <= 6 ? 'left' : 'center', vertical: 'center' },
                     border: {
-                        top: { style: "thin", color: { rgb: "E5E7EB" } },
-                        bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-                        left: { style: "thin", color: { rgb: "E5E7EB" } },
-                        right: { style: "thin", color: { rgb: "E5E7EB" } }
+                        top: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                        bottom: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                        left: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                        right: { style: 'thin', color: { rgb: 'E5E7EB' } }
                     }
                 };
             }
@@ -713,14 +782,14 @@ const exportToExcel = async () => {
                 const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
                 ws[cellAddress].s = {
-                    font: { bold: row === summaryStartRow, sz: row === summaryStartRow ? 12 : 10, color: { rgb: row === summaryStartRow ? "7C2D12" : "92400E" } },
-                    fill: { fgColor: { rgb: row === summaryStartRow ? "FED7AA" : "FEF3C7" } },
-                    alignment: { horizontal: "left", vertical: "center" },
+                    font: { bold: row === summaryStartRow, sz: row === summaryStartRow ? 12 : 10, color: { rgb: row === summaryStartRow ? '7C2D12' : '92400E' } },
+                    fill: { fgColor: { rgb: row === summaryStartRow ? 'FED7AA' : 'FEF3C7' } },
+                    alignment: { horizontal: 'left', vertical: 'center' },
                     border: {
-                        top: { style: "thin", color: { rgb: "F59E0B" } },
-                        bottom: { style: "thin", color: { rgb: "F59E0B" } },
-                        left: { style: "thin", color: { rgb: "F59E0B" } },
-                        right: { style: "thin", color: { rgb: "F59E0B" } }
+                        top: { style: 'thin', color: { rgb: 'F59E0B' } },
+                        bottom: { style: 'thin', color: { rgb: 'F59E0B' } },
+                        left: { style: 'thin', color: { rgb: 'F59E0B' } },
+                        right: { style: 'thin', color: { rgb: 'F59E0B' } }
                     }
                 };
             }
@@ -737,18 +806,18 @@ const exportToExcel = async () => {
             { hpt: 18 }, // Legend
             { hpt: 15 }, // Empty row
             { hpt: 15 }, // Empty row
-            { hpt: 22 }  // Column headers
+            { hpt: 22 } // Column headers
         ];
 
         // Create workbook with enhanced properties
         const wb = XLSX.utils.book_new();
         wb.Props = {
-            Title: "Student Attendance Report",
-            Subject: "Attendance Analysis",
-            Author: "Sakai LAMMS",
+            Title: 'Student Attendance Report',
+            Subject: 'Attendance Analysis',
+            Author: 'Sakai LAMMS',
             CreatedDate: new Date()
         };
-        
+
         XLSX.utils.book_append_sheet(wb, ws, 'Attendance Report');
 
         // Save the workbook
@@ -797,32 +866,32 @@ const initializeComponent = async () => {
                 const assignments = response.data.assignments || [];
                 const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
 
-                // Filter homeroom sections for this specific teacher only
-                const homeroomSections = allSections.filter((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
-                console.log(`Homeroom sections for teacher ${teacherId.value}:`, homeroomSections);
+                // Find the teacher's homeroom section directly from sections table
+                console.log('Finding homeroom section for teacher:', teacherId.value);
+                const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
 
-                if (homeroomSections.length === 0) {
-                    // If no homeroom sections, use all assigned sections for now
-                    console.log('No homeroom sections found, using all assigned sections');
-                    teacherSections.value = assignments.map((assignment) => ({
-                        id: assignment.section_id,
-                        name: assignment.section_name,
-                        subjects: assignment.subjects || []
-                    }));
-                } else {
-                    // Add subjects to homeroom sections
-                    teacherSections.value = homeroomSections.map((section) => {
-                        const sectionAssignment = assignments.find((assignment) => assignment.section_id === section.id);
-                        return {
-                            id: section.id,
-                            name: section.name,
-                            homeroom_teacher_id: section.homeroom_teacher_id,
+                if (homeroomSection) {
+                    // Set the single homeroom section for this teacher
+                    const sectionAssignment = assignments.find((assignment) => assignment.section_id === homeroomSection.id);
+
+                    teacherSections.value = [
+                        {
+                            id: homeroomSection.id,
+                            name: homeroomSection.name,
+                            homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
                             subjects: sectionAssignment?.subjects || []
-                        };
-                    });
+                        }
+                    ];
+
+                    // Auto-select the homeroom section (no dropdown needed)
+                    selectedSection.value = teacherSections.value[0];
+                    console.log('Auto-selected homeroom section:', selectedSection.value.name);
+                } else {
+                    console.warn('No homeroom section found for teacher:', teacherId.value);
+                    teacherSections.value = [];
                 }
 
-                // All teacher sections for search
+                // All teacher sections for search (keep all assignments for comprehensive search)
                 allTeacherSections.value = assignments.map((assignment) => ({
                     id: assignment.section_id,
                     name: assignment.section_name,
@@ -864,10 +933,8 @@ const initializeComponent = async () => {
         // Add 'All Subjects' option at the beginning
         subjects.value = [{ id: 'all', name: 'All Subjects' }, ...uniqueSubjects];
 
-        // Auto-select first section and 'All Subjects' if available
-        if (teacherSections.value.length > 0) {
-            selectedSection.value = teacherSections.value[0];
-            // Load available dates for the selected section
+        // Load available dates for the selected section if it exists
+        if (selectedSection.value) {
             await loadAvailableDates();
         }
         if (subjects.value.length > 0) {
@@ -893,6 +960,8 @@ const initializeComponent = async () => {
 
 // Load teacher data and sections on component mount
 onMounted(() => {
+    // Clear cache to ensure fresh data on page load
+    AttendanceRecordsService.cache.clear();
     initializeComponent();
 });
 
@@ -1151,38 +1220,41 @@ const showDayDetails = (student, date) => {
     <div class="attendance-records-container p-4">
         <Toast />
 
-        <!-- Header with title and export button -->
+        <!-- Header with title and action buttons -->
         <div class="flex justify-between items-center mb-4">
             <h5 class="text-xl font-semibold">Attendance Records</h5>
-            <Button icon="pi pi-file-excel" label="Export to Excel" class="p-button-success" @click="exportToExcel" :disabled="loading || !filteredRecords.length" />
+            <div class="flex gap-2">
+                <Button icon="pi pi-refresh" label="Refresh" class="p-button-outlined" @click="forceRefresh" :disabled="isLoading" v-tooltip.top="'Refresh attendance data'" />
+                <Button icon="pi pi-file-excel" label="Export to Excel" class="p-button-success" @click="exportToExcel" :disabled="isLoading || !filteredRecords.length" />
+            </div>
         </div>
 
         <!-- Filters -->
         <div class="filters p-3 mb-4 border rounded-lg bg-gray-50">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="field">
-                    <label for="section" class="block mb-1 font-medium">Section</label>
-                    <Dropdown id="section" v-model="selectedSection" :options="teacherSections" optionLabel="name" placeholder="Select Section" class="w-full" :loading="loading" />
-                    <small class="text-gray-500">Homeroom sections only</small>
+                    <label for="section" class="block mb-2 font-medium text-gray-900">Section</label>
+                    <InputText id="section" :value="`🏠 ${selectedSection?.name || 'Loading...'} (Homeroom)`" readonly class="w-full" style="background-color: #f8f9fa; cursor: default" />
+                    <small class="text-gray-500">Your assigned homeroom section</small>
                 </div>
 
                 <div class="field">
-                    <label for="subject" class="block mb-1 font-medium">Subject</label>
+                    <label for="subject" class="block mb-2 font-medium text-gray-900">Subject</label>
                     <Dropdown id="subject" v-model="selectedSubject" :options="subjects" optionLabel="name" placeholder="Select Subject" class="w-full" />
                 </div>
 
                 <div class="field">
-                    <label for="startDate" class="block mb-1 font-medium">Start Date</label>
+                    <label for="startDate" class="block mb-2 font-medium text-gray-900">Start Date</label>
                     <Calendar id="startDate" v-model="startDate" dateFormat="yy-mm-dd" class="w-full" :maxDate="endDate" :loading="isLoadingDates" showIcon />
                 </div>
 
                 <div class="field">
-                    <label for="endDate" class="block mb-1 font-medium">End Date</label>
+                    <label for="endDate" class="block mb-2 font-medium text-gray-900">End Date</label>
                     <Calendar id="endDate" v-model="endDate" dateFormat="yy-mm-dd" class="w-full" :minDate="startDate" :loading="isLoadingDates" showIcon />
                 </div>
 
                 <div class="field">
-                    <label for="search" class="block mb-1 font-medium">Search</label>
+                    <label for="search" class="block mb-2 font-medium text-gray-900">Search</label>
                     <div class="p-inputgroup w-full">
                         <span class="p-inputgroup-addon"> </span>
                         <InputText id="search" v-model="searchQuery" placeholder="Search by name or ID..." class="w-full" />

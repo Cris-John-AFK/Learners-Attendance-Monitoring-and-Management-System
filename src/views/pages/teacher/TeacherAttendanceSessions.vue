@@ -1,5 +1,6 @@
 <script setup>
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Column from 'primevue/column';
@@ -21,7 +22,7 @@ const toast = useToast();
 const loading = ref(false);
 const sessions = ref([]);
 const selectedDate = ref(new Date());
-const teacherId = ref(3); // Maria Santos
+const teacherId = ref(null); // Will be set from authenticated teacher data
 const showSessionDetail = ref(false);
 const selectedSession = ref(null);
 const sessionStudents = ref([]);
@@ -49,8 +50,41 @@ const sessionsByDate = computed(() => {
     return grouped;
 });
 
+// Initialize teacher data from authentication
+const initializeTeacherData = async () => {
+    try {
+        // Check if teacher is authenticated
+        if (!TeacherAuthService.isAuthenticated()) {
+            console.warn('Teacher not authenticated, redirecting to login');
+            router.push('/teacher-login');
+            return false;
+        }
+
+        // Get authenticated teacher data
+        const teacherData = TeacherAuthService.getTeacherData();
+        if (teacherData && teacherData.teacher) {
+            teacherId.value = teacherData.teacher.id;
+            console.log('Initialized teacher ID from authenticated data:', teacherId.value);
+            return true;
+        } else {
+            console.error('No teacher data found in authentication');
+            router.push('/teacher-login');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error initializing teacher data:', error);
+        router.push('/teacher-login');
+        return false;
+    }
+};
+
 // Load attendance sessions for the teacher
 const loadAttendanceSessions = async () => {
+    if (!teacherId.value) {
+        console.error('No teacher ID available');
+        return;
+    }
+
     loading.value = true;
     try {
         console.log('Loading attendance sessions for teacher:', teacherId.value);
@@ -250,8 +284,13 @@ const handleNotificationUpdate = (notifications) => {
     }
 };
 
-onMounted(() => {
-    loadAttendanceSessions();
+onMounted(async () => {
+    // Initialize teacher data first
+    const initialized = await initializeTeacherData();
+    if (initialized) {
+        // Load attendance sessions only if teacher data was initialized successfully
+        await loadAttendanceSessions();
+    }
     // Subscribe to notifications for auto-refresh
     unsubscribeNotifications = NotificationService.subscribe(handleNotificationUpdate);
 });

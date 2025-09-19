@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Rosa's Sections Fix</title>
+</head>
+<body>
+    <h1>Testing Rosa Garcia's Section Access</h1>
+    <div id="results"></div>
+
+    <script>
+        async function testRosaSections() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                // Test the assignments API
+                const response = await fetch('http://127.0.0.1:8000/api/teachers/3/assignments', {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = `
+                    <h2>✅ API Response for Rosa Garcia (Teacher 3):</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                    
+                    <h2>📋 Expected Sections in Dropdown:</h2>
+                    <ul>
+                        ${data.assignments.map(assignment => 
+                            `<li><strong>${assignment.section_name}</strong> (ID: ${assignment.section_id})</li>`
+                        ).join('')}
+                    </ul>
+                    
+                    <h2>🎯 What Rosa Should See:</h2>
+                    <ul>
+                        <li>✅ <strong>Kinder Two</strong> - Her homeroom section</li>
+                        <li>✅ <strong>Kinder One</strong> - Section where she teaches Filipino</li>
+                    </ul>
+                    
+                    <h2>📊 Expected Attendance Data:</h2>
+                    <ul>
+                        <li><strong>Kinder Two:</strong> Filipino sessions from Sep 17</li>
+                        <li><strong>Kinder One:</strong> English session from Sep 19 + Filipino sessions from Sep 17</li>
+                    </ul>
+                `;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<h2>❌ Error:</h2><p>${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testRosaSections();
+    </script>
+</body>
+</html>

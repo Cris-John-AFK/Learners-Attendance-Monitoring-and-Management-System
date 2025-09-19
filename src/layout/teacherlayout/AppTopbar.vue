@@ -236,9 +236,9 @@ const logout = async () => {
         // Show success message
         isLogoutSuccess.value = true;
         
-        // Redirect to teacher login page after a short delay
+        // Redirect to general login page after a short delay
         setTimeout(() => {
-            router.push('/teacher/login');
+            router.push('/');
         }, 1500);
     } catch (error) {
         console.error('Logout error:', error);

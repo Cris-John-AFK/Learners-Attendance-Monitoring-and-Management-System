@@ -1,85 +1,105 @@
 <?php
 
-// Direct test of the API endpoints without going through HTTP
 require_once 'lamms-backend/vendor/autoload.php';
 
 $app = require_once 'lamms-backend/bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 
-Config::set('database.default', 'pgsql');
-Config::set('database.connections.pgsql', [
-    'driver' => 'pgsql',
-    'host' => 'localhost',
-    'port' => '5432',
-    'database' => 'lamms_db',
-    'username' => 'postgres',
-    'password' => 'password',
-    'charset' => 'utf8',
-    'prefix' => '',
-    'schema' => 'public',
-]);
+echo "=== Testing Attendance Records API Query Directly ===\n";
 
-echo "Testing API endpoints directly...\n\n";
+// Test the exact query from AttendanceRecordsController
+$sectionId = 1;
+$startDate = '2025-09-17';
+$endDate = '2025-09-17';
+$subjectId = 3;
 
-try {
-    // Test summary endpoint
-    $controller = new \App\Http\Controllers\API\AttendanceSummaryController();
-    
-    $request = new Request();
-    $request->merge([
-        'teacher_id' => 3,
-        'period' => 'month',
-        'view_type' => 'subject',
-        'subject_id' => 1
-    ]);
+echo "Testing query for Section: $sectionId, Date: $startDate, Subject: $subjectId\n\n";
 
-    $response = $controller->getTeacherAttendanceSummary($request);
-    echo "Summary API Response:\n";
-    echo "Status: " . $response->getStatusCode() . "\n";
-    echo "Content: " . $response->getContent() . "\n\n";
+// Get attendance sessions with records (same query as controller)
+$query = DB::table('attendance_sessions as s')
+    ->join('attendance_records as r', 's.id', '=', 'r.attendance_session_id')
+    ->join('attendance_statuses as st', 'r.attendance_status_id', '=', 'st.id')
+    ->leftJoin('subjects as sub', 's.subject_id', '=', 'sub.id')
+    ->where('s.section_id', $sectionId)
+    ->whereBetween('s.session_date', [$startDate, $endDate])
+    ->where('r.is_current_version', true);
 
-    // Test trends endpoint
-    $request2 = new Request();
-    $request2->merge([
-        'teacher_id' => 3,
-        'period' => 'week',
-        'view_type' => 'subject',
-        'subject_id' => 1
-    ]);
-
-    $response2 = $controller->getTeacherAttendanceTrends($request2);
-    echo "Trends API Response:\n";
-    echo "Status: " . $response2->getStatusCode() . "\n";
-    echo "Content: " . $response2->getContent() . "\n\n";
-
-    // Parse and display the data nicely
-    $summaryData = json_decode($response->getContent(), true);
-    if ($summaryData['success']) {
-        echo "=== SUMMARY DATA ===\n";
-        echo "Total Students: " . $summaryData['data']['total_students'] . "\n";
-        echo "Average Attendance: " . $summaryData['data']['average_attendance'] . "%\n";
-        echo "Students with Warning: " . $summaryData['data']['students_with_warning'] . "\n";
-        echo "Students with Critical: " . $summaryData['data']['students_with_critical'] . "\n";
-        
-        echo "\nStudent Details:\n";
-        foreach ($summaryData['data']['students'] as $student) {
-            echo "- {$student['first_name']} {$student['last_name']}: {$student['total_absences']} total absences, {$student['recent_absences']} recent\n";
-        }
-    }
-
-    $trendsData = json_decode($response2->getContent(), true);
-    if ($trendsData['success']) {
-        echo "\n=== TRENDS DATA ===\n";
-        echo "Labels: " . implode(', ', $trendsData['data']['labels']) . "\n";
-        foreach ($trendsData['data']['datasets'] as $dataset) {
-            echo "{$dataset['label']}: " . implode(', ', $dataset['data']) . "\n";
-        }
-    }
-
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
-    echo "File: " . $e->getFile() . " Line: " . $e->getLine() . "\n";
+if ($subjectId) {
+    $query->where('s.subject_id', $subjectId);
 }
+
+$records = $query->select([
+    's.id as session_id',
+    's.session_date',
+    's.subject_id',
+    'sub.name as subject_name',
+    'r.student_id',
+    'r.arrival_time',
+    'r.marked_at',
+    'r.remarks',
+    'st.name as status_name',
+    'st.code as status_code'
+])->get();
+
+echo "Records found: " . $records->count() . "\n";
+foreach ($records as $record) {
+    echo "Student ID: {$record->student_id}, Status: {$record->status_name}, Session: {$record->session_id}\n";
+}
+
+// Get students for the section (same query as controller)
+echo "\n=== Students Query ===\n";
+$students = DB::table('student_details as sd')
+    ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+    ->where('ss.section_id', $sectionId)
+    ->where('sd.isActive', true)
+    ->where('ss.is_active', true)
+    ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.gradeLevel')
+    ->get();
+
+echo "Students found: " . $students->count() . "\n";
+foreach ($students as $student) {
+    echo "Student: {$student->firstName} {$student->lastName} (ID: {$student->id})\n";
+}
+
+// Test the transformation logic
+echo "\n=== Transformation Logic ===\n";
+$sessions = [];
+$sessionGroups = $records->groupBy('session_id');
+
+foreach ($sessionGroups as $sessionId => $sessionRecords) {
+    $session = [
+        'id' => $sessionId,
+        'session_date' => $sessionRecords->first()->session_date,
+        'subject' => [
+            'id' => $sessionRecords->first()->subject_id,
+            'name' => $sessionRecords->first()->subject_name
+        ],
+        'attendance_records' => []
+    ];
+
+    foreach ($sessionRecords as $record) {
+        $session['attendance_records'][] = [
+            'student_id' => $record->student_id,
+            'arrival_time' => $record->arrival_time,
+            'remarks' => $record->remarks,
+            'attendance_status' => [
+                'name' => $record->status_name,
+                'code' => $record->status_code
+            ]
+        ];
+    }
+
+    $sessions[] = $session;
+}
+
+echo "Sessions after transformation: " . count($sessions) . "\n";
+foreach ($sessions as $session) {
+    echo "Session {$session['id']}: " . count($session['attendance_records']) . " records\n";
+    foreach ($session['attendance_records'] as $record) {
+        echo "  Student {$record['student_id']}: {$record['attendance_status']['name']}\n";
+    }
+}
+
+?>
