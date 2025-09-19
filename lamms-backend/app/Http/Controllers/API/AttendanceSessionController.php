@@ -806,8 +806,17 @@ class AttendanceSessionController extends Controller
     public function getTeacherAttendanceSessions($teacherId)
     {
         try {
-            $sessions = AttendanceSession::with(['section', 'subject'])
+            // Get the sections that this teacher is assigned to
+            $assignedSectionIds = DB::table('teacher_section_subject')
                 ->where('teacher_id', $teacherId)
+                ->where('is_active', true)
+                ->pluck('section_id')
+                ->unique()
+                ->toArray();
+
+            // Get sessions for the teacher's assigned sections only
+            $sessions = AttendanceSession::with(['section', 'subject'])
+                ->whereIn('section_id', $assignedSectionIds)
                 ->orderBy('session_date', 'desc')
                 ->orderBy('session_start_time', 'desc')
                 ->get()

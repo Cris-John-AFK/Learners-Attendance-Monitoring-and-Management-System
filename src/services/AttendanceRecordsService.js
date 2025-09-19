@@ -65,11 +65,11 @@ export class AttendanceRecordsService {
     }
 
     /**
-     * Get teacher's homeroom sections only (not all teaching assignments)
+     * Get all teacher's assigned sections (not just homeroom sections)
      */
     static async getTeacherHomeroomSections(teacherId) {
         try {
-            const cacheKey = `teacher_homeroom_${teacherId}`;
+            const cacheKey = `teacher_sections_${teacherId}`;
             return await this.getCachedData(cacheKey, async () => {
                 const response = await axios.get(`${API_BASE_URL}/teachers/${teacherId}/assignments`);
                 console.log('Raw API response:', response.data);
@@ -80,27 +80,13 @@ export class AttendanceRecordsService {
                 
                 const assignments = response.data.assignments || [];
                 
-                // Transform assignments into sections format and get homeroom sections
-                // First, get all sections this teacher is assigned to
-                const sectionsResponse = await axios.get(`${API_BASE_URL}/sections`);
-                const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
-                
-                // Filter to only homeroom sections (where teacher is homeroom_teacher_id)
-                const homeroomSections = allSections.filter(section => 
-                    section.homeroom_teacher_id === parseInt(teacherId)
-                );
-                
-                // Add subjects to each homeroom section from assignments
-                const sectionsWithSubjects = homeroomSections.map(section => {
-                    const sectionAssignments = assignments.find(assignment => 
-                        assignment.section_id === section.id
-                    );
-                    
+                // Transform assignments directly into sections format
+                // Each assignment already contains section info and subjects
+                const sectionsWithSubjects = assignments.map(assignment => {
                     return {
-                        id: section.id,
-                        name: section.name,
-                        homeroom_teacher_id: section.homeroom_teacher_id,
-                        subjects: sectionAssignments?.subjects || []
+                        id: assignment.section_id,
+                        name: assignment.section_name,
+                        subjects: assignment.subjects || []
                     };
                 });
                 
@@ -110,7 +96,7 @@ export class AttendanceRecordsService {
                 };
             });
         } catch (error) {
-            console.error('Error fetching teacher homeroom sections:', error);
+            console.error('Error fetching teacher assigned sections:', error);
             throw error;
         }
     }

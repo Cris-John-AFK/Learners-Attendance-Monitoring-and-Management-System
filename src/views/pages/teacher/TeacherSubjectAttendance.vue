@@ -41,12 +41,22 @@ const getInitialSubjectInfo = () => {
         return { id: props.subjectId, name: props.subjectName };
     } else if (route.path.includes('/subject/homeroom')) {
         return { id: '2', name: 'Homeroom' };
+    } else if (route.path.includes('/subject/english')) {
+        return { id: 'english', name: 'English' };
+    } else if (route.path.includes('/subject/filipino')) {
+        return { id: 'filipino', name: 'Filipino' };
     } else if (route.path.includes('/subject/mathematics')) {
         return { id: '1', name: 'Mathematics' };
     } else if (route.params.subjectId) {
         const id = route.params.subjectId;
-        // Don't hardcode names - will be fetched dynamically
-        return { id, name: 'Subject' };
+        // Map common subject IDs to proper names
+        const subjectNames = {
+            'english': 'English',
+            'filipino': 'Filipino',
+            'mathematics': 'Mathematics',
+            'science': 'Science'
+        };
+        return { id, name: subjectNames[id] || 'Subject' };
     }
     return { id: '1', name: 'Mathematics' };
 };
@@ -58,6 +68,10 @@ const sectionId = ref('');
 const teacherId = ref(null); // Will be set from authenticated teacher
 const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
+
+// Loading states
+const isLoadingSeating = ref(false);
+const loadingMessage = ref('');
 
 // Attendance Session Management
 const currentSession = ref(null);
@@ -233,6 +247,10 @@ const initializeTeacherData = async () => {
 const loadStudentsData = async () => {
     try {
         console.log('Loading students from database...');
+        
+        // Show loading animation
+        isLoadingSeating.value = true;
+        loadingMessage.value = 'Loading students and seating arrangement...';
 
         // Ensure teacher is initialized first
         if (!teacherId.value) {
@@ -320,6 +338,12 @@ const loadStudentsData = async () => {
             life: 5000
         });
         return false;
+    } finally {
+        // Hide loading animation after a minimum display time
+        setTimeout(() => {
+            isLoadingSeating.value = false;
+            loadingMessage.value = '';
+        }, 800);
     }
 };
 
@@ -398,6 +422,8 @@ const saveCurrentLayout = async (showToast = true) => {
 // Load seating arrangement from database
 const loadSeatingArrangementFromDatabase = async () => {
     try {
+        isLoadingSeating.value = true;
+        loadingMessage.value = 'Loading seating arrangement...';
         console.log('Loading seating arrangement from database...');
 
         if (!sectionId.value || !teacherId.value) {
@@ -441,12 +467,18 @@ const loadSeatingArrangementFromDatabase = async () => {
         }
 
         // Fallback to localStorage if database doesn't have data
-        console.log('No seating arrangement in database, trying localStorage...');
-        return loadSavedLayout();
+        console.log('Loaded seating arrangement from database');
+        return true;
     } catch (error) {
         console.error('Error loading seating arrangement from database:', error);
         console.log('Falling back to localStorage...');
         return loadSavedLayout();
+    } finally {
+        // Add a small delay to show the loading animation
+        setTimeout(() => {
+            isLoadingSeating.value = false;
+            loadingMessage.value = '';
+        }, 500);
     }
 };
 
@@ -2016,6 +2048,13 @@ watchEffect(() => {
         subjectId.value = newSubject.id;
         subjectName.value = newSubject.name;
         console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
+        
+        // Reload students data when subject changes
+        if (teacherId.value) {
+            isLoadingSeating.value = true;
+            loadingMessage.value = 'Switching subjects...';
+            loadStudentsData();
+        }
     }
 });
 
@@ -4014,6 +4053,19 @@ const titleRef = ref(null);
             @dont-show-again="handleDontShowAgain"
         />
 
+        <!-- Seating Loading Overlay -->
+        <div v-if="isLoadingSeating" class="seating-loading-overlay">
+            <div class="loading-content">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                </div>
+                <div class="loading-text">
+                    <h3>{{ loadingMessage }}</h3>
+                    <p>Please wait while we prepare your classroom...</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Session Completion Loading Overlay -->
         <div v-if="isCompletingSession" class="session-loading-overlay">
             <div class="loading-content">
@@ -4559,6 +4611,62 @@ const titleRef = ref(null);
     50% {
         box-shadow: 0 4px 20px rgba(16, 185, 129, 0.5);
     }
+}
+
+/* Seating Loading Overlay Styles */
+.seating-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(5px);
+}
+
+.seating-loading-overlay .loading-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    width: 90%;
+}
+
+.seating-loading-overlay .loading-spinner {
+    margin-bottom: 1.5rem;
+}
+
+.seating-loading-overlay .spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.seating-loading-overlay .loading-text h3 {
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+    font-size: 1.2rem;
+}
+
+.seating-loading-overlay .loading-text p {
+    margin: 0;
+    color: #7f8c8d;
+    font-size: 0.9rem;
 }
 
 /* Session Completion Loading Overlay Styles */

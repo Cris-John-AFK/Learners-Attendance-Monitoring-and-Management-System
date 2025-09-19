@@ -166,8 +166,7 @@ const initializeTeacherData = async () => {
                 id: teacherData.teacher.id,
                 name: teacherData.teacher.full_name || `${teacherData.teacher.first_name} ${teacherData.teacher.last_name}`,
                 email: teacherData.user.email,
-                section: teacherData.assignments.find(a => a.role === 'homeroom')?.section_name || 
-                        teacherData.assignments.find(a => a.role === 'subject_teacher')?.section_name || 
+                section: teacherData.assignments.find(a => a.section_name)?.section_name || 
                         'No section assigned',
                 assignedGrades: []
             };
