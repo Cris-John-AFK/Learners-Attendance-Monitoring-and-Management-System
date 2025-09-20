@@ -615,6 +615,20 @@ const handleLogin = async () => {
     font-size: 1.1rem;
 }
 
+.password-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: #666;
+    font-size: 1.2rem;
+    transition: color 0.3s ease;
+}
+
+.password-toggle:hover {
+    color: #81bfda;
+}
+
 .form-group {
     margin-bottom: 2rem;
     animation: slideInUp 0.8s ease-out both;

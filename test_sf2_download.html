@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test SF2 Download API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5a6fd8;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 SF2 Download API Test</h1>
+        
+        <div class="test-section">
+            <h3>1. Test SF2 Report Download</h3>
+            <p>Test the Laravel backend SF2 report generation and download functionality.</p>
+            
+            <div>
+                <label>Section ID:</label>
+                <input type="number" id="sectionId" value="1" min="1">
+                
+                <label>Month (YYYY-MM):</label>
+                <input type="text" id="monthParam" value="2025-09" placeholder="2025-09">
+                
+                <button onclick="testSF2Download()">Download SF2 Report</button>
+            </div>
+            
+            <div id="downloadResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Test API Endpoint Availability</h3>
+            <p>Check if the SF2 API endpoints are accessible.</p>
+            
+            <button onclick="testEndpointAvailability()">Test Endpoints</button>
+            
+            <div id="endpointResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Test Different Months</h3>
+            <p>Test SF2 report generation for different months.</p>
+            
+            <button onclick="testMultipleMonths()">Test Multiple Months</button>
+            
+            <div id="multipleResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000/api';
+
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+
+        async function testSF2Download() {
+            const sectionId = document.getElementById('sectionId').value;
+            const monthParam = document.getElementById('monthParam').value;
+            
+            if (!sectionId || !monthParam) {
+                showResult('downloadResult', 'Please enter both Section ID and Month', 'error');
+                return;
+            }
+
+            try {
+                showResult('downloadResult', 'Generating SF2 report...', 'info');
+                
+                const response = await fetch(`${API_BASE}/admin/reports/sf2/download/${sectionId}/${monthParam}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                // Get filename from response headers
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `SF2_Report_Section${sectionId}_${monthParam}.xlsx`;
+                
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                // Convert to blob and trigger download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+                showResult('downloadResult', 
+                    `✅ SF2 Report Downloaded Successfully!\n` +
+                    `Filename: ${filename}\n` +
+                    `Size: ${(blob.size / 1024).toFixed(2)} KB\n` +
+                    `Content-Type: ${blob.type}`, 
+                    'success'
+                );
+
+            } catch (error) {
+                console.error('SF2 Download Error:', error);
+                showResult('downloadResult', 
+                    `❌ SF2 Download Failed:\n${error.message}`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testEndpointAvailability() {
+            const endpoints = [
+                '/admin/reports/sf2/download/1',
+                '/admin/reports/sf2/download/1/2025-09'
+            ];
+
+            let results = '🔍 Testing API Endpoints:\n\n';
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`${API_BASE}${endpoint}`, {
+                        method: 'HEAD' // Just check if endpoint exists
+                    });
+                    
+                    results += `✅ ${endpoint} - Status: ${response.status}\n`;
+                } catch (error) {
+                    results += `❌ ${endpoint} - Error: ${error.message}\n`;
+                }
+            }
+
+            showResult('endpointResult', results, 'info');
+        }
+
+        async function testMultipleMonths() {
+            const months = ['2025-08', '2025-09', '2025-10'];
+            const sectionId = 1;
+            
+            let results = '📅 Testing Multiple Months:\n\n';
+
+            for (const month of months) {
+                try {
+                    showResult('multipleResult', `Testing ${month}...`, 'info');
+                    
+                    const response = await fetch(`${API_BASE}/admin/reports/sf2/download/${sectionId}/${month}`, {
+                        method: 'HEAD'
+                    });
+                    
+                    if (response.ok) {
+                        results += `✅ ${month} - Report generation available\n`;
+                    } else {
+                        results += `⚠️ ${month} - Status: ${response.status}\n`;
+                    }
+                } catch (error) {
+                    results += `❌ ${month} - Error: ${error.message}\n`;
+                }
+            }
+
+            showResult('multipleResult', results, 'info');
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            console.log('SF2 Download Test Page Loaded');
+            console.log('API Base URL:', API_BASE);
+        };
+    </script>
+</body>
+</html>

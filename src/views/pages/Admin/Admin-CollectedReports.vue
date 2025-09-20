@@ -38,6 +38,28 @@
                     <p class="statistics-subtitle">Section counts and student distribution by grade level</p>
                 </div>
 
+                <!-- Month Navigation -->
+                <div class="month-navigation-header">
+                    <Button 
+                        icon="pi pi-chevron-left" 
+                        class="p-button-text p-button-rounded month-nav-btn" 
+                        @click="previousOverviewMonth()" 
+                        :disabled="!canGoPreviousOverviewMonth()"
+                        v-tooltip.top="'Previous Month'"
+                    />
+                    <div class="current-month-display">
+                        <h3 class="month-title">{{ getCurrentOverviewMonthDisplay() }}</h3>
+                        <p class="month-subtitle">{{ getActiveSectionsCount() }} sections active</p>
+                    </div>
+                    <Button 
+                        icon="pi pi-chevron-right" 
+                        class="p-button-text p-button-rounded month-nav-btn" 
+                        @click="nextOverviewMonth()" 
+                        :disabled="!canGoNextOverviewMonth()"
+                        v-tooltip.top="'Next Month'"
+                    />
+                </div>
+
                 <div class="grade-stats-grid">
                     <div v-for="gradeStats in gradeStatistics" :key="gradeStats.grade" class="grade-stat-card">
                         <div class="grade-header">
@@ -898,13 +920,19 @@ const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
 const selectedStatus = ref(null);
 
-// Month navigation
-const currentMonth = ref(8); // September = 8 (0-based index)
+// Current month and year for navigation
+const currentMonth = ref(8); // September (0-indexed)
 const currentYear = ref(2025);
+
+// Overview month navigation (separate from section details)
+const currentOverviewMonth = ref(8); // September (0-indexed)
+const currentOverviewYear = ref(2025);
+
+// Available months for navigation
 const availableMonths = ref([
-    { month: 7, year: 2025, name: 'August 2025' },
-    { month: 8, year: 2025, name: 'September 2025' },
-    { month: 9, year: 2025, name: 'October 2025' }
+    { month: 7, year: 2025, display: 'August 2025' },
+    { month: 8, year: 2025, display: 'September 2025' },
+    { month: 9, year: 2025, display: 'October 2025' }
 ]);
 
 // Historical section data with different teachers per month
@@ -2516,56 +2544,133 @@ const getGradeSections = (grade) => {
     }
 };
 
-// Computed property for grade statistics
+// Month-specific section data
+const monthlyGradeData = ref({
+    'August 2025': {
+        'Kindergarten': {
+            sections: [
+                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 22, presentCount: 20, absentCount: 2, attendanceRate: 91, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 25, presentCount: 23, absentCount: 2, attendanceRate: 92, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 21, presentCount: 18, absentCount: 3, attendanceRate: 86, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 1': {
+            sections: [
+                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 28, presentCount: 26, absentCount: 2, attendanceRate: 93, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 27, presentCount: 23, absentCount: 4, attendanceRate: 85, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 2': {
+            sections: [
+                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 25, presentCount: 24, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 27, presentCount: 26, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 26, presentCount: 23, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        }
+    },
+    'September 2025': {
+        'Kindergarten': {
+            sections: kinderSections.value
+        },
+        'Grade 1': {
+            sections: grade1Sections.value
+        },
+        'Grade 2': {
+            sections: grade2Sections.value
+        },
+        'Grade 3': {
+            sections: grade3Sections.value
+        },
+        'Grade 4': {
+            sections: grade4Sections.value
+        },
+        'Grade 5': {
+            sections: grade5Sections.value
+        },
+        'Grade 6': {
+            sections: grade6Sections.value
+        }
+    },
+    'October 2025': {
+        'Kindergarten': {
+            sections: [
+                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 26, presentCount: 25, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 29, presentCount: 28, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 25, presentCount: 22, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' },
+                { id: 4, name: 'Kinder D', teacher: 'Ms. Anna Rodriguez', studentCount: 27, presentCount: 20, absentCount: 7, attendanceRate: 74, status: 'NEEDS ATTENTION', statusClass: 'status-warning' }
+            ]
+        },
+        'Grade 1': {
+            sections: [
+                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 31, presentCount: 29, absentCount: 2, attendanceRate: 94, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 30, presentCount: 26, absentCount: 4, attendanceRate: 87, status: 'GOOD', statusClass: 'status-good' },
+                { id: 3, name: 'Grade 1-C', teacher: 'Ms. Rebecca Davis', studentCount: 29, presentCount: 24, absentCount: 5, attendanceRate: 83, status: 'GOOD', statusClass: 'status-good' }
+            ]
+        },
+        'Grade 2': {
+            sections: [
+                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 28, presentCount: 27, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 30, presentCount: 29, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 29, presentCount: 26, absentCount: 3, attendanceRate: 90, status: 'EXCELLENT', statusClass: 'status-excellent' },
+                { id: 4, name: 'Grade 2-D', teacher: 'Ms. Elena Reyes', studentCount: 31, presentCount: 30, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' }
+            ]
+        }
+    }
+});
+
+// Computed property for grade statistics based on selected month
 const gradeStatistics = computed(() => {
+    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
+    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    
     const grades = [
         {
             grade: 'Kindergarten',
             level: 'Pre-Elementary',
             emoji: '🎨',
-            sections: kinderSections.value,
+            sections: monthData['Kindergarten']?.sections || [],
             color: '#FF6B6B'
         },
         {
             grade: 'Grade 1',
             level: 'Elementary',
             emoji: '📚',
-            sections: grade1Sections.value,
+            sections: monthData['Grade 1']?.sections || [],
             color: '#4ECDC4'
         },
         {
             grade: 'Grade 2',
             level: 'Elementary',
             emoji: '✏️',
-            sections: grade2Sections.value,
+            sections: monthData['Grade 2']?.sections || [],
             color: '#45B7D1'
         },
         {
             grade: 'Grade 3',
             level: 'Elementary',
             emoji: '📖',
-            sections: grade3Sections.value,
+            sections: monthData['Grade 3']?.sections || [],
             color: '#96CEB4'
         },
         {
             grade: 'Grade 4',
             level: 'Elementary',
             emoji: '🔬',
-            sections: grade4Sections.value,
+            sections: monthData['Grade 4']?.sections || [],
             color: '#FFEAA7'
         },
         {
             grade: 'Grade 5',
             level: 'Elementary',
             emoji: '🌟',
-            sections: grade5Sections.value,
+            sections: monthData['Grade 5']?.sections || [],
             color: '#DDA0DD'
         },
         {
             grade: 'Grade 6',
             level: 'Elementary',
             emoji: '🎓',
-            sections: grade6Sections.value,
+            sections: monthData['Grade 6']?.sections || [],
             color: '#20B2AA'
         }
     ];
@@ -2585,7 +2690,7 @@ const gradeStatistics = computed(() => {
             teacherCount,
             attendanceRate
         };
-    });
+    }).filter(grade => grade.sectionCount > 0); // Only show grades with sections
 });
 
 const getAttendanceBarClass = (rate) => {
@@ -3090,6 +3195,54 @@ const nextMonth = () => {
     }
 };
 
+// Overview month navigation functions
+const getCurrentOverviewMonthDisplay = () => {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[currentOverviewMonth.value]} ${currentOverviewYear.value}`;
+};
+
+const canGoPreviousOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    return currentIndex > 0;
+};
+
+const canGoNextOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    return currentIndex < availableMonths.value.length - 1;
+};
+
+const previousOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    if (currentIndex > 0) {
+        const prevMonth = availableMonths.value[currentIndex - 1];
+        currentOverviewMonth.value = prevMonth.month;
+        currentOverviewYear.value = prevMonth.year;
+    }
+};
+
+const nextOverviewMonth = () => {
+    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
+    if (currentIndex < availableMonths.value.length - 1) {
+        const nextMonth = availableMonths.value[currentIndex + 1];
+        currentOverviewMonth.value = nextMonth.month;
+        currentOverviewYear.value = nextMonth.year;
+    }
+};
+
+const getActiveSectionsCount = () => {
+    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
+    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    
+    let totalSections = 0;
+    Object.values(monthData).forEach(gradeData => {
+        if (gradeData.sections) {
+            totalSections += gradeData.sections.length;
+        }
+    });
+    
+    return totalSections;
+};
+
 const downloadSF2Report = async () => {
     if (!selectedSectionDetails.value) {
         toast.add({
@@ -3104,107 +3257,70 @@ const downloadSF2Report = async () => {
     try {
         // Get current section data
         const section = selectedSectionDetails.value;
-        const sectionName = section.name;
-        const teacher = getCurrentTeacher();
+        const sectionId = section.id;
         const monthDisplay = getCurrentMonthDisplay();
-        const students = getSectionStudents(sectionName);
-        const maleStudents = getMaleStudents(sectionName);
-        const femaleStudents = getFemaleStudents(sectionName);
+        
+        // Convert month display to YYYY-MM format for API
+        const monthParts = monthDisplay.split(' ');
+        const monthName = monthParts[0];
+        const year = monthParts[1];
+        const monthNumber = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
+        const monthParam = `${year}-${monthNumber.toString().padStart(2, '0')}`;
 
-        // Load the Excel template
-        const templatePath = '/templates/School Form Attendance Report of Learners.xlsx';
-        const response = await fetch(templatePath);
+        toast.add({
+            severity: 'info',
+            summary: 'Generating Report',
+            detail: 'Please wait while we generate your SF2 report...',
+            life: 3000
+        });
+
+        // Call Laravel backend API to generate and download SF2 report
+        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/download/${sectionId}/${monthParam}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Type': 'application/json',
+            }
+        });
 
         if (!response.ok) {
-            throw new Error('Template file not found');
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        const wb = XLSX.read(arrayBuffer, { type: 'array' });
+        // Get the filename from response headers or create default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `SF2_Daily_Attendance_${section.name}_${monthDisplay.replace(/\s+/g, '_')}.xlsx`;
+        
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (filenameMatch) {
+                filename = filenameMatch[1];
+            }
+        }
 
-        // Get the first worksheet from the template
-        const wsName = wb.SheetNames[0];
-        const ws = wb.Sheets[wsName];
-
-        // Populate template with actual data
-        // Update school information
-        if (ws['B3']) ws['B3'].v = 'Kagawasan Elementary School';
-        if (ws['B4']) ws['B4'].v = sectionName;
-        if (ws['B5']) ws['B5'].v = teacher;
-        if (ws['B6']) ws['B6'].v = monthDisplay;
-
-        // Summary data (from the modal)
-        const summaryData = {
-            maleEnrollment: getMaleStudents(sectionName).length,
-            femaleEnrollment: getFemaleStudents(sectionName).length,
-            totalEnrollment: students.length,
-            maleDroppedOut: getMaleDroppedOutCount(sectionName),
-            femaleDroppedOut: getFemaleDroppedOutCount(sectionName),
-            maleTransferredOut: getMaleTransferredOutCount(sectionName),
-            femaleTransferredOut: getFemaleTransferredOutCount(sectionName),
-            maleTransferredIn: getMaleTransferredInCount(sectionName),
-            femaleTransferredIn: getFemaleTransferredInCount(sectionName),
-            maleAttendanceRate: getMaleAttendanceRate(sectionName),
-            femaleAttendanceRate: getFemaleAttendanceRate(sectionName),
-            overallAttendanceRate: getOverallAttendanceRate(sectionName)
-        };
-
-        // Populate summary section (adjust cell references based on your template)
-        // Male column (M)
-        if (ws['M10']) ws['M10'].v = summaryData.maleEnrollment;
-        if (ws['M11']) ws['M11'].v = 0; // Late enrollment during month
-        if (ws['M12']) ws['M12'].v = summaryData.maleEnrollment;
-        if (ws['M13']) ws['M13'].v = '100%'; // Percentage of enrollment
-        if (ws['M14']) ws['M14'].v = `${summaryData.maleAttendanceRate}%`;
-        if (ws['M15']) ws['M15'].v = `${summaryData.maleAttendanceRate}%`;
-        if (ws['M16']) ws['M16'].v = 0; // Absent for 5 consecutive days
-        if (ws['M17']) ws['M17'].v = summaryData.maleDroppedOut;
-        if (ws['M18']) ws['M18'].v = summaryData.maleTransferredOut;
-        if (ws['M19']) ws['M19'].v = summaryData.maleTransferredIn;
-
-        // Female column (F)
-        if (ws['F10']) ws['F10'].v = summaryData.femaleEnrollment;
-        if (ws['F11']) ws['F11'].v = 0; // Late enrollment during month
-        if (ws['F12']) ws['F12'].v = summaryData.femaleEnrollment;
-        if (ws['F13']) ws['F13'].v = '100%'; // Percentage of enrollment
-        if (ws['F14']) ws['F14'].v = `${summaryData.femaleAttendanceRate}%`;
-        if (ws['F15']) ws['F15'].v = `${summaryData.femaleAttendanceRate}%`;
-        if (ws['F16']) ws['F16'].v = 0; // Absent for 5 consecutive days
-        if (ws['F17']) ws['F17'].v = summaryData.femaleDroppedOut;
-        if (ws['F18']) ws['F18'].v = summaryData.femaleTransferredOut;
-        if (ws['F19']) ws['F19'].v = summaryData.femaleTransferredIn;
-
-        // Total column (TOTAL)
-        if (ws['H10']) ws['H10'].v = summaryData.totalEnrollment;
-        if (ws['H11']) ws['H11'].v = 0; // Late enrollment during month
-        if (ws['H12']) ws['H12'].v = summaryData.totalEnrollment;
-        if (ws['H13']) ws['H13'].v = '100%'; // Percentage of enrollment
-        if (ws['H14']) ws['H14'].v = `${summaryData.overallAttendanceRate}%`;
-        if (ws['H15']) ws['H15'].v = `${summaryData.overallAttendanceRate}%`;
-        if (ws['H16']) ws['H16'].v = 0; // Absent for 5 consecutive days
-        if (ws['H17']) ws['H17'].v = summaryData.maleDroppedOut + summaryData.femaleDroppedOut;
-        if (ws['H18']) ws['H18'].v = summaryData.maleTransferredOut + summaryData.femaleTransferredOut;
-        if (ws['H19']) ws['H19'].v = summaryData.maleTransferredIn + summaryData.femaleTransferredIn;
-
-        // Generate filename
-        const currentDate = new Date().toISOString().split('T')[0];
-        const filename = `SF-2-Daily-Attendance_${sectionName.replace(/\s+/g, '_')}_${monthDisplay.replace(/\s+/g, '_')}_${currentDate}.xlsx`;
-
-        // Save the file
-        XLSX.writeFile(wb, filename);
+        // Convert response to blob and trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
 
         toast.add({
             severity: 'success',
-            summary: 'Excel Download Complete',
-            detail: `SF2 Excel report for ${sectionName} has been downloaded.`,
+            summary: 'SF2 Report Downloaded',
+            detail: `SF2 Excel report for ${section.name} (${monthDisplay}) has been downloaded successfully.`,
             life: 5000
         });
     } catch (error) {
-        console.error('Error generating SF2 Excel report:', error);
+        console.error('Error downloading SF2 report:', error);
         toast.add({
             severity: 'error',
             summary: 'Download Failed',
-            detail: 'Failed to generate SF2 Excel report. Please try again.',
+            detail: 'Failed to download SF2 report from server. Please try again.',
             life: 5000
         });
     }
@@ -3639,6 +3755,70 @@ const reportTypes = ref([
 .status-transferred-in {
     background-color: #4caf50;
     color: white;
+}
+
+/* Grade Level Statistics */
+.grade-statistics-section {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Month Navigation Header */
+.month-navigation-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.month-nav-btn {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+}
+
+.month-nav-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: scale(1.1);
+}
+
+.month-nav-btn:disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+}
+
+.current-month-display {
+    text-align: center;
+    color: white;
+    min-width: 250px;
+}
+
+.month-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.month-subtitle {
+    font-size: 1rem;
+    margin: 0.5rem 0 0 0;
+    opacity: 0.9;
+    font-weight: 500;
 }
 
 /* Filter section */
