@@ -97,6 +97,9 @@ class SF2ReportController extends Controller
             // Populate school information
             $this->populateSchoolInfo($worksheet, $section, $month);
             
+            // Populate day headers first
+            $this->populateDayHeaders($worksheet, $month);
+            
             // Populate student data
             $this->populateStudentData($worksheet, $students);
             
@@ -485,56 +488,216 @@ class SF2ReportController extends Controller
     }
 
     /**
-     * Populate student attendance data in the template
+     * Populate student attendance data in the template matching exact SF2 format
      */
     private function populateStudentData($worksheet, $students)
     {
-        $maleStudents = $students->where('gender', 'Male');
-        $femaleStudents = $students->where('gender', 'Female');
-        
-        $currentRow = 10; // Starting row for student data (adjust based on template)
-        
-        // Male students section
-        foreach ($maleStudents as $student) {
-            $worksheet->setCellValue("A{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
+        try {
+            Log::info("Starting to populate student data in SF2 format");
             
-            // Populate daily attendance (columns B to AF for 31 days)
-            $col = 'B';
-            foreach ($student->attendance_data as $date => $status) {
-                $mark = $this->getAttendanceMark($status);
-                $worksheet->setCellValue("{$col}{$currentRow}", $mark);
-                $col++;
+            $maleStudents = $students->where('gender', 'Male');
+            $femaleStudents = $students->where('gender', 'Female');
+            
+            // Student data should start after the day headers (rows 11-12)
+            // Row 13 will be the MALE header, students start at row 14
+            $currentRow = 13;
+            
+            // Add MALE section header at row 13
+            $worksheet->setCellValue("A{$currentRow}", "MALE");
+            $worksheet->setCellValue("B{$currentRow}", "(Last Name, First Name, Middle Name)");
+            $currentRow++;
+            
+            // Male students section
+            $maleIndex = 1;
+            foreach ($maleStudents as $student) {
+                // Column A: Student number
+                $worksheet->setCellValue("A{$currentRow}", $maleIndex);
+                
+                // Column B: Student name
+                $worksheet->setCellValue("B{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
+                
+                // Populate daily attendance starting from column C (day 1) to column AG (day 31)
+                $this->populateDailyAttendance($worksheet, $student, $currentRow);
+                
+                // Summary columns at the end (shifted one column right)
+                $worksheet->setCellValue("AI{$currentRow}", $student->total_absent);   // ABSENT
+                $worksheet->setCellValue("AJ{$currentRow}", $student->total_present);  // PRESENT  
+                $worksheet->setCellValue("AK{$currentRow}", 0);                       // TARDY
+                
+                $currentRow++;
+                $maleIndex++;
             }
             
-            // Summary columns (adjust column letters based on template)
-            $worksheet->setCellValue("AG{$currentRow}", $student->total_present);
-            $worksheet->setCellValue("AH{$currentRow}", $student->total_absent);
-            $worksheet->setCellValue("AI{$currentRow}", $student->attendance_rate . '%');
-            
+            // Add some spacing and FEMALE section header
             $currentRow++;
-        }
-        
-        // Female students section (skip a row for section header)
-        $currentRow += 2;
-        
-        foreach ($femaleStudents as $student) {
-            $worksheet->setCellValue("A{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
+            $worksheet->setCellValue("A{$currentRow}", "FEMALE");
+            $currentRow++;
             
-            // Populate daily attendance
-            $col = 'B';
-            foreach ($student->attendance_data as $date => $status) {
-                $mark = $this->getAttendanceMark($status);
-                $worksheet->setCellValue("{$col}{$currentRow}", $mark);
-                $col++;
+            // Female students section
+            $femaleIndex = $maleIndex; // Continue numbering from where male students ended
+            foreach ($femaleStudents as $student) {
+                // Column A: Student number
+                $worksheet->setCellValue("A{$currentRow}", $femaleIndex);
+                
+                // Column B: Student name
+                $worksheet->setCellValue("B{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
+                
+                // Populate daily attendance
+                $this->populateDailyAttendance($worksheet, $student, $currentRow);
+                
+                // Summary columns (shifted one column right)
+                $worksheet->setCellValue("AI{$currentRow}", $student->total_absent);   // ABSENT
+                $worksheet->setCellValue("AJ{$currentRow}", $student->total_present);  // PRESENT
+                $worksheet->setCellValue("AK{$currentRow}", 0);                       // TARDY
+                
+                $currentRow++;
+                $femaleIndex++;
             }
             
-            // Summary columns
-            $worksheet->setCellValue("AG{$currentRow}", $student->total_present);
-            $worksheet->setCellValue("AH{$currentRow}", $student->total_absent);
-            $worksheet->setCellValue("AI{$currentRow}", $student->attendance_rate . '%');
+            Log::info("Successfully populated " . count($students) . " students in SF2 format");
             
-            $currentRow++;
+        } catch (\Exception $e) {
+            Log::error("Error populating student data: " . $e->getMessage());
         }
+    }
+    
+    /**
+     * Populate day headers in the calendar format matching the SF2 template
+     */
+    private function populateDayHeaders($worksheet, $month)
+    {
+        try {
+            Log::info("Populating consecutive weekday headers for month: {$month}");
+            
+            // Get the actual month and year
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            
+            // Sequential columns starting from D (no gaps for weekends)
+            $columns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH'];
+            
+            $columnIndex = 0;
+            $currentDate = $startDate->copy();
+            
+            // Loop through each day of the month and assign consecutive columns to weekdays
+            while ($currentDate <= $endDate && $columnIndex < count($columns)) {
+                // Only process weekdays (Monday to Friday)
+                if ($currentDate->isWeekday()) {
+                    $column = $columns[$columnIndex];
+                    $dayNumber = $currentDate->day;
+                    $dayOfWeek = $this->getDayOfWeekAbbreviation($currentDate->dayOfWeek);
+                    
+                    // Ensure we have valid day number (not 0)
+                    if ($dayNumber > 0) {
+                        // Row 11: Day numbers (consecutive weekdays: 1, 2, 3, 5, 8, 9, 10, 12, etc.)
+                        $worksheet->setCellValue("{$column}11", $dayNumber);
+                        
+                        // Row 12: Day abbreviations (MON, TUE, WED, THU, FRI, MON, TUE, WED, etc.)
+                        $worksheet->setCellValue("{$column}12", $dayOfWeek);
+                        
+                        Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex})");
+                        
+                        $columnIndex++;
+                    }
+                }
+                
+                $currentDate->addDay();
+            }
+            
+            Log::info("Successfully populated {$columnIndex} consecutive weekday headers for {$month}");
+            
+        } catch (\Exception $e) {
+            Log::error("Error populating day headers: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get day of week abbreviation
+     */
+    private function getDayOfWeekAbbreviation($dayOfWeek)
+    {
+        $abbreviations = [
+            0 => 'SUN',  // Sunday
+            1 => 'M',    // Monday
+            2 => 'T',    // Tuesday
+            3 => 'W',    // Wednesday
+            4 => 'TH',   // Thursday
+            5 => 'F',    // Friday
+            6 => 'SAT'   // Saturday
+        ];
+        
+        return $abbreviations[$dayOfWeek] ?? 'UNK';
+    }
+    
+    /**
+     * Populate daily attendance for a student across all days of the month
+     */
+    private function populateDailyAttendance($worksheet, $student, $row)
+    {
+        try {
+            // Get the month from the first attendance record to determine the month context
+            if (empty($student->attendance_data)) {
+                return;
+            }
+            
+            // Get month from first attendance record
+            $firstDate = array_keys($student->attendance_data)[0];
+            $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
+            
+            // Build dynamic column mapping based on weekdays only
+            $columnMapping = $this->buildWeekdayColumnMapping($month);
+            
+            // Populate attendance for each day
+            foreach ($student->attendance_data as $date => $status) {
+                $dateObj = Carbon::createFromFormat('Y-m-d', $date);
+                
+                // Only process weekdays
+                if ($dateObj->isWeekday()) {
+                    $dayNumber = $dateObj->day;
+                    
+                    if (isset($columnMapping[$dayNumber])) {
+                        $column = $columnMapping[$dayNumber];
+                        $mark = $this->getAttendanceMark($status);
+                        $worksheet->setCellValue("{$column}{$row}", $mark);
+                    }
+                }
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("Error populating daily attendance for student: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Build column mapping for weekdays only - consecutive columns without gaps
+     */
+    private function buildWeekdayColumnMapping($month)
+    {
+        $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+        
+        // Sequential columns starting from D (no gaps for weekends)
+        $columns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH'];
+        
+        $mapping = [];
+        $columnIndex = 0;
+        $currentDate = $startDate->copy();
+        
+        // Map each weekday to consecutive columns (no gaps for weekends)
+        while ($currentDate <= $endDate && $columnIndex < count($columns)) {
+            $dayNumber = $currentDate->day;
+            
+            // Only map weekdays to consecutive columns and ensure valid day number
+            if ($currentDate->isWeekday() && $dayNumber > 0) {
+                $mapping[$dayNumber] = $columns[$columnIndex];
+                Log::info("Mapped day {$dayNumber} ({$currentDate->format('D')}) to column {$columns[$columnIndex]} (position {$columnIndex})");
+                $columnIndex++;
+            }
+            
+            $currentDate->addDay();
+        }
+        
+        return $mapping;
     }
 
     /**
@@ -564,52 +727,52 @@ class SF2ReportController extends Controller
         
         // Populate summary section (adjust cell references based on template)
         // Enrollment data
-        $worksheet->setCellValue('M10', $maleCount);     // Male enrollment
-        $worksheet->setCellValue('N10', $femaleCount);   // Female enrollment
-        $worksheet->setCellValue('O10', $totalCount);    // Total enrollment
+        $worksheet->setCellValue('AH66', $maleCount);     // Male enrollment
+        $worksheet->setCellValue('AI66', $femaleCount);   // Female enrollment
+        $worksheet->setCellValue('AJ66', $totalCount);    // Total enrollment
         
         // Late enrollment (usually 0 for existing students)
-        $worksheet->setCellValue('M11', 0);
-        $worksheet->setCellValue('N11', 0);
-        $worksheet->setCellValue('O11', 0);
+        $worksheet->setCellValue('AH68', 0);
+        $worksheet->setCellValue('AI68', 0);
+        $worksheet->setCellValue('AJ68', 0);
         
         // Registered learners (same as enrollment for this example)
-        $worksheet->setCellValue('M12', $maleCount);
-        $worksheet->setCellValue('N12', $femaleCount);
-        $worksheet->setCellValue('O12', $totalCount);
+        $worksheet->setCellValue('AH70', $maleCount);
+        $worksheet->setCellValue('AI70', $femaleCount);
+        $worksheet->setCellValue('AJ70', $totalCount);
         
         // Percentage of enrollment (100% for existing students)
-        $worksheet->setCellValue('M13', '100%');
-        $worksheet->setCellValue('N13', '100%');
-        $worksheet->setCellValue('O13', '100%');
+        $worksheet->setCellValue('AH72', '100%');
+        $worksheet->setCellValue('AI72', '100%');
+        $worksheet->setCellValue('AJ72', '100%');
         
         // Average daily attendance
-        $worksheet->setCellValue('M14', $maleAttendanceRate . '%');
-        $worksheet->setCellValue('N14', $femaleAttendanceRate . '%');
-        $worksheet->setCellValue('O14', $overallAttendanceRate . '%');
+        $worksheet->setCellValue('AH74', $maleAttendanceRate . '%');
+        $worksheet->setCellValue('AI74', $femaleAttendanceRate . '%');
+        $worksheet->setCellValue('AJ74', $overallAttendanceRate . '%');
         
         // Percentage of attendance for the month
-        $worksheet->setCellValue('M15', $maleAttendanceRate . '%');
-        $worksheet->setCellValue('N15', $femaleAttendanceRate . '%');
-        $worksheet->setCellValue('O15', $overallAttendanceRate . '%');
+        $worksheet->setCellValue('AH75', $maleAttendanceRate . '%');
+        $worksheet->setCellValue('AI75', $femaleAttendanceRate . '%');
+        $worksheet->setCellValue('AJ75', $overallAttendanceRate . '%');
         
         // Students absent for 5 consecutive days (would need additional logic)
-        $worksheet->setCellValue('M16', 0);
-        $worksheet->setCellValue('N16', 0);
-        $worksheet->setCellValue('O16', 0);
+        $worksheet->setCellValue('AH77', 0);
+        $worksheet->setCellValue('AI77', 0);
+        $worksheet->setCellValue('AJ77', 0);
         
         // Dropouts, transfers (would need status tracking)
-        $worksheet->setCellValue('M17', 0); // Male dropouts
-        $worksheet->setCellValue('N17', 0); // Female dropouts
-        $worksheet->setCellValue('O17', 0); // Total dropouts
+        $worksheet->setCellValue('AH79', 0); // Male dropouts
+        $worksheet->setCellValue('AI79', 0); // Female dropouts
+        $worksheet->setCellValue('AJ79', 0); // Total dropouts
         
-        $worksheet->setCellValue('M18', 0); // Male transferred out
-        $worksheet->setCellValue('N18', 0); // Female transferred out
-        $worksheet->setCellValue('O18', 0); // Total transferred out
+        $worksheet->setCellValue('AH81', 0); // Male transferred out
+        $worksheet->setCellValue('AI81', 0); // Female transferred out
+        $worksheet->setCellValue('AJ81', 0); // Total transferred out
         
-        $worksheet->setCellValue('M19', 0); // Male transferred in
-        $worksheet->setCellValue('N19', 0); // Female transferred in
-        $worksheet->setCellValue('O19', 0); // Total transferred in
+        $worksheet->setCellValue('AH83', 0); // Male transferred in
+        $worksheet->setCellValue('AI83', 0); // Female transferred in
+        $worksheet->setCellValue('AJ83', 0); // Total transferred in
     }
 
     /**
