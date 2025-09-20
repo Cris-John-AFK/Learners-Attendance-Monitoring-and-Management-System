@@ -341,7 +341,7 @@ onMounted(() => {
                     <div class="flex items-center">
                         <span class="font-medium mr-2">Name of School:</span>
                         <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
-                            {{ reportData.school_info.name || 'Naawan CS' }}
+                            {{ reportData.school_info.name || 'Naawan Central School' }}
                         </div>
                     </div>
                     <div class="flex items-center">
