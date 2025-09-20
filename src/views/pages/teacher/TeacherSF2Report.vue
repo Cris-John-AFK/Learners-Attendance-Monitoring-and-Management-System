@@ -31,54 +31,58 @@ const femaleStudents = computed(() => {
 // Calculate daily totals for male students
 const maleDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month || !maleStudents.value.length) return {};
-    
+
     const totals = {};
-    reportData.value.days_in_month.forEach(day => {
-        let present = 0, absent = 0, late = 0;
-        
-        maleStudents.value.forEach(student => {
+    reportData.value.days_in_month.forEach((day) => {
+        let present = 0,
+            absent = 0,
+            late = 0;
+
+        maleStudents.value.forEach((student) => {
             const status = student.attendance_data?.[day.date];
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
         });
-        
+
         totals[day.date] = { present, absent, late, total: present + absent + late };
     });
-    
+
     return totals;
 });
 
 // Calculate daily totals for female students
 const femaleDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month || !femaleStudents.value.length) return {};
-    
+
     const totals = {};
-    reportData.value.days_in_month.forEach(day => {
-        let present = 0, absent = 0, late = 0;
-        
-        femaleStudents.value.forEach(student => {
+    reportData.value.days_in_month.forEach((day) => {
+        let present = 0,
+            absent = 0,
+            late = 0;
+
+        femaleStudents.value.forEach((student) => {
             const status = student.attendance_data?.[day.date];
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
         });
-        
+
         totals[day.date] = { present, absent, late, total: present + absent + late };
     });
-    
+
     return totals;
 });
 
 // Calculate combined daily totals
 const combinedDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month) return {};
-    
+
     const totals = {};
-    reportData.value.days_in_month.forEach(day => {
+    reportData.value.days_in_month.forEach((day) => {
         const maleTotal = maleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
         const femaleTotal = femaleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
-        
+
         totals[day.date] = {
             present: maleTotal.present + femaleTotal.present,
             absent: maleTotal.absent + femaleTotal.absent,
@@ -86,7 +90,7 @@ const combinedDailyTotals = computed(() => {
             total: maleTotal.present + maleTotal.absent + maleTotal.late + femaleTotal.present + femaleTotal.absent + femaleTotal.late
         };
     });
-    
+
     return totals;
 });
 
@@ -194,7 +198,7 @@ const getDayOfWeek = (dateString) => {
 const getDayOfWeekClass = (dateString) => {
     const date = new Date(dateString);
     const dayOfWeek = date.getDay();
-    
+
     // Weekend styling (Saturday = 6, Sunday = 0)
     if (dayOfWeek === 0 || dayOfWeek === 6) {
         return 'bg-red-100 text-red-700 font-bold';
@@ -207,7 +211,7 @@ const getDayOfWeekClass = (dateString) => {
 const getColumnBorderClass = (dateString) => {
     const date = new Date(dateString);
     const dayOfWeek = date.getDay();
-    
+
     // Add thick border before Sunday (start of week)
     if (dayOfWeek === 0) {
         return 'weekend-column';
@@ -216,7 +220,7 @@ const getColumnBorderClass = (dateString) => {
     if (dayOfWeek === 1) {
         return 'week-separator';
     }
-    
+
     return '';
 };
 
@@ -268,72 +272,90 @@ onMounted(() => {
         <!-- SF2 Report Card -->
         <div v-else-if="reportData" class="sf2-report-card bg-white rounded-lg shadow-lg p-8 max-w-full overflow-x-auto">
             <!-- Header -->
-            <div class="text-center mb-8">
-                <div class="flex justify-between items-start mb-4">
-                    <!-- DepEd Logo (Left) -->
-                    <div class="flex items-center">
-                        <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mr-4">
-                            <span class="text-white font-bold text-xs">DepEd</span>
+            <div class="text-center mb-6">
+                <div class="flex justify-between items-start mb-6">
+                    <!-- Left Logo and Info -->
+                    <div class="flex items-start w-1/4">
+                        <div class="w-20 h-20 border-2 border-gray-800 rounded-full flex items-center justify-center mr-3">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold text-xs">LOGO</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="text-left text-sm">
-                            <p class="font-medium">Republic of the Philippines</p>
-                            <p class="font-medium">Department of Education</p>
-                            <p>{{ reportData.school_info.division }}</p>
-                            <p>{{ reportData.school_info.district }}</p>
+                        <div class="text-left text-xs leading-tight">
+                            <p class="font-bold">Republic of the Philippines</p>
+                            <p class="font-bold">Department of Education</p>
+                            <p class="font-medium">{{ reportData.school_info.division || 'REGION X - NORTHERN MINDANAO' }}</p>
+                            <p class="font-medium">{{ reportData.school_info.district || 'NAAWAN DISTRICT' }}</p>
                         </div>
                     </div>
 
                     <!-- Center Title -->
-                    <div class="flex-1 text-center">
-                        <h1 class="text-xl font-bold mb-2">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
-                        <p class="text-sm text-gray-600">(This replaces Form 1, Form 2 and Form 3 used in previous years)</p>
+                    <div class="flex-1 text-center px-4">
+                        <h1 class="text-lg font-bold mb-2 leading-tight">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
+                        <p class="text-xs text-gray-700 italic">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
                     </div>
 
-                    <!-- DepEd Logo (Right) -->
+                    <!-- Right Logo -->
+                    <div class="flex items-start justify-end w-1/4">
+                        <div class="text-right text-xs mr-3 leading-tight">
+                            <p class="font-bold text-red-600 text-lg">DepEd</p>
+                            <p class="font-bold text-blue-600 text-xs">DEPARTMENT OF EDUCATION</p>
+                        </div>
+                        <div class="w-20 h-20 border-2 border-gray-800 rounded-full flex items-center justify-center">
+                            <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center">
+                                <span class="text-white font-bold text-xs">LOGO</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- School Information Form Fields -->
+            <div class="mb-6">
+                <!-- First Row -->
+                <div class="grid grid-cols-3 gap-6 mb-4 text-sm">
                     <div class="flex items-center">
-                        <div class="text-right text-sm mr-4">
-                            <p class="font-bold text-red-600">DepEd</p>
-                            <p class="font-bold text-blue-600">SULONG EDUKALIDAD</p>
-                        </div>
-                        <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center">
-                            <span class="text-white font-bold text-xs">Logo</span>
+                        <span class="font-medium mr-2">School ID:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
+                            {{ reportData.school_info.school_id || '127935' }}
                         </div>
                     </div>
+                    <div class="flex items-center">
+                        <span class="font-medium mr-2">School Year:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
+                            {{ reportData.school_info.school_year || '2025 - 2026' }}
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="font-medium mr-2">Report for the Month of:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white font-bold">
+                            {{ reportData.month_name?.toUpperCase() || 'AUGUST' }}
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- School Information -->
-            <div class="grid grid-cols-2 gap-8 mb-6 text-sm">
-                <div class="space-y-2">
-                    <div class="flex">
-                        <span class="font-medium w-24">School ID:</span>
-                        <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.school_info.school_id }}</span>
+                <!-- Second Row -->
+                <div class="grid grid-cols-3 gap-6 mb-6 text-sm">
+                    <div class="flex items-center">
+                        <span class="font-medium mr-2">Name of School:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
+                            {{ reportData.school_info.name || 'Naawan CS' }}
+                        </div>
                     </div>
-                    <div class="flex">
-                        <span class="font-medium w-24">School Year:</span>
-                        <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.school_info.school_year }}</span>
+                    <div class="flex items-center">
+                        <span class="font-medium mr-2">Grade Level:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
+                            {{ reportData.section.grade_level || 'Kinder' }}
+                        </div>
                     </div>
-                </div>
-                <div class="space-y-2">
-                    <div class="flex">
-                        <span class="font-medium w-32">Report for the Month of:</span>
-                        <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.month_name }}</span>
+                    <div class="flex items-center">
+                        <span class="font-medium mr-2">Section:</span>
+                        <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white font-bold">
+                            {{ reportData.section.name || 'GREAT AM' }}
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-3 gap-8 mb-8 text-sm">
-                <div class="flex">
-                    <span class="font-medium w-24">Name of School:</span>
-                    <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.school_info.name }}</span>
-                </div>
-                <div class="flex">
-                    <span class="font-medium w-20">Grade Level:</span>
-                    <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.section.grade_level }}</span>
-                </div>
-                <div class="flex">
-                    <span class="font-medium w-16">Section:</span>
-                    <span class="border-b border-gray-400 flex-1 px-2">{{ reportData.section.name }}</span>
                 </div>
             </div>
 
@@ -343,117 +365,134 @@ onMounted(() => {
                     <!-- Table Header -->
                     <thead>
                         <tr>
-                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-left w-48">
-                                LEARNER'S NAME<br />
-                                <span class="text-xs font-normal">(Last Name, First Name, Middle Name)</span>
+                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-center w-8">
+                                <div class="text-xs font-bold">No.</div>
                             </th>
-                            <th colspan="31" class="border border-gray-800 p-2 bg-gray-100 text-center">Days of the month (Put check mark (✓) for each day present, (✗) for absent, and (L) for late)</th>
-                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
-                                Total for the Month<br />
-                                <span class="text-xs font-normal">ABSENT</span>
+                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-left w-56">
+                                <div class="text-xs font-bold">NAME</div>
+                                <div class="text-xs font-normal">(Last Name, First Name, Middle Name)</div>
                             </th>
-                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
-                                Total for the Month<br />
-                                <span class="text-xs font-normal">TARDY</span>
+                            <th colspan="31" class="border border-gray-800 p-2 bg-gray-100 text-center">
+                                <div class="text-xs font-bold">Days of the month (Put check mark (✓) for each day present, (✗) for absent, and (L) for late)</div>
                             </th>
-                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-32">
-                                REMARKS<br />
-                                <span class="text-xs font-normal">(e.g. DROPPED OUT (date), TRANSFERRED: IN (date) or OUT (date), etc.)</span>
+                            <th colspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center">
+                                <div class="text-xs font-bold">Total for the Month</div>
+                            </th>
+                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-center w-40">
+                                <div class="text-xs font-bold">REMARKS</div>
+                                <div class="text-xs font-normal leading-tight mt-1">
+                                    (If DROPPED OUT, state reason, please refer to legend number 2.<br/>
+                                    If TRANSFERRED IN/OUT, write the name of School.)
+                                </div>
                             </th>
                         </tr>
                         <tr>
                             <!-- Day numbers -->
-                            <th v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 bg-gray-100 text-center w-6"
-                                :class="getColumnBorderClass(day.date)">
+                            <th v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 bg-gray-100 text-center w-6" :class="getColumnBorderClass(day.date)">
                                 <div class="text-xs font-bold">{{ day.day }}</div>
+                            </th>
+                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
+                                <div class="text-xs font-bold">ABSENT</div>
+                            </th>
+                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
+                                <div class="text-xs font-bold">PRESENT</div>
+                            </th>
+                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
+                                <div class="text-xs font-bold">TARDY</div>
                             </th>
                         </tr>
                         <tr>
                             <!-- Day of week labels -->
-                            <th v-for="day in reportData.days_in_month" :key="`dow-${day.date}`" 
-                                class="border border-gray-800 p-1 bg-gray-50 text-center w-6 text-xs"
-                                :class="[getDayOfWeekClass(day.date), getColumnBorderClass(day.date)]">
+                            <th v-for="day in reportData.days_in_month" :key="`dow-${day.date}`" class="border border-gray-800 p-1 bg-gray-50 text-center w-6 text-xs" :class="[getDayOfWeekClass(day.date), getColumnBorderClass(day.date)]">
                                 {{ getDayOfWeek(day.date) }}
                             </th>
+                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">A</th>
+                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">P</th>
+                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">T</th>
                         </tr>
                     </thead>
 
                     <!-- Male Students Section -->
                     <tbody>
                         <tr>
-                            <td colspan="35" class="border border-gray-800 p-2 bg-blue-100 font-bold text-center">MALE</td>
+                            <td colspan="37" class="border border-gray-800 p-2 bg-blue-100 font-bold text-center">MALE</td>
                         </tr>
-                        <tr v-for="student in maleStudents" :key="student.id">
-                            <td class="border border-gray-800 p-2 font-medium">{{ student.name }}</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center" 
-                                :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
+                        <tr v-for="(student, index) in maleStudents" :key="student.id">
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ index + 1 }}</td>
+                            <td class="border border-gray-800 p-2 font-medium text-left">{{ student.name }}</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 text-center" :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_present || 0 }}</td>
                             <td class="border border-gray-800 p-1 text-center font-medium">0</td>
-                            <td class="border border-gray-800 p-1 text-center">-</td>
+                            <td class="border border-gray-800 p-1 text-center text-xs">-</td>
                         </tr>
                         <!-- Male Daily Totals Row -->
                         <tr class="bg-blue-50">
-                            <td class="border border-gray-800 p-2 font-bold text-center">MALE TOTAL</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center font-bold" 
-                                :class="[
-                                    maleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
-                                    getColumnBorderClass(day.date)
-                                ]">
+                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
+                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< MALE TOTAL Per Day >>>></td>
+                            <td
+                                v-for="day in reportData.days_in_month"
+                                :key="day.date"
+                                class="border border-gray-800 p-1 text-center font-bold"
+                                :class="[maleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
+                            >
                                 {{ maleDailyTotals[day.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.male.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.male.total_present || 0 }}</td>
                             <td class="border border-gray-800 p-1 text-center font-bold">0</td>
                             <td class="border border-gray-800 p-1 text-center">-</td>
                         </tr>
 
                         <!-- Female Students Section -->
                         <tr>
-                            <td colspan="35" class="border border-gray-800 p-2 bg-pink-100 font-bold text-center">FEMALE</td>
+                            <td colspan="37" class="border border-gray-800 p-2 bg-pink-100 font-bold text-center">FEMALE</td>
                         </tr>
-                        <tr v-for="student in femaleStudents" :key="student.id">
-                            <td class="border border-gray-800 p-2 font-medium">{{ student.name }}</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center" 
-                                :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
+                        <tr v-for="(student, index) in femaleStudents" :key="student.id">
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ maleStudents.length + index + 1 }}</td>
+                            <td class="border border-gray-800 p-2 font-medium text-left">{{ student.name }}</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 text-center" :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_present || 0 }}</td>
                             <td class="border border-gray-800 p-1 text-center font-medium">0</td>
-                            <td class="border border-gray-800 p-1 text-center">-</td>
+                            <td class="border border-gray-800 p-1 text-center text-xs">-</td>
                         </tr>
                         <!-- Female Daily Totals Row -->
                         <tr class="bg-pink-50">
-                            <td class="border border-gray-800 p-2 font-bold text-center">FEMALE TOTAL</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center font-bold" 
-                                :class="[
-                                    femaleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
-                                    getColumnBorderClass(day.date)
-                                ]">
+                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
+                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< FEMALE TOTAL Per Day >>>></td>
+                            <td
+                                v-for="day in reportData.days_in_month"
+                                :key="day.date"
+                                class="border border-gray-800 p-1 text-center font-bold"
+                                :class="[femaleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
+                            >
                                 {{ femaleDailyTotals[day.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.female.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.female.total_present || 0 }}</td>
                             <td class="border border-gray-800 p-1 text-center font-bold">0</td>
                             <td class="border border-gray-800 p-1 text-center">-</td>
                         </tr>
 
                         <!-- Combined Total Row -->
                         <tr class="bg-yellow-100">
-                            <td class="border border-gray-800 p-2 font-bold text-center">Combined TOTAL PER DAY</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center font-bold" 
-                                :class="[
-                                    combinedDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
-                                    getColumnBorderClass(day.date)
-                                ]">
+                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
+                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< TOTAL Per Day >>>></td>
+                            <td
+                                v-for="day in reportData.days_in_month"
+                                :key="day.date"
+                                class="border border-gray-800 p-1 text-center font-bold"
+                                :class="[combinedDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
+                            >
                                 {{ combinedDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_absent }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_present || 0 }}</td>
                             <td class="border border-gray-800 p-1 text-center font-bold">0</td>
                             <td class="border border-gray-800 p-1 text-center">-</td>
                         </tr>
