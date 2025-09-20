@@ -1,11 +1,11 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,12 +20,74 @@ const sectionId = route.params.sectionId;
 // Computed properties
 const maleStudents = computed(() => {
     if (!reportData.value?.students) return [];
-    return reportData.value.students.filter(student => student.gender === 'Male');
+    return reportData.value.students.filter((student) => student.gender === 'Male');
 });
 
 const femaleStudents = computed(() => {
     if (!reportData.value?.students) return [];
-    return reportData.value.students.filter(student => student.gender === 'Female');
+    return reportData.value.students.filter((student) => student.gender === 'Female');
+});
+
+// Calculate daily totals for male students
+const maleDailyTotals = computed(() => {
+    if (!reportData.value?.days_in_month || !maleStudents.value.length) return {};
+    
+    const totals = {};
+    reportData.value.days_in_month.forEach(day => {
+        let present = 0, absent = 0, late = 0;
+        
+        maleStudents.value.forEach(student => {
+            const status = student.attendance_data?.[day.date];
+            if (status === 'present') present++;
+            else if (status === 'absent') absent++;
+            else if (status === 'late') late++;
+        });
+        
+        totals[day.date] = { present, absent, late, total: present + absent + late };
+    });
+    
+    return totals;
+});
+
+// Calculate daily totals for female students
+const femaleDailyTotals = computed(() => {
+    if (!reportData.value?.days_in_month || !femaleStudents.value.length) return {};
+    
+    const totals = {};
+    reportData.value.days_in_month.forEach(day => {
+        let present = 0, absent = 0, late = 0;
+        
+        femaleStudents.value.forEach(student => {
+            const status = student.attendance_data?.[day.date];
+            if (status === 'present') present++;
+            else if (status === 'absent') absent++;
+            else if (status === 'late') late++;
+        });
+        
+        totals[day.date] = { present, absent, late, total: present + absent + late };
+    });
+    
+    return totals;
+});
+
+// Calculate combined daily totals
+const combinedDailyTotals = computed(() => {
+    if (!reportData.value?.days_in_month) return {};
+    
+    const totals = {};
+    reportData.value.days_in_month.forEach(day => {
+        const maleTotal = maleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
+        const femaleTotal = femaleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
+        
+        totals[day.date] = {
+            present: maleTotal.present + femaleTotal.present,
+            absent: maleTotal.absent + femaleTotal.absent,
+            late: maleTotal.late + femaleTotal.late,
+            total: maleTotal.present + maleTotal.absent + maleTotal.late + femaleTotal.present + femaleTotal.absent + femaleTotal.late
+        };
+    });
+    
+    return totals;
 });
 
 // Load SF2 report data
@@ -34,7 +96,7 @@ const loadReportData = async () => {
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7); // YYYY-MM format
         const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${monthStr}`);
-        
+
         if (response.data.success) {
             reportData.value = response.data.data;
         } else {
@@ -65,7 +127,7 @@ const downloadExcel = async () => {
         const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${sectionId}/${monthStr}`, {
             responseType: 'blob'
         });
-        
+
         // Create download link
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
@@ -75,7 +137,7 @@ const downloadExcel = async () => {
         link.click();
         link.remove();
         window.URL.revokeObjectURL(url);
-        
+
         toast.add({
             severity: 'success',
             summary: 'Success',
@@ -96,21 +158,66 @@ const downloadExcel = async () => {
 // Get attendance mark for display
 const getAttendanceMark = (status) => {
     switch (status) {
-        case 'present': return '✓';
-        case 'absent': return '✗';
-        case 'late': return 'L';
-        default: return '-';
+        case 'present':
+            return '✓';
+        case 'absent':
+            return '✗';
+        case 'late':
+            return 'L';
+        default:
+            return '-';
     }
 };
 
 // Get attendance mark color
 const getAttendanceColor = (status) => {
     switch (status) {
-        case 'present': return 'text-green-600';
-        case 'absent': return 'text-red-600';
-        case 'late': return 'text-yellow-600';
-        default: return 'text-gray-400';
+        case 'present':
+            return 'text-green-600';
+        case 'absent':
+            return 'text-red-600';
+        case 'late':
+            return 'text-yellow-600';
+        default:
+            return 'text-gray-400';
     }
+};
+
+// Get day of week abbreviation
+const getDayOfWeek = (dateString) => {
+    const date = new Date(dateString);
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    return days[date.getDay()];
+};
+
+// Get day of week styling class
+const getDayOfWeekClass = (dateString) => {
+    const date = new Date(dateString);
+    const dayOfWeek = date.getDay();
+    
+    // Weekend styling (Saturday = 6, Sunday = 0)
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+        return 'bg-red-100 text-red-700 font-bold';
+    }
+    // Weekday styling
+    return 'bg-blue-100 text-blue-700';
+};
+
+// Get column border class for visual separation
+const getColumnBorderClass = (dateString) => {
+    const date = new Date(dateString);
+    const dayOfWeek = date.getDay();
+    
+    // Add thick border before Sunday (start of week)
+    if (dayOfWeek === 0) {
+        return 'weekend-column';
+    }
+    // Add medium border before Monday (after weekend)
+    if (dayOfWeek === 1) {
+        return 'week-separator';
+    }
+    
+    return '';
 };
 
 // Go back to attendance records
@@ -132,42 +239,21 @@ onMounted(() => {
 <template>
     <div class="sf2-report-container">
         <Toast />
-        
+
         <!-- Header Controls (No Print) -->
         <div class="no-print mb-6 flex justify-between items-center bg-white p-4 rounded-lg shadow">
             <div class="flex items-center gap-4">
-                <Button 
-                    icon="pi pi-arrow-left" 
-                    label="Back" 
-                    class="p-button-outlined" 
-                    @click="goBack" 
-                />
+                <Button icon="pi pi-arrow-left" label="Back" class="p-button-outlined" @click="goBack" />
                 <h2 class="text-xl font-bold text-gray-800">SF2 Daily Attendance Report</h2>
             </div>
-            
+
             <div class="flex items-center gap-3">
                 <div class="flex items-center gap-2">
                     <label class="text-sm font-medium">Month:</label>
-                    <Calendar 
-                        v-model="selectedMonth" 
-                        view="month" 
-                        dateFormat="MM yy"
-                        @date-select="onMonthChange"
-                        class="w-32"
-                    />
+                    <Calendar v-model="selectedMonth" view="month" dateFormat="MM yy" @date-select="onMonthChange" class="w-32" />
                 </div>
-                <Button 
-                    icon="pi pi-print" 
-                    label="Print" 
-                    class="p-button-outlined" 
-                    @click="printReport" 
-                />
-                <Button 
-                    icon="pi pi-download" 
-                    label="Download Excel" 
-                    class="p-button-success" 
-                    @click="downloadExcel" 
-                />
+                <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
+                <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
             </div>
         </div>
 
@@ -196,13 +282,13 @@ onMounted(() => {
                             <p>{{ reportData.school_info.district }}</p>
                         </div>
                     </div>
-                    
+
                     <!-- Center Title -->
                     <div class="flex-1 text-center">
                         <h1 class="text-xl font-bold mb-2">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
                         <p class="text-sm text-gray-600">(This replaces Form 1, Form 2 and Form 3 used in previous years)</p>
                     </div>
-                    
+
                     <!-- DepEd Logo (Right) -->
                     <div class="flex items-center">
                         <div class="text-right text-sm mr-4">
@@ -257,78 +343,115 @@ onMounted(() => {
                     <!-- Table Header -->
                     <thead>
                         <tr>
-                            <th rowspan="2" class="border border-gray-800 p-2 bg-gray-100 text-left w-48">
-                                LEARNER'S NAME<br>
+                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-left w-48">
+                                LEARNER'S NAME<br />
                                 <span class="text-xs font-normal">(Last Name, First Name, Middle Name)</span>
                             </th>
-                            <th colspan="31" class="border border-gray-800 p-2 bg-gray-100 text-center">
-                                Days of the month (Put check mark (✓) for each day present, (✗) for absent, and (L) for late)
-                            </th>
-                            <th rowspan="2" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
-                                Total for the Month<br>
+                            <th colspan="31" class="border border-gray-800 p-2 bg-gray-100 text-center">Days of the month (Put check mark (✓) for each day present, (✗) for absent, and (L) for late)</th>
+                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
+                                Total for the Month<br />
                                 <span class="text-xs font-normal">ABSENT</span>
                             </th>
-                            <th rowspan="2" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
-                                Total for the Month<br>
+                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-16">
+                                Total for the Month<br />
                                 <span class="text-xs font-normal">TARDY</span>
                             </th>
-                            <th rowspan="2" class="border border-gray-800 p-2 bg-gray-100 text-center w-32">
-                                REMARKS<br>
+                            <th rowspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center w-32">
+                                REMARKS<br />
                                 <span class="text-xs font-normal">(e.g. DROPPED OUT (date), TRANSFERRED: IN (date) or OUT (date), etc.)</span>
                             </th>
                         </tr>
                         <tr>
                             <!-- Day numbers -->
                             <th v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 bg-gray-100 text-center w-6">
-                                {{ day.day }}
+                                class="border border-gray-800 p-1 bg-gray-100 text-center w-6"
+                                :class="getColumnBorderClass(day.date)">
+                                <div class="text-xs font-bold">{{ day.day }}</div>
+                            </th>
+                        </tr>
+                        <tr>
+                            <!-- Day of week labels -->
+                            <th v-for="day in reportData.days_in_month" :key="`dow-${day.date}`" 
+                                class="border border-gray-800 p-1 bg-gray-50 text-center w-6 text-xs"
+                                :class="[getDayOfWeekClass(day.date), getColumnBorderClass(day.date)]">
+                                {{ getDayOfWeek(day.date) }}
                             </th>
                         </tr>
                     </thead>
-                    
+
                     <!-- Male Students Section -->
                     <tbody>
                         <tr>
-                            <td colspan="35" class="border border-gray-800 p-2 bg-blue-100 font-bold text-center">
-                                MALE | TOTAL Per Day
-                            </td>
+                            <td colspan="35" class="border border-gray-800 p-2 bg-blue-100 font-bold text-center">MALE</td>
                         </tr>
                         <tr v-for="student in maleStudents" :key="student.id">
                             <td class="border border-gray-800 p-2 font-medium">{{ student.name }}</td>
                             <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center"
-                                :class="getAttendanceColor(student.attendance_data[day.date])">
+                                class="border border-gray-800 p-1 text-center" 
+                                :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
                             <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent }}</td>
                             <td class="border border-gray-800 p-1 text-center font-medium">0</td>
                             <td class="border border-gray-800 p-1 text-center">-</td>
                         </tr>
-                        
+                        <!-- Male Daily Totals Row -->
+                        <tr class="bg-blue-50">
+                            <td class="border border-gray-800 p-2 font-bold text-center">MALE TOTAL</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" 
+                                class="border border-gray-800 p-1 text-center font-bold" 
+                                :class="[
+                                    maleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
+                                    getColumnBorderClass(day.date)
+                                ]">
+                                {{ maleDailyTotals[day.date]?.present || 0 }}
+                            </td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.male.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">0</td>
+                            <td class="border border-gray-800 p-1 text-center">-</td>
+                        </tr>
+
                         <!-- Female Students Section -->
                         <tr>
-                            <td colspan="35" class="border border-gray-800 p-2 bg-pink-100 font-bold text-center">
-                                FEMALE | TOTAL Per Day
-                            </td>
+                            <td colspan="35" class="border border-gray-800 p-2 bg-pink-100 font-bold text-center">FEMALE</td>
                         </tr>
                         <tr v-for="student in femaleStudents" :key="student.id">
                             <td class="border border-gray-800 p-2 font-medium">{{ student.name }}</td>
                             <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center"
-                                :class="getAttendanceColor(student.attendance_data[day.date])">
+                                class="border border-gray-800 p-1 text-center" 
+                                :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
                             <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent }}</td>
                             <td class="border border-gray-800 p-1 text-center font-medium">0</td>
                             <td class="border border-gray-800 p-1 text-center">-</td>
                         </tr>
-                        
+                        <!-- Female Daily Totals Row -->
+                        <tr class="bg-pink-50">
+                            <td class="border border-gray-800 p-2 font-bold text-center">FEMALE TOTAL</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" 
+                                class="border border-gray-800 p-1 text-center font-bold" 
+                                :class="[
+                                    femaleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
+                                    getColumnBorderClass(day.date)
+                                ]">
+                                {{ femaleDailyTotals[day.date]?.present || 0 }}
+                            </td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.female.total_absent || 0 }}</td>
+                            <td class="border border-gray-800 p-1 text-center font-bold">0</td>
+                            <td class="border border-gray-800 p-1 text-center">-</td>
+                        </tr>
+
                         <!-- Combined Total Row -->
                         <tr class="bg-yellow-100">
                             <td class="border border-gray-800 p-2 font-bold text-center">Combined TOTAL PER DAY</td>
                             <td v-for="day in reportData.days_in_month" :key="day.date" 
-                                class="border border-gray-800 p-1 text-center font-bold">
-                                -
+                                class="border border-gray-800 p-1 text-center font-bold" 
+                                :class="[
+                                    combinedDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800',
+                                    getColumnBorderClass(day.date)
+                                ]">
+                                {{ combinedDailyTotals[day.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_absent }}</td>
                             <td class="border border-gray-800 p-1 text-center font-bold">0</td>
@@ -430,21 +553,29 @@ onMounted(() => {
             </div>
 
             <!-- Footer -->
-            <div class="mt-8 grid grid-cols-2 gap-8 text-sm">
-                <div class="space-y-4">
-                    <div>
-                        <p class="mb-2">Prepared by:</p>
-                        <div class="border-b border-gray-800 w-48 mb-1"></div>
-                        <p class="text-center">{{ reportData.section.teacher?.name || 'Teacher Name' }}</p>
-                        <p class="text-center text-xs">Teacher</p>
-                    </div>
+            <div class="mt-8 text-sm">
+                <!-- Certification Statement -->
+                <div class="mb-6">
+                    <p class="italic">I certify that this is a true and correct report.</p>
                 </div>
-                <div class="space-y-4">
-                    <div>
-                        <p class="mb-2">Noted by:</p>
-                        <div class="border-b border-gray-800 w-48 mb-1"></div>
-                        <p class="text-center">Principal Name</p>
-                        <p class="text-center text-xs">School Head/Principal</p>
+
+                <!-- Signatures Section -->
+                <div class="grid grid-cols-2 gap-8">
+                    <div class="space-y-4">
+                        <div>
+                            <p class="mb-2">Prepared by:</p>
+                            <div class="border-b border-gray-800 w-64 mb-2"></div>
+                            <p class="text-center font-medium">{{ reportData.section.teacher?.name || 'Maria Santos' }}</p>
+                            <p class="text-center text-xs italic">(Signature of Teacher over Printed Name)</p>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="mb-2">Attested by:</p>
+                            <div class="border-b border-gray-800 w-64 mb-2"></div>
+                            <p class="text-center font-medium">Principal Name</p>
+                            <p class="text-center text-xs italic">(Signature of School Head over Printed Name)</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -484,29 +615,39 @@ onMounted(() => {
     min-width: 1200px;
 }
 
+/* Weekend column styling */
+.weekend-column {
+    border-left: 3px solid #dc2626 !important;
+}
+
+/* Week separator */
+.week-separator {
+    border-left: 2px solid #374151 !important;
+}
+
 /* Print Styles */
 @media print {
     .no-print {
         display: none !important;
     }
-    
+
     .sf2-report-container {
         background: white;
         padding: 0;
         margin: 0;
     }
-    
+
     .sf2-report-card {
         box-shadow: none;
         border-radius: 0;
         padding: 20px;
         margin: 0;
     }
-    
+
     .attendance-table-container table {
         font-size: 10px;
     }
-    
+
     body {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
@@ -519,7 +660,7 @@ onMounted(() => {
         padding: 1rem;
         font-size: 0.8rem;
     }
-    
+
     .attendance-table-container table {
         font-size: 10px;
     }
