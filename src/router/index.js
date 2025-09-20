@@ -90,6 +90,11 @@ const router = createRouter({
                     path: '/teacher/student-qrcodes',
                     name: 'student-qrcodes',
                     component: StudentQRCodes
+                },
+                {
+                    path: '/teacher/sf2-report/:sectionId',
+                    name: 'teacher-sf2-report',
+                    component: () => import('@/views/pages/teacher/TeacherSF2Report.vue')
                 }
             ]
         },

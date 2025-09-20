@@ -319,3 +319,9 @@ Route::prefix('attendance-records')->group(function () {
 // SF2 Report routes
 Route::get('admin/reports/sf2/download/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'download'])->name('sf2.download');
 Route::get('admin/reports/sf2/download/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'downloadByMonth'])->name('sf2.download.month');
+
+// Teacher SF2 Report routes
+Route::get('teacher/reports/sf2/data/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'getReportData'])->name('teacher.sf2.data');
+Route::get('teacher/reports/sf2/data/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'getReportData'])->name('teacher.sf2.data.month');
+Route::get('teacher/reports/sf2/download/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'download'])->name('teacher.sf2.download');
+Route::get('teacher/reports/sf2/download/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'downloadByMonth'])->name('teacher.sf2.download.month');

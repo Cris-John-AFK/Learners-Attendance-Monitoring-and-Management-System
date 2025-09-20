@@ -350,6 +350,115 @@ class SF2ReportController extends Controller
     }
 
     /**
+     * Get SF2 report data for teacher view (JSON format)
+     */
+    public function getReportData($sectionId, $month = null)
+    {
+        try {
+            // Use current month if not specified
+            if (!$month) {
+                $month = Carbon::now()->format('Y-m');
+            }
+            
+            // Get section with students and teacher
+            $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+            
+            // Get students with attendance data
+            $students = $this->getStudentsWithAttendance($section, $month);
+            
+            // Calculate summary statistics
+            $maleStudents = $students->where('gender', 'Male');
+            $femaleStudents = $students->where('gender', 'Female');
+            
+            $summary = [
+                'male' => [
+                    'enrollment' => $maleStudents->count(),
+                    'total_present' => $maleStudents->sum('total_present'),
+                    'total_absent' => $maleStudents->sum('total_absent'),
+                    'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0
+                ],
+                'female' => [
+                    'enrollment' => $femaleStudents->count(),
+                    'total_present' => $femaleStudents->sum('total_present'),
+                    'total_absent' => $femaleStudents->sum('total_absent'),
+                    'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0
+                ],
+                'total' => [
+                    'enrollment' => $students->count(),
+                    'total_present' => $students->sum('total_present'),
+                    'total_absent' => $students->sum('total_absent'),
+                    'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
+                ]
+            ];
+            
+            // Get days in month for headers
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            $daysInMonth = [];
+            
+            $currentDate = $startDate->copy();
+            while ($currentDate <= $endDate) {
+                if ($currentDate->isWeekday()) {
+                    $daysInMonth[] = [
+                        'date' => $currentDate->format('Y-m-d'),
+                        'day' => $currentDate->format('j'),
+                        'dayName' => $currentDate->format('D')
+                    ];
+                }
+                $currentDate->addDay();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'section' => [
+                        'id' => $section->id,
+                        'name' => $section->name,
+                        'grade_level' => $section->grade_level,
+                        'teacher' => $section->teacher ? [
+                            'name' => $section->teacher->first_name . ' ' . $section->teacher->last_name,
+                            'id' => $section->teacher->id
+                        ] : null
+                    ],
+                    'month' => $month,
+                    'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                    'students' => $students->map(function($student) {
+                        return [
+                            'id' => $student->id,
+                            'name' => $student->lastName . ', ' . $student->firstName . ' ' . $student->middleName,
+                            'firstName' => $student->firstName,
+                            'lastName' => $student->lastName,
+                            'middleName' => $student->middleName,
+                            'gender' => $student->gender,
+                            'attendance_data' => $student->attendance_data,
+                            'total_present' => $student->total_present,
+                            'total_absent' => $student->total_absent,
+                            'attendance_rate' => $student->attendance_rate
+                        ];
+                    }),
+                    'days_in_month' => $daysInMonth,
+                    'summary' => $summary,
+                    'school_info' => [
+                        'name' => 'Naawan Elementary School',
+                        'school_id' => '123456',
+                        'school_year' => '2024-2025',
+                        'division' => 'Division of Misamis Oriental',
+                        'district' => 'Naawan District'
+                    ]
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("SF2 Report Data Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get SF2 report data',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Convert attendance status to display mark
      */
     private function getAttendanceMark($status)

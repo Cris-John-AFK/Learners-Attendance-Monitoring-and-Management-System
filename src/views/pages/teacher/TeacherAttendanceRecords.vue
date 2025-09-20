@@ -15,6 +15,7 @@ import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue'; // Added missing watch import
+import { useRouter } from 'vue-router';
 
 // Add custom CSS for enhanced animations
 const customStyles = `
@@ -99,6 +100,7 @@ axios.defaults.headers.common['Access-Control-Allow-Origin'] = '*';
 axios.defaults.withCredentials = false;
 
 const toast = useToast();
+const router = useRouter();
 const loading = ref(true);
 const isLoading = ref(false);
 const quickRangeLoading = ref(false);
@@ -1214,6 +1216,27 @@ const showDayDetails = (student, date) => {
         showDayDetailsDialog.value = true;
     }
 };
+
+// Open SF2 Report
+const openSF2Report = () => {
+    if (!selectedSection.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'No Section Selected',
+            detail: 'Please select a section first',
+            life: 3000
+        });
+        return;
+    }
+    
+    // Navigate to SF2 report page with section ID
+    router.push({
+        name: 'teacher-sf2-report',
+        params: {
+            sectionId: selectedSection.value.id
+        }
+    });
+};
 </script>
 
 <template>
@@ -1225,6 +1248,7 @@ const showDayDetails = (student, date) => {
             <h5 class="text-xl font-semibold">Attendance Records</h5>
             <div class="flex gap-2">
                 <Button icon="pi pi-refresh" label="Refresh" class="p-button-outlined" @click="forceRefresh" :disabled="isLoading" v-tooltip.top="'Refresh attendance data'" />
+                <Button icon="pi pi-file" label="Report (Teacher)" class="p-button-info" @click="openSF2Report" :disabled="isLoading || !filteredRecords.length || !selectedSection" v-tooltip.top="'Open SF2 Daily Attendance Report'" />
                 <Button icon="pi pi-file-excel" label="Export to Excel" class="p-button-success" @click="exportToExcel" :disabled="isLoading || !filteredRecords.length" />
             </div>
         </div>
