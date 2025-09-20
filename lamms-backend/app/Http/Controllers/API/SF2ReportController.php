@@ -213,12 +213,325 @@ class SF2ReportController extends Controller
     {
         $monthName = Carbon::createFromFormat('Y-m', $month)->format('F Y');
         
-        // School information (adjust cell references based on your template)
-        $worksheet->setCellValue('B3', 'Kagawasan Elementary School');
-        $worksheet->setCellValue('B4', $section->name);
-        $worksheet->setCellValue('B5', $section->teacher->name ?? 'N/A');
-        $worksheet->setCellValue('B6', $monthName);
-        $worksheet->setCellValue('B7', '2024-2025'); // School year
+        try {
+            // Clear any existing content in input fields first to avoid overlap
+            $this->clearInputFields($worksheet);
+            
+            // Based on photo2, target the exact input field boxes (merged cells)
+            // These are the actual input field coordinates from the template
+            
+            // First row input fields (around row 6-7)
+            // School ID input box (appears to be around column C-D)
+            $this->setValueInInputBox($worksheet, 'C6', '123456', 'School ID');
+            
+            // School Year input box (appears to be around column F-G)
+            $this->setValueInInputBox($worksheet, 'F6', '2024-2025', 'School Year');
+            
+            // Report for the Month of input box (appears to be around column J-K)
+            $monthFormatted = strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y'));
+            $this->setValueInInputBox($worksheet, 'J6', $monthFormatted, 'Report Month');
+            
+            // Second row input fields (around row 8-9)
+            // Name of School input box (appears to be a wider merged cell around column C-F)
+            $this->setValueInInputBox($worksheet, 'C8', 'Naawan CS', 'School Name');
+            
+            // Grade Level input box (appears to be around column H-I)
+            $gradeLevel = $section->grade_level ?? 'Kinder';
+            $this->setValueInInputBox($worksheet, 'H8', $gradeLevel, 'Grade Level');
+            
+            // Section input box (appears to be around column K-L)
+            $sectionName = $section->name ?? 'Matatag';
+            $this->setValueInInputBox($worksheet, 'K8', $sectionName, 'Section');
+            
+        } catch (\Exception $e) {
+            Log::error("Error populating school info: " . $e->getMessage());
+            
+            // Fallback to scanning method
+            $this->populateFieldByText($worksheet, 'School ID', '123456');
+            $this->populateFieldByText($worksheet, 'School Year', '2024-2025');
+            $this->populateFieldByText($worksheet, 'Report for the Month of', strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y')));
+            $this->populateFieldByText($worksheet, 'Name of School', 'Naawan Elementary School');
+            $this->populateFieldByText($worksheet, 'Grade Level', $section->grade_level ?? 'Kinder');
+            $this->populateFieldByText($worksheet, 'Section', $section->name ?? 'Matatag');
+        }
+    }
+    
+    /**
+     * Clear input fields and background cells to avoid text overlap
+     */
+    private function clearInputFields($worksheet)
+    {
+        try {
+            // Clear all potential cells that might contain overlapping data
+            $cellsToClear = [
+                // Row 5-10 to cover all possible school info areas
+                'B5', 'C5', 'D5', 'E5', 'F5', 'G5', 'H5', 'I5', 'J5', 'K5', 'L5', 'M5', 'N5',
+                'B6', 'C6', 'D6', 'E6', 'F6', 'G6', 'H6', 'I6', 'J6', 'K6', 'L6', 'M6', 'N6',
+                'B7', 'C7', 'D7', 'E7', 'F7', 'G7', 'H7', 'I7', 'J7', 'K7', 'L7', 'M7', 'N7',
+                'B8', 'C8', 'D8', 'E8', 'F8', 'G8', 'H8', 'I8', 'J8', 'K8', 'L8', 'M8', 'N8',
+                'B9', 'C9', 'D9', 'E9', 'F9', 'G9', 'H9', 'I9', 'J9', 'K9', 'L9', 'M9', 'N9',
+                'B10', 'C10', 'D10', 'E10', 'F10', 'G10', 'H10', 'I10', 'J10', 'K10', 'L10', 'M10', 'N10'
+            ];
+            
+            foreach ($cellsToClear as $cell) {
+                try {
+                    $currentValue = $worksheet->getCell($cell)->getValue();
+                    // Clear any text that looks like our data or placeholder text
+                    if ($this->shouldClearCell($currentValue)) {
+                        $worksheet->setCellValue($cell, '');
+                        Log::info("Cleared cell {$cell}: {$currentValue}");
+                    }
+                } catch (\Exception $e) {
+                    // Continue if cell doesn't exist
+                    continue;
+                }
+            }
+            
+            Log::info("Cleared all potential overlapping cells");
+        } catch (\Exception $e) {
+            Log::error("Error clearing input fields: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Determine if a cell should be cleared
+     */
+    private function shouldClearCell($value)
+    {
+        if (empty($value)) {
+            return false; // Don't clear already empty cells
+        }
+        
+        if (!is_string($value)) {
+            return false; // Don't clear non-string values
+        }
+        
+        // Clear if it matches our data patterns
+        $dataPatterns = [
+            '123456', '2024-2025', 'SEPTEMBER', 'Naawan', 'Kinder', 'Matatag',
+            'School ID', 'School Year', 'Report for', 'Name of School', 'Grade Level', 'Section'
+        ];
+        
+        foreach ($dataPatterns as $pattern) {
+            if (stripos($value, $pattern) !== false) {
+                return true;
+            }
+        }
+        
+        // Clear if it looks like placeholder text
+        return $this->isPlaceholderText($value);
+    }
+
+    /**
+     * Set value in the specific input box cell, trying multiple positions if needed
+     */
+    private function setValueInInputBox($worksheet, $primaryCell, $value, $fieldName)
+    {
+        try {
+            // Define alternative cells based on the primary cell
+            $alternativeCells = $this->getAlternativeCells($primaryCell);
+            
+            // Try primary cell first
+            $allCells = array_merge([$primaryCell], $alternativeCells);
+            
+            foreach ($allCells as $cell) {
+                try {
+                    $currentValue = $worksheet->getCell($cell)->getValue();
+                    
+                    // Check if this looks like an input field (empty, has border, or placeholder text)
+                    if ($this->isInputFieldCell($worksheet, $cell, $currentValue)) {
+                        $worksheet->setCellValue($cell, $value);
+                        Log::info("Set {$fieldName} to {$cell}: {$value}");
+                        return true;
+                    }
+                } catch (\Exception $e) {
+                    // Continue to next cell if this one fails
+                    continue;
+                }
+            }
+            
+            // If no suitable cell found, force use primary cell
+            $worksheet->setCellValue($primaryCell, $value);
+            Log::info("Set {$fieldName} to {$primaryCell} (forced): {$value}");
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::error("Error setting {$fieldName}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get alternative cells based on primary cell position
+     */
+    private function getAlternativeCells($primaryCell)
+    {
+        $column = substr($primaryCell, 0, 1);
+        $row = substr($primaryCell, 1);
+        
+        $alternatives = [];
+        
+        // Try adjacent columns (left and right)
+        if ($column > 'A') {
+            $alternatives[] = chr(ord($column) - 1) . $row;
+        }
+        if ($column < 'Z') {
+            $alternatives[] = chr(ord($column) + 1) . $row;
+            if (chr(ord($column) + 1) < 'Z') {
+                $alternatives[] = chr(ord($column) + 2) . $row;
+            }
+        }
+        
+        // Try adjacent rows (up and down)
+        if ($row > 1) {
+            $alternatives[] = $column . ($row - 1);
+        }
+        $alternatives[] = $column . ($row + 1);
+        $alternatives[] = $column . ($row + 2);
+        
+        return $alternatives;
+    }
+
+    /**
+     * Check if a cell looks like an input field
+     */
+    private function isInputFieldCell($worksheet, $cell, $currentValue)
+    {
+        try {
+            // Cell is good if it's empty
+            if (empty($currentValue)) {
+                return true;
+            }
+            
+            // Cell is good if it has placeholder text
+            if ($this->isPlaceholderText($currentValue)) {
+                return true;
+            }
+            
+            // Cell is good if it's a short text that looks like a placeholder
+            if (is_string($currentValue) && strlen($currentValue) < 20) {
+                return true;
+            }
+            
+            return false;
+            
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Try alternative cell positions for school information
+     */
+    private function tryAlternativeCells($worksheet, $section, $month)
+    {
+        $monthFormatted = strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y'));
+        $gradeLevel = $section->grade_level ?? 'Kinder';
+        $sectionName = $section->name ?? 'Matatag';
+        
+        // Try different possible cell positions based on photo1 structure
+        $alternativeCells = [
+            // Row 7 alternatives (first row of input fields)
+            ['B7', '123456'], ['C7', '123456'], ['D7', '123456'],
+            ['E7', '2024-2025'], ['F7', '2024-2025'], ['G7', '2024-2025'],
+            ['I7', $monthFormatted], ['J7', $monthFormatted], ['K7', $monthFormatted],
+            
+            // Row 9 alternatives (second row of input fields)
+            ['B9', 'Naawan CS'], ['C9', 'Naawan CS'], ['D9', 'Naawan CS'], ['E9', 'Naawan CS'], ['F9', 'Naawan CS'],
+            ['G9', $gradeLevel], ['H9', $gradeLevel], ['I9', $gradeLevel],
+            ['J9', $sectionName], ['K9', $sectionName], ['L9', $sectionName],
+            
+            // Row 8 alternatives (in case there's a middle row)
+            ['C8', '123456'], ['F8', '2024-2025'], ['J8', $monthFormatted],
+        ];
+        
+        foreach ($alternativeCells as [$cell, $value]) {
+            try {
+                $currentValue = $worksheet->getCell($cell)->getValue();
+                if (empty($currentValue)) {
+                    $worksheet->setCellValue($cell, $value);
+                    Log::info("Set alternative cell {$cell}: {$value}");
+                }
+            } catch (\Exception $e) {
+                // Continue to next cell if this one fails
+                continue;
+            }
+        }
+    }
+
+    /**
+     * Find and populate a field by searching for label text
+     */
+    private function populateFieldByText($worksheet, $labelText, $value)
+    {
+        try {
+            $highestRow = $worksheet->getHighestRow();
+            $highestColumn = $worksheet->getHighestColumn();
+            
+            // Search for the label text in the first 20 rows
+            for ($row = 1; $row <= min(20, $highestRow); $row++) {
+                for ($col = 'A'; $col <= $highestColumn; $col++) {
+                    $cellValue = $worksheet->getCell($col . $row)->getValue();
+                    
+                    if (is_string($cellValue) && strpos($cellValue, $labelText) !== false) {
+                        // Found the label, now find the input field
+                        // Try the next few cells to the right
+                        for ($inputCol = chr(ord($col) + 1); $inputCol <= chr(ord($col) + 5); $inputCol++) {
+                            if ($inputCol > 'Z') break; // Simple check for single letter columns
+                            
+                            $inputCell = $inputCol . $row;
+                            $inputValue = $worksheet->getCell($inputCell)->getValue();
+                            
+                            // If cell is empty or has placeholder text, populate it
+                            if (empty($inputValue) || $this->isPlaceholderText($inputValue)) {
+                                $worksheet->setCellValue($inputCell, $value);
+                                Log::info("Populated {$labelText} in cell {$inputCell} with value: {$value}");
+                                return true;
+                            }
+                        }
+                        
+                        // Also try the same row but different columns (for horizontal layouts)
+                        $nextRow = $row + 1;
+                        for ($inputCol = 'A'; $inputCol <= chr(ord($col) + 10); $inputCol++) {
+                            if ($inputCol > 'Z') break;
+                            
+                            $inputCell = $inputCol . $nextRow;
+                            if ($worksheet->getCell($inputCell)->getValue() === null) {
+                                $worksheet->setCellValue($inputCell, $value);
+                                Log::info("Populated {$labelText} in cell {$inputCell} with value: {$value}");
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Log::warning("Could not find field for: {$labelText}");
+            return false;
+            
+        } catch (\Exception $e) {
+            Log::error("Error populating field {$labelText}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if text appears to be placeholder text
+     */
+    private function isPlaceholderText($text)
+    {
+        if (!is_string($text)) return false;
+        
+        $placeholders = ['[', 'placeholder', 'enter', 'input', 'fill'];
+        $text = strtolower($text);
+        
+        foreach ($placeholders as $placeholder) {
+            if (strpos($text, $placeholder) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -347,6 +660,115 @@ class SF2ReportController extends Controller
         $worksheet->setCellValue('M19', 0); // Male transferred in
         $worksheet->setCellValue('N19', 0); // Female transferred in
         $worksheet->setCellValue('O19', 0); // Total transferred in
+    }
+
+    /**
+     * Get SF2 report data for teacher view (JSON format)
+     */
+    public function getReportData($sectionId, $month = null)
+    {
+        try {
+            // Use current month if not specified
+            if (!$month) {
+                $month = Carbon::now()->format('Y-m');
+            }
+            
+            // Get section with students and teacher
+            $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+            
+            // Get students with attendance data
+            $students = $this->getStudentsWithAttendance($section, $month);
+            
+            // Calculate summary statistics
+            $maleStudents = $students->where('gender', 'Male');
+            $femaleStudents = $students->where('gender', 'Female');
+            
+            $summary = [
+                'male' => [
+                    'enrollment' => $maleStudents->count(),
+                    'total_present' => $maleStudents->sum('total_present'),
+                    'total_absent' => $maleStudents->sum('total_absent'),
+                    'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0
+                ],
+                'female' => [
+                    'enrollment' => $femaleStudents->count(),
+                    'total_present' => $femaleStudents->sum('total_present'),
+                    'total_absent' => $femaleStudents->sum('total_absent'),
+                    'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0
+                ],
+                'total' => [
+                    'enrollment' => $students->count(),
+                    'total_present' => $students->sum('total_present'),
+                    'total_absent' => $students->sum('total_absent'),
+                    'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
+                ]
+            ];
+            
+            // Get days in month for headers
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            $daysInMonth = [];
+            
+            $currentDate = $startDate->copy();
+            while ($currentDate <= $endDate) {
+                if ($currentDate->isWeekday()) {
+                    $daysInMonth[] = [
+                        'date' => $currentDate->format('Y-m-d'),
+                        'day' => $currentDate->format('j'),
+                        'dayName' => $currentDate->format('D')
+                    ];
+                }
+                $currentDate->addDay();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'section' => [
+                        'id' => $section->id,
+                        'name' => $section->name,
+                        'grade_level' => $section->grade_level,
+                        'teacher' => $section->teacher ? [
+                            'name' => $section->teacher->first_name . ' ' . $section->teacher->last_name,
+                            'id' => $section->teacher->id
+                        ] : null
+                    ],
+                    'month' => $month,
+                    'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                    'students' => $students->map(function($student) {
+                        return [
+                            'id' => $student->id,
+                            'name' => $student->lastName . ', ' . $student->firstName . ' ' . $student->middleName,
+                            'firstName' => $student->firstName,
+                            'lastName' => $student->lastName,
+                            'middleName' => $student->middleName,
+                            'gender' => $student->gender,
+                            'attendance_data' => $student->attendance_data,
+                            'total_present' => $student->total_present,
+                            'total_absent' => $student->total_absent,
+                            'attendance_rate' => $student->attendance_rate
+                        ];
+                    }),
+                    'days_in_month' => $daysInMonth,
+                    'summary' => $summary,
+                    'school_info' => [
+                        'name' => 'Naawan Elementary School',
+                        'school_id' => '123456',
+                        'school_year' => '2024-2025',
+                        'division' => 'REGION X - NORTHERN MINDANAO',
+                        'district' => 'NAAWAN DISTRICT'
+                    ]
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("SF2 Report Data Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get SF2 report data',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
