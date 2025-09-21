@@ -14,6 +14,7 @@ use App\Http\Controllers\API\ScheduleController;
 use App\Http\Controllers\API\EnrollmentController;
 use App\Http\Controllers\API\QRCodeController;
 use App\Http\Controllers\API\TeacherAuthController;
+use App\Http\Controllers\API\AttendanceAnalyticsController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -325,3 +326,10 @@ Route::get('teacher/reports/sf2/data/{sectionId}', [\App\Http\Controllers\API\SF
 Route::get('teacher/reports/sf2/data/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'getReportData'])->name('teacher.sf2.data.month');
 Route::get('teacher/reports/sf2/download/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'download'])->name('teacher.sf2.download');
 Route::get('teacher/reports/sf2/download/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'downloadByMonth'])->name('teacher.sf2.download.month');
+
+// Attendance Analytics routes for Admin Dashboard
+Route::prefix('admin/attendance-analytics')->group(function () {
+    Route::get('/overview', [AttendanceAnalyticsController::class, 'getOverview']);
+    Route::get('/grade/{gradeId}', [AttendanceAnalyticsController::class, 'getGradeDetails']);
+    Route::get('/section/{sectionId}', [AttendanceAnalyticsController::class, 'getSectionDetails']);
+});
