@@ -520,21 +520,19 @@ class SF2ReportController extends Controller
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
                 
                 // Summary columns at the end (shifted one column right)
-                $worksheet->setCellValue("AI{$currentRow}", $student->total_absent);   // ABSENT
-                $worksheet->setCellValue("AJ{$currentRow}", $student->total_present);  // PRESENT  
-                $worksheet->setCellValue("AK{$currentRow}", 0);                       // TARDY
+                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
+                $worksheet->setCellValue("AK{$currentRow}", $student->total_present);  // PRESENT  
+                $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
                 $currentRow++;
                 $maleIndex++;
             }
             
-            // Add some spacing and FEMALE section header
-            $currentRow++;
-            $worksheet->setCellValue("A{$currentRow}", "FEMALE");
-            $currentRow++;
+            // Set FEMALE section to start directly at row 36 (no header)
+            $currentRow = 36;
             
-            // Female students section
-            $femaleIndex = $maleIndex; // Continue numbering from where male students ended
+            // Female students section - start numbering from 1
+            $femaleIndex = 1; // Start female numbering from 1
             foreach ($femaleStudents as $student) {
                 // Column A: Student number
                 $worksheet->setCellValue("A{$currentRow}", $femaleIndex);
