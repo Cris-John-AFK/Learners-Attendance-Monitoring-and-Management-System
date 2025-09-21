@@ -381,7 +381,7 @@ onMounted(() => {
                             <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-center w-40">
                                 <div class="text-xs font-bold">REMARKS</div>
                                 <div class="text-xs font-normal leading-tight mt-1">
-                                    (If DROPPED OUT, state reason, please refer to legend number 2.<br/>
+                                    (If DROPPED OUT, state reason, please refer to legend number 2.<br />
                                     If TRANSFERRED IN/OUT, write the name of School.)
                                 </div>
                             </th>
