@@ -16,6 +16,7 @@ const loading = ref(true);
 const reportData = ref(null);
 const selectedMonth = ref(new Date());
 const sectionId = route.params.sectionId;
+const submitting = ref(false);
 
 // Computed properties
 const maleStudents = computed(() => {
@@ -159,6 +160,36 @@ const downloadExcel = async () => {
     }
 };
 
+// Submit to Admin
+const submitToAdmin = async () => {
+    submitting.value = true;
+    try {
+        const monthStr = selectedMonth.value.toISOString().slice(0, 7);
+        const response = await axios.post(`http://127.0.0.1:8000/api/teacher/reports/sf2/submit/${sectionId}/${monthStr}`);
+
+        if (response.data.success) {
+            toast.add({
+                severity: 'success',
+                summary: 'Successfully Submitted!',
+                detail: `SF2 report for ${reportData.value.section.name} has been submitted to admin`,
+                life: 5000
+            });
+        } else {
+            throw new Error(response.data.message || 'Failed to submit report');
+        }
+    } catch (error) {
+        console.error('Error submitting report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.response?.data?.message || 'Failed to submit SF2 report to admin',
+            life: 3000
+        });
+    } finally {
+        submitting.value = false;
+    }
+};
+
 // Get attendance mark for display
 const getAttendanceMark = (status) => {
     switch (status) {
@@ -258,6 +289,13 @@ onMounted(() => {
                 </div>
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
                 <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
+                <Button 
+                    icon="pi pi-send" 
+                    label="Submit to Admin" 
+                    class="p-button-warning" 
+                    :loading="submitting"
+                    @click="submitToAdmin" 
+                />
             </div>
         </div>
 
