@@ -48,7 +48,18 @@
                     <Button icon="pi pi-chevron-right" class="p-button-text p-button-rounded month-nav-btn" @click="nextOverviewMonth()" :disabled="!canGoNextOverviewMonth()" v-tooltip.top="'Next Month'" />
                 </div>
 
-                <div class="grade-stats-grid">
+                <div v-if="loadingRealData" class="loading-container">
+                    <ProgressSpinner />
+                    <p>Loading curriculum data...</p>
+                </div>
+
+                <div v-else-if="gradeStatistics.length === 0" class="empty-state">
+                    <i class="pi pi-inbox empty-icon"></i>
+                    <h3>No Grades Found</h3>
+                    <p>No grade levels have been configured in the curriculum yet.</p>
+                </div>
+
+                <div v-else class="grade-stats-grid">
                     <div v-for="gradeStats in gradeStatistics" :key="gradeStats.grade" class="grade-stat-card">
                         <div class="grade-header">
                             <div class="grade-info">
@@ -877,6 +888,8 @@ import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
+import api from '@/config/axios';
+import { CurriculumService } from '@/router/service/CurriculumService';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -889,6 +902,11 @@ const showViewDialog = ref(false);
 const showSectionDetailsDialog = ref(false);
 const selectedReport = ref(null);
 const selectedSectionDetails = ref(null);
+
+// Real curriculum data
+const realGrades = ref([]);
+const realSections = ref([]);
+const loadingRealData = ref(false);
 
 // Status change dialog variables
 const statusChangeDialog = ref(false);
@@ -2605,81 +2623,67 @@ const monthlyGradeData = ref({
     }
 });
 
-// Computed property for grade statistics based on selected month
+// Computed property for grade statistics based on real curriculum data
 const gradeStatistics = computed(() => {
-    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
-    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    if (loadingRealData.value || realGrades.value.length === 0) {
+        return [];
+    }
 
-    const grades = [
-        {
-            grade: 'Kindergarten',
-            level: 'Pre-Elementary',
-            emoji: '🎨',
-            sections: monthData['Kindergarten']?.sections || [],
-            color: '#FF6B6B'
-        },
-        {
-            grade: 'Grade 1',
-            level: 'Elementary',
-            emoji: '📚',
-            sections: monthData['Grade 1']?.sections || [],
-            color: '#4ECDC4'
-        },
-        {
-            grade: 'Grade 2',
-            level: 'Elementary',
-            emoji: '✏️',
-            sections: monthData['Grade 2']?.sections || [],
-            color: '#45B7D1'
-        },
-        {
-            grade: 'Grade 3',
-            level: 'Elementary',
-            emoji: '📖',
-            sections: monthData['Grade 3']?.sections || [],
-            color: '#96CEB4'
-        },
-        {
-            grade: 'Grade 4',
-            level: 'Elementary',
-            emoji: '🔬',
-            sections: monthData['Grade 4']?.sections || [],
-            color: '#FFEAA7'
-        },
-        {
-            grade: 'Grade 5',
-            level: 'Elementary',
-            emoji: '🌟',
-            sections: monthData['Grade 5']?.sections || [],
-            color: '#DDA0DD'
-        },
-        {
-            grade: 'Grade 6',
-            level: 'Elementary',
-            emoji: '🎓',
-            sections: monthData['Grade 6']?.sections || [],
-            color: '#20B2AA'
-        }
-    ];
+    const gradeEmojiMap = {
+        'Kindergarten': '🎨',
+        'Grade 1': '📚',
+        'Grade 2': '✏️',
+        'Grade 3': '💻',
+        'Grade 4': '🔬',
+        'Grade 5': '🌟',
+        'Grade 6': '🎓'
+    };
 
-    return grades
-        .map((grade) => {
-            const sections = grade.sections;
-            const sectionCount = sections.length;
-            const totalStudents = sections.reduce((sum, section) => sum + section.studentCount, 0);
-            const teacherCount = new Set(sections.map((section) => section.teacher)).size;
-            const totalPresent = sections.reduce((sum, section) => sum + section.presentCount, 0);
-            const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
-
+    return realGrades.value.map((grade) => {
+        // Get sections for this grade
+        const gradeSections = realSections.value.filter(section => section.gradeId === grade.id);
+        
+        // Generate mock attendance data for each section
+        const sectionsWithData = gradeSections.map(section => {
+            const studentCount = Math.floor(Math.random() * 15) + 20; // 20-35 students
+            const presentCount = Math.floor(studentCount * (0.85 + Math.random() * 0.15)); // 85-100% attendance
+            const absentCount = studentCount - presentCount;
+            const attendanceRate = Math.round((presentCount / studentCount) * 100);
+            
             return {
-                ...grade,
-                sectionCount,
-                totalStudents,
-                teacherCount,
-                attendanceRate
+                id: section.id,
+                name: section.name,
+                teacher: section.homeroom_teacher ? 
+                    `${section.homeroom_teacher.first_name} ${section.homeroom_teacher.last_name}` : 
+                    'No Teacher Assigned',
+                studentCount,
+                presentCount,
+                absentCount,
+                attendanceRate,
+                status: attendanceRate >= 95 ? 'EXCELLENT' : 
+                        attendanceRate >= 85 ? 'GOOD' : 'NEEDS ATTENTION',
+                statusClass: attendanceRate >= 95 ? 'status-excellent' : 
+                            attendanceRate >= 85 ? 'status-good' : 'status-warning'
             };
-        })
-        .filter((grade) => grade.sectionCount > 0); // Only show grades with sections
+        });
+
+        const sectionCount = sectionsWithData.length;
+        const totalStudents = sectionsWithData.reduce((sum, section) => sum + section.studentCount, 0);
+        const teacherCount = new Set(sectionsWithData.map(section => section.teacher)).size;
+        const totalPresent = sectionsWithData.reduce((sum, section) => sum + section.presentCount, 0);
+        const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
+
+        return {
+            grade: grade.name,
+            level: grade.name.includes('Kindergarten') ? 'Pre-Elementary' : 'Elementary',
+            emoji: gradeEmojiMap[grade.name] || '📖',
+            sections: sectionsWithData,
+            sectionCount,
+            totalStudents,
+            teacherCount,
+            attendanceRate
+        };
+    }).filter(grade => grade.sectionCount > 0); // Only show grades with sections
 });
 
 const getAttendanceBarClass = (rate) => {
@@ -2705,6 +2709,83 @@ const generateGradeReport = (grade) => {
         detail: `Generating comprehensive report for ${grade}`,
         life: 3000
     });
+};
+
+// Load real curriculum data
+const loadRealCurriculumData = async () => {
+    try {
+        loadingRealData.value = true;
+        
+        // Get all curriculums (use plural method)
+        const curriculumsResponse = await CurriculumService.getCurriculums();
+        const curriculums = Array.isArray(curriculumsResponse) ? curriculumsResponse : (curriculumsResponse.data || []);
+        
+        // Find the active curriculum or use the first one
+        const activeCurriculum = curriculums.find(c => c.is_active) || curriculums[0];
+        
+        if (activeCurriculum && activeCurriculum.id) {
+            console.log('Using curriculum:', activeCurriculum);
+            
+            // Get grades for this curriculum
+            const gradesResponse = await CurriculumService.getGradesByCurriculum(activeCurriculum.id);
+            realGrades.value = Array.isArray(gradesResponse) ? gradesResponse : (gradesResponse.data || []);
+            
+            console.log('Loaded grades:', realGrades.value);
+            
+            // Get all sections for each grade
+            const allSections = [];
+            for (const grade of realGrades.value) {
+                try {
+                    const sectionsResponse = await CurriculumService.getSectionsByGrade(activeCurriculum.id, grade.id);
+                    const sections = Array.isArray(sectionsResponse) ? sectionsResponse : (sectionsResponse.data || []);
+                    
+                    console.log(`Sections for grade ${grade.name}:`, sections);
+                    
+                    // Add grade info to each section
+                    sections.forEach(section => {
+                        section.gradeName = grade.name;
+                        section.gradeId = grade.id;
+                        section.curriculumId = activeCurriculum.id;
+                        allSections.push(section);
+                    });
+                } catch (error) {
+                    console.warn(`Error loading sections for grade ${grade.name}:`, error);
+                }
+            }
+            
+            realSections.value = allSections;
+            console.log('Loaded real curriculum data:', {
+                curriculum: activeCurriculum,
+                grades: realGrades.value,
+                sections: realSections.value
+            });
+            
+            toast.add({
+                severity: 'success',
+                summary: 'Data Loaded',
+                detail: `Loaded ${realGrades.value.length} grades and ${realSections.value.length} sections`,
+                life: 3000
+            });
+        } else {
+            console.warn('No active curriculum found');
+            toast.add({
+                severity: 'warn',
+                summary: 'No Curriculum',
+                detail: 'No active curriculum found. Please set up curriculum first.',
+                life: 5000
+            });
+        }
+    } catch (error) {
+        console.error('Error loading curriculum data:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load curriculum data: ' + error.message,
+            life: 5000
+        });
+    } finally {
+        loadingRealData.value = false;
+    }
 };
 
 const getRecordsCount = (grade) => {
@@ -3327,9 +3408,10 @@ const backToMainReport = () => {
     }, 100);
 };
 
-// Lifecycle
+// Lifecycle hooks
 onMounted(() => {
-    // Load reports data
+    // Load real curriculum data
+    loadRealCurriculumData();
     loading.value = true;
     setTimeout(() => {
         loading.value = false;
