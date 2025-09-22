@@ -15,18 +15,18 @@ return new class extends Migration
     {
         // Drop the existing unique constraint that includes status
         DB::statement('ALTER TABLE attendance_sessions DROP CONSTRAINT IF EXISTS unique_active_session');
-        
+
         // Create a partial unique index that only applies to active sessions
         DB::statement('
-            CREATE UNIQUE INDEX unique_active_session_only 
-            ON attendance_sessions (teacher_id, section_id, subject_id, session_date) 
+            CREATE UNIQUE INDEX unique_active_session_only
+            ON attendance_sessions (teacher_id, section_id, subject_id, session_date)
             WHERE status = \'active\'
         ');
-        
+
         // Also create a regular index for performance on completed sessions
         DB::statement('
-            CREATE INDEX idx_completed_sessions 
-            ON attendance_sessions (teacher_id, section_id, subject_id, session_date, status) 
+            CREATE INDEX idx_completed_sessions
+            ON attendance_sessions (teacher_id, section_id, subject_id, session_date, status)
             WHERE status = \'completed\'
         ');
     }
@@ -39,7 +39,7 @@ return new class extends Migration
         // Drop the new indexes
         DB::statement('DROP INDEX IF EXISTS unique_active_session_only');
         DB::statement('DROP INDEX IF EXISTS idx_completed_sessions');
-        
+
         // Recreate the original constraint (this might fail if there are duplicates)
         try {
             Schema::table('attendance_sessions', function (Blueprint $table) {

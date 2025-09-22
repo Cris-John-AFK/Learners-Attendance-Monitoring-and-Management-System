@@ -40,24 +40,12 @@
 
                 <!-- Month Navigation -->
                 <div class="month-navigation-header">
-                    <Button 
-                        icon="pi pi-chevron-left" 
-                        class="p-button-text p-button-rounded month-nav-btn" 
-                        @click="previousOverviewMonth()" 
-                        :disabled="!canGoPreviousOverviewMonth()"
-                        v-tooltip.top="'Previous Month'"
-                    />
+                    <Button icon="pi pi-chevron-left" class="p-button-text p-button-rounded month-nav-btn" @click="previousOverviewMonth()" :disabled="!canGoPreviousOverviewMonth()" v-tooltip.top="'Previous Month'" />
                     <div class="current-month-display">
                         <h3 class="month-title">{{ getCurrentOverviewMonthDisplay() }}</h3>
                         <p class="month-subtitle">{{ getActiveSectionsCount() }} sections active</p>
                     </div>
-                    <Button 
-                        icon="pi pi-chevron-right" 
-                        class="p-button-text p-button-rounded month-nav-btn" 
-                        @click="nextOverviewMonth()" 
-                        :disabled="!canGoNextOverviewMonth()"
-                        v-tooltip.top="'Next Month'"
-                    />
+                    <Button icon="pi pi-chevron-right" class="p-button-text p-button-rounded month-nav-btn" @click="nextOverviewMonth()" :disabled="!canGoNextOverviewMonth()" v-tooltip.top="'Next Month'" />
                 </div>
 
                 <div class="grade-stats-grid">
@@ -889,7 +877,6 @@ import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
-import * as XLSX from 'xlsx';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -2547,7 +2534,7 @@ const getGradeSections = (grade) => {
 // Month-specific section data
 const monthlyGradeData = ref({
     'August 2025': {
-        'Kindergarten': {
+        Kindergarten: {
             sections: [
                 { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 22, presentCount: 20, absentCount: 2, attendanceRate: 91, status: 'EXCELLENT', statusClass: 'status-excellent' },
                 { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 25, presentCount: 23, absentCount: 2, attendanceRate: 92, status: 'EXCELLENT', statusClass: 'status-excellent' },
@@ -2569,7 +2556,7 @@ const monthlyGradeData = ref({
         }
     },
     'September 2025': {
-        'Kindergarten': {
+        Kindergarten: {
             sections: kinderSections.value
         },
         'Grade 1': {
@@ -2592,7 +2579,7 @@ const monthlyGradeData = ref({
         }
     },
     'October 2025': {
-        'Kindergarten': {
+        Kindergarten: {
             sections: [
                 { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 26, presentCount: 25, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
                 { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 29, presentCount: 28, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
@@ -2622,7 +2609,7 @@ const monthlyGradeData = ref({
 const gradeStatistics = computed(() => {
     const currentMonthDisplay = getCurrentOverviewMonthDisplay();
     const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
-    
+
     const grades = [
         {
             grade: 'Kindergarten',
@@ -2675,22 +2662,24 @@ const gradeStatistics = computed(() => {
         }
     ];
 
-    return grades.map((grade) => {
-        const sections = grade.sections;
-        const sectionCount = sections.length;
-        const totalStudents = sections.reduce((sum, section) => sum + section.studentCount, 0);
-        const teacherCount = new Set(sections.map((section) => section.teacher)).size;
-        const totalPresent = sections.reduce((sum, section) => sum + section.presentCount, 0);
-        const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
+    return grades
+        .map((grade) => {
+            const sections = grade.sections;
+            const sectionCount = sections.length;
+            const totalStudents = sections.reduce((sum, section) => sum + section.studentCount, 0);
+            const teacherCount = new Set(sections.map((section) => section.teacher)).size;
+            const totalPresent = sections.reduce((sum, section) => sum + section.presentCount, 0);
+            const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
 
-        return {
-            ...grade,
-            sectionCount,
-            totalStudents,
-            teacherCount,
-            attendanceRate
-        };
-    }).filter(grade => grade.sectionCount > 0); // Only show grades with sections
+            return {
+                ...grade,
+                sectionCount,
+                totalStudents,
+                teacherCount,
+                attendanceRate
+            };
+        })
+        .filter((grade) => grade.sectionCount > 0); // Only show grades with sections
 });
 
 const getAttendanceBarClass = (rate) => {
@@ -3232,14 +3221,14 @@ const nextOverviewMonth = () => {
 const getActiveSectionsCount = () => {
     const currentMonthDisplay = getCurrentOverviewMonthDisplay();
     const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
-    
+
     let totalSections = 0;
-    Object.values(monthData).forEach(gradeData => {
+    Object.values(monthData).forEach((gradeData) => {
         if (gradeData.sections) {
             totalSections += gradeData.sections.length;
         }
     });
-    
+
     return totalSections;
 };
 
@@ -3259,7 +3248,7 @@ const downloadSF2Report = async () => {
         const section = selectedSectionDetails.value;
         const sectionId = section.id;
         const monthDisplay = getCurrentMonthDisplay();
-        
+
         // Convert month display to YYYY-MM format for API
         const monthParts = monthDisplay.split(' ');
         const monthName = monthParts[0];
@@ -3278,8 +3267,8 @@ const downloadSF2Report = async () => {
         const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/download/${sectionId}/${monthParam}`, {
             method: 'GET',
             headers: {
-                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Type': 'application/json',
+                Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Type': 'application/json'
             }
         });
 
@@ -3290,7 +3279,7 @@ const downloadSF2Report = async () => {
         // Get the filename from response headers or create default
         const contentDisposition = response.headers.get('Content-Disposition');
         let filename = `SF2_Daily_Attendance_${section.name}_${monthDisplay.replace(/\s+/g, '_')}.xlsx`;
-        
+
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename="(.+)"/);
             if (filenameMatch) {
