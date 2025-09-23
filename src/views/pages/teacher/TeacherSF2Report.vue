@@ -289,13 +289,7 @@ onMounted(() => {
                 </div>
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
                 <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
-                <Button 
-                    icon="pi pi-send" 
-                    label="Submit to Admin" 
-                    class="p-button-warning" 
-                    :loading="submitting"
-                    @click="submitToAdmin" 
-                />
+                <Button icon="pi pi-send" label="Submit to Admin" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
             </div>
         </div>
 
