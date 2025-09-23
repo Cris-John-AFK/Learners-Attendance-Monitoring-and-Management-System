@@ -326,6 +326,11 @@ Route::get('teacher/reports/sf2/data/{sectionId}', [\App\Http\Controllers\API\SF
 Route::get('teacher/reports/sf2/data/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'getReportData'])->name('teacher.sf2.data.month');
 Route::get('teacher/reports/sf2/download/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'download'])->name('teacher.sf2.download');
 Route::get('teacher/reports/sf2/download/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'downloadByMonth'])->name('teacher.sf2.download.month');
+Route::post('teacher/reports/sf2/submit/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'submitToAdmin'])->name('teacher.sf2.submit');
+
+// Admin routes for managing submitted SF2 reports
+Route::get('admin/reports/submitted', [\App\Http\Controllers\API\SF2ReportController::class, 'getSubmittedReports'])->name('admin.sf2.submitted');
+Route::put('admin/reports/submitted/{reportId}/status', [\App\Http\Controllers\API\SF2ReportController::class, 'updateReportStatus'])->name('admin.sf2.update.status');
 
 // Attendance Analytics routes for Admin Dashboard
 Route::prefix('admin/attendance-analytics')->group(function () {

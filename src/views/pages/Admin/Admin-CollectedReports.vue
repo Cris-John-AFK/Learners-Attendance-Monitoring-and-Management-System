@@ -22,8 +22,13 @@
                         <p class="page-subtitle">Manage and view all system reports</p>
                     </div>
                     <div class="header-actions">
+                        <div class="notification-icon-container">
+                            <Button icon="pi pi-bell" class="p-button-text p-button-rounded notification-btn" @click="scrollToSubmittedReports" v-tooltip.bottom="'New Submissions'" />
+                            <span v-if="newSubmissionsCount > 0" class="notification-badge">{{ newSubmissionsCount }}</span>
+                        </div>
                         <Button label="Generate Report" icon="pi pi-plus" class="p-button-success" @click="showGenerateDialog = true" />
                         <Button label="Export All" icon="pi pi-download" class="p-button-outlined" @click="exportAllReports" />
+                        <Button label="Test Notification" icon="pi pi-bell" class="p-button-warning p-button-outlined" @click="receiveNewSubmission" />
                     </div>
                 </div>
             </div>
@@ -958,6 +963,9 @@ const searchQuery = ref('');
 const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
 const selectedStatus = ref(null);
+
+// Notification system
+const newSubmissionsCount = ref(0);
 
 // Current month and year for navigation
 const currentMonth = ref(8); // September (0-indexed)
@@ -2869,10 +2877,31 @@ const exportAllReports = () => {
     toast.add({
         severity: 'info',
         summary: 'Export Started',
-        detail: 'Exporting all reports...',
+        detail: 'Exporting all reports to Excel...',
         life: 3000
     });
     // Implement export logic here
+};
+
+// Notification functions
+const scrollToSubmittedReports = () => {
+    const reportsSection = document.querySelector('.reports-table-container');
+    if (reportsSection) {
+        reportsSection.scrollIntoView({ behavior: 'smooth' });
+        // Clear notification count when user clicks
+        newSubmissionsCount.value = 0;
+    }
+};
+
+// Simulate receiving new submission notification
+const receiveNewSubmission = () => {
+    newSubmissionsCount.value += 1;
+    toast.add({
+        severity: 'info',
+        summary: 'New Report Submitted',
+        detail: 'A teacher has submitted a new SF2 report',
+        life: 5000
+    });
 };
 
 // Section details methods
@@ -5744,5 +5773,54 @@ const reportTypes = ref([
 .report-status {
     position: relative;
     display: inline-block;
+}
+
+/* Notification Icon Styles */
+.notification-icon-container {
+    position: relative;
+    display: inline-block;
+    margin-right: 1rem;
+}
+
+.notification-btn {
+    color: #6c757d !important;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+}
+
+.notification-btn:hover {
+    color: #495057 !important;
+    transform: scale(1.1);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 </style>

@@ -883,6 +883,187 @@ class SF2ReportController extends Controller
     }
 
     /**
+     * Submit SF2 report to admin
+     */
+    public function submitToAdmin($sectionId, $month)
+    {
+        try {
+            // Get section with teacher information
+            $section = Section::with(['teacher'])->findOrFail($sectionId);
+            
+            // Check if already submitted for this section and month
+            $existingSubmission = \DB::table('submitted_sf2_reports')
+                ->where('section_id', $sectionId)
+                ->where('month', $month)
+                ->first();
+            
+            if ($existingSubmission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Report already submitted for this section and month'
+                ], 409);
+            }
+            
+            // Create submission record
+            $submissionId = \DB::table('submitted_sf2_reports')->insertGetId([
+                'section_id' => $sectionId,
+                'section_name' => $section->name,
+                'grade_level' => $section->grade_level ?? 'Kinder',
+                'month' => $month,
+                'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                'report_type' => 'SF2',
+                'status' => 'submitted',
+                'submitted_by' => $section->teacher_id ?? 1,
+                'submitted_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+            
+            Log::info("SF2 report submitted successfully", [
+                'submission_id' => $submissionId,
+                'section_id' => $sectionId,
+                'month' => $month,
+                'teacher_id' => $section->teacher_id
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'SF2 report submitted successfully to admin',
+                'data' => [
+                    'submission_id' => $submissionId,
+                    'section_name' => $section->name,
+                    'month' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                    'status' => 'submitted',
+                    'submitted_at' => now()->toISOString()
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("Error submitting SF2 report: " . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to submit report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all submitted SF2 reports for admin
+     */
+    public function getSubmittedReports()
+    {
+        try {
+            $reports = \DB::table('submitted_sf2_reports')
+                ->leftJoin('teachers', 'submitted_sf2_reports.submitted_by', '=', 'teachers.id')
+                ->select(
+                    'submitted_sf2_reports.*',
+                    'teachers.firstName as teacher_first_name',
+                    'teachers.lastName as teacher_last_name'
+                )
+                ->orderBy('submitted_at', 'desc')
+                ->get();
+
+            // Transform the data for frontend
+            $transformedReports = $reports->map(function ($report) {
+                return [
+                    'id' => $report->id,
+                    'section_id' => $report->section_id,
+                    'section_name' => $report->section_name,
+                    'grade_level' => $report->grade_level,
+                    'month' => $report->month,
+                    'month_name' => $report->month_name,
+                    'report_type' => $report->report_type,
+                    'status' => $report->status,
+                    'teacher_name' => $report->teacher_first_name . ' ' . $report->teacher_last_name,
+                    'submitted_at' => $report->submitted_at,
+                    'reviewed_at' => $report->reviewed_at,
+                    'admin_notes' => $report->admin_notes,
+                    'submitted' => $report->status === 'submitted' // For notification badge
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $transformedReports
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error fetching submitted reports: " . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch submitted reports',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update the status of a submitted report
+     */
+    public function updateReportStatus($reportId, Request $request)
+    {
+        try {
+            $status = $request->input('status');
+            $adminNotes = $request->input('admin_notes', '');
+
+            // Validate status
+            $validStatuses = ['submitted', 'reviewed', 'approved', 'rejected'];
+            if (!in_array($status, $validStatuses)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid status provided'
+                ], 400);
+            }
+
+            // Update the report
+            $updated = \DB::table('submitted_sf2_reports')
+                ->where('id', $reportId)
+                ->update([
+                    'status' => $status,
+                    'reviewed_at' => now(),
+                    'reviewed_by' => 1, // TODO: Get actual admin ID from auth
+                    'admin_notes' => $adminNotes,
+                    'updated_at' => now()
+                ]);
+
+            if ($updated) {
+                Log::info("Report status updated", [
+                    'report_id' => $reportId,
+                    'new_status' => $status,
+                    'admin_notes' => $adminNotes
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Report status updated successfully',
+                    'data' => [
+                        'report_id' => $reportId,
+                        'status' => $status,
+                        'reviewed_at' => now()->toISOString()
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Report not found'
+                ], 404);
+            }
+
+        } catch (\Exception $e) {
+            Log::error("Error updating report status: " . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update report status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Convert attendance status to display mark
      */
     private function getAttendanceMark($status)
