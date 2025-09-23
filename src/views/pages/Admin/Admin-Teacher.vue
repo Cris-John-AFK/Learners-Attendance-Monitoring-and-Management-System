@@ -105,7 +105,7 @@
                                 <i class="pi pi-home"></i>
                                 <span>Assign Section</span>
                             </button>
-                            <button class="action-btn add-subject-btn" @click="addSubject(teacher)" title="Add Subject">
+                            <button class="action-btn add-subject-btn" @click="openAddSubjectsDialog(teacher)" title="Add Subject">
                                 <i class="pi pi-plus"></i>
                                 <span>Add Subject</span>
                             </button>
@@ -269,6 +269,57 @@
                     </div>
                 </div>
             </div>
+        </Dialog>
+
+        <!-- Assignment Wizard Dialog -->
+        <Dialog v-model:visible="assignmentWizardDialog" modal :style="{ width: '800px' }" header="Add Subjects to Teacher" class="assignment-wizard-dialog">
+            <div v-if="selectedTeacher && assignmentWizardMode === 'add-subjects'" class="assignment-wizard-content">
+                <div class="teacher-info mb-4">
+                    <h4>Adding subjects for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
+                    <p class="text-sm text-gray-600">Select additional subjects to assign to this teacher</p>
+                </div>
+
+                <div class="subjects-selection">
+                    <h5>Available Subjects</h5>
+                    <div class="subject-grid">
+                        <div v-for="subject in availableSubjectsForAssignment" 
+                             :key="subject.id" 
+                             class="subject-card" 
+                             :class="{ 
+                                 selected: selectedSubjectsForAssignment.some((s) => s.id === subject.id),
+                                 disabled: isSubjectAlreadyAssigned(subject),
+                                 'already-assigned': isSubjectAlreadyAssigned(subject)
+                             }" 
+                             @click="!isSubjectAlreadyAssigned(subject) && toggleSubjectSelection(subject)">
+                            <div class="subject-content">
+                                <div class="subject-name">{{ subject.name }}</div>
+                                <div v-if="isSubjectAlreadyAssigned(subject)" class="already-assigned-badge">
+                                    <i class="pi pi-check-circle"></i>
+                                    <span>Already Assigned</span>
+                                </div>
+                            </div>
+                            <div v-if="selectedSubjectsForAssignment.some((s) => s.id === subject.id) && !isSubjectAlreadyAssigned(subject)" class="selection-indicator">
+                                <i class="pi pi-plus-circle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="selectedSubjectsForAssignment.length > 0" class="selected-subjects mt-4">
+                    <h5>Selected Subjects ({{ selectedSubjectsForAssignment.length }})</h5>
+                    <div class="selected-list">
+                        <span v-for="subject in selectedSubjectsForAssignment" :key="subject.id" class="selected-subject-tag">
+                            {{ subject.name }}
+                            <i class="pi pi-times" @click="removeSubjectFromAssignment(subject)"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="assignmentWizardDialog = false" />
+                <Button label="Add Subjects" icon="pi pi-check" :disabled="selectedSubjectsForAssignment.length === 0" @click="saveSubjectAssignments" />
+            </template>
         </Dialog>
     </div>
 </template>
@@ -1162,7 +1213,7 @@ const openAssignmentWizard = (teacherData) => {
 };
 
 // Add a new method specifically for adding subjects
-const openAddSubjectsDialog = (teacherData) => {
+const openAddSubjectsDialog = async (teacherData) => {
     if (!teacherData || !teacherData.id) {
         toast.add({
             severity: 'error',
@@ -1194,6 +1245,14 @@ const openAddSubjectsDialog = (teacherData) => {
         console.log(`Opening add-subjects dialog for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
         console.log(`Primary assignment:`, primaryAssignment);
 
+        // Load available subjects for assignment
+        await loadSubjectsForAssignment();
+
+        // Debug: Log teacher's current assignments
+        console.log('Full teacher object:', selectedTeacher.value);
+        console.log('Teacher assignments for filtering:', selectedTeacher.value.active_assignments);
+        console.log('All teacher properties:', Object.keys(selectedTeacher.value));
+
         // Open the dialog
         assignmentWizardDialog.value = true;
     } catch (error) {
@@ -1204,6 +1263,141 @@ const openAddSubjectsDialog = (teacherData) => {
             detail: 'Failed to open add subjects dialog',
             life: 3000
         });
+    }
+};
+
+// Check if subject is already assigned to teacher
+const isSubjectAlreadyAssigned = (subject) => {
+    if (!selectedTeacher.value) {
+        console.log('No teacher found');
+        return false;
+    }
+    
+    // Try different possible assignment property names
+    const assignments = selectedTeacher.value.subject_assignments || 
+                       selectedTeacher.value.active_assignments || 
+                       selectedTeacher.value.assignments || 
+                       selectedTeacher.value.teaching_subjects ||
+                       selectedTeacher.value.subjects ||
+                       [];
+    
+    if (!assignments || assignments.length === 0) {
+        console.log('No assignments found in teacher object');
+        console.log('Teacher object keys:', Object.keys(selectedTeacher.value));
+        return false;
+    }
+    
+    console.log(`Checking if subject "${subject.name}" (ID: ${subject.id}) is already assigned`);
+    console.log('Available assignments:', assignments);
+    
+    // Check if teacher already has this subject assigned (check both ID and name for safety)
+    const isAssigned = assignments.some(assignment => {
+        // Handle different assignment data structures
+        const assignmentSubject = assignment.subject || assignment;
+        
+        if (!assignmentSubject) {
+            console.log('Assignment has no subject:', assignment);
+            return false;
+        }
+        
+        console.log(`Comparing with assignment subject: "${assignmentSubject.name}" (ID: ${assignmentSubject.id})`);
+        
+        // Check by ID (primary)
+        if (assignmentSubject.id === subject.id) {
+            console.log('Match found by ID!');
+            return true;
+        }
+        
+        // Check by name (fallback for edge cases)
+        if (assignmentSubject.name && subject.name) {
+            const assignmentName = assignmentSubject.name.toLowerCase().trim();
+            const subjectName = subject.name.toLowerCase().trim();
+            if (assignmentName === subjectName) {
+                console.log('Match found by name!');
+                return true;
+            }
+        }
+        
+        return false;
+    });
+    
+    console.log(`Subject "${subject.name}" is ${isAssigned ? 'ASSIGNED' : 'NOT ASSIGNED'}`);
+    return isAssigned;
+};
+
+// Toggle subject selection
+const toggleSubjectSelection = (subject) => {
+    // Don't allow selection if already assigned
+    if (isSubjectAlreadyAssigned(subject)) {
+        return;
+    }
+    
+    const index = selectedSubjectsForAssignment.value.findIndex((s) => s.id === subject.id);
+    if (index > -1) {
+        selectedSubjectsForAssignment.value.splice(index, 1);
+    } else {
+        selectedSubjectsForAssignment.value.push(subject);
+    }
+};
+
+// Remove subject from assignment
+const removeSubjectFromAssignment = (subject) => {
+    selectedSubjectsForAssignment.value = selectedSubjectsForAssignment.value.filter((s) => s.id !== subject.id);
+};
+
+// Save subject assignments
+const saveSubjectAssignments = async () => {
+    try {
+        loading.value = true;
+
+        // Get the teacher's primary assignment to determine the section
+        const primaryAssignment = selectedTeacher.value.primary_assignment || (selectedTeacher.value.active_assignments && selectedTeacher.value.active_assignments.find((a) => a.is_primary || a.role === 'primary'));
+
+        if (!primaryAssignment) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No primary assignment found for teacher',
+                life: 3000
+            });
+            return;
+        }
+
+        // Prepare assignment data
+        const assignments = selectedSubjectsForAssignment.value.map((subject) => ({
+            section_id: primaryAssignment.section.id,
+            subject_id: subject.id,
+            is_primary: false,
+            role: 'teacher'
+        }));
+
+        // Send to backend
+        const response = await api(`/api/teachers/${selectedTeacher.value.id}/assignments`, {
+            method: 'POST',
+            data: { assignments }
+        });
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Added ${selectedSubjectsForAssignment.value.length} subject(s) to teacher`,
+            life: 3000
+        });
+
+        // Close dialog and refresh
+        assignmentWizardDialog.value = false;
+        selectedSubjectsForAssignment.value = [];
+        await loadTeachers();
+    } catch (error) {
+        console.error('Error saving subject assignments:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to add subjects to teacher',
+            life: 3000
+        });
+    } finally {
+        loading.value = false;
     }
 };
 
@@ -2113,7 +2307,7 @@ const loadSectionsForAssignment = async (gradeId) => {
 const loadSubjectsForAssignment = async () => {
     try {
         loading.value = true;
-        const response = await axios.get(`${API_BASE_URL}/subjects`);
+        const response = await api(`/api/subjects`);
         availableSubjectsForAssignment.value = response.data;
 
         // If primary teacher is selected, automatically add a homeroom subject
@@ -3235,6 +3429,273 @@ const archiveTeacher = async (teacher) => {
 
     .search-input {
         width: 200px !important;
+    }
+}
+
+/* Assignment Wizard Dialog Styles */
+.assignment-wizard-content {
+    padding: 1rem 0;
+}
+
+.teacher-info h4 {
+    margin: 0 0 0.5rem 0;
+    color: #374151;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.teacher-info p {
+    color: #6b7280;
+    margin: 0;
+}
+
+.subjects-selection h5 {
+    margin: 0 0 1.5rem 0;
+    color: #374151;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.subjects-selection h5::before {
+    content: '📚';
+    font-size: 1.2rem;
+}
+
+.subject-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.subject-card {
+    position: relative;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.subject-card:hover:not(.disabled) {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.subject-card.selected {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.subject-card.disabled,
+.subject-card.already-assigned {
+    border-color: #d1d5db;
+    background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+}
+
+.subject-card.already-assigned {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    opacity: 0.8;
+}
+
+.subject-card.already-assigned::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 12px;
+    pointer-events: none;
+}
+
+.subject-card.disabled::after,
+.subject-card.already-assigned::after {
+    content: '🚫';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.subject-card.already-assigned:hover::after {
+    opacity: 0.7;
+}
+
+.subject-content {
+    padding: 1.25rem;
+    position: relative;
+}
+
+.subject-name {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+.subject-grade {
+    font-size: 0.8rem;
+    color: #6b7280;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.already-assigned-badge {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: #f59e0b;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    animation: pulse 2s infinite;
+}
+
+.already-assigned-badge i {
+    font-size: 0.8rem;
+}
+
+.selection-indicator {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: #10b981;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    animation: bounceIn 0.3s ease-out;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+@keyframes bounceIn {
+    0% { transform: scale(0); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+.selected-subjects {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #0ea5e9;
+    border-radius: 12px;
+    padding: 1.25rem;
+    animation: slideInUp 0.3s ease-out;
+}
+
+.selected-subjects h5 {
+    margin: 0 0 1rem 0;
+    color: #0c4a6e;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.selected-subjects h5::before {
+    content: '✨';
+    font-size: 1.1rem;
+}
+
+.selected-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.selected-subject-tag {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 25px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    transition: all 0.2s ease;
+    animation: fadeInScale 0.3s ease-out;
+}
+
+.selected-subject-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.selected-subject-tag i {
+    cursor: pointer;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+    padding: 2px;
+    border-radius: 50%;
+}
+
+.selected-subject-tag i:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+@keyframes slideInUp {
+    0% { 
+        opacity: 0; 
+        transform: translateY(20px); 
+    }
+    100% { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+@keyframes fadeInScale {
+    0% { 
+        opacity: 0; 
+        transform: scale(0.8); 
+    }
+    100% { 
+        opacity: 1; 
+        transform: scale(1); 
     }
 }
 </style>

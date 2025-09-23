@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AttendanceAnalyticsController extends Controller
@@ -19,9 +20,8 @@ class AttendanceAnalyticsController extends Controller
             $dateTo = $request->get('date_to', Carbon::today()->toDateString());
 
             // Get total students across all grades
-            $totalStudents = DB::table('students')
-                ->join('student_section', 'students.id', '=', 'student_section.student_id')
-                ->where('student_section.is_active', true)
+            $totalStudents = DB::table('student_details')
+                ->where('isActive', true)
                 ->count();
 
             // Get attendance statistics for the date range
@@ -43,35 +43,67 @@ class AttendanceAnalyticsController extends Controller
             $absentPercentage = round(($attendanceStats->absent_count / $totalRecords) * 100, 1);
             $latePercentage = round(($attendanceStats->late_count / $totalRecords) * 100, 1);
 
-            // Get grade-level breakdown
-            $gradeBreakdown = DB::table('grades as g')
-                ->leftJoin('curriculum_grade as cg', 'g.id', '=', 'cg.grade_id')
-                ->leftJoin('sections as s', 'cg.id', '=', 's.curriculum_grade_id')
-                ->leftJoin('student_section as ss', 's.id', '=', 'ss.section_id')
-                ->leftJoin('students as st', 'ss.student_id', '=', 'st.id')
-                ->leftJoin('attendance_records as ar', function($join) use ($dateFrom, $dateTo) {
-                    $join->on('st.id', '=', 'ar.student_id')
-                         ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                         ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                         ->whereBetween('ases.session_date', [$dateFrom, $dateTo]);
-                })
-                ->where('ss.is_active', true)
-                ->groupBy('g.id', 'g.name')
-                ->selectRaw('
-                    g.id as grade_id,
-                    g.name as grade_name,
-                    COUNT(DISTINCT st.id) as total_students,
-                    COUNT(ar.id) as total_attendance_records,
-                    SUM(CASE WHEN ast.code = \'P\' THEN 1 ELSE 0 END) as present_count,
-                    SUM(CASE WHEN ast.code = \'A\' THEN 1 ELSE 0 END) as absent_count,
-                    SUM(CASE WHEN ast.code = \'L\' THEN 1 ELSE 0 END) as late_count
-                ')
-                ->get()
-                ->map(function($grade) {
-                    $totalRecords = $grade->total_attendance_records ?: 1;
-                    $grade->attendance_percentage = round(($grade->present_count / $totalRecords) * 100, 1);
-                    return $grade;
-                });
+            // Get grade-level breakdown by mapping sections to grades
+            $gradeBreakdown = collect();
+            
+            // Get all grades
+            $grades = DB::table('grades')->get();
+            
+            foreach ($grades as $grade) {
+                // Map sections to grades based on section names
+                $sectionConditions = [];
+                if ($grade->code === 'K1') {
+                    // Only "Kinder 1" grade gets both "Kinder One" and "Kinder Two" sections
+                    $sectionConditions = ['Kinder One', 'Kinder Two'];
+                } else if ($grade->code === 'K2') {
+                    // "Kinder 2" grade gets no sections (empty)
+                    $sectionConditions = [];
+                } else {
+                    // For other grades, use the grade level pattern
+                    $sectionConditions = ["Grade {$grade->level} - Section A", "Grade {$grade->level} - Section B"];
+                }
+                
+                // Get attendance data for this grade's sections
+                if (empty($sectionConditions)) {
+                    // No sections for this grade, return empty data
+                    $gradeData = (object)[
+                        'total_students' => 0,
+                        'total_attendance_records' => 0,
+                        'present_count' => 0,
+                        'absent_count' => 0,
+                        'late_count' => 0
+                    ];
+                } else {
+                    $gradeData = DB::table('attendance_sessions as ases')
+                        ->join('sections as s', 'ases.section_id', '=', 's.id')
+                        ->leftJoin('attendance_records as ar', 'ases.id', '=', 'ar.attendance_session_id')
+                        ->leftJoin('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                        ->whereIn('s.name', $sectionConditions)
+                        ->whereBetween('ases.session_date', [$dateFrom, $dateTo])
+                        ->selectRaw('
+                            COUNT(DISTINCT ar.student_id) as total_students,
+                            COUNT(ar.id) as total_attendance_records,
+                            SUM(CASE WHEN ast.code = \'P\' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN ast.code = \'A\' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN ast.code = \'L\' THEN 1 ELSE 0 END) as late_count
+                        ')
+                        ->first();
+                }
+                
+                $totalRecords = $gradeData->total_attendance_records ?: 1;
+                $attendancePercentage = round(($gradeData->present_count / $totalRecords) * 100, 1);
+                
+                $gradeBreakdown->push((object)[
+                    'grade_id' => $grade->id,
+                    'grade_name' => $grade->name,
+                    'total_students' => $gradeData->total_students ?: 0,
+                    'total_attendance_records' => $gradeData->total_attendance_records ?: 0,
+                    'present_count' => $gradeData->present_count ?: 0,
+                    'absent_count' => $gradeData->absent_count ?: 0,
+                    'late_count' => $gradeData->late_count ?: 0,
+                    'attendance_percentage' => $attendancePercentage
+                ]);
+            }
 
             // Get attendance trend for the last 7 days
             $attendanceTrend = DB::table('attendance_sessions as ases')
@@ -145,25 +177,32 @@ class AttendanceAnalyticsController extends Controller
             }
 
             // Get sections in this grade with attendance data
+            
+            // Determine which sections belong to this grade
+            $sectionConditions = [];
+            if (str_contains($grade->code, 'K')) {
+                // For kindergarten grades, include both "Kinder One" and "Kinder Two" sections
+                $sectionConditions = ['Kinder One', 'Kinder Two'];
+            } else {
+                // For other grades, use the grade level pattern
+                $sectionConditions = ["Grade {$grade->level} - Section A", "Grade {$grade->level} - Section B"];
+            }
+            
             $sections = DB::table('sections as s')
-                ->join('curriculum_grade as cg', 's.curriculum_grade_id', '=', 'cg.id')
-                ->leftJoin('student_section as ss', 's.id', '=', 'ss.section_id')
-                ->leftJoin('students as st', 'ss.student_id', '=', 'st.id')
+                ->leftJoin('attendance_sessions as ases', 's.id', '=', 'ases.section_id')
                 ->leftJoin('attendance_records as ar', function($join) use ($dateFrom, $dateTo) {
-                    $join->on('st.id', '=', 'ar.student_id')
-                         ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                    $join->on('ases.id', '=', 'ar.attendance_session_id')
                          ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                          ->whereBetween('ases.session_date', [$dateFrom, $dateTo]);
                 })
                 ->leftJoin('teachers as t', 's.homeroom_teacher_id', '=', 't.id')
-                ->where('cg.grade_id', $gradeId)
-                ->where('ss.is_active', true)
+                ->whereIn('s.name', $sectionConditions)
                 ->groupBy('s.id', 's.name', 't.first_name', 't.last_name')
                 ->selectRaw('
                     s.id as section_id,
                     s.name as section_name,
                     CONCAT(t.first_name, \' \', t.last_name) as homeroom_teacher,
-                    COUNT(DISTINCT st.id) as total_students,
+                    COUNT(DISTINCT ar.student_id) as total_students,
                     COUNT(ar.id) as total_attendance_records,
                     SUM(CASE WHEN ast.code = \'P\' THEN 1 ELSE 0 END) as present_count,
                     SUM(CASE WHEN ast.code = \'A\' THEN 1 ELSE 0 END) as absent_count,
@@ -206,13 +245,11 @@ class AttendanceAnalyticsController extends Controller
             $dateFrom = $request->get('date_from', Carbon::today()->toDateString());
             $dateTo = $request->get('date_to', Carbon::today()->toDateString());
 
-            // Get section information
-            $section = DB::table('sections as s')
-                ->leftJoin('grades as g', 's.grade_id', '=', 'g.id')
-                ->leftJoin('teachers as t', 's.homeroom_teacher_id', '=', 't.id')
-                ->where('s.id', $sectionId)
-                ->select('s.*', 'g.name as grade_name', 
-                        DB::raw('CONCAT(t.first_name, " ", t.last_name) as homeroom_teacher'))
+            Log::info("getSectionDetails called with sectionId: $sectionId, dateFrom: $dateFrom, dateTo: $dateTo");
+
+            // Get section information (simplified)
+            $section = DB::table('sections')
+                ->where('id', $sectionId)
                 ->first();
 
             if (!$section) {
@@ -222,48 +259,110 @@ class AttendanceAnalyticsController extends Controller
                 ], 404);
             }
 
-            // Get students in this section with their attendance records
-            $students = DB::table('students as st')
-                ->join('student_section as ss', 'st.id', '=', 'ss.student_id')
-                ->leftJoin('attendance_records as ar', function($join) use ($dateFrom, $dateTo) {
-                    $join->on('st.id', '=', 'ar.student_id')
-                         ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                         ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                         ->whereBetween('ases.session_date', [$dateFrom, $dateTo]);
-                })
-                ->where('ss.section_id', $sectionId)
-                ->where('ss.is_active', true)
-                ->groupBy('st.id', 'st.first_name', 'st.last_name', 'st.student_id')
-                ->selectRaw('
-                    st.id,
-                    st.student_id,
-                    st.first_name,
-                    st.last_name,
-                    COUNT(ar.id) as total_attendance_records,
-                    SUM(CASE WHEN ast.code = \'P\' THEN 1 ELSE 0 END) as present_count,
-                    SUM(CASE WHEN ast.code = \'A\' THEN 1 ELSE 0 END) as absent_count,
-                    SUM(CASE WHEN ast.code = \'L\' THEN 1 ELSE 0 END) as late_count,
-                    MAX(CASE WHEN ast.code = \'P\' AND ar.arrival_time IS NOT NULL THEN ar.arrival_time END) as latest_time_in,
-                    MAX(CASE WHEN ast.code = \'P\' AND ar.departure_time IS NOT NULL THEN ar.departure_time END) as latest_time_out,
-                    MAX(CASE WHEN ases.session_date = CURRENT_DATE THEN ast.code END) as today_status
-                ')
+            Log::info("Found section: " . json_encode($section));
+
+            // Add grade name and homeroom teacher info
+            $section->grade_name = str_contains($section->name, 'Kinder') ? 'Kinder 1' : 'Unknown';
+            $section->homeroom_teacher = 'Not assigned';
+
+            // Get students from attendance records (working version)
+            $students = DB::table('attendance_sessions as ases')
+                ->join('attendance_records as ar', 'ases.id', '=', 'ar.attendance_session_id')
+                ->join('student_details as st', 'ar.student_id', '=', 'st.id')
+                ->where('ases.section_id', $sectionId)
+                ->whereBetween('ases.session_date', [$dateFrom, $dateTo])
+                ->select('st.id', 'st.firstName as first_name', 'st.lastName as last_name', 'st.studentId as student_id')
+                ->distinct()
                 ->get()
-                ->map(function($student) {
-                    $totalRecords = $student->total_attendance_records ?: 1;
-                    $student->attendance_percentage = round(($student->present_count / $totalRecords) * 100, 1);
+                ->map(function($student) use ($sectionId) {
                     $student->full_name = $student->first_name . ' ' . $student->last_name;
                     
-                    // Convert status codes to readable format
-                    switch($student->today_status) {
-                        case 'P': $student->today_status = 'present'; break;
-                        case 'A': $student->today_status = 'absent'; break;
-                        case 'L': $student->today_status = 'late'; break;
-                        case 'E': $student->today_status = 'excused'; break;
-                        default: $student->today_status = null;
+                    // Get real attendance data for this student
+                    $attendanceData = DB::table('attendance_sessions as ases')
+                        ->join('attendance_records as ar', 'ases.id', '=', 'ar.attendance_session_id')
+                        ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                        ->where('ases.section_id', $sectionId)
+                        ->where('ar.student_id', $student->id)
+                        ->selectRaw('
+                            COUNT(*) as total_records,
+                            SUM(CASE WHEN ast.code = \'P\' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN ast.code = \'A\' THEN 1 ELSE 0 END) as absent_count
+                        ')
+                        ->first();
+                    
+                    // Get today's attendance record with time information (Priority System)
+                    // Check teacher attendance records first
+                    $todayRecord = DB::table('attendance_sessions as ases')
+                        ->join('attendance_records as ar', 'ases.id', '=', 'ar.attendance_session_id')
+                        ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                        ->where('ases.section_id', $sectionId)
+                        ->where('ar.student_id', $student->id)
+                        ->where('ases.session_date', Carbon::today()->toDateString())
+                        ->select('ast.code as status', 'ar.arrival_time', 'ar.marked_at', 'ar.marking_method', DB::raw("'teacher' as source"))
+                        ->orderBy('ar.created_at', 'desc')
+                        ->first();
+                    
+                    // Also check gate attendance records
+                    $gateRecord = DB::table('gate_attendance')
+                        ->where('student_id', $student->id)
+                        ->where('scan_date', Carbon::today()->toDateString())
+                        ->where('type', 'check_in')
+                        ->select(
+                            DB::raw("'P' as status"), 
+                            DB::raw('scan_time as arrival_time'), 
+                            DB::raw('scan_time as marked_at'), 
+                            DB::raw("'qr_gate' as marking_method"),
+                            DB::raw("'gate' as source")
+                        )
+                        ->orderBy('scan_time', 'desc')
+                        ->first();
+                    
+                    // Prioritize gate attendance over teacher attendance (gate is more accurate)
+                    if ($gateRecord) {
+                        $todayRecord = $gateRecord;
+                    }
+                    
+                    $totalRecords = $attendanceData->total_records ?: 1;
+                    $student->attendance_percentage = round(($attendanceData->present_count / $totalRecords) * 100, 1);
+                    
+                    // Determine today's status and time in using hybrid approach
+                    if ($todayRecord && $todayRecord->status === 'P') {
+                        $student->today_status = 'present';
+                        
+                        // Priority System for Time In:
+                        // 1st: arrival_time (from QR/Gate or manual entry)
+                        // 2nd: marked_at (fallback)
+                        if ($todayRecord->arrival_time) {
+                            $student->latest_time_in = $todayRecord->arrival_time;
+                        } elseif ($todayRecord->marked_at) {
+                            // Extract time from marked_at timestamp
+                            $student->latest_time_in = Carbon::parse($todayRecord->marked_at)->format('H:i:s');
+                        } else {
+                            $student->latest_time_in = null;
+                        }
+                    } elseif ($todayRecord && $todayRecord->status === 'A') {
+                        $student->today_status = 'absent';
+                        $student->latest_time_in = null; // Will show "Not Present"
+                    } elseif ($todayRecord && $todayRecord->status === 'L') {
+                        $student->today_status = 'late';
+                        // Same priority system for late arrivals
+                        if ($todayRecord->arrival_time) {
+                            $student->latest_time_in = $todayRecord->arrival_time;
+                        } elseif ($todayRecord->marked_at) {
+                            $student->latest_time_in = Carbon::parse($todayRecord->marked_at)->format('H:i:s');
+                        } else {
+                            $student->latest_time_in = null;
+                        }
+                    } else {
+                        // No record for today
+                        $student->today_status = 'no_record';
+                        $student->latest_time_in = null;
                     }
                     
                     return $student;
                 });
+
+            Log::info("Found " . count($students) . " students");
 
             return response()->json([
                 'success' => true,
@@ -278,6 +377,8 @@ class AttendanceAnalyticsController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Error in getSectionDetails: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch section details',

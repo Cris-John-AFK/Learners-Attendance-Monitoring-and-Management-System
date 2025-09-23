@@ -159,10 +159,12 @@
                             
                             <div class="grade-chart">
                                 <Chart 
+                                    :key="`grade-${grade.grade_id}-${grade.total_students}-${grade.present_count}-${grade.attendance_percentage}`"
                                     type="doughnut" 
                                     :data="getGradeChartData(grade)" 
                                     :options="doughnutOptions" 
                                     style="height: 120px;"
+                                    :plugins="[]"
                                 />
                             </div>
                             
@@ -266,18 +268,11 @@
                             <Column field="latest_time_in" header="Time In">
                                 <template #body="{ data }">
                                     <span class="time-display">
-                                        {{ data.latest_time_in ? formatTime(data.latest_time_in) : '--' }}
+                                        {{ getTimeInDisplay(data) }}
                                     </span>
                                 </template>
                             </Column>
                             
-                            <Column field="latest_time_out" header="Time Out">
-                                <template #body="{ data }">
-                                    <span class="time-display">
-                                        {{ data.latest_time_out ? formatTime(data.latest_time_out) : '--' }}
-                                    </span>
-                                </template>
-                            </Column>
                             
                             <Column field="attendance_percentage" header="Attendance %" sortable>
                                 <template #body="{ data }">
@@ -323,7 +318,7 @@ import Dropdown from 'primevue/dropdown';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import Tag from 'primevue/tag';
-import { onMounted, onUnmounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, shallowRef } from 'vue';
 
 // Core state
 const loading = ref(true);
@@ -337,8 +332,8 @@ const currentView = ref('overview'); // 'overview', 'grade', 'section'
 const selectedGrade = ref(null);
 const selectedSection = ref(null);
 
-// Data state
-const dashboardData = ref({
+// Data state (using shallowRef to reduce reactivity and prevent unnecessary re-renders)
+const dashboardData = shallowRef({
     overview: null,
     grade_breakdown: [],
     sections: [],
@@ -361,20 +356,33 @@ const trendChartData = ref({
     datasets: []
 });
 
-// Chart options
-const doughnutOptions = ref({
+// Chart options (static to prevent reactivity issues)
+const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false, // Disable animations to prevent constant refreshing
+    interaction: {
+        intersect: false
+    },
+    elements: {
+        arc: {
+            borderWidth: 0
+        }
+    },
     plugins: {
         legend: {
             display: false
+        },
+        tooltip: {
+            enabled: false
         }
     }
-});
+};
 
-const lineChartOptions = ref({
+const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false, // Disable animations to prevent constant refreshing
     plugins: {
         legend: {
             display: false
@@ -391,11 +399,15 @@ const lineChartOptions = ref({
             }
         }
     }
-});
+};
 
 // Load dashboard data based on current view
+let isLoading = false;
 const loadDashboardData = async () => {
+    if (isLoading) return; // Prevent multiple simultaneous loads
+    
     try {
+        isLoading = true;
         loading.value = true;
         error.value = null;
 
@@ -431,6 +443,8 @@ const loadDashboardData = async () => {
         console.error('Error loading dashboard data:', err);
         error.value = err.message || 'Failed to load dashboard data';
         loading.value = false;
+    } finally {
+        isLoading = false;
     }
 };
 
@@ -458,9 +472,18 @@ const navigateBack = async () => {
     await loadDashboardData();
 };
 
-// Chart data helpers
+// Chart data helpers with memoization
+const chartDataCache = new Map();
+
 const getGradeChartData = (grade) => {
-    return {
+    const cacheKey = `${grade.grade_id}-${grade.present_count}-${grade.absent_count}-${grade.late_count}`;
+    
+    if (chartDataCache.has(cacheKey)) {
+        return chartDataCache.get(cacheKey);
+    }
+    
+    // Create a stable data structure to prevent unnecessary re-renders
+    const chartData = {
         labels: ['Present', 'Absent', 'Late'],
         datasets: [{
             data: [
@@ -469,9 +492,13 @@ const getGradeChartData = (grade) => {
                 grade.late_count || 0
             ],
             backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
-            borderWidth: 0
+            borderWidth: 0,
+            borderColor: 'transparent'
         }]
     };
+    
+    chartDataCache.set(cacheKey, chartData);
+    return chartData;
 };
 
 // Utility functions
@@ -480,6 +507,7 @@ const getStatusSeverity = (status) => {
         case 'present': return 'success';
         case 'absent': return 'danger';
         case 'late': return 'warning';
+        case 'no_record': return 'secondary';
         default: return 'info';
     }
 };
@@ -487,15 +515,49 @@ const getStatusSeverity = (status) => {
 const formatTime = (timeString) => {
     if (!timeString) return '--';
     try {
-        const time = new Date(`2000-01-01T${timeString}`);
-        return time.toLocaleTimeString('en-US', {
+        // Handle full timestamp format (2025-09-22 21:54:19) or time format (21:54:19)
+        let dateObj;
+        
+        if (timeString.includes(' ')) {
+            // Full timestamp format
+            dateObj = new Date(timeString);
+        } else if (timeString.includes(':')) {
+            // Time only format
+            dateObj = new Date(`2000-01-01T${timeString}`);
+        } else {
+            return timeString;
+        }
+        
+        return dateObj.toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
+            second: '2-digit',
             hour12: true
         });
     } catch {
         return timeString;
     }
+};
+
+// Enhanced Time In display with hybrid logic
+const getTimeInDisplay = (student) => {
+    // Handle absent students
+    if (student.today_status === 'absent') {
+        return 'Not Present';
+    }
+    
+    // Handle no record
+    if (student.today_status === 'no_record' || !student.today_status) {
+        return '--';
+    }
+    
+    // Handle present/late students with time
+    if (student.latest_time_in) {
+        return formatTime(student.latest_time_in);
+    }
+    
+    // Fallback
+    return '--';
 };
 
 // Event handlers
@@ -528,7 +590,6 @@ const updateDateTime = () => {
 
 // Lifecycle hooks
 onMounted(async () => {
-    console.log('Modern Admin Dashboard mounted');
 
     // Initialize date/time and start real-time updates
     updateDateTime();
@@ -537,11 +598,10 @@ onMounted(async () => {
     // Load initial dashboard data
     await loadDashboardData();
 
-    // Setup real-time data refresh every 30 seconds
+    // Setup real-time data refresh every 5 minutes instead of 30 seconds
     refreshInterval = setInterval(async () => {
-        console.log('Auto-refreshing dashboard data...');
         await loadDashboardData();
-    }, 30000);
+    }, 300000); // 5 minutes instead of 30 seconds
 });
 
 onUnmounted(() => {
