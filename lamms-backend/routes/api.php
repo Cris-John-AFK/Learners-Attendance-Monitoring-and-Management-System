@@ -59,14 +59,12 @@ Route::prefix('teachers')->group(function () {
     Route::get('/', [TeacherController::class, 'index']);
     Route::get('/active', [TeacherController::class, 'getActiveTeachers']);
     Route::get('/section/{sectionId}', [TeacherController::class, 'getTeachersBySection']);
-    Route::post('/', [TeacherController::class, 'store']);
     Route::get('/{teacher}', [TeacherController::class, 'show']);
+    Route::post('/', [TeacherController::class, 'store']);
     Route::put('/{teacher}', [TeacherController::class, 'update']);
     Route::delete('/{teacher}', [TeacherController::class, 'destroy']);
-    Route::patch('/{teacher}/toggle-status', [TeacherController::class, 'toggleStatus']);
-    Route::put('/{teacher}/assignments', [TeacherController::class, 'updateAssignments']);
-    Route::patch('/{teacher}/force-password-reset', [TeacherController::class, 'forcePasswordReset']);
-    Route::post('/{id}/restore', [TeacherController::class, 'restore']);
+    Route::post('/{teacher}/restore', [TeacherController::class, 'restore']);
+    Route::post('/{teacher}/assignments', [TeacherController::class, 'updateAssignments']);
 });
 
 // Test route

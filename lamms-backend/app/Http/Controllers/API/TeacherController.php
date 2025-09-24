@@ -427,14 +427,36 @@ class TeacherController extends Controller
 
             // Rest of your validation code...
 
-            // Instead of deleting and recreating all assignments, identify what needs to be created
-            // Get existing assignments IDs
-            $existingAssignmentIds = $teacher->assignments()->pluck('id')->toArray();
+        // Rest of your validation code...
 
-            // Split into existing and new assignments
-            $assignmentsToUpdate = [];
-            $assignmentsToCreate = [];
-            $processedIds = [];
+        // Instead of deleting and recreating all assignments, identify what needs to be created
+        // Get existing assignments IDs
+        $existingAssignmentIds = $teacher->assignments()->pluck('id')->toArray();
+
+        // Split into existing and new assignments
+        $assignmentsToUpdate = [];
+        $assignmentsToCreate = [];
+        $processedIds = [];
+
+        // Process each assignment to determine if it's new or existing
+        foreach ($processedAssignments as $assignment) {
+            // Check if this assignment already exists
+            $existingAssignment = $teacher->assignments()
+                ->where('section_id', $assignment['section_id'])
+                ->where('subject_id', $assignment['subject_id'])
+                ->first();
+
+            if ($existingAssignment) {
+                // Update existing assignment
+                $assignment['id'] = $existingAssignment->id;
+                $assignmentsToUpdate[] = $assignment;
+                $processedIds[] = $existingAssignment->id;
+            } else {
+                // Create new assignment
+                $assignment['teacher_id'] = $teacher->id;
+                $assignmentsToCreate[] = $assignment;
+            }
+        }
 
         // Update the duplicate subject-section validation check
         foreach ($processedAssignments as $assignment) {

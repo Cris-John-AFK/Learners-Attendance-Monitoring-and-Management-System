@@ -1248,10 +1248,8 @@ const openAddSubjectsDialog = async (teacherData) => {
         // Load available subjects for assignment
         await loadSubjectsForAssignment();
 
-        // Debug: Log teacher's current assignments
-        console.log('Full teacher object:', selectedTeacher.value);
-        console.log('Teacher assignments for filtering:', selectedTeacher.value.active_assignments);
-        console.log('All teacher properties:', Object.keys(selectedTeacher.value));
+        // Debug: Log teacher's current assignments for subject filtering
+        console.log('Teacher subject assignments:', selectedTeacher.value.subject_assignments);
 
         // Open the dialog
         assignmentWizardDialog.value = true;
@@ -1269,7 +1267,6 @@ const openAddSubjectsDialog = async (teacherData) => {
 // Check if subject is already assigned to teacher
 const isSubjectAlreadyAssigned = (subject) => {
     if (!selectedTeacher.value) {
-        console.log('No teacher found');
         return false;
     }
     
@@ -1282,13 +1279,8 @@ const isSubjectAlreadyAssigned = (subject) => {
                        [];
     
     if (!assignments || assignments.length === 0) {
-        console.log('No assignments found in teacher object');
-        console.log('Teacher object keys:', Object.keys(selectedTeacher.value));
         return false;
     }
-    
-    console.log(`Checking if subject "${subject.name}" (ID: ${subject.id}) is already assigned`);
-    console.log('Available assignments:', assignments);
     
     // Check if teacher already has this subject assigned (check both ID and name for safety)
     const isAssigned = assignments.some(assignment => {
@@ -1296,15 +1288,11 @@ const isSubjectAlreadyAssigned = (subject) => {
         const assignmentSubject = assignment.subject || assignment;
         
         if (!assignmentSubject) {
-            console.log('Assignment has no subject:', assignment);
             return false;
         }
         
-        console.log(`Comparing with assignment subject: "${assignmentSubject.name}" (ID: ${assignmentSubject.id})`);
-        
         // Check by ID (primary)
         if (assignmentSubject.id === subject.id) {
-            console.log('Match found by ID!');
             return true;
         }
         
@@ -1313,7 +1301,6 @@ const isSubjectAlreadyAssigned = (subject) => {
             const assignmentName = assignmentSubject.name.toLowerCase().trim();
             const subjectName = subject.name.toLowerCase().trim();
             if (assignmentName === subjectName) {
-                console.log('Match found by name!');
                 return true;
             }
         }
@@ -1321,7 +1308,6 @@ const isSubjectAlreadyAssigned = (subject) => {
         return false;
     });
     
-    console.log(`Subject "${subject.name}" is ${isAssigned ? 'ASSIGNED' : 'NOT ASSIGNED'}`);
     return isAssigned;
 };
 
@@ -1368,14 +1354,16 @@ const saveSubjectAssignments = async () => {
             section_id: primaryAssignment.section.id,
             subject_id: subject.id,
             is_primary: false,
-            role: 'teacher'
+            role: 'subject'
         }));
 
         // Send to backend
+        console.log('Sending assignment data:', { assignments });
         const response = await api(`/api/teachers/${selectedTeacher.value.id}/assignments`, {
             method: 'POST',
             data: { assignments }
         });
+        console.log('Assignment response:', response);
 
         toast.add({
             severity: 'success',
@@ -2308,7 +2296,20 @@ const loadSubjectsForAssignment = async () => {
     try {
         loading.value = true;
         const response = await api(`/api/subjects`);
-        availableSubjectsForAssignment.value = response.data;
+        
+        // Remove duplicate subjects by name (keep the first occurrence)
+        const uniqueSubjects = [];
+        const seenNames = new Set();
+        
+        response.data.forEach(subject => {
+            if (!seenNames.has(subject.name.toLowerCase())) {
+                seenNames.add(subject.name.toLowerCase());
+                uniqueSubjects.push(subject);
+            }
+        });
+        
+        availableSubjectsForAssignment.value = uniqueSubjects;
+        console.log(`Loaded ${uniqueSubjects.length} unique subjects (filtered from ${response.data.length} total)`);
 
         // If primary teacher is selected, automatically add a homeroom subject
         if (selectedRole.value === 'primary') {

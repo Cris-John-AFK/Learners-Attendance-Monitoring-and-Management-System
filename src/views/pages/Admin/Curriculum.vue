@@ -1625,11 +1625,11 @@ onMounted(() => {
             const sectionData = {
                 name: section.value.name,
                 curriculum_id: selectedCurriculum.value.id,
-                grade_id: selectedGrade.value.id,
                 capacity: section.value.capacity || 25,
                 is_active: true, // Always set to true
                 description: section.value.description || '',
                 teacher_id: section.value.teacher_id || null
+                // Note: curriculum_grade_id will be set below after getting it from the API
             };
 
             console.log('Sending section data:', sectionData);
@@ -1675,13 +1675,33 @@ onMounted(() => {
                 }
             }
 
-            // Reload sections
+            // Force refresh sections with multiple strategies
             try {
-                const sectionsForGrade = await CurriculumService.getSectionsByGrade(selectedCurriculum.value.id, selectedGrade.value.id);
+                console.log('Force refreshing sections for grade:', selectedGrade.value.id);
+                
+                // Strategy 1: Clear cache and reload
+                CurriculumService.clearAllCaches();
+                
+                // Strategy 2: Try multiple endpoints to get sections
+                let sectionsForGrade = null;
+                
+                try {
+                    sectionsForGrade = await CurriculumService.getSectionsByGrade(selectedCurriculum.value.id, selectedGrade.value.id);
+                    console.log('Got sections from nested endpoint:', sectionsForGrade?.length || 0);
+                } catch (nestedError) {
+                    console.warn('Nested endpoint failed, trying direct sections endpoint');
+                    try {
+                        const allSections = await CurriculumService.getAllSections();
+                        sectionsForGrade = allSections.filter(s => s.grade_id === selectedGrade.value.id);
+                        console.log('Got sections from direct endpoint:', sectionsForGrade?.length || 0);
+                    } catch (directError) {
+                        console.error('Both section endpoints failed:', directError);
+                    }
+                }
 
-                if (Array.isArray(sectionsForGrade)) {
+                if (Array.isArray(sectionsForGrade) && sectionsForGrade.length >= 0) {
                     sections.value = sectionsForGrade;
-                    console.log('Reloaded sections, count:', sections.value.length);
+                    console.log('Successfully reloaded sections, count:', sections.value.length);
 
                     // If we got a 500 error but find our section in the list, then it was created
                     if (!sectionCreated) {
@@ -1692,10 +1712,18 @@ onMounted(() => {
                         }
                     }
                 } else {
-                    console.warn('Invalid response when reloading sections');
+                    console.warn('Invalid response when reloading sections, adding locally');
+                    // Add section locally if reload fails
+                    const newSection = {
+                        ...sectionData,
+                        id: Date.now(), // Temporary ID until page refresh
+                        subjects: []
+                    };
+                    sections.value.push(newSection);
+                    sectionCreated = true;
                 }
             } catch (error) {
-                console.warn('Could not reload sections, will try to add locally:', error);
+                console.error('Could not reload sections, adding locally:', error);
 
                 // Add section locally if reload fails
                 const newSection = {
@@ -1704,6 +1732,7 @@ onMounted(() => {
                     subjects: []
                 };
                 sections.value.push(newSection);
+                sectionCreated = true;
             }
 
             // Close dialog and show success message
@@ -1715,6 +1744,16 @@ onMounted(() => {
                     summary: 'Success',
                     detail: 'Section added successfully',
                     life: 3000
+                });
+
+                // Force reactive update by triggering a re-render
+                nextTick(() => {
+                    // Force Vue to re-evaluate computed properties and watchers
+                    const currentSections = [...sections.value];
+                    sections.value = [];
+                    nextTick(() => {
+                        sections.value = currentSections;
+                    });
                 });
             } else {
                 toast.add({
