@@ -22,8 +22,13 @@
                         <p class="page-subtitle">Manage and view all system reports</p>
                     </div>
                     <div class="header-actions">
+                        <div class="notification-icon-container">
+                            <Button icon="pi pi-bell" class="p-button-text p-button-rounded notification-btn" @click="scrollToSubmittedReports" v-tooltip.bottom="'New Submissions'" />
+                            <span v-if="newSubmissionsCount > 0" class="notification-badge">{{ newSubmissionsCount }}</span>
+                        </div>
                         <Button label="Generate Report" icon="pi pi-plus" class="p-button-success" @click="showGenerateDialog = true" />
                         <Button label="Export All" icon="pi pi-download" class="p-button-outlined" @click="exportAllReports" />
+                        <Button label="Test Notification" icon="pi pi-bell" class="p-button-warning p-button-outlined" @click="receiveNewSubmission" />
                     </div>
                 </div>
             </div>
@@ -48,7 +53,18 @@
                     <Button icon="pi pi-chevron-right" class="p-button-text p-button-rounded month-nav-btn" @click="nextOverviewMonth()" :disabled="!canGoNextOverviewMonth()" v-tooltip.top="'Next Month'" />
                 </div>
 
-                <div class="grade-stats-grid">
+                <div v-if="loadingRealData" class="loading-container">
+                    <ProgressSpinner />
+                    <p>Loading curriculum data...</p>
+                </div>
+
+                <div v-else-if="gradeStatistics.length === 0" class="empty-state">
+                    <i class="pi pi-inbox empty-icon"></i>
+                    <h3>No Grades Found</h3>
+                    <p>No grade levels have been configured in the curriculum yet.</p>
+                </div>
+
+                <div v-else class="grade-stats-grid">
                     <div v-for="gradeStats in gradeStatistics" :key="gradeStats.grade" class="grade-stat-card">
                         <div class="grade-header">
                             <div class="grade-info">
@@ -89,17 +105,40 @@
                             <div class="section-list-header">
                                 <span>Sections:</span>
                             </div>
-                            <div class="sections-chips">
-                                <span
+                            <div class="sections-cards-grid">
+                                <div
                                     v-for="section in gradeStats.sections"
                                     :key="section.id"
-                                    class="section-chip"
+                                    class="section-card"
                                     :class="section.statusClass"
                                     @click="viewSectionDetails(section)"
                                     :title="`${section.name} - ${section.teacher} (${section.attendanceRate}%)`"
                                 >
-                                    {{ section.name }}
-                                </span>
+                                    <div class="section-card-header" :class="section.statusClass">
+                                        <div class="section-card-title">{{ section.name }}</div>
+                                        <div class="section-card-subtitle">{{ section.teacher }}</div>
+                                        <div class="section-card-icon">
+                                            <span class="attendance-badge">{{ section.attendanceRate }}%</span>
+                                        </div>
+                                    </div>
+                                    <div class="section-card-body">
+                                        <div class="section-stats">
+                                            <div class="stat-item">
+                                                <i class="pi pi-users"></i>
+                                                <span>{{ section.studentCount }} Students</span>
+                                            </div>
+                                            <div class="stat-item">
+                                                <i class="pi pi-check-circle"></i>
+                                                <span>{{ section.presentCount }} Present</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="section-card-footer">
+                                        <Button icon="pi pi-eye" class="p-button-text p-button-sm" @click.stop="viewSectionDetails(section)" v-tooltip.top="'View Details'" />
+                                        <Button icon="pi pi-file-excel" class="p-button-text p-button-sm" @click.stop="downloadSectionReport(section)" v-tooltip.top="'Download Report'" />
+                                        <Button icon="pi pi-ellipsis-v" class="p-button-text p-button-sm" v-tooltip.top="'More Options'" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -133,57 +172,69 @@
                 </div>
             </div>
 
-            <!-- Reports Grid -->
-            <div class="reports-grid">
+            <!-- Reports Table -->
+            <div class="reports-table-container">
                 <div v-if="loading" class="loading-container">
                     <ProgressSpinner />
                     <p>Loading reports...</p>
                 </div>
 
-                <div v-else-if="filteredReports.length === 0" class="empty-state">
-                    <i class="pi pi-file-excel empty-icon"></i>
-                    <h3>No Reports Found</h3>
-                    <p>No reports match your current filters. Try adjusting your search criteria.</p>
-                </div>
+                <div v-else>
+                    <!-- Empty State - Only show when there are no reports at all -->
+                    <div v-if="reports.length === 0" class="empty-state">
+                        <i class="pi pi-inbox empty-icon"></i>
+                        <h3>No Submitted Reports</h3>
+                        <p>Submitted reports from teachers will appear here</p>
+                    </div>
 
-                <div v-else class="reports-list">
-                    <div v-for="report in filteredReports" :key="report.id" class="report-card">
-                        <div class="report-header">
-                            <div class="report-info">
-                                <h4 class="report-title">{{ report.title }}</h4>
-                                <p class="report-description">{{ report.description }}</p>
-                            </div>
-                            <div class="report-status">
-                                <span :class="['status-badge', getStatusClass(report.status)]">
-                                    {{ report.status }}
-                                </span>
-                            </div>
-                        </div>
+                    <!-- No Results State - When there are reports but none match filters -->
+                    <div v-else-if="filteredReports.length === 0" class="empty-state">
+                        <i class="pi pi-file-excel empty-icon"></i>
+                        <h3>No Reports Found</h3>
+                        <p>No reports match your current filters. Try adjusting your search criteria.</p>
+                    </div>
 
-                        <div class="report-details">
-                            <div class="detail-item">
-                                <i class="pi pi-calendar"></i>
-                                <span>{{ formatDate(report.created_at) }}</span>
+                    <!-- Reports List - Only show when there are reports -->
+                    <div v-else class="reports-list">
+                        <div v-for="report in filteredReports" :key="report.id" class="report-card">
+                            <div class="report-header">
+                                <div class="report-info">
+                                    <h4 class="report-title">{{ report.title }}</h4>
+                                    <p class="report-description">{{ report.description }}</p>
+                                </div>
+                                <div class="report-status">
+                                    <span :class="['status-badge', getStatusClass(report.status)]">
+                                        {{ report.status }}
+                                    </span>
+                                    <span v-if="report.submitted" class="new-submission-badge" v-tooltip.top="'New Submission'"></span>
+                                </div>
                             </div>
-                            <div class="detail-item">
-                                <i class="pi pi-user"></i>
-                                <span>{{ report.generated_by }}</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="pi pi-file"></i>
-                                <span>{{ report.type }}</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="pi pi-database"></i>
-                                <span>{{ report.records_count }} records</span>
-                            </div>
-                        </div>
 
-                        <div class="report-actions">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" @click="viewReport(report)" v-tooltip.top="'View Report'" />
-                            <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadReport(report)" v-tooltip.top="'Download Report'" />
-                            <Button icon="pi pi-share-alt" class="p-button-rounded p-button-info p-button-outlined p-button-sm" @click="shareReport(report)" v-tooltip.top="'Share Report'" />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="confirmDeleteReport(report)" v-tooltip.top="'Delete Report'" />
+                            <div class="report-details">
+                                <div class="detail-item">
+                                    <i class="pi pi-calendar"></i>
+                                    <span>{{ formatDate(report.created_at) }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <i class="pi pi-user"></i>
+                                    <span>{{ report.generated_by }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <i class="pi pi-file"></i>
+                                    <span>{{ report.type }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <i class="pi pi-database"></i>
+                                    <span>{{ report.records_count }} records</span>
+                                </div>
+                            </div>
+
+                            <div class="report-actions">
+                                <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" @click="viewReport(report)" v-tooltip.top="'View Report'" />
+                                <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadReport(report)" v-tooltip.top="'Download Report'" />
+                                <Button icon="pi pi-share-alt" class="p-button-rounded p-button-info p-button-outlined p-button-sm" @click="shareReport(report)" v-tooltip.top="'Share Report'" />
+                                <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="confirmDeleteReport(report)" v-tooltip.top="'Delete Report'" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -865,6 +916,7 @@
 </template>
 
 <script setup>
+import { CurriculumService } from '@/router/service/CurriculumService';
 import 'jspdf-autotable';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
@@ -890,6 +942,11 @@ const showSectionDetailsDialog = ref(false);
 const selectedReport = ref(null);
 const selectedSectionDetails = ref(null);
 
+// Real curriculum data
+const realGrades = ref([]);
+const realSections = ref([]);
+const loadingRealData = ref(false);
+
 // Status change dialog variables
 const statusChangeDialog = ref(false);
 const selectedStudent = ref(null);
@@ -906,6 +963,9 @@ const searchQuery = ref('');
 const selectedGradeType = ref(null);
 const selectedDateRange = ref(null);
 const selectedStatus = ref(null);
+
+// Notification system
+const newSubmissionsCount = ref(0);
 
 // Current month and year for navigation
 const currentMonth = ref(8); // September (0-indexed)
@@ -2329,81 +2389,8 @@ const newReport = ref({
     endDate: ''
 });
 
-// Sample reports data
-const reports = ref([
-    {
-        id: 1,
-        title: 'Kinder Attendance Report',
-        description: 'Monthly attendance report for Kindergarten students',
-        grade: 'Kinder',
-        status: 'COMPLETED',
-        created_at: '2025-09-01',
-        generated_by: 'Admin User',
-        records_count: 150,
-        year: '2025',
-        month: 'september'
-    },
-    {
-        id: 2,
-        title: 'Grade 1 Attendance Report',
-        description: 'Weekly attendance summary for Grade 1 students',
-        grade: 'Grade 1',
-        status: 'INCOMPLETE',
-        created_at: '2025-09-03',
-        generated_by: 'Admin User',
-        records_count: 180,
-        year: '2025',
-        month: 'september'
-    },
-    {
-        id: 3,
-        title: 'Grade 3 Attendance Report',
-        description: 'Daily attendance tracking for Grade 3 students',
-        grade: 'Grade 3',
-        status: 'INCOMPLETE',
-        created_at: '2025-08-30',
-        generated_by: 'Admin User',
-        records_count: 165,
-        year: '2025',
-        month: 'august'
-    },
-    {
-        id: 4,
-        title: 'Grade 6 Attendance Report',
-        description: 'Monthly attendance analysis for Grade 6 students',
-        grade: 'Grade 6',
-        status: 'EMPTY',
-        created_at: '2025-09-02',
-        generated_by: 'Admin User',
-        records_count: 0,
-        year: '2025',
-        month: 'september'
-    },
-    {
-        id: 5,
-        title: 'Grade 2 Attendance Report',
-        description: 'Monthly attendance report for Grade 2 students',
-        grade: 'Grade 2',
-        status: 'COMPLETED',
-        created_at: '2024-12-15',
-        generated_by: 'Admin User',
-        records_count: 145,
-        year: '2024',
-        month: 'december'
-    },
-    {
-        id: 6,
-        title: 'Grade 4 Attendance Report',
-        description: 'Quarterly attendance summary for Grade 4 students',
-        grade: 'Grade 4',
-        status: 'COMPLETED',
-        created_at: '2023-06-20',
-        generated_by: 'Admin User',
-        records_count: 175,
-        year: '2023',
-        month: 'june'
-    }
-]);
+// Reports data - starts empty until reports are submitted
+const reports = ref([]);
 
 // Options for dropdowns
 const gradeTypes = ref([
@@ -2605,74 +2592,58 @@ const monthlyGradeData = ref({
     }
 });
 
-// Computed property for grade statistics based on selected month
+// Computed property for grade statistics based on real curriculum data
 const gradeStatistics = computed(() => {
-    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
-    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
+    if (loadingRealData.value || realGrades.value.length === 0) {
+        return [];
+    }
 
-    const grades = [
-        {
-            grade: 'Kindergarten',
-            level: 'Pre-Elementary',
-            emoji: '🎨',
-            sections: monthData['Kindergarten']?.sections || [],
-            color: '#FF6B6B'
-        },
-        {
-            grade: 'Grade 1',
-            level: 'Elementary',
-            emoji: '📚',
-            sections: monthData['Grade 1']?.sections || [],
-            color: '#4ECDC4'
-        },
-        {
-            grade: 'Grade 2',
-            level: 'Elementary',
-            emoji: '✏️',
-            sections: monthData['Grade 2']?.sections || [],
-            color: '#45B7D1'
-        },
-        {
-            grade: 'Grade 3',
-            level: 'Elementary',
-            emoji: '📖',
-            sections: monthData['Grade 3']?.sections || [],
-            color: '#96CEB4'
-        },
-        {
-            grade: 'Grade 4',
-            level: 'Elementary',
-            emoji: '🔬',
-            sections: monthData['Grade 4']?.sections || [],
-            color: '#FFEAA7'
-        },
-        {
-            grade: 'Grade 5',
-            level: 'Elementary',
-            emoji: '🌟',
-            sections: monthData['Grade 5']?.sections || [],
-            color: '#DDA0DD'
-        },
-        {
-            grade: 'Grade 6',
-            level: 'Elementary',
-            emoji: '🎓',
-            sections: monthData['Grade 6']?.sections || [],
-            color: '#20B2AA'
-        }
-    ];
+    const gradeEmojiMap = {
+        Kindergarten: '🎨',
+        'Grade 1': '📚',
+        'Grade 2': '✏️',
+        'Grade 3': '💻',
+        'Grade 4': '🔬',
+        'Grade 5': '🌟',
+        'Grade 6': '🎓'
+    };
 
-    return grades
+    return realGrades.value
         .map((grade) => {
-            const sections = grade.sections;
-            const sectionCount = sections.length;
-            const totalStudents = sections.reduce((sum, section) => sum + section.studentCount, 0);
-            const teacherCount = new Set(sections.map((section) => section.teacher)).size;
-            const totalPresent = sections.reduce((sum, section) => sum + section.presentCount, 0);
+            // Get sections for this grade
+            const gradeSections = realSections.value.filter((section) => section.gradeId === grade.id);
+
+            // Generate mock attendance data for each section
+            const sectionsWithData = gradeSections.map((section) => {
+                const studentCount = Math.floor(Math.random() * 15) + 20; // 20-35 students
+                const presentCount = Math.floor(studentCount * (0.85 + Math.random() * 0.15)); // 85-100% attendance
+                const absentCount = studentCount - presentCount;
+                const attendanceRate = Math.round((presentCount / studentCount) * 100);
+
+                return {
+                    id: section.id,
+                    name: section.name,
+                    teacher: section.homeroom_teacher ? `${section.homeroom_teacher.first_name} ${section.homeroom_teacher.last_name}` : 'No Teacher Assigned',
+                    studentCount,
+                    presentCount,
+                    absentCount,
+                    attendanceRate,
+                    status: attendanceRate >= 95 ? 'EXCELLENT' : attendanceRate >= 85 ? 'GOOD' : 'NEEDS ATTENTION',
+                    statusClass: attendanceRate >= 95 ? 'status-excellent' : attendanceRate >= 85 ? 'status-good' : 'status-warning'
+                };
+            });
+
+            const sectionCount = sectionsWithData.length;
+            const totalStudents = sectionsWithData.reduce((sum, section) => sum + section.studentCount, 0);
+            const teacherCount = new Set(sectionsWithData.map((section) => section.teacher)).size;
+            const totalPresent = sectionsWithData.reduce((sum, section) => sum + section.presentCount, 0);
             const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
 
             return {
-                ...grade,
+                grade: grade.name,
+                level: grade.name.includes('Kindergarten') ? 'Pre-Elementary' : 'Elementary',
+                emoji: gradeEmojiMap[grade.name] || '📖',
+                sections: sectionsWithData,
                 sectionCount,
                 totalStudents,
                 teacherCount,
@@ -2705,6 +2676,83 @@ const generateGradeReport = (grade) => {
         detail: `Generating comprehensive report for ${grade}`,
         life: 3000
     });
+};
+
+// Load real curriculum data
+const loadRealCurriculumData = async () => {
+    try {
+        loadingRealData.value = true;
+
+        // Get all curriculums (use plural method)
+        const curriculumsResponse = await CurriculumService.getCurriculums();
+        const curriculums = Array.isArray(curriculumsResponse) ? curriculumsResponse : curriculumsResponse.data || [];
+
+        // Find the active curriculum or use the first one
+        const activeCurriculum = curriculums.find((c) => c.is_active) || curriculums[0];
+
+        if (activeCurriculum && activeCurriculum.id) {
+            console.log('Using curriculum:', activeCurriculum);
+
+            // Get grades for this curriculum
+            const gradesResponse = await CurriculumService.getGradesByCurriculum(activeCurriculum.id);
+            realGrades.value = Array.isArray(gradesResponse) ? gradesResponse : gradesResponse.data || [];
+
+            console.log('Loaded grades:', realGrades.value);
+
+            // Get all sections for each grade
+            const allSections = [];
+            for (const grade of realGrades.value) {
+                try {
+                    const sectionsResponse = await CurriculumService.getSectionsByGrade(activeCurriculum.id, grade.id);
+                    const sections = Array.isArray(sectionsResponse) ? sectionsResponse : sectionsResponse.data || [];
+
+                    console.log(`Sections for grade ${grade.name}:`, sections);
+
+                    // Add grade info to each section
+                    sections.forEach((section) => {
+                        section.gradeName = grade.name;
+                        section.gradeId = grade.id;
+                        section.curriculumId = activeCurriculum.id;
+                        allSections.push(section);
+                    });
+                } catch (error) {
+                    console.warn(`Error loading sections for grade ${grade.name}:`, error);
+                }
+            }
+
+            realSections.value = allSections;
+            console.log('Loaded real curriculum data:', {
+                curriculum: activeCurriculum,
+                grades: realGrades.value,
+                sections: realSections.value
+            });
+
+            toast.add({
+                severity: 'success',
+                summary: 'Data Loaded',
+                detail: `Loaded ${realGrades.value.length} grades and ${realSections.value.length} sections`,
+                life: 3000
+            });
+        } else {
+            console.warn('No active curriculum found');
+            toast.add({
+                severity: 'warn',
+                summary: 'No Curriculum',
+                detail: 'No active curriculum found. Please set up curriculum first.',
+                life: 5000
+            });
+        }
+    } catch (error) {
+        console.error('Error loading curriculum data:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load curriculum data: ' + error.message,
+            life: 5000
+        });
+    } finally {
+        loadingRealData.value = false;
+    }
 };
 
 const getRecordsCount = (grade) => {
@@ -2829,10 +2877,31 @@ const exportAllReports = () => {
     toast.add({
         severity: 'info',
         summary: 'Export Started',
-        detail: 'Exporting all reports...',
+        detail: 'Exporting all reports to Excel...',
         life: 3000
     });
     // Implement export logic here
+};
+
+// Notification functions
+const scrollToSubmittedReports = () => {
+    const reportsSection = document.querySelector('.reports-table-container');
+    if (reportsSection) {
+        reportsSection.scrollIntoView({ behavior: 'smooth' });
+        // Clear notification count when user clicks
+        newSubmissionsCount.value = 0;
+    }
+};
+
+// Simulate receiving new submission notification
+const receiveNewSubmission = () => {
+    newSubmissionsCount.value += 1;
+    toast.add({
+        severity: 'info',
+        summary: 'New Report Submitted',
+        detail: 'A teacher has submitted a new SF2 report',
+        life: 5000
+    });
 };
 
 // Section details methods
@@ -3327,9 +3396,10 @@ const backToMainReport = () => {
     }, 100);
 };
 
-// Lifecycle
+// Lifecycle hooks
 onMounted(() => {
-    // Load reports data
+    // Load real curriculum data
+    loadRealCurriculumData();
     loading.value = true;
     setTimeout(() => {
         loading.value = false;
@@ -5333,20 +5403,119 @@ const reportTypes = ref([
     font-size: 0.9rem;
 }
 
-.sections-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+.sections-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
 }
 
-.section-chip {
-    padding: 0.4rem 0.8rem;
+.section-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+    border: 1px solid #e9ecef;
+}
+
+.section-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.section-card-header {
+    padding: 1rem;
+    position: relative;
+    color: white;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.section-card-header.status-excellent {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.section-card-header.status-good {
+    background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%);
+}
+
+.section-card-header.status-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    color: #212529;
+}
+
+.section-card-header.status-poor {
+    background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
+}
+
+.section-card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.section-card-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin-bottom: 0.5rem;
+}
+
+.section-card-icon {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.attendance-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.5rem;
     border-radius: 20px;
     font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+}
+
+.section-card-body {
+    padding: 1rem;
+    background: #f8f9fa;
+}
+
+.section-stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.stat-item i {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.section-card-footer {
+    padding: 0.75rem 1rem;
+    background: white;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.section-card-footer .p-button {
+    color: #6c757d;
+    transition: color 0.2s ease;
+}
+
+.section-card-footer .p-button:hover {
+    color: #495057;
 }
 
 .section-chip.status-excellent {
@@ -5426,6 +5595,16 @@ const reportTypes = ref([
 
     .statistics-title {
         font-size: 2rem;
+    }
+
+    .sections-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .section-stats {
+        flex-direction: column;
+        gap: 0.5rem;
     }
 
     .section-info-header {
@@ -5510,5 +5689,138 @@ const reportTypes = ref([
     margin-bottom: 0.5rem;
     font-weight: 600;
     color: #2c3e50;
+}
+
+/* No Data State */
+.no-data-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin: 1rem 0;
+    padding: 2rem;
+    text-align: center;
+}
+
+.no-data-content {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.no-data-icon {
+    font-size: 4rem;
+    color: #e0e0e0;
+    margin-bottom: 1rem;
+}
+
+.no-data-content h3 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.no-data-content p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
+/* Empty State */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    text-align: center;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.empty-icon {
+    font-size: 3.5rem;
+    color: #adb5bd;
+    margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+}
+
+.empty-state p {
+    color: #6c757d;
+    margin: 0;
+    max-width: 400px;
+}
+
+/* New Submission Badge */
+.new-submission-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    background-color: #f44336;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+}
+
+.report-status {
+    position: relative;
+    display: inline-block;
+}
+
+/* Notification Icon Styles */
+.notification-icon-container {
+    position: relative;
+    display: inline-block;
+    margin-right: 1rem;
+}
+
+.notification-btn {
+    color: #6c757d !important;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+}
+
+.notification-btn:hover {
+    color: #495057 !important;
+    transform: scale(1.1);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 </style>
