@@ -51,10 +51,10 @@ const getInitialSubjectInfo = () => {
         const id = route.params.subjectId;
         // Map common subject IDs to proper names
         const subjectNames = {
-            'english': 'English',
-            'filipino': 'Filipino',
-            'mathematics': 'Mathematics',
-            'science': 'Science'
+            english: 'English',
+            filipino: 'Filipino',
+            mathematics: 'Mathematics',
+            science: 'Science'
         };
         return { id, name: subjectNames[id] || 'Subject' };
     }
@@ -177,10 +177,7 @@ const fetchSubjectDetails = async (subjectIdentifier) => {
             if (response.ok) {
                 const subjects = await response.json();
                 console.log(`📚 All subjects:`, subjects);
-                const subject = subjects.find(s => 
-                    s.name.toLowerCase() === subjectIdentifier.toLowerCase() || 
-                    s.code.toLowerCase() === subjectIdentifier.toLowerCase()
-                );
+                const subject = subjects.find((s) => s.name.toLowerCase() === subjectIdentifier.toLowerCase() || s.code.toLowerCase() === subjectIdentifier.toLowerCase());
                 console.log(`🎯 Found matching subject:`, subject);
                 if (subject) {
                     return { id: subject.id, name: subject.name };
@@ -247,7 +244,7 @@ const initializeTeacherData = async () => {
 const loadStudentsData = async () => {
     try {
         console.log('Loading students from database...');
-        
+
         // Show loading animation
         isLoadingSeating.value = true;
         loadingMessage.value = 'Loading students and seating arrangement...';
@@ -308,8 +305,20 @@ const loadStudentsData = async () => {
                     student_id: student.studentId || student.id
                 }));
 
-                // Load seating arrangement after students and sectionId are set
-                await loadSeatingArrangementFromDatabase();
+                // Ensure students are fully processed before loading seating arrangement
+                await nextTick();
+                console.log('Students loaded, now loading seating arrangement. Student count:', students.value.length);
+                
+                // Try to restore preserved assignments first
+                const restored = restorePreservedAssignments();
+                if (!restored) {
+                    // Load seating arrangement after students and sectionId are set
+                    await loadSeatingArrangementFromDatabase();
+                } else {
+                    console.log('Used preserved assignments instead of database');
+                    // Skip any further database loading to prevent overwriting restored assignments
+                    return;
+                }
             } else {
                 students.value = [];
             }
@@ -365,6 +374,16 @@ const saveCurrentLayout = async (showToast = true) => {
     console.log('Saving current layout to database');
 
     try {
+        if (!sectionId.value || !teacherId.value) {
+            console.log('Missing required IDs for saving layout');
+            return;
+        }
+
+        const assignedSeats = seatPlan.value.flat().filter((seat) => seat.isOccupied).length;
+
+        // Use the resolved subject ID (numeric) instead of the route parameter
+        const resolvedSubjectId = getResolvedSubjectId();
+
         // Prepare the layout data for the API
         const layout = {
             rows: rows.value,
@@ -377,24 +396,31 @@ const saveCurrentLayout = async (showToast = true) => {
         // Save to database via API
         console.log('Saving layout with data:', {
             sectionId: sectionId.value,
-            subjectId: subjectId.value,
+            subjectId: resolvedSubjectId,
             teacherId: teacherId.value,
             seatPlan: layout.seatPlan,
-            assignedSeats: layout.seatPlan.flat().filter((seat) => seat.isOccupied).length
+            assignedSeats
         });
-        await SeatingService.saveSeatingArrangement(sectionId.value, subjectId.value, teacherId.value, layout);
-
-        // Also save to localStorage as backup (section-based, not subject-specific)
-        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
+        
+        console.log('Calling SeatingService.saveSeatingArrangement with:', {
+            sectionId: sectionId.value,
+            subjectId: resolvedSubjectId,
+            teacherId: teacherId.value,
+            layoutKeys: Object.keys(layout)
+        });
+        
+        const response = await SeatingService.saveSeatingArrangement(sectionId.value, resolvedSubjectId, teacherId.value, layout);
 
         if (showToast) {
             toast.add({
                 severity: 'success',
                 summary: 'Layout Saved',
-                detail: 'Seating arrangement has been saved to database',
+                detail: 'Seating arrangement has been saved successfully',
                 life: 3000
             });
         }
+
+        console.log('Layout saved successfully:', response);
     } catch (error) {
         console.error('Error saving layout to database:', error);
 
@@ -453,12 +479,23 @@ const loadSeatingArrangementFromDatabase = async () => {
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
 
-                // Only clean up if students are already loaded to avoid removing valid assignments
+                // Defer cleanup until after students are fully loaded
+                // Use nextTick to ensure students are loaded first
+                await nextTick();
+                
+                // Double-check students are loaded before cleanup
                 if (students.value && students.value.length > 0) {
-                    console.log('Running cleanup after loading seating arrangement');
+                    console.log('Running cleanup after loading seating arrangement - students loaded:', students.value.length);
                     cleanupInvalidStudentAssignments();
                 } else {
-                    console.log('Skipping cleanup - students not loaded yet');
+                    console.log('Skipping cleanup - students not loaded yet, will cleanup later');
+                    // Schedule cleanup for later when students are loaded
+                    setTimeout(() => {
+                        if (students.value && students.value.length > 0) {
+                            console.log('Delayed cleanup - students now loaded:', students.value.length);
+                            cleanupInvalidStudentAssignments();
+                        }
+                    }, 1000);
                 }
 
                 console.log('Loaded seating arrangement from database');
@@ -467,8 +504,16 @@ const loadSeatingArrangementFromDatabase = async () => {
         }
 
         // Fallback to localStorage if database doesn't have data
-        console.log('Loaded seating arrangement from database');
-        return true;
+        console.log('No seating arrangement found in database, trying localStorage');
+        const localResult = loadSavedLayout();
+        if (localResult) {
+            console.log('Loaded seating arrangement from localStorage');
+            return true;
+        } else {
+            console.log('No saved layout found, using default grid');
+            initializeSeatPlan();
+            return false;
+        }
     } catch (error) {
         console.error('Error loading seating arrangement from database:', error);
         console.log('Falling back to localStorage...');
@@ -499,6 +544,7 @@ const formatSubjectName = (id) => {
 
 // Create an empty seat plan grid
 const initializeSeatPlan = () => {
+    console.log(`Initializing seat plan with ${rows.value} rows and ${columns.value} columns`);
     seatPlan.value = [];
     for (let i = 0; i < rows.value; i++) {
         const row = [];
@@ -511,6 +557,7 @@ const initializeSeatPlan = () => {
         }
         seatPlan.value.push(row);
     }
+    console.log(`Seat plan initialized with ${seatPlan.value.length} rows and ${seatPlan.value[0]?.length || 0} columns`);
 };
 
 // Update seat plan with changes to row/column count
@@ -908,25 +955,38 @@ const onScannerError = (error) => {
 
 // Clean up invalid student assignments from seating arrangement
 const cleanupInvalidStudentAssignments = () => {
+    // Don't run cleanup if students aren't loaded yet
+    if (!students.value || students.value.length === 0) {
+        console.log('Skipping cleanup - no students loaded');
+        return;
+    }
+
     let cleanedCount = 0;
+    const studentIds = students.value.map(s => s.id);
 
     console.log(
         'Running cleanup - current students:',
         students.value.map((s) => ({ id: s.id, name: s.name }))
     );
+    console.log('Available student IDs:', studentIds);
 
     seatPlan.value.forEach((row, rowIndex) => {
         row.forEach((seat, colIndex) => {
             if (seat.isOccupied && seat.studentId) {
                 const student = getStudentById(seat.studentId);
                 console.log(`Checking seat [${rowIndex}][${colIndex}] with studentId ${seat.studentId}:`, student ? 'FOUND' : 'NOT FOUND');
-                if (!student) {
+                
+                // Only remove if we're absolutely sure the student doesn't exist
+                // and we have a reasonable number of students loaded
+                if (!student && students.value.length > 0) {
                     console.log(`Removing invalid student assignment: ${seat.studentId}`);
                     // Clear the invalid assignment
                     seat.isOccupied = false;
                     seat.studentId = null;
                     seat.status = null;
                     cleanedCount++;
+                } else if (!student) {
+                    console.log(`Keeping assignment for studentId ${seat.studentId} - students may not be fully loaded`);
                 }
             }
         });
@@ -936,6 +996,8 @@ const cleanupInvalidStudentAssignments = () => {
         console.log(`Cleaned up ${cleanedCount} invalid student assignments from seating arrangement`);
         // Recalculate unassigned students after cleanup
         calculateUnassignedStudents();
+    } else {
+        console.log('No invalid assignments found during cleanup');
     }
 };
 
@@ -1146,6 +1208,110 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
     }
 };
 
+// Preserve current assignments before navigation
+const preserveCurrentAssignments = () => {
+    const assignments = [];
+    seatPlan.value.forEach((row, rowIndex) => {
+        row.forEach((seat, colIndex) => {
+            if (seat.isOccupied && seat.studentId) {
+                assignments.push({
+                    rowIndex,
+                    colIndex,
+                    studentId: seat.studentId,
+                    status: seat.status
+                });
+            }
+        });
+    });
+    
+    if (assignments.length > 0) {
+        // Use resolved subject ID for consistency
+        const resolvedSubjectId = getResolvedSubjectId();
+        const preservationKey = `preserved_assignments_${teacherId.value}_${sectionId.value}_${resolvedSubjectId}`;
+        localStorage.setItem(preservationKey, JSON.stringify({
+            assignments,
+            timestamp: new Date().toISOString(),
+            rows: rows.value,
+            columns: columns.value,
+            teacherId: teacherId.value,
+            sectionId: sectionId.value,
+            subjectId: resolvedSubjectId
+        }));
+        console.log('Preserved assignments for navigation:', assignments.length);
+    }
+};
+
+// Restore preserved assignments after navigation
+const restorePreservedAssignments = () => {
+    // Use resolved subject ID for consistency
+    const resolvedSubjectId = getResolvedSubjectId();
+    const preservationKey = `preserved_assignments_${teacherId.value}_${sectionId.value}_${resolvedSubjectId}`;
+    const preserved = localStorage.getItem(preservationKey);
+    
+    if (preserved) {
+        try {
+            const data = JSON.parse(preserved);
+            const timeDiff = new Date() - new Date(data.timestamp);
+            
+            // Only restore if preserved within the last 5 minutes
+            if (timeDiff < 5 * 60 * 1000) {
+                console.log('Restoring preserved assignments:', data.assignments.length);
+                
+                // Set flag to prevent grid updates during restoration
+                isRestoringAssignments.value = true;
+                
+                console.log('Setting restoration flag to prevent grid updates');
+                
+                // Ensure grid matches preserved dimensions
+                if (data.rows && data.columns) {
+                    console.log(`Restoring grid dimensions: ${data.rows}×${data.columns}`);
+                    rows.value = data.rows;
+                    columns.value = data.columns;
+                    initializeSeatPlan();
+                }
+                
+                // Restore assignments
+                console.log('Restoring assignments:', data.assignments);
+                data.assignments.forEach(assignment => {
+                    if (assignment.rowIndex < seatPlan.value.length && 
+                        assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+                        const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
+                        seat.isOccupied = true;
+                        seat.studentId = assignment.studentId;
+                        seat.status = assignment.status;
+                        console.log(`Restored: student ${assignment.studentId} to seat [${assignment.rowIndex}][${assignment.colIndex}]`);
+                    }
+                });
+                
+                calculateUnassignedStudents();
+                
+                // Clear the restoration flag after a delay to ensure all watchers have processed
+                setTimeout(() => {
+                    isRestoringAssignments.value = false;
+                    console.log('Cleared restoration flag');
+                }, 100);
+                
+                // Save the restored layout to database immediately to persist it
+                setTimeout(() => {
+                    saveCurrentLayout(false);
+                }, 100);
+                
+                // Clean up preserved data
+                localStorage.removeItem(preservationKey);
+                return true;
+            } else {
+                // Clean up old preserved data
+                localStorage.removeItem(preservationKey);
+            }
+        } catch (error) {
+            console.error('Error restoring preserved assignments:', error);
+            localStorage.removeItem(preservationKey);
+        }
+    }
+    
+    return false;
+};
+
 // Save the current seat plan as a template
 const saveAsTemplate = () => {
     if (!templateName.value.trim()) {
@@ -1304,6 +1470,13 @@ const filteredUnassignedStudents = computed(() => {
     if (!searchQuery.value) return unassignedStudents.value;
     const query = searchQuery.value.toLowerCase();
     return unassignedStudents.value.filter((student) => student.name.toLowerCase().includes(query) || student.id.toString().includes(query));
+});
+
+// Computed property for responsive teacher desk size
+const teacherDeskSize = computed(() => {
+    // Base size calculation based on grid dimensions
+    const baseSize = Math.max(80, Math.min(120, columns.value * 20 + 40));
+    return `${baseSize}px`;
 });
 
 // Fetch attendance history from service
@@ -1804,20 +1977,7 @@ const resetAllAttendance = () => {
 const incrementRows = () => {
     if (rows.value < 12) {
         rows.value++;
-
-        // Add new row at the top
-        const newRow = Array(columns.value)
-            .fill()
-            .map(() => ({
-                isOccupied: false,
-                studentId: null,
-                status: null
-            }));
-
-        seatPlan.value.unshift(newRow);
-
-        // Save the layout after changing rows
-        saveCurrentLayout(false);
+        updateGridSize();
     }
 };
 
@@ -1825,26 +1985,7 @@ const incrementRows = () => {
 const decrementRows = () => {
     if (rows.value > 1) {
         rows.value--;
-
-        // Find the first empty row from the top
-        let foundEmptyRow = false;
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            const rowIsEmpty = seatPlan.value[i].every((seat) => !seat.isOccupied);
-            if (rowIsEmpty) {
-                // Remove this empty row
-                seatPlan.value.splice(i, 1);
-                foundEmptyRow = true;
-                break;
-            }
-        }
-
-        // If no empty row was found, remove from bottom
-        if (!foundEmptyRow) {
-            seatPlan.value.pop();
-        }
-
-        // Save the layout after changing rows
-        saveCurrentLayout(false);
+        updateGridSize();
     }
 };
 
@@ -1852,62 +1993,58 @@ const decrementRows = () => {
 const incrementColumns = () => {
     if (columns.value < 12) {
         columns.value++;
-
-        // Add a new column to each row
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            seatPlan.value[i].push({
-                isOccupied: false,
-                studentId: null,
-                status: null
-            });
-        }
-
-        // Save the layout after changing columns
-        saveCurrentLayout(false);
+        updateGridSize();
     }
 };
 
 const decrementColumns = () => {
     if (columns.value > 1) {
         columns.value--;
-
-        // Remove last column from each row if empty
-        let allEmpty = true;
-
-        // Check if all seats in the last column are empty
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            const lastColIndex = seatPlan.value[i].length - 1;
-            if (lastColIndex >= 0 && seatPlan.value[i][lastColIndex].isOccupied) {
-                allEmpty = false;
-                break;
-            }
-        }
-
-        // Only remove if all are empty
-        if (allEmpty) {
-            for (let i = 0; i < seatPlan.value.length; i++) {
-                seatPlan.value[i].pop();
-            }
-        } else {
-            // If not all empty, revert the column change
-            columns.value++;
-            toast.add({
-                severity: 'warn',
-                summary: 'Cannot Remove Column',
-                detail: 'Cannot remove a column with assigned students',
-                life: 3000
-            });
-            return;
-        }
-
-        // Save the layout after changing columns
-        saveCurrentLayout(false);
+        updateGridSize();
     }
 };
 
 // Add missing updateGridSize function
 const updateGridSize = () => {
+    console.log(`Updating grid size to ${rows.value} rows × ${columns.value} columns`);
+    
+    // Preserve current assignments before reinitializing
+    const currentAssignments = [];
+    if (seatPlan.value && seatPlan.value.length > 0) {
+        seatPlan.value.forEach((row, rowIndex) => {
+            row.forEach((seat, colIndex) => {
+                if (seat.isOccupied && seat.studentId) {
+                    currentAssignments.push({
+                        rowIndex,
+                        colIndex,
+                        studentId: seat.studentId,
+                        status: seat.status
+                    });
+                }
+            });
+        });
+    }
+    
+    console.log('Preserving assignments during grid update:', currentAssignments.length);
+    
+    // Reinitialize the grid
     initializeSeatPlan();
+    
+    // Restore assignments to new grid if they fit
+    currentAssignments.forEach(assignment => {
+        if (assignment.rowIndex < seatPlan.value.length && 
+            assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+            const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
+            seat.isOccupied = true;
+            seat.studentId = assignment.studentId;
+            seat.status = assignment.status;
+            console.log(`Restored assignment: student ${assignment.studentId} to [${assignment.rowIndex}][${assignment.colIndex}]`);
+        } else {
+            console.log(`Could not restore assignment for student ${assignment.studentId} - position out of bounds`);
+        }
+    });
+    
+    calculateUnassignedStudents();
     saveCurrentLayout(false);
 };
 
@@ -2048,7 +2185,7 @@ watchEffect(() => {
         subjectId.value = newSubject.id;
         subjectName.value = newSubject.name;
         console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
-        
+
         // Reload students data when subject changes
         if (teacherId.value) {
             isLoadingSeating.value = true;
@@ -2061,10 +2198,10 @@ watchEffect(() => {
 // Initialize component when mounted
 onMounted(async () => {
     console.log(`🔄 Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
-    
+
     // Initialize teacher authentication first
     await initializeTeacherData();
-    
+
     console.log(`🔍 Checking if subject ID needs resolution: isNaN(${subjectId.value}) = ${isNaN(subjectId.value)}`);
 
     // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
@@ -2072,25 +2209,25 @@ onMounted(async () => {
         console.log(`🚀 Fetching subject details for identifier: ${subjectId.value}`);
         const subjectDetails = await fetchSubjectDetails(subjectId.value);
         console.log(`📋 Received subject details:`, subjectDetails);
-        
+
         if (subjectDetails.id) {
             const newSubjectName = subjectDetails.name;
             const newSubjectId = subjectDetails.id;
-            
+
             subjectId.value = newSubjectId;
             subjectName.value = newSubjectName;
             console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
-            
+
             // Force Vue to update the DOM
             await nextTick();
             console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
-            
+
             // Use template ref for direct access with the resolved name
             await nextTick();
             if (titleRef.value) {
                 titleRef.value.textContent = `${newSubjectName} Attendance`;
                 console.log(`🎯 Template ref update applied: ${titleRef.value.textContent}`);
-                
+
                 // Force multiple updates to ensure it sticks
                 setTimeout(() => {
                     if (titleRef.value) {
@@ -2306,6 +2443,9 @@ const startRollCall = () => {
 
 // Clean up on component unmount
 onUnmounted(() => {
+    // Preserve current assignments before unmounting
+    preserveCurrentAssignments();
+    
     // Stop scanning to release camera resources
     scanning.value = false;
     console.log('Component unmounting, camera resources released');
@@ -3552,6 +3692,83 @@ watch(showStudentIds, (newValue) => {
     saveCurrentLayout(false);
 });
 
+// Track if we're currently restoring assignments to prevent grid reset
+const isRestoringAssignments = ref(false);
+
+// Helper function to get resolved subject ID
+const getResolvedSubjectId = () => {
+    // Map subject names to their numeric IDs
+    const subjectMapping = {
+        'Arts': 5,
+        'English': 1,
+        'Filipino': 2,
+        'Mathematics': 3,
+        'Science': 4
+    };
+    
+    // First try to map by subject name
+    if (subjectName.value && subjectMapping[subjectName.value]) {
+        console.log(`Resolved subject ID by name: ${subjectName.value} → ${subjectMapping[subjectName.value]}`);
+        return subjectMapping[subjectName.value];
+    }
+    
+    // If subjectId is already numeric, use it
+    if (typeof subjectId.value === 'number' || !isNaN(Number(subjectId.value))) {
+        const numericId = Number(subjectId.value);
+        console.log(`Using numeric subject ID: ${numericId}`);
+        return numericId;
+    }
+    
+    // Map route parameter to numeric ID
+    const routeMapping = {
+        'arts': 5,
+        'english': 1,
+        'filipino': 2,
+        'mathematics': 3,
+        'science': 4
+    };
+    
+    if (routeMapping[subjectId.value]) {
+        console.log(`Resolved subject ID by route: ${subjectId.value} → ${routeMapping[subjectId.value]}`);
+        return routeMapping[subjectId.value];
+    }
+    
+    console.warn(`Could not resolve subject ID for: name="${subjectName.value}", id="${subjectId.value}"`);
+    return subjectId.value;
+};
+
+// Watch for rows and columns changes to ensure grid updates
+watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
+    console.log(`Grid dimensions changed: ${oldRows}×${oldColumns} → ${newRows}×${newColumns}`);
+    
+    // Don't update grid if we're currently restoring assignments
+    if (isRestoringAssignments.value) {
+        console.log('Skipping grid update - currently restoring assignments');
+        return;
+    }
+    
+    if (newRows !== oldRows || newColumns !== oldColumns) {
+        updateGridSize();
+    }
+});
+
+// Watch for students loading to trigger cleanup if needed
+watch(students, (newStudents, oldStudents) => {
+    if (newStudents && newStudents.length > 0 && (!oldStudents || oldStudents.length === 0)) {
+        console.log('Students loaded, checking if cleanup is needed');
+        // Small delay to ensure seating arrangement is also loaded
+        setTimeout(() => {
+            const hasAssignedSeats = seatPlan.value.some(row => 
+                row.some(seat => seat.isOccupied && seat.studentId)
+            );
+            if (hasAssignedSeats) {
+                console.log('Found assigned seats, running cleanup to validate assignments');
+                cleanupInvalidStudentAssignments();
+            }
+        }, 500);
+    }
+}, { deep: true });
+
 // Fix reference to isDropTarget
 const isDropTarget = ref(false);
 
@@ -3662,7 +3879,15 @@ const titleRef = ref(null);
 
                 <!-- Seating grid -->
                 <div class="seating-grid-container">
-                    <!-- Teacher's desk at top (removed) -->
+                    <!-- Teacher's desk at top -->
+                    <div v-if="showTeacherDesk" class="teacher-desk mb-6 flex justify-center">
+                        <div class="teacher-desk-label" :style="{ width: teacherDeskSize, height: teacherDeskSize }">
+                            <div>
+                                <i class="pi pi-user block mb-1"></i>
+                                <span class="text-xs">Teacher's Desk</span>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
@@ -3700,11 +3925,6 @@ const titleRef = ref(null);
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Teacher's desk at bottom -->
-                    <div v-if="showTeacherDesk" class="teacher-desk mt-8">
-                        <div class="teacher-desk-label p-3 bg-blue-50 border border-blue-200 rounded-lg text-center"><i class="pi pi-user mr-2"></i> Teacher's Desk</div>
                     </div>
                 </div>
             </div>
@@ -4135,6 +4355,42 @@ const titleRef = ref(null);
 .unassigned-students-list {
     overflow-y: auto;
     flex: 1;
+}
+
+.teacher-desk {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.teacher-desk-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    color: #1e40af;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+    transition: all 0.2s ease;
+    padding: 0.75rem;
+}
+
+.teacher-desk-label:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.15);
+}
+
+.teacher-desk-label i {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+    padding-left: 25px;
+}
+
+.teacher-desk-label span {
+    font-size: 0.75rem;
+    line-height: 1;
 }
 
 /* Seat grid styles */
@@ -4653,8 +4909,12 @@ const titleRef = ref(null);
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .seating-loading-overlay .loading-text h3 {
