@@ -257,7 +257,7 @@
                 </div>
             </div>
             <template #footer>
-                <Button label="Print Report" icon="pi pi-print" text />
+                <Button label="Print Report" icon="pi pi-print" text @click="printAttendanceReport" />
                 <Button label="Schedule Follow-up" icon="pi pi-calendar-plus" />
                 <Button label="Close" icon="pi pi-times" @click="showProgressDialog = false" />
             </template>
@@ -575,6 +575,519 @@ function formatDate(date) {
         month: 'short',
         day: 'numeric'
     }).format(new Date(date));
+}
+
+function printAttendanceReport() {
+    if (!selectedStudentForProgress.value) return;
+    
+    const student = selectedStudentForProgress.value;
+    const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    
+    // Create a new window for the report
+    const reportWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes');
+    
+    if (!reportWindow) {
+        alert('Unable to open print window. Please allow popups for this site.');
+        return;
+    }
+    
+    // Generate the HTML content for the report
+    const reportHTML = generateAttendanceReportHTML(student, currentDate);
+    
+    // Write the HTML to the new window
+    reportWindow.document.write(reportHTML);
+    reportWindow.document.close();
+    
+    // Wait for content to load, then print
+    reportWindow.onload = () => {
+        setTimeout(() => {
+            reportWindow.print();
+        }, 500);
+    };
+}
+
+function generateAttendanceReportHTML(student, currentDate) {
+    const schoolYear = getCurrentSchoolYear();
+    const overallAttendanceRate = calculateOverallAttendanceRate();
+    
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Attendance Report - ${student.first_name} ${student.last_name}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Times New Roman', serif;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+            padding: 20px;
+        }
+        
+        .report-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border: 2px solid #2c5aa0;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e3a8a 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .school-logo {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #2c5aa0;
+            font-weight: bold;
+        }
+        
+        .school-name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .school-subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+        
+        .report-title {
+            font-size: 20px;
+            font-weight: bold;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .student-info {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dotted #cbd5e0;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #4a5568;
+        }
+        
+        .info-value {
+            color: #2d3748;
+        }
+        
+        .stats-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card.present .stat-number { color: #16a34a; }
+        .stat-card.absent .stat-number { color: #dc2626; }
+        .stat-card.late .stat-number { color: #d97706; }
+        .stat-card.excused .stat-number { color: #2563eb; }
+        
+        .weekly-breakdown {
+            margin-bottom: 30px;
+        }
+        
+        .week-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        
+        .week-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .week-title {
+            font-weight: bold;
+            color: #374151;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .week-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            font-size: 12px;
+        }
+        
+        .week-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+        
+        .attendance-rate {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 20px;
+            padding: 8px 15px;
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #0369a1;
+        }
+        
+        .improvements-section, .concerns-section {
+            margin-bottom: 25px;
+        }
+        
+        .improvements-list, .concerns-list, .next-steps-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .improvements-list li, .concerns-list li, .next-steps-list li {
+            padding: 8px 0;
+            border-bottom: 1px dotted #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .improvements-list li::before {
+            content: "✓";
+            color: #16a34a;
+            font-weight: bold;
+        }
+        
+        .concerns-list li::before {
+            content: "⚠";
+            color: #dc2626;
+            font-weight: bold;
+        }
+        
+        .next-steps-list li::before {
+            content: "→";
+            color: #2563eb;
+            font-weight: bold;
+        }
+        
+        .footer {
+            background: #f8fafc;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .signature-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .signature-line {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid #333;
+        }
+        
+        @media print {
+            body { padding: 0; }
+            .report-container { border: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <div class="school-logo">NCS</div>
+            <div class="school-name">Naawan Central School</div>
+            <div class="school-subtitle">Learning and Management System</div>
+            <div class="report-title">Student Attendance Report</div>
+        </div>
+        
+        <div class="content">
+            <div class="student-info">
+                <h3 style="margin-bottom: 15px; color: #2c5aa0;">Student Information</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Full Name:</span>
+                        <span class="info-value">${student.first_name} ${student.last_name}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Grade Level:</span>
+                        <span class="info-value">${getStudentGradeLevel(student)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Section:</span>
+                        <span class="info-value">${getStudentSection(student)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">School Year:</span>
+                        <span class="info-value">${schoolYear}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Report Date:</span>
+                        <span class="info-value">${currentDate}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Subject:</span>
+                        <span class="info-value">${props.selectedSubject?.name || 'All Subjects'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats-section">
+                <h3 class="section-title">Attendance Summary</h3>
+                <div class="stats-grid">
+                    <div class="stat-card present">
+                        <div class="stat-number">${getTotalPresent(student)}</div>
+                        <div class="stat-label">Present</div>
+                    </div>
+                    <div class="stat-card absent">
+                        <div class="stat-number">${student.total_absences || 0}</div>
+                        <div class="stat-label">Absent</div>
+                    </div>
+                    <div class="stat-card late">
+                        <div class="stat-number">${getTotalLate(student)}</div>
+                        <div class="stat-label">Late</div>
+                    </div>
+                    <div class="stat-card excused">
+                        <div class="stat-number">${getTotalExcused(student)}</div>
+                        <div class="stat-label">Excused</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <div style="font-size: 18px; font-weight: bold; color: #2c5aa0;">
+                        Overall Attendance Rate: ${overallAttendanceRate}%
+                    </div>
+                </div>
+            </div>
+            
+            <div class="weekly-breakdown">
+                <h3 class="section-title">Weekly Attendance Breakdown</h3>
+                <div class="week-grid">
+                    ${progressData.value.weeklyAttendance.map(week => `
+                        <div class="week-card">
+                            <div class="week-title">${week.week}</div>
+                            <div class="week-stats">
+                                <div class="week-stat">
+                                    <span>Present:</span>
+                                    <span style="color: #16a34a; font-weight: bold;">${week.present}</span>
+                                </div>
+                                <div class="week-stat">
+                                    <span>Absent:</span>
+                                    <span style="color: #dc2626; font-weight: bold;">${week.absent}</span>
+                                </div>
+                                <div class="week-stat">
+                                    <span>Late:</span>
+                                    <span style="color: #d97706; font-weight: bold;">${week.late}</span>
+                                </div>
+                            </div>
+                            <div class="attendance-rate">${week.percentage}%</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <div class="improvements-section">
+                <h3 class="section-title">Positive Improvements</h3>
+                <ul class="improvements-list">
+                    ${progressData.value.improvements.map(improvement => `
+                        <li>${improvement}</li>
+                    `).join('')}
+                </ul>
+            </div>
+            
+            <div class="concerns-section">
+                <h3 class="section-title">Areas of Concern</h3>
+                <ul class="concerns-list">
+                    ${progressData.value.concerns.map(concern => `
+                        <li>${concern}</li>
+                    `).join('')}
+                </ul>
+            </div>
+            
+            <div class="next-steps-section">
+                <h3 class="section-title">Recommended Next Steps</h3>
+                <ul class="next-steps-list">
+                    ${progressData.value.nextSteps.map(step => `
+                        <li>${step}</li>
+                    `).join('')}
+                </ul>
+            </div>
+            
+            <div class="signature-section">
+                <div>
+                    <div class="signature-line">
+                        <div>Teacher Signature</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="signature-line">
+                        <div>Date</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>This report was generated by the Naawan Central School Learning and Management System</p>
+            <p>Generated on ${currentDate} | Confidential Student Information</p>
+        </div>
+    </div>
+</body>
+</html>
+    `;
+}
+
+function getCurrentSchoolYear() {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    
+    // School year typically starts in June (month 5) and ends in March (month 2)
+    if (currentMonth >= 5) {
+        return `${currentYear}-${currentYear + 1}`;
+    } else {
+        return `${currentYear - 1}-${currentYear}`;
+    }
+}
+
+function calculateOverallAttendanceRate() {
+    if (!progressData.value.weeklyAttendance.length) return 0;
+    
+    const totalWeeks = progressData.value.weeklyAttendance.length;
+    const totalPercentage = progressData.value.weeklyAttendance.reduce((sum, week) => sum + week.percentage, 0);
+    
+    return Math.round(totalPercentage / totalWeeks);
+}
+
+function getTotalPresent(student) {
+    return progressData.value.weeklyAttendance.reduce((sum, week) => sum + week.present, 0);
+}
+
+function getTotalLate(student) {
+    return progressData.value.weeklyAttendance.reduce((sum, week) => sum + week.late, 0);
+}
+
+function getTotalExcused(student) {
+    // For now, return 0 as we don't have excused data in the mock data
+    return 0;
+}
+
+function getStudentGradeLevel(student) {
+    // Check if student has grade_level property
+    if (student.grade_level) {
+        // Handle numeric grade levels
+        if (typeof student.grade_level === 'number') {
+            if (student.grade_level === 0) return 'Kindergarten';
+            if (student.grade_level === 1) return 'Kinder One';
+            if (student.grade_level === 2) return 'Kinder Two';
+            return `Grade ${student.grade_level}`;
+        }
+        // Handle string grade levels
+        return student.grade_level;
+    }
+    
+    // Check if section name contains grade info
+    const section = student.section || '';
+    if (section.toLowerCase().includes('kinder')) {
+        return 'Kinder One';
+    }
+    
+    // Default fallback
+    return 'Kinder One';
+}
+
+function getStudentSection(student) {
+    // Get section name, default to current context
+    return student.section || 'Kinder One';
 }
 </script>
 

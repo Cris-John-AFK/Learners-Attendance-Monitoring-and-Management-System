@@ -2,7 +2,64 @@ class NotificationService {
     constructor() {
         this.notifications = [];
         this.listeners = [];
+        this.currentTeacherId = null;
+        this.teacherAssignments = null;
         this.loadNotifications();
+    }
+
+    /**
+     * Set current teacher and load their assignments
+     */
+    async setCurrentTeacher(teacherId) {
+        if (this.currentTeacherId !== teacherId) {
+            this.currentTeacherId = teacherId;
+            this.teacherAssignments = null;
+            
+            // Load teacher assignments to filter notifications
+            try {
+                const response = await fetch(`http://localhost:8000/api/teachers/${teacherId}/assignments`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.teacherAssignments = data.assignments || [];
+                    console.log('Loaded teacher assignments for notifications:', this.teacherAssignments);
+                    
+                    // Clean up old notifications that don't have proper teacher metadata
+                    this.cleanupOldNotifications();
+                }
+            } catch (error) {
+                console.error('Error loading teacher assignments for notifications:', error);
+            }
+            
+            // Reload notifications for this teacher
+            this.loadNotifications();
+            this.notifyListeners();
+        }
+    }
+
+    /**
+     * Clean up old notifications that don't have proper teacher metadata
+     */
+    cleanupOldNotifications() {
+        console.log('Cleaning up old notifications without proper teacher metadata');
+        const beforeCount = this.notifications.length;
+        
+        this.notifications = this.notifications.filter(notification => {
+            // Keep system notifications
+            if (notification.type === 'system_update') {
+                return true;
+            }
+            
+            // Keep notifications that have proper teacher metadata
+            const metadata = notification.metadata || {};
+            return metadata.teacherId && (metadata.subjectId || metadata.sectionId);
+        });
+        
+        const afterCount = this.notifications.length;
+        console.log(`Cleaned up ${beforeCount - afterCount} old notifications`);
+        
+        if (beforeCount !== afterCount) {
+            this.saveNotifications();
+        }
     }
 
     /**
@@ -36,6 +93,12 @@ class NotificationService {
      */
     addSessionCompletionNotification(sessionData) {
         console.log('Creating session completion notification with data:', sessionData);
+        console.log('Session data keys:', Object.keys(sessionData));
+        console.log('Current teacher ID:', this.currentTeacherId);
+        console.log('Teacher assignments:', this.teacherAssignments);
+        
+        // Ensure we have teacher ID - use current teacher if not provided in session data
+        const teacherId = sessionData.teacher_id || this.currentTeacherId;
         
         const notification = {
             type: 'session_completed',
@@ -47,7 +110,7 @@ class NotificationService {
             method: sessionData.method || 'Manual Entry',
             metadata: {
                 sessionId: sessionData.session_id || sessionData.id,
-                teacherId: sessionData.teacher_id,
+                teacherId: teacherId,
                 sectionId: sessionData.section_id,
                 subjectId: sessionData.subject_id
             },
@@ -55,6 +118,8 @@ class NotificationService {
         };
 
         console.log('Notification object created:', notification);
+        console.log('Notification metadata:', notification.metadata);
+        console.log('Using teacher ID:', teacherId);
         const result = this.addNotification(notification);
         console.log('addNotification returned:', result);
         
@@ -92,17 +157,69 @@ class NotificationService {
     }
 
     /**
-     * Get all notifications
+     * Get all notifications filtered for current teacher
      */
     getNotifications() {
-        return this.notifications;
+        return this.filterNotificationsForCurrentTeacher(this.notifications);
     }
 
     /**
-     * Get unread notifications count
+     * Filter notifications based on current teacher's assignments
+     */
+    filterNotificationsForCurrentTeacher(notifications) {
+        if (!this.currentTeacherId || !this.teacherAssignments) {
+            console.log('No teacher ID or assignments for filtering:', {
+                teacherId: this.currentTeacherId,
+                assignments: this.teacherAssignments
+            });
+            return notifications;
+        }
+
+        return notifications.filter(notification => {
+            // Always show system notifications
+            if (notification.type === 'system_update') {
+                return true;
+            }
+
+            // Check if notification belongs to this teacher
+            const metadata = notification.metadata || {};
+            
+            console.log('Filtering notification:', {
+                type: notification.type,
+                metadata: metadata,
+                currentTeacherId: this.currentTeacherId,
+                teacherAssignments: this.teacherAssignments
+            });
+            
+            // If notification has teacher ID, check if it matches
+            if (metadata.teacherId && metadata.teacherId !== this.currentTeacherId) {
+                console.log('Notification filtered out: teacher ID mismatch');
+                return false;
+            }
+
+            // If notification has subject/section info, check if teacher is assigned
+            if (metadata.subjectId && metadata.sectionId) {
+                const isAssigned = this.teacherAssignments.some(assignment => 
+                    assignment.subject_id === metadata.subjectId && 
+                    assignment.section_id === metadata.sectionId
+                );
+                console.log('Assignment check result:', isAssigned);
+                return isAssigned;
+            }
+
+            // If no specific assignment info, show if it belongs to this teacher
+            const belongsToTeacher = metadata.teacherId === this.currentTeacherId;
+            console.log('Belongs to teacher check:', belongsToTeacher);
+            return belongsToTeacher;
+        });
+    }
+
+    /**
+     * Get unread notifications count for current teacher
      */
     getUnreadCount() {
-        return this.notifications.filter(n => !n.read).length;
+        const filteredNotifications = this.filterNotificationsForCurrentTeacher(this.notifications);
+        return filteredNotifications.filter(n => !n.read).length;
     }
 
     /**
@@ -136,11 +253,12 @@ class NotificationService {
      * Notify all listeners of changes
      */
     notifyListeners() {
-        console.log('Notifying listeners, current notifications:', this.notifications.length);
+        const filteredNotifications = this.filterNotificationsForCurrentTeacher(this.notifications);
+        console.log('Notifying listeners, filtered notifications for teacher:', filteredNotifications.length);
         this.listeners.forEach((callback, index) => {
             try {
                 console.log(`Calling listener ${index}:`, callback);
-                callback([...this.notifications]); // Pass a copy to ensure reactivity
+                callback([...filteredNotifications]); // Pass filtered notifications
             } catch (error) {
                 console.error('Error in notification listener:', error);
             }
@@ -234,10 +352,11 @@ class NotificationService {
     }
 
     /**
-     * Get notifications by type
+     * Get notifications by type for current teacher
      */
     getNotificationsByType(type) {
-        return this.notifications.filter(n => n.type === type);
+        const filteredNotifications = this.filterNotificationsForCurrentTeacher(this.notifications);
+        return filteredNotifications.filter(n => n.type === type);
     }
 
     /**

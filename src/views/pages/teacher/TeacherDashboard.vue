@@ -171,14 +171,22 @@ const initializeTeacherData = async () => {
                 assignedGrades: []
             };
 
-            // Get unique subjects from assignments
+            // Get unique subjects from assignments with correct section IDs
+            const assignments = TeacherAuthService.getAssignments();
             const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
-            availableSubjects.value = uniqueSubjects.map(subject => ({
-                id: subject.id,
-                name: subject.name,
-                grade: subject.sections[0]?.grade || 'Unknown',
-                originalSubject: { id: subject.id, name: subject.name }
-            }));
+            
+            availableSubjects.value = uniqueSubjects.map(subject => {
+                // Find the assignment for this subject to get the correct section ID
+                const assignment = assignments.find(a => a.subject_id === subject.id);
+                return {
+                    id: subject.id,
+                    name: subject.name,
+                    grade: subject.sections[0]?.grade || 'Unknown',
+                    sectionId: assignment?.section_id || subject.sections[0]?.id,
+                    originalSubject: { id: subject.id, name: subject.name },
+                    assignment: assignment
+                };
+            });
 
             // Set default selected subject
             if (availableSubjects.value.length > 0) {
@@ -437,9 +445,18 @@ async function loadAttendanceData() {
     try {
         console.log('Loading attendance data for subject:', selectedSubject.value);
 
-        // Use the same API as the attendance page to get students
-        const sectionId = selectedSubject.value.sectionId || selectedSubject.value.originalSubject?.sectionId || 3; // Use Malikhain section ID
+        // Get the correct section ID from teacher assignments
+        const teacherAssignments = TeacherAuthService.getAssignments();
+        const assignment = teacherAssignments.find(a => a.subject_id === selectedSubject.value.id);
+        const sectionId = assignment?.section_id || selectedSubject.value.sectionId || selectedSubject.value.originalSubject?.sectionId;
+        
+        if (!sectionId) {
+            console.error('No section ID found for subject:', selectedSubject.value);
+            return;
+        }
+        
         console.log('Using sectionId:', sectionId, 'for subject:', selectedSubject.value.name);
+        console.log('Found assignment:', assignment);
 
         console.log('Calling getStudentsForTeacherSubject with params:', {
             teacherId: currentTeacher.value.id,

@@ -499,37 +499,68 @@ class TeacherController extends Controller
             // For non-homeroom subjects, allow multiple sections to have the same subject
             // No validation needed here
         }
-            // Get IDs for assignments to delete (ones that exist but are not in our processed list)
-            $idsToDelete = array_diff($existingAssignmentIds, $processedIds);
+            // For adding new subjects, we should NOT delete existing assignments
+            // Only delete if this is a complete replacement operation (not an addition)
+            // Check if this is an addition operation by seeing if we're only adding new subjects
+            $isAdditionOperation = count($assignmentsToUpdate) === 0 && count($assignmentsToCreate) > 0;
+            
+            if (!$isAdditionOperation) {
+                // Get IDs for assignments to delete (ones that exist but are not in our processed list)
+                $idsToDelete = array_diff($existingAssignmentIds, $processedIds);
 
-            // Update existing assignments
-            foreach ($assignmentsToUpdate as $assignment) {
-                TeacherSectionSubject::where('id', $assignment['id'])
-                    ->update([
-                        'section_id' => $assignment['section_id'],
-                        'subject_id' => $assignment['subject_id'],
-                        'is_primary' => $assignment['is_primary'],
-                        'is_active' => true,
-                        'role' => $assignment['role']
-                    ]);
-            }
+                // Update existing assignments
+                foreach ($assignmentsToUpdate as $assignment) {
+                    TeacherSectionSubject::where('id', $assignment['id'])
+                        ->update([
+                            'section_id' => $assignment['section_id'],
+                            'subject_id' => $assignment['subject_id'],
+                            'is_primary' => $assignment['is_primary'],
+                            'is_active' => true,
+                            'role' => $assignment['role']
+                        ]);
+                }
 
-            // Delete removed assignments
-            if (!empty($idsToDelete)) {
-                TeacherSectionSubject::whereIn('id', $idsToDelete)->delete();
+                // Delete removed assignments only if this is a replacement operation
+                if (!empty($idsToDelete)) {
+                    TeacherSectionSubject::whereIn('id', $idsToDelete)->delete();
+                    Log::info("Deleted assignments for teacher {$teacher->id}: " . implode(',', $idsToDelete));
+                }
+            } else {
+                Log::info("Addition operation detected for teacher {$teacher->id} - preserving existing assignments");
             }
 
             // Create new assignments
             foreach ($assignmentsToCreate as $assignment) {
-                // Check if assignment already exists (to avoid unique constraint violations)
-                $exists = TeacherSectionSubject::where('teacher_id', $teacher->id)
+                // Check if assignment already exists (including soft deleted ones)
+                $existingAssignment = TeacherSectionSubject::withTrashed()
+                    ->where('teacher_id', $teacher->id)
                     ->where('section_id', $assignment['section_id'])
                     ->where('subject_id', $assignment['subject_id'])
-                    ->exists();
+                    ->first();
 
-                // Only create if it doesn't exist
-                if (!$exists) {
+                if ($existingAssignment) {
+                    if ($existingAssignment->trashed()) {
+                        // Restore the soft deleted assignment and update its properties
+                        $existingAssignment->restore();
+                        $existingAssignment->update([
+                            'is_primary' => $assignment['is_primary'],
+                            'role' => $assignment['role'],
+                            'is_active' => true
+                        ]);
+                        Log::info("Restored soft deleted assignment for teacher {$teacher->id}, subject {$assignment['subject_id']}");
+                    } else {
+                        // Assignment already exists and is active, update it
+                        $existingAssignment->update([
+                            'is_primary' => $assignment['is_primary'],
+                            'role' => $assignment['role'],
+                            'is_active' => true
+                        ]);
+                        Log::info("Updated existing assignment for teacher {$teacher->id}, subject {$assignment['subject_id']}");
+                    }
+                } else {
+                    // Create new assignment
                     TeacherSectionSubject::create($assignment);
+                    Log::info("Created new assignment for teacher {$teacher->id}, subject {$assignment['subject_id']}");
                 }
             }
 
