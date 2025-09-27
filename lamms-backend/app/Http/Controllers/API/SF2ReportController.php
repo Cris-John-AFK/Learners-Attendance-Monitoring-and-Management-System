@@ -682,8 +682,11 @@ class SF2ReportController extends Controller
                     $totalPresent = $maleStudents->sum('total_present');
                     
                     $worksheet->setCellValue("AC{$row}", $totalAbsent);   // ABSENT
+                    $worksheet->getStyle("AC{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
                     $worksheet->setCellValue("AK{$row}", $totalPresent);  // PRESENT
+                    $worksheet->getStyle("AK{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
                     $worksheet->setCellValue("AE{$row}", 0);              // TARDY
+                    $worksheet->getStyle("AE{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
                 }
             }
             
