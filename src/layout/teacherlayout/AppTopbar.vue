@@ -250,7 +250,14 @@ const logout = async () => {
 };
 
 // Subscribe to notifications
-onMounted(() => {
+onMounted(async () => {
+    // Initialize teacher for notifications
+    const teacherData = TeacherAuthService.getTeacherData();
+    if (teacherData && teacherData.teacher && teacherData.teacher.id) {
+        console.log('Initializing notifications for teacher:', teacherData.teacher.id);
+        await NotificationService.setCurrentTeacher(teacherData.teacher.id);
+    }
+    
     // Force refresh notifications on mount
     NotificationService.loadNotifications();
     notifications.value = NotificationService.getNotifications();

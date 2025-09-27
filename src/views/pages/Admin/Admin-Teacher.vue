@@ -1318,12 +1318,19 @@ const toggleSubjectSelection = (subject) => {
         return;
     }
     
+    console.log('Toggling subject selection:', subject);
+    console.log('Subject ID:', subject.id, 'Subject Name:', subject.name);
+    
     const index = selectedSubjectsForAssignment.value.findIndex((s) => s.id === subject.id);
     if (index > -1) {
         selectedSubjectsForAssignment.value.splice(index, 1);
+        console.log('Removed subject from selection');
     } else {
         selectedSubjectsForAssignment.value.push(subject);
+        console.log('Added subject to selection');
     }
+    
+    console.log('Current selected subjects:', selectedSubjectsForAssignment.value);
 };
 
 // Remove subject from assignment
@@ -1337,7 +1344,9 @@ const saveSubjectAssignments = async () => {
         loading.value = true;
 
         // Get the teacher's primary assignment to determine the section
+        console.log('Selected teacher data:', selectedTeacher.value);
         const primaryAssignment = selectedTeacher.value.primary_assignment || (selectedTeacher.value.active_assignments && selectedTeacher.value.active_assignments.find((a) => a.is_primary || a.role === 'primary'));
+        console.log('Found primary assignment:', primaryAssignment);
 
         if (!primaryAssignment) {
             toast.add({
@@ -1349,26 +1358,180 @@ const saveSubjectAssignments = async () => {
             return;
         }
 
-        // Prepare assignment data
-        const assignments = selectedSubjectsForAssignment.value.map((subject) => ({
-            section_id: primaryAssignment.section.id,
-            subject_id: subject.id,
-            is_primary: false,
-            role: 'subject'
-        }));
+        // Get section ID with proper fallback
+        const sectionId = primaryAssignment.section_id || primaryAssignment.section?.id;
+        
+        if (!sectionId) {
+            console.error('No section ID found in primary assignment:', primaryAssignment);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'No section ID found for teacher assignment',
+                life: 3000
+            });
+            return;
+        }
+
+        // Get existing subject assignments to avoid duplicates
+        // Check both subject_assignments and any other assignment arrays
+        const existingSubjectIds = [];
+        
+        // Check subject_assignments array
+        if (selectedTeacher.value.subject_assignments) {
+            selectedTeacher.value.subject_assignments.forEach(assignment => {
+                if (assignment && assignment.subject_id) {
+                    existingSubjectIds.push(assignment.subject_id);
+                }
+            });
+        }
+        
+        // Also check if there are assignments in other formats
+        if (selectedTeacher.value.assignments) {
+            selectedTeacher.value.assignments.forEach(assignment => {
+                if (assignment && assignment.subject_id) {
+                    existingSubjectIds.push(assignment.subject_id);
+                }
+            });
+        }
+        
+        console.log('Existing subject assignments:', existingSubjectIds);
+        console.log('Teacher data structure:', {
+            subject_assignments: selectedTeacher.value.subject_assignments,
+            assignments: selectedTeacher.value.assignments
+        });
+        
+        // If no existing assignments found, fetch fresh data from backend
+        if (existingSubjectIds.length === 0) {
+            console.log('No existing assignments found in cached data, fetching fresh data...');
+            try {
+                const freshTeacherResponse = await api.get(`/api/teachers/${selectedTeacher.value.id}`);
+                const freshTeacher = freshTeacherResponse.data;
+                console.log('Fresh teacher data from backend:', freshTeacher);
+                
+                // Extract assignments from fresh data - check all possible fields
+                console.log('Fresh teacher data keys:', Object.keys(freshTeacher));
+                
+                // Check various possible assignment field names
+                const assignmentFields = ['subject_assignments', 'assignments', 'teacher_assignments', 'active_assignments'];
+                
+                assignmentFields.forEach(fieldName => {
+                    if (freshTeacher[fieldName] && Array.isArray(freshTeacher[fieldName])) {
+                        console.log(`Found assignments in field: ${fieldName}`, freshTeacher[fieldName]);
+                        freshTeacher[fieldName].forEach((assignment, index) => {
+                            console.log(`Assignment ${index}:`, assignment);
+                            if (assignment && assignment.subject_id) {
+                                existingSubjectIds.push(assignment.subject_id);
+                                console.log(`Added existing subject ID: ${assignment.subject_id} from ${fieldName}`);
+                            } else {
+                                console.log(`Assignment ${index} has no subject_id:`, assignment);
+                            }
+                        });
+                    }
+                });
+                
+                console.log('Updated existing subject assignments after fresh fetch:', existingSubjectIds);
+                
+                // If still no assignments found, try a direct database check
+                if (existingSubjectIds.length === 0) {
+                    console.log('Still no assignments found, trying direct assignment check...');
+                    try {
+                        // Check if there's a specific endpoint for teacher assignments
+                        const assignmentsResponse = await api.get(`/api/teachers/${selectedTeacher.value.id}/assignments`);
+                        console.log('Direct assignments response:', assignmentsResponse.data);
+                        
+                        if (assignmentsResponse.data && assignmentsResponse.data.assignments) {
+                            assignmentsResponse.data.assignments.forEach(assignment => {
+                                if (assignment && assignment.subject_id) {
+                                    existingSubjectIds.push(assignment.subject_id);
+                                    console.log(`Added existing subject ID from direct check: ${assignment.subject_id}`);
+                                }
+                            });
+                        }
+                    } catch (directError) {
+                        console.log('Direct assignment check failed:', directError.message);
+                    }
+                }
+                
+                // Final check: if we're still going to try to assign subjects, 
+                // let's do a final validation by checking each subject individually
+                console.log('Final existing subject IDs before filtering:', existingSubjectIds);
+                console.log('Subjects attempting to assign:', selectedSubjectsForAssignment.value.map(s => ({id: s.id, name: s.name})));
+                
+                // CRITICAL: The backend is not returning all assignments!
+                // Based on database evidence, English (ID=2) should be assigned but isn't showing
+                // Let's add a direct database query to get ALL assignments for this teacher
+                try {
+                    console.log('🔍 DEBUGGING: Checking for missing assignments...');
+                    const allTeachersResponse = await api.get('/api/teachers');
+                    const fullTeacherData = allTeachersResponse.data.find(t => t.id === selectedTeacher.value.id);
+                    console.log('🔍 Full teacher data from teachers list:', fullTeacherData);
+                    
+                    if (fullTeacherData && fullTeacherData.subject_assignments) {
+                        console.log('🔍 Subject assignments from full data:', fullTeacherData.subject_assignments);
+                        fullTeacherData.subject_assignments.forEach(assignment => {
+                            if (assignment && assignment.subject_id && !existingSubjectIds.includes(assignment.subject_id)) {
+                                existingSubjectIds.push(assignment.subject_id);
+                                console.log(`🔍 Added missing subject ID: ${assignment.subject_id}`);
+                            }
+                        });
+                    }
+                } catch (debugError) {
+                    console.error('🔍 Debug query failed:', debugError);
+                }
+            } catch (error) {
+                console.error('Error fetching fresh teacher data:', error);
+            }
+        }
+        
+        // Filter out subjects that are already assigned
+        const newSubjects = selectedSubjectsForAssignment.value.filter(subject => 
+            !existingSubjectIds.includes(parseInt(subject.id))
+        );
+        
+        if (newSubjects.length === 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'No New Assignments',
+                detail: 'All selected subjects are already assigned to this teacher',
+                life: 3000
+            });
+            loading.value = false;
+            return;
+        }
+        
+        console.log('New subjects to assign:', newSubjects);
+        console.log('Selected subjects for assignment:', selectedSubjectsForAssignment.value);
+
+        // Prepare assignment data for new subjects only
+        const assignments = newSubjects.map((subject) => {
+            console.log('Processing subject for assignment:', {
+                id: subject.id,
+                name: subject.name,
+                parsedId: parseInt(subject.id)
+            });
+            
+            return {
+                section_id: parseInt(sectionId),
+                subject_id: parseInt(subject.id),
+                is_primary: false,
+                role: 'subject'
+            };
+        });
 
         // Send to backend
         console.log('Sending assignment data:', { assignments });
-        const response = await api(`/api/teachers/${selectedTeacher.value.id}/assignments`, {
-            method: 'POST',
-            data: { assignments }
+        console.log('Teacher ID:', selectedTeacher.value.id);
+        console.log('Full assignment payload:', JSON.stringify({ assignments }, null, 2));
+        
+        const response = await api.post(`/api/teachers/${selectedTeacher.value.id}/assignments`, { 
+            assignments 
         });
         console.log('Assignment response:', response);
 
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: `Added ${selectedSubjectsForAssignment.value.length} subject(s) to teacher`,
+            detail: `Added ${newSubjects.length} new subject(s) to teacher`,
             life: 3000
         });
 
@@ -1378,12 +1541,50 @@ const saveSubjectAssignments = async () => {
         await loadTeachers();
     } catch (error) {
         console.error('Error saving subject assignments:', error);
+        console.error('Error response:', error.response?.data);
+        console.error('Error status:', error.response?.status);
+        
+        let errorMessage = 'Failed to add subjects to teacher';
+        let severity = 'error';
+        
+        if (error.response?.data?.message && 
+            (error.response.data.message.includes('duplicate key value') || 
+             error.response.data.message.includes('SQLSTATE[23505]') ||
+             error.response.data.message.includes('already exists'))) {
+            // Handle duplicate assignment error specifically
+            errorMessage = 'The selected subject is already assigned to this teacher. The page will refresh to show current assignments.';
+            severity = 'warn';
+            
+            // Refresh teacher data to show current assignments
+            console.log('🔄 Refreshing teacher data due to duplicate assignment...');
+            await loadTeachers();
+            
+            // Also force a complete reload of the page data to ensure consistency
+            setTimeout(() => {
+                console.log('🔄 Additional refresh to ensure all assignments are visible...');
+                loadTeachers();
+            }, 1000);
+        } else if (error.response?.data?.errors) {
+            // Validation errors
+            const validationErrors = Object.values(error.response.data.errors).flat();
+            errorMessage = validationErrors.join(', ');
+        } else if (error.response?.data?.message) {
+            // General error message
+            errorMessage = error.response.data.message;
+        }
+        
         toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to add subjects to teacher',
-            life: 3000
+            severity: severity,
+            summary: severity === 'warn' ? 'Warning' : 'Error',
+            detail: errorMessage,
+            life: 5000
         });
+        
+        // Close dialog on duplicate error to force refresh
+        if (severity === 'warn') {
+            assignmentWizardDialog.value = false;
+            selectedSubjectsForAssignment.value = [];
+        }
     } finally {
         loading.value = false;
     }

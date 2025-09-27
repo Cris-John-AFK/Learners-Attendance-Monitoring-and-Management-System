@@ -72,6 +72,7 @@ const currentDateTime = ref(new Date());
 // Loading states
 const isLoadingSeating = ref(false);
 const loadingMessage = ref('');
+const isLoadingStudents = ref(false);
 
 // Attendance Session Management
 const currentSession = ref(null);
@@ -94,6 +95,9 @@ const showQRScanner = ref(false);
 const isScanning = ref(false);
 const scannedStudents = ref([]);
 const lastScannedStudent = ref(null);
+
+// Track attendance method for notifications
+const attendanceMethod = ref('manual'); // 'manual' or 'qr'
 
 // Loading states
 const isCompletingSession = ref(false);
@@ -177,7 +181,39 @@ const fetchSubjectDetails = async (subjectIdentifier) => {
             if (response.ok) {
                 const subjects = await response.json();
                 console.log(`📚 All subjects:`, subjects);
-                const subject = subjects.find((s) => s.name.toLowerCase() === subjectIdentifier.toLowerCase() || s.code.toLowerCase() === subjectIdentifier.toLowerCase());
+                
+                // First try exact match
+                let subject = subjects.find((s) => s.name.toLowerCase() === subjectIdentifier.toLowerCase() || s.code.toLowerCase() === subjectIdentifier.toLowerCase());
+                
+                // If no exact match, try special mappings
+                if (!subject) {
+                    const subjectMappings = {
+                        'technologyandlivelihoodeducation': 'Technology and Livelihood Education',
+                        'technology': 'Technology and Livelihood Education',
+                        'tle': 'Technology and Livelihood Education',
+                        'arts': 'Arts',
+                        'english': 'English',
+                        'filipino': 'Filipino',
+                        'mathematics': 'Mathematics',
+                        'science': 'Science'
+                    };
+                    
+                    const mappedName = subjectMappings[subjectIdentifier.toLowerCase()];
+                    if (mappedName) {
+                        subject = subjects.find((s) => s.name.toLowerCase() === mappedName.toLowerCase());
+                        console.log(`🔄 Using mapping: ${subjectIdentifier} → ${mappedName}`);
+                    }
+                }
+                
+                // If still no match, try partial match
+                if (!subject) {
+                    subject = subjects.find((s) => 
+                        s.name.toLowerCase().includes(subjectIdentifier.toLowerCase()) ||
+                        subjectIdentifier.toLowerCase().includes(s.name.toLowerCase().replace(/\s+/g, ''))
+                    );
+                    console.log(`🔍 Trying partial match for: ${subjectIdentifier}`);
+                }
+                
                 console.log(`🎯 Found matching subject:`, subject);
                 if (subject) {
                     return { id: subject.id, name: subject.name };
@@ -202,7 +238,8 @@ const initializeAttendanceSession = async () => {
         const activeSessions = await AttendanceSessionService.getActiveSessionsForTeacher(teacherId.value);
         if (activeSessions && activeSessions.length > 0) {
             // Find session for current subject/section
-            const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == subjectId.value);
+            const resolvedSubjectId = getResolvedSubjectId();
+            const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == resolvedSubjectId);
 
             if (matchingSession) {
                 currentSession.value = matchingSession;
@@ -242,7 +279,14 @@ const initializeTeacherData = async () => {
 
 // Function to load students data from database
 const loadStudentsData = async () => {
+    // Prevent duplicate calls
+    if (isLoadingStudents.value) {
+        console.log('Students already loading, skipping duplicate call');
+        return;
+    }
+    
     try {
+        isLoadingStudents.value = true;
         console.log('Loading students from database...');
 
         // Show loading animation
@@ -292,7 +336,8 @@ const loadStudentsData = async () => {
             }
 
             // Load students for this specific assignment
-            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, subjectId.value);
+            const resolvedSubjectId = getResolvedSubjectId();
+            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, resolvedSubjectId);
 
             if (studentsResponse && studentsResponse.students) {
                 students.value = studentsResponse.students.map((student) => ({
@@ -348,6 +393,9 @@ const loadStudentsData = async () => {
         });
         return false;
     } finally {
+        // Clear loading flags
+        isLoadingStudents.value = false;
+        
         // Hide loading animation after a minimum display time
         setTimeout(() => {
             isLoadingSeating.value = false;
@@ -432,7 +480,9 @@ const saveCurrentLayout = async (showToast = true) => {
             showTeacherDesk: showTeacherDesk.value,
             showStudentIds: showStudentIds.value
         };
-        localStorage.setItem(`seatPlan_section_${sectionId.value}`, JSON.stringify(layout));
+        // Make localStorage key subject-specific
+        const resolvedSubjectId = getResolvedSubjectId();
+        localStorage.setItem(`seatPlan_section_${sectionId.value}_subject_${resolvedSubjectId}`, JSON.stringify(layout));
 
         if (showToast) {
             toast.add({
@@ -458,9 +508,9 @@ const loadSeatingArrangementFromDatabase = async () => {
             return loadSavedLayout();
         }
 
-        console.log('Loading with sectionId:', sectionId.value, 'teacherId:', teacherId.value);
+        console.log('Loading with sectionId:', sectionId.value, 'teacherId:', teacherId.value, 'subjectId:', getResolvedSubjectId());
 
-        const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, subjectId.value);
+        const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, getResolvedSubjectId());
 
         console.log('Loading seating arrangement response:', response);
 
@@ -519,11 +569,9 @@ const loadSeatingArrangementFromDatabase = async () => {
         console.log('Falling back to localStorage...');
         return loadSavedLayout();
     } finally {
-        // Add a small delay to show the loading animation
-        setTimeout(() => {
-            isLoadingSeating.value = false;
-            loadingMessage.value = '';
-        }, 500);
+        // Ensure loading state is cleared
+        isLoadingSeating.value = false;
+        loadingMessage.value = '';
     }
 };
 
@@ -730,28 +778,18 @@ const stopCamera = () => {
 };
 
 const startQRScanner = async () => {
-    console.log('🚀 Starting QR Scanner...');
+    console.log('Starting QR scanner...');
+    attendanceMethod.value = 'qr'; // Set method to QR when scanner starts
+    showQRScanner.value = true;
+    scannedStudents.value = [];
+    lastScannedStudent.value = null;
+    
     try {
-        showQRScanner.value = true;
-        scanning.value = true; // Start scanning immediately
-        console.log('📱 Scanner dialog opened, scanning set to:', scanning.value);
         await initializeCamera();
-
-        toast.add({
-            severity: 'info',
-            summary: 'QR Scanner Started',
-            detail: 'Hold QR codes in front of the camera to scan',
-            life: 3000
-        });
     } catch (error) {
-        console.error('❌ Error starting QR scanner:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Scanner Error',
-            detail: 'Could not start QR scanner',
-            life: 5000
-        });
-        scanning.value = false;
+        console.error('Failed to start QR scanner:', error);
+        showQRScanner.value = false;
+        attendanceMethod.value = 'manual'; // Reset to manual on error
     }
 };
 
@@ -1183,9 +1221,10 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
         };
 
         // Fallback to legacy system - format for markAttendance API
+        const resolvedSubjectId = getResolvedSubjectId();
         const attendanceData = {
             section_id: sectionId.value,
-            subject_id: subjectId.value,
+            subject_id: resolvedSubjectId,
             teacher_id: teacherId.value,
             date: currentDate.value,
             attendance: [
@@ -1680,10 +1719,13 @@ const startAttendanceSession = async () => {
 // Create actual session after method selection
 const createAttendanceSession = async () => {
     try {
+        // Use resolved subject ID for session creation
+        const resolvedSubjectId = getResolvedSubjectId();
+        
         const sessionData = {
             teacherId: teacherId.value,
             sectionId: sectionId.value,
-            subjectId: subjectId.value,
+            subjectId: resolvedSubjectId,
             date: currentDate.value,
             startTime: new Date().toTimeString().split(' ')[0], // Current time in HH:MM:SS format
             type: 'regular',
@@ -1775,11 +1817,13 @@ const calculateSessionStatistics = () => {
 
 // Method selection functions
 const selectSeatPlanMethod = async () => {
+    attendanceMethod.value = 'manual'; // Set method to manual for seating plan
     await createAttendanceSession();
     showAttendanceMethodModal.value = false;
 };
 
 const selectRollCallMethod = async () => {
+    attendanceMethod.value = 'manual'; // Set method to manual for roll call
     await createAttendanceSession();
     showAttendanceMethodModal.value = false;
     startRollCall();
@@ -1844,9 +1888,13 @@ const completeAttendanceSession = async () => {
         localStorage.setItem(completionKey, JSON.stringify(completionData));
         completedSessionData.value = response.summary;
 
-        // Add notification
-        console.log('Adding session completion notification:', response.summary);
-        const notification = NotificationService.addSessionCompletionNotification(response.summary);
+        // Add notification with correct method
+        const sessionSummaryWithMethod = {
+            ...response.summary,
+            method: attendanceMethod.value === 'qr' ? 'QR Code Scan' : 'Manual Entry'
+        };
+        console.log('Adding session completion notification:', sessionSummaryWithMethod);
+        const notification = NotificationService.addSessionCompletionNotification(sessionSummaryWithMethod);
         console.log('Notification added:', notification);
 
         // Step 6: Final completion
@@ -2004,6 +2052,37 @@ const decrementColumns = () => {
     }
 };
 
+// Function to resolve subject details from identifier
+const resolveSubjectDetails = async (subjectIdentifier) => {
+    console.log(`🚀 Resolving subject details for identifier: ${subjectIdentifier}`);
+    
+    if (subjectIdentifier && (subjectName.value === 'Subject' || isNaN(subjectIdentifier))) {
+        const subjectDetails = await fetchSubjectDetails(subjectIdentifier);
+        console.log(`📋 Received subject details:`, subjectDetails);
+
+        if (subjectDetails.id) {
+            const newSubjectName = subjectDetails.name;
+            const newSubjectId = subjectDetails.id;
+
+            subjectId.value = newSubjectId;
+            subjectName.value = newSubjectName;
+            resolvedSubjectId.value = newSubjectId; // Store the resolved ID
+            console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
+
+            // Force Vue to update the DOM
+            await nextTick();
+            console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
+
+            // Use template ref for direct access with the resolved name
+            await nextTick();
+            if (titleRef.value) {
+                titleRef.value.textContent = `${newSubjectName} Attendance`;
+                console.log(`🎯 Template ref update applied: ${titleRef.value.textContent}`);
+            }
+        }
+    }
+};
+
 // Add missing updateGridSize function
 const updateGridSize = () => {
     console.log(`Updating grid size to ${rows.value} rows × ${columns.value} columns`);
@@ -2051,12 +2130,54 @@ const updateGridSize = () => {
 // Watch for route changes to update subject
 watch(
     () => route.params,
-    (params) => {
+    async (params, oldParams) => {
         const matchedSubject = params.subjectId;
+        console.log(`Route changed - Updated to: ${subjectName.value} (ID: ${matchedSubject})`);
 
-        if (matchedSubject) {
-            subjectName.value = formatSubjectName(matchedSubject);
+        // Only reinitialize if the subject actually changed and we're not already loading
+        if (oldParams && oldParams.subjectId !== matchedSubject && !isLoadingStudents.value) {
+            console.log(`Subject changed from ${oldParams.subjectId} to ${matchedSubject}, reinitializing...`);
+            
+            // Clear any existing intervals to prevent conflicts
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            
+            // Clear current data
+            students.value = [];
+            seatPlan.value = [];
+            attendanceRecords.value = [];
+            resolvedSubjectId.value = null; // Clear resolved ID for fresh resolution
+            
+            // Reset subject info
+            if (matchedSubject) {
+                subjectId.value = matchedSubject;
+                
+                // Resolve subject details if needed
+                if (isNaN(matchedSubject)) {
+                    await resolveSubjectDetails(matchedSubject);
+                } else {
+                    subjectName.value = formatSubjectName(matchedSubject);
+                }
+                
+                // Reinitialize component with new subject
+                await initializeComponent();
+            } else {
+                subjectName.value = 'Subject';
+                subjectId.value = '';
+            }
+        } else if (matchedSubject) {
+            // First load or same subject
             subjectId.value = matchedSubject;
+            
+            // Resolve subject details if needed for first load
+            if (isNaN(matchedSubject)) {
+                await resolveSubjectDetails(matchedSubject);
+            } else {
+                subjectName.value = formatSubjectName(matchedSubject);
+            }
+            
             loadSavedTemplates();
         } else {
             subjectName.value = 'Subject';
@@ -2079,11 +2200,20 @@ const initializeComponent = async () => {
 
         // Load students data in background (non-blocking)
         loadStudentsData().then(() => {
-            // Set up auto-refresh after initial load
+            // Clear any existing interval first
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            
+            // Set up auto-refresh after initial load (much less frequent)
             refreshInterval = setInterval(async () => {
                 console.log('Auto-refreshing student data...');
-                await loadStudentsData();
-            }, 30000); // Refresh every 30 seconds (reduced frequency)
+                // Only refresh if not currently loading to prevent conflicts
+                if (!isLoadingSeating.value) {
+                    await loadStudentsData();
+                }
+            }, 300000); // Refresh every 5 minutes instead of 30 seconds
         });
 
         // Initialize an empty seat plan for grid layout
@@ -2216,27 +2346,20 @@ onMounted(async () => {
 
             subjectId.value = newSubjectId;
             subjectName.value = newSubjectName;
+            resolvedSubjectId.value = newSubjectId; // Store the resolved ID
             console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
 
             // Force Vue to update the DOM
             await nextTick();
             console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
 
-            // Use template ref for direct access with the resolved name
-            await nextTick();
-            if (titleRef.value) {
-                titleRef.value.textContent = `${newSubjectName} Attendance`;
-                console.log(`🎯 Template ref update applied: ${titleRef.value.textContent}`);
-
-                // Force multiple updates to ensure it sticks
-                setTimeout(() => {
-                    if (titleRef.value) {
-                        titleRef.value.textContent = `${newSubjectName} Attendance`;
-                        titleRef.value.innerHTML = `${newSubjectName} Attendance`;
-                        console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
-                    }
-                }, 200);
-            }
+            // Force multiple updates to ensure it stuck
+            setTimeout(() => {
+                if (titleRef.value) {
+                    titleRef.value.textContent = `${newSubjectName} Attendance`;
+                    console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
+                }
+            }, 200);
         } else {
             console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
         }
@@ -2450,11 +2573,21 @@ onUnmounted(() => {
     scanning.value = false;
     console.log('Component unmounting, camera resources released');
 
-    // Clear the time interval
+    // Clear all intervals
     if (timeInterval.value) {
         clearInterval(timeInterval.value);
         timeInterval.value = null;
     }
+    
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+    
+    // Clear loading states
+    isLoadingSeating.value = false;
+    isLoadingStudents.value = false;
+    loadingMessage.value = '';
 });
 
 // Add computed property for sorted unassigned students
@@ -3401,8 +3534,12 @@ const saveCompletedSession = (sessionData) => {
     localStorage.setItem(completionKey, JSON.stringify(completionData));
     completedSessionData.value = sessionData;
 
-    // Add notification to the system
-    NotificationService.addSessionCompletionNotification(sessionData);
+    // Add notification to the system with correct method
+    const sessionDataWithMethod = {
+        ...sessionData,
+        method: attendanceMethod.value === 'qr' ? 'QR Code Scan' : 'Manual Entry'
+    };
+    NotificationService.addSessionCompletionNotification(sessionDataWithMethod);
 
     // Show modal after 5-10 seconds delay as requested
     setTimeout(() => {
@@ -3583,7 +3720,9 @@ const applyAttendanceStatusesToSeatPlan = () => {
 // Update the loadSavedLayout function to apply attendance statuses after loading the layout
 const loadSavedLayout = () => {
     try {
-        const storageKey = `seatPlan_section_${sectionId.value}`;
+        // Make localStorage key subject-specific
+        const resolvedSubjectId = getResolvedSubjectId();
+        const storageKey = `seatPlan_section_${sectionId.value}_subject_${resolvedSubjectId}`;
         const savedData = localStorage.getItem(storageKey);
 
         if (savedData) {
@@ -3695,41 +3834,54 @@ watch(showStudentIds, (newValue) => {
 // Track if we're currently restoring assignments to prevent grid reset
 const isRestoringAssignments = ref(false);
 
+// Store the resolved subject ID from API
+const resolvedSubjectId = ref(null);
+
 // Helper function to get resolved subject ID
 const getResolvedSubjectId = () => {
-    // Map subject names to their numeric IDs
-    const subjectMapping = {
-        'Arts': 5,
-        'English': 1,
-        'Filipino': 2,
-        'Mathematics': 3,
-        'Science': 4
-    };
-    
-    // First try to map by subject name
-    if (subjectName.value && subjectMapping[subjectName.value]) {
-        console.log(`Resolved subject ID by name: ${subjectName.value} → ${subjectMapping[subjectName.value]}`);
-        return subjectMapping[subjectName.value];
+    // First priority: Use the resolved ID from API if available
+    if (resolvedSubjectId.value) {
+        console.log(`Using resolved subject ID from API: ${resolvedSubjectId.value}`);
+        return resolvedSubjectId.value;
     }
     
-    // If subjectId is already numeric, use it
+    // Second priority: If subjectId is already numeric, use it
     if (typeof subjectId.value === 'number' || !isNaN(Number(subjectId.value))) {
         const numericId = Number(subjectId.value);
         console.log(`Using numeric subject ID: ${numericId}`);
         return numericId;
     }
     
-    // Map route parameter to numeric ID
+    // Third priority: Try to map by subject name
+    const subjectMapping = {
+        'Arts': 5,
+        'English': 1,
+        'Filipino': 2,
+        'Mathematics': 3,
+        'Science': 4,
+        'Technology and Livelihood Education': 23, // Updated to correct ID
+        'TLE': 23
+    };
+    
+    if (subjectName.value && subjectMapping[subjectName.value]) {
+        console.log(`Resolved subject ID by name: ${subjectName.value} → ${subjectMapping[subjectName.value]}`);
+        return subjectMapping[subjectName.value];
+    }
+    
+    // Last resort: Map route parameter to numeric ID (fallback only)
     const routeMapping = {
         'arts': 5,
         'english': 1,
         'filipino': 2,
         'mathematics': 3,
-        'science': 4
+        'science': 4,
+        'technologyandlivelihoodeducation': 23, // Updated to correct ID
+        'technology': 23,
+        'tle': 23
     };
     
     if (routeMapping[subjectId.value]) {
-        console.log(`Resolved subject ID by route: ${subjectId.value} → ${routeMapping[subjectId.value]}`);
+        console.log(`Resolved subject ID by route (fallback): ${subjectId.value} → ${routeMapping[subjectId.value]}`);
         return routeMapping[subjectId.value];
     }
     
