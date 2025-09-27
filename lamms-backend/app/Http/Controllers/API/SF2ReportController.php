@@ -1005,6 +1005,9 @@ class SF2ReportController extends Controller
                         // Row 12: Day abbreviations (MON, TUE, WED, THU, FRI, MON, TUE, WED, etc.)
                         $worksheet->setCellValue("{$column}12", $dayOfWeek);
                         
+                        // Set vertical text (letters stacked vertically)
+                        $worksheet->getStyle("{$column}12")->getAlignment()->setTextRotation(255);
+                        
                         Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex})");
                         
                         $columnIndex++;
@@ -1027,16 +1030,16 @@ class SF2ReportController extends Controller
     private function getDayOfWeekAbbreviation($dayOfWeek)
     {
         $abbreviations = [
-            0 => 'SUN',  // Sunday
-            1 => 'M',    // Monday
-            2 => 'T',    // Tuesday
-            3 => 'W',    // Wednesday
-            4 => 'TH',   // Thursday
-            5 => 'F',    // Friday
-            6 => 'SAT'   // Saturday
+            0 => 'S',   // Sunday
+            1 => 'M',   // Monday
+            2 => 'T',   // Tuesday
+            3 => 'W',   // Wednesday
+            4 => 'TH',  // Thursday
+            5 => 'F',   // Friday
+            6 => 'S'    // Saturday
         ];
         
-        return $abbreviations[$dayOfWeek] ?? 'UNK';
+        return $abbreviations[$dayOfWeek] ?? 'U';
     }
     
     /**
