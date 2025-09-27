@@ -600,7 +600,7 @@ class SF2ReportController extends Controller
                 
                 // Summary columns at the end (shifted one column right)
                 $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-                $worksheet->setCellValue("AK{$currentRow}", $student->total_present);  // PRESENT  
+                
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
                 $currentRow++;
@@ -626,9 +626,9 @@ class SF2ReportController extends Controller
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
                 
                 // Summary columns (shifted one column right)
-                $worksheet->setCellValue("AI{$currentRow}", $student->total_absent);   // ABSENT
-                $worksheet->setCellValue("AJ{$currentRow}", $student->total_present);  // PRESENT
-                $worksheet->setCellValue("AK{$currentRow}", 0);                       // TARDY
+                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
+                
+                $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
                 $currentRow++;
                 $femaleIndex++;
@@ -639,6 +639,12 @@ class SF2ReportController extends Controller
             
             // Add Combined TOTAL PER DAY at existing row 61 (use existing template row)
             $this->addCombinedTotalRow($worksheet, $students, 62);
+            
+            // Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
+            $this->applyCenterAlignmentToSummaryColumns($worksheet);
+            
+            // Apply vertical text and center alignment to total rows
+            $this->applyVerticalTextToTotalRows($worksheet);
             
             Log::info("Successfully populated " . count($students) . " students in SF2 format with all totals");
             
@@ -684,12 +690,12 @@ class SF2ReportController extends Controller
                     $totalAbsent = $maleStudents->sum('total_absent');
                     $totalPresent = $maleStudents->sum('total_present');
                     
-                    $worksheet->setCellValue("AC{$row}", $totalAbsent);   // ABSENT
-                    $worksheet->getStyle("AC{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
-                    $worksheet->setCellValue("AK{$row}", $totalPresent);  // PRESENT
-                    $worksheet->getStyle("AK{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
-                    $worksheet->setCellValue("AE{$row}", 0);              // TARDY
-                    $worksheet->getStyle("AE{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
+                     // ABSENT
+                    
+                    $worksheet->setCellValue("AG{$row}", $totalPresent);  // PRESENT
+                    $worksheet->getStyle("AG{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
+                                 // TARDY
+                    
                 }
             }
             
@@ -737,9 +743,10 @@ class SF2ReportController extends Controller
                     $totalAbsent = $femaleStudents->sum('total_absent');
                     $totalPresent = $femaleStudents->sum('total_present');
                     
-                    $worksheet->setCellValue("AI{$row}", $totalAbsent);   // ABSENT
-                    $worksheet->setCellValue("AJ{$row}", $totalPresent);  // PRESENT
-                    $worksheet->setCellValue("AE{$row}", 0);              // TARDY
+                    
+                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                    
+                  
                 }
             }
             
@@ -787,9 +794,9 @@ class SF2ReportController extends Controller
                     $totalAbsent = $allStudents->sum('total_absent');
                     $totalPresent = $allStudents->sum('total_present');
                     
-                    $worksheet->setCellValue("AI{$row}", $totalAbsent);   // ABSENT
-                    $worksheet->setCellValue("AJ{$row}", $totalPresent);  // PRESENT
-                    $worksheet->setCellValue("AE{$row}", 0);              // TARDY
+                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                  
+                   
                 }
             }
             
@@ -1031,12 +1038,22 @@ class SF2ReportController extends Controller
                 Log::info("Column {$i}: {$columns[$i]}");
             }
             
-            // Fill any remaining empty columns with pattern continuation
+            // Fill any remaining empty columns with pattern continuation (but avoid summary columns)
+            // Summary columns are AC (ABSENT), AD (TARDY), AE, AF, AG, AH, AI, AJ, AK (PRESENT) - don't overwrite these
+            $summaryColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']; // Columns to avoid
+            
             if ($columnIndex < count($columns)) {
-                Log::info("Filling remaining columns from index {$columnIndex} to " . (count($columns) - 1));
+                Log::info("Filling remaining day columns from index {$columnIndex}, avoiding summary columns");
                 
                 for ($i = $columnIndex; $i < count($columns); $i++) {
                     $column = $columns[$i];
+                    
+                    // Skip if this is a summary column
+                    if (in_array($column, $summaryColumns)) {
+                        Log::info("Skipping summary column: {$column}");
+                        continue;
+                    }
+                    
                     // Continue the M T W TH F pattern
                     $dayPattern = ['M', 'T', 'W', 'TH', 'F'];
                     $patternIndex = $i % 5; // Cycle through M T W TH F
@@ -1528,6 +1545,97 @@ class SF2ReportController extends Controller
                 return 'L';
             default:
                 return '-';
+        }
+    }
+
+    /**
+     * Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
+     */
+    private function applyCenterAlignmentToSummaryColumns($worksheet)
+    {
+        try {
+            Log::info("Applying center alignment to summary columns");
+            
+            // Define the summary columns that need center alignment
+            $summaryColumns = ['AC', 'AD', 'AE', 'AG']; // ABSENT, PRESENT, TARDY columns
+            
+            // Get the highest row with data
+            $highestRow = $worksheet->getHighestRow();
+            
+            // Apply vertical text and wrap text to MALE TOTAL row (row 35) - columns D to AB only
+            $maleRowColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
+            foreach ($maleRowColumns as $column) {
+                $cell = "{$column}35";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);   // Wrap text
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text (255 = vertical stacked)
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            }
+            
+            // Apply center alignment to all summary columns from row 10 to the highest row
+            foreach ($summaryColumns as $column) {
+                $range = "{$column}10:{$column}{$highestRow}";
+                $worksheet->getStyle($range)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($range)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                Log::info("Applied center alignment to range: {$range}");
+            }
+            
+            // Also center align the header row (around row 11-12) for the summary columns
+            foreach ($summaryColumns as $column) {
+                $headerRange = "{$column}11:{$column}12";
+                $worksheet->getStyle($headerRange)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($headerRange)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            Log::info("Successfully applied center alignment to summary columns");
+            
+        } catch (\Exception $e) {
+            Log::error("Error applying center alignment: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Apply vertical text and center alignment to total rows
+     */
+    private function applyVerticalTextToTotalRows($worksheet)
+    {
+        try {
+            Log::info("Applying center alignment to total rows");
+            
+            // Define the daily attendance columns (D to AB for days 1-31)
+            $dailyColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
+            
+            // Apply center alignment to MALE TOTAL row (row 35)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}35";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            // Apply center alignment to FEMALE TOTAL row (row 61)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}61";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            // Apply center alignment to Combined TOTAL row (row 62)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}62";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            Log::info("Successfully applied center alignment to total rows");
+            
+        } catch (\Exception $e) {
+            Log::error("Error applying center alignment to total rows: " . $e->getMessage());
         }
     }
 }
