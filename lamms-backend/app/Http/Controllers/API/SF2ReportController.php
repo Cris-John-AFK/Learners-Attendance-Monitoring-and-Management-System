@@ -100,6 +100,9 @@ class SF2ReportController extends Controller
             // Populate day headers first
             $this->populateDayHeaders($worksheet, $month);
             
+            // Apply wrap text to learner's name header (red boxed area)
+            $worksheet->getStyle('B10:B12')->getAlignment()->setWrapText(true);
+            
             // Populate student data
             $this->populateStudentData($worksheet, $students);
             
@@ -1005,10 +1008,12 @@ class SF2ReportController extends Controller
                         // Row 12: Day abbreviations (MON, TUE, WED, THU, FRI, MON, TUE, WED, etc.)
                         $worksheet->setCellValue("{$column}12", $dayOfWeek);
                         
-                        // Set vertical text (letters stacked vertically)
-                        $worksheet->getStyle("{$column}12")->getAlignment()->setTextRotation(255);
+                        // Set vertical text (letters stacked vertically) and wrap text
+                        $cellStyle = $worksheet->getStyle("{$column}12");
+                        $cellStyle->getAlignment()->setTextRotation(255);
+                        $cellStyle->getAlignment()->setWrapText(true);
                         
-                        Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex})");
+                        Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex}) with vertical text and wrap");
                         
                         $columnIndex++;
                     }
@@ -1018,6 +1023,37 @@ class SF2ReportController extends Controller
             }
             
             Log::info("Successfully populated {$columnIndex} consecutive weekday headers for {$month}");
+            Log::info("Total columns available: " . count($columns));
+            Log::info("Last date processed: " . $currentDate->format('Y-m-d'));
+            
+            // Debug: Show which columns were used
+            for ($i = 0; $i < $columnIndex && $i < count($columns); $i++) {
+                Log::info("Column {$i}: {$columns[$i]}");
+            }
+            
+            // Fill any remaining empty columns with pattern continuation
+            if ($columnIndex < count($columns)) {
+                Log::info("Filling remaining columns from index {$columnIndex} to " . (count($columns) - 1));
+                
+                for ($i = $columnIndex; $i < count($columns); $i++) {
+                    $column = $columns[$i];
+                    // Continue the M T W TH F pattern
+                    $dayPattern = ['M', 'T', 'W', 'TH', 'F'];
+                    $patternIndex = $i % 5; // Cycle through M T W TH F
+                    $dayAbbrev = $dayPattern[$patternIndex];
+                    
+                    // Set empty day number and pattern day abbreviation
+                    $worksheet->setCellValue("{$column}11", '');
+                    $worksheet->setCellValue("{$column}12", $dayAbbrev);
+                    
+                    // Apply same formatting
+                    $cellStyle = $worksheet->getStyle("{$column}12");
+                    $cellStyle->getAlignment()->setTextRotation(255);
+                    $cellStyle->getAlignment()->setWrapText(true);
+                    
+                    Log::info("Filled column {$column} with pattern day: {$dayAbbrev}");
+                }
+            }
             
         } catch (\Exception $e) {
             Log::error("Error populating day headers: " . $e->getMessage());
