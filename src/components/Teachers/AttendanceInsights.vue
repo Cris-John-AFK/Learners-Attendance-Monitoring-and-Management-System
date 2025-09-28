@@ -39,96 +39,159 @@
         </div>
 
         <!-- Individual Student Plans -->
-        <div class="student-plans-section" v-if="studentsNeedingAttention.length > 0">
+        <div class="student-plans-section" v-if="studentsNeedingAttention && studentsNeedingAttention.length > 0">
             <h4 class="section-title">
                 <i class="pi pi-users"></i>
                 Students Requiring Attention
             </h4>
 
-            <div class="student-plan-cards">
-                <div 
-                    v-for="student in studentsNeedingAttention" 
-                    :key="student.student_id"
-                    class="student-plan-card"
-                    :class="student.riskLevel"
-                >
-                    <div class="student-header">
-                        <div class="student-info">
-                            <h5 class="student-name">{{ student.first_name }} {{ student.last_name }}</h5>
-                            <div class="student-meta">
-                                <span class="grade-badge">Grade {{ student.grade_level || 3 }}</span>
-                                <span class="section-badge">{{ student.section || 'Malikhain' }}</span>
+            <!-- Critical Risk Students -->
+            <div class="risk-group" v-if="groupedStudents.critical && groupedStudents.critical.length > 0">
+                <div class="risk-group-header critical" @click="toggleGroup('critical')">
+                    <div class="group-title">
+                        <i class="pi pi-exclamation-circle risk-icon"></i>
+                        <span>Critical Risk ({{ groupedStudents.critical.length }})</span>
+                        <i :class="expandedGroups.critical ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+                    </div>
+                </div>
+                <div class="risk-group-content" v-show="expandedGroups.critical">
+                    <div class="compact-student-cards">
+                        <div 
+                            v-for="student in groupedStudents.critical" 
+                            :key="student.student_id || student.id"
+                            class="compact-student-card critical"
+                            @click="viewStudentProfile(student)"
+                        >
+                            <div class="student-compact-header">
+                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
+                                <div class="risk-badge critical">
+                                    <i class="pi pi-exclamation-circle"></i>
+                                </div>
                             </div>
-                        </div>
-                        <div class="risk-indicator" :class="student.riskLevel">
-                            <i :class="getRiskIcon(student.riskLevel)"></i>
-                        </div>
-                    </div>
-
-                    <div class="attendance-summary">
-                        <div class="summary-item">
-                            <span class="label">Total Absences:</span>
-                            <span class="value">{{ student.total_absences }}</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="label">Recent Absences:</span>
-                            <span class="value">{{ student.recent_absences }}</span>
-                        </div>
-                        <div class="summary-item" v-if="student.consecutive_absences > 0">
-                            <span class="label">Consecutive:</span>
-                            <span class="value">{{ student.consecutive_absences }} days</span>
-                        </div>
-                    </div>
-
-                    <!-- Risk Factors -->
-                    <div class="risk-factors" v-if="student.riskFactors && student.riskFactors.length > 0">
-                        <h6>Risk Factors:</h6>
-                        <div class="factors-list">
-                            <span 
-                                v-for="factor in student.riskFactors" 
-                                :key="factor"
-                                class="factor-tag"
-                                :class="getFactorClass(factor)"
-                            >
-                                {{ factor }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Recommended Actions -->
-                    <div class="recommended-actions">
-                        <h6>Recommended Actions:</h6>
-                        <div class="actions-list">
-                            <div 
-                                v-for="action in getRecommendedActions(student)" 
-                                :key="action.id"
-                                class="action-item"
-                            >
+                            <div class="student-stats-compact">
+                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
+                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
+                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
+                            </div>
+                            <div class="student-actions-compact">
                                 <Button 
-                                    :label="action.label"
-                                    :icon="action.icon"
-                                    :class="action.class"
-                                    size="small"
-                                    @click="executeAction(action, student)"
+                                    icon="pi pi-chart-line" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="monitorProgress(student)"
+                                    v-tooltip="'Monitor Progress'"
+                                />
+                                <Button 
+                                    icon="pi pi-file-edit" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="createPlan(student)"
+                                    v-tooltip="'Create Plan'"
                                 />
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    <!-- Individual Attendance Plan -->
-                    <div class="attendance-plan" v-if="student.attendancePlan">
-                        <h6>Individual Attendance Plan:</h6>
-                        <div class="plan-content">
-                            <p>{{ student.attendancePlan.description }}</p>
-                            <div class="plan-goals">
-                                <div class="goal-item">
-                                    <span class="goal-label">Target:</span>
-                                    <span class="goal-value">{{ student.attendancePlan.targetAttendance }}% attendance</span>
+            <!-- High Risk Students -->
+            <div class="risk-group" v-if="groupedStudents.high && groupedStudents.high.length > 0">
+                <div class="risk-group-header high" @click="toggleGroup('high')">
+                    <div class="group-title">
+                        <i class="pi pi-exclamation-triangle risk-icon"></i>
+                        <span>High Risk ({{ groupedStudents.high.length }})</span>
+                        <i :class="expandedGroups.high ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+                    </div>
+                </div>
+                <div class="risk-group-content" v-show="expandedGroups.high">
+                    <div class="compact-student-cards">
+                        <div 
+                            v-for="student in groupedStudents.high" 
+                            :key="student.student_id || student.id"
+                            class="compact-student-card high"
+                            @click="viewStudentProfile(student)"
+                        >
+                            <div class="student-compact-header">
+                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
+                                <div class="risk-badge high">
+                                    <i class="pi pi-exclamation-triangle"></i>
                                 </div>
-                                <div class="goal-item">
-                                    <span class="goal-label">Review Date:</span>
-                                    <span class="goal-value">{{ formatDate(student.attendancePlan.reviewDate) }}</span>
+                            </div>
+                            <div class="student-stats-compact">
+                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
+                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
+                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
+                            </div>
+                            <div class="student-actions-compact">
+                                <Button 
+                                    icon="pi pi-chart-line" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="monitorProgress(student)"
+                                    v-tooltip="'Monitor Progress'"
+                                />
+                                <Button 
+                                    icon="pi pi-file-edit" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="createPlan(student)"
+                                    v-tooltip="'Create Plan'"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medium Risk Students -->
+            <div class="risk-group" v-if="groupedStudents.medium && groupedStudents.medium.length > 0">
+                <div class="risk-group-header medium" @click="toggleGroup('medium')">
+                    <div class="group-title">
+                        <i class="pi pi-info-circle risk-icon"></i>
+                        <span>Medium Risk ({{ groupedStudents.medium.length }})</span>
+                        <i :class="expandedGroups.medium ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+                    </div>
+                </div>
+                <div class="risk-group-content" v-show="expandedGroups.medium">
+                    <div class="compact-student-cards">
+                        <div 
+                            v-for="student in groupedStudents.medium" 
+                            :key="student.student_id || student.id"
+                            class="compact-student-card medium"
+                            @click="viewStudentProfile(student)"
+                        >
+                            <div class="student-compact-header">
+                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
+                                <div class="risk-badge medium">
+                                    <i class="pi pi-info-circle"></i>
                                 </div>
+                            </div>
+                            <div class="student-stats-compact">
+                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
+                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
+                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
+                            </div>
+                            <div class="student-actions-compact">
+                                <Button 
+                                    icon="pi pi-chart-line" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="monitorProgress(student)"
+                                    v-tooltip="'Monitor Progress'"
+                                />
+                                <Button 
+                                    icon="pi pi-file-edit" 
+                                    size="small" 
+                                    text 
+                                    class="p-button-sm"
+                                    @click.stop="createPlan(student)"
+                                    v-tooltip="'Create Plan'"
+                                />
                             </div>
                         </div>
                     </div>
@@ -143,11 +206,7 @@
                 Improving Students
             </h4>
             <div class="success-cards">
-                <div 
-                    v-for="student in improvingStudents" 
-                    :key="student.student_id"
-                    class="success-card"
-                >
+                <div v-for="student in improvingStudents" :key="student.student_id" class="success-card">
                     <div class="student-name">{{ student.first_name }} {{ student.last_name }}</div>
                     <div class="improvement-text">{{ student.improvementNote }}</div>
                 </div>
@@ -159,31 +218,15 @@
             <div class="plan-form">
                 <div class="field">
                     <label for="targetAttendance">Target Attendance Percentage</label>
-                    <InputNumber 
-                        id="targetAttendance" 
-                        v-model="newPlan.targetAttendance" 
-                        :min="70" 
-                        :max="100" 
-                        suffix="%" 
-                    />
+                    <InputNumber id="targetAttendance" v-model="newPlan.targetAttendance" :min="70" :max="100" suffix="%" />
                 </div>
                 <div class="field">
                     <label for="planDescription">Plan Description</label>
-                    <Textarea 
-                        id="planDescription" 
-                        v-model="newPlan.description" 
-                        rows="4" 
-                        placeholder="Describe the specific interventions and support strategies..."
-                    />
+                    <Textarea id="planDescription" v-model="newPlan.description" rows="4" placeholder="Describe the specific interventions and support strategies..." />
                 </div>
                 <div class="field">
                     <label for="reviewDate">Review Date</label>
-                    <Calendar 
-                        id="reviewDate" 
-                        v-model="newPlan.reviewDate" 
-                        :minDate="new Date()" 
-                        dateFormat="mm/dd/yy"
-                    />
+                    <Calendar id="reviewDate" v-model="newPlan.reviewDate" :minDate="new Date()" dateFormat="mm/dd/yy" />
                 </div>
             </div>
             <template #footer>
@@ -265,13 +308,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
-import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
 import SmartAnalyticsService from '@/services/SmartAnalyticsService';
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
-import Calendar from 'primevue/calendar';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     students: {
@@ -304,86 +347,118 @@ const progressData = ref({
     nextSteps: []
 });
 
+// Helper functions (defined first to be used in computed properties)
+function getRiskLevel(student) {
+    const totalAbsences = student.total_absences || 0;
+    const recentAbsences = student.recent_absences || 0;
+    const consecutiveAbsences = student.consecutive_absences || 0;
+    
+    if (totalAbsences >= 5 || recentAbsences >= 5 || consecutiveAbsences >= 5) return 'critical';
+    if (totalAbsences >= 3 || recentAbsences >= 3 || consecutiveAbsences >= 3) return 'high';
+    if (totalAbsences >= 1 || recentAbsences >= 1 || consecutiveAbsences >= 1) return 'medium';
+    return 'normal';
+}
+
+function getRiskFactors(student) {
+    const factors = [];
+
+    // Academic performance factor (simulated)
+    if (student.total_absences >= 8) {
+        factors.push('High Total Absences');
+    }
+
+    // Consecutive absences
+    if ((student.consecutive_absences || 0) >= 3) {
+        factors.push('Consecutive Absences');
+    }
+
+    // Household income factor (from enrollment data)
+    if (student.household_income === 'Below 10k') {
+        factors.push('Economic Risk');
+    }
+
+    // Health/medical pattern (simulated based on absence pattern)
+    if (student.recent_absences > student.total_absences * 0.6) {
+        factors.push('Recent Pattern Change');
+    }
+
+    return factors;
+}
+
+function getExistingPlan(student) {
+    // Simulate checking for existing plans
+    // In real implementation, this would query the database
+    return null;
+}
+
+function calculateConsecutiveAbsences(student) {
+    // Simulate calculating consecutive absences
+    // In real implementation, this would analyze recent attendance records
+    return Math.floor(Math.random() * 4); // 0-3 consecutive days
+}
+
 // Computed properties for student categorization
 const criticalStudents = computed(() => {
-    return props.students.filter(student => student.recent_absences >= 5);
+    return props.students.filter((student) => student.recent_absences >= 5);
 });
 
 const warningStudents = computed(() => {
-    return props.students.filter(student => student.recent_absences >= 3 && student.recent_absences < 5);
+    return props.students.filter((student) => student.recent_absences >= 3 && student.recent_absences < 5);
 });
 
 const consecutiveAbsenceStudents = computed(() => {
-    return props.students.filter(student => (student.consecutive_absences || 0) >= 3);
+    return props.students.filter((student) => (student.consecutive_absences || 0) >= 3);
 });
 
 const studentsNeedingAttention = computed(() => {
-    return props.students
-        .filter(student => student.recent_absences >= 3 || (student.consecutive_absences || 0) >= 3)
-        .map(student => ({
+    if (!props.students || !Array.isArray(props.students)) {
+        return [];
+    }
+    
+    const filtered = props.students
+        .filter((student) => {
+            const totalAbsences = student.total_absences || 0;
+            const recentAbsences = student.recent_absences || 0;
+            const consecutiveAbsences = student.consecutive_absences || 0;
+            
+            // More inclusive filtering - anyone with any absences needs attention
+            return totalAbsences >= 1 || recentAbsences >= 1 || consecutiveAbsences >= 1;
+        })
+        .map((student) => ({
             ...student,
             riskLevel: getRiskLevel(student),
             riskFactors: getRiskFactors(student),
             attendancePlan: getExistingPlan(student),
             consecutive_absences: student.consecutive_absences || calculateConsecutiveAbsences(student)
         }))
-        .sort((a, b) => b.recent_absences - a.recent_absences);
+        .sort((a, b) => (b.recent_absences || 0) - (a.recent_absences || 0));
+    
+    return filtered;
 });
 
 const improvingStudents = computed(() => {
     // Students who had high absences but are now improving
     return props.students
-        .filter(student => {
+        .filter((student) => {
             const hadIssues = student.total_absences >= 5;
             const improving = student.recent_absences < 2;
             return hadIssues && improving;
         })
-        .map(student => ({
+        .map((student) => ({
             ...student,
             improvementNote: `Reduced from ${student.total_absences} total absences to only ${student.recent_absences} recent absences`
         }));
 });
 
-// Helper functions
-function getRiskLevel(student) {
-    if (student.recent_absences >= 5 || (student.consecutive_absences || 0) >= 5) return 'critical';
-    if (student.recent_absences >= 3 || (student.consecutive_absences || 0) >= 3) return 'warning';
-    return 'normal';
-}
-
 function getRiskIcon(riskLevel) {
     const icons = {
         critical: 'pi pi-exclamation-circle',
+        high: 'pi pi-exclamation-triangle',
+        medium: 'pi pi-info-circle',
         warning: 'pi pi-exclamation-triangle',
         normal: 'pi pi-check-circle'
     };
     return icons[riskLevel] || 'pi pi-info-circle';
-}
-
-function getRiskFactors(student) {
-    const factors = [];
-    
-    // Academic performance factor (simulated)
-    if (student.total_absences >= 8) {
-        factors.push('High Total Absences');
-    }
-    
-    // Consecutive absences
-    if ((student.consecutive_absences || 0) >= 3) {
-        factors.push('Consecutive Absences');
-    }
-    
-    // Household income factor (from enrollment data)
-    if (student.household_income === 'Below 10k') {
-        factors.push('Economic Risk');
-    }
-    
-    // Health/medical pattern (simulated based on absence pattern)
-    if (student.recent_absences > student.total_absences * 0.6) {
-        factors.push('Recent Pattern Change');
-    }
-    
-    return factors;
 }
 
 function getFactorClass(factor) {
@@ -398,7 +473,7 @@ function getFactorClass(factor) {
 
 function getRecommendedActions(student) {
     const actions = [];
-    
+
     if (student.riskLevel === 'critical') {
         actions.push({
             id: 'schedule-meeting',
@@ -408,7 +483,7 @@ function getRecommendedActions(student) {
             priority: 'high'
         });
     }
-    
+
     if (student.riskFactors?.includes('Economic Risk')) {
         actions.push({
             id: 'refer-counselor',
@@ -418,7 +493,7 @@ function getRecommendedActions(student) {
             priority: 'medium'
         });
     }
-    
+
     actions.push({
         id: 'track-progress',
         label: 'Monitor Progress',
@@ -426,7 +501,7 @@ function getRecommendedActions(student) {
         class: 'p-button-secondary',
         priority: 'low'
     });
-    
+
     return actions.sort((a, b) => {
         const priorityOrder = { high: 3, medium: 2, low: 1 };
         return priorityOrder[b.priority] - priorityOrder[a.priority];
@@ -462,21 +537,21 @@ function openPlanDialog(student) {
 
 function generatePlanDescription(student) {
     let description = `Individual attendance improvement plan for ${student.first_name} ${student.last_name}.\n\n`;
-    
+
     if (student.riskFactors?.includes('Economic Risk')) {
         description += '• Provide flexible scheduling options\n';
         description += '• Connect family with school support resources\n';
     }
-    
+
     if (student.riskFactors?.includes('Consecutive Absences')) {
         description += '• Daily check-ins with student\n';
         description += '• Identify and address barriers to attendance\n';
     }
-    
+
     description += '• Weekly attendance review meetings\n';
     description += '• Positive reinforcement for improved attendance\n';
     description += '• Academic support to catch up on missed work';
-    
+
     return description;
 }
 
@@ -510,93 +585,80 @@ async function loadProgressData(student) {
         console.log('Loading progress data for student:', student);
         console.log('Student ID:', student.id);
         console.log('Available student keys:', Object.keys(student));
-        
+
         // Try different possible ID fields based on common patterns
-        const studentId = student.id || 
-                         student.student_id || 
-                         student.studentId || 
-                         student.user_id ||
-                         student.pk ||
-                         student.ID;
-        
+        const studentId = student.id || student.student_id || student.studentId || student.user_id || student.pk || student.ID;
+
         if (!studentId) {
             console.error('No valid student ID found in student object:', student);
             console.error('Trying to use a fallback student ID from the first available student...');
-            
+
             // Try to use a known working student ID as fallback for testing
             const fallbackStudentId = 12; // We know this works from the API test
             console.warn(`Using fallback student ID: ${fallbackStudentId} for testing purposes`);
-            
+
             // Fetch real smart analytics data from the API using fallback ID
             const response = await SmartAnalyticsService.getStudentAnalytics(fallbackStudentId);
-            
+
             if (response.success && response.data) {
                 const analytics = response.data;
-                
+
                 // Map real analytics data to progress dialog format
                 progressData.value = {
                     weeklyAttendance: analytics.weekly_attendance || [],
                     monthlyTrends: analytics.monthly_trends || [],
-                    improvements: analytics.positive_improvements || [
-                        'No specific improvements detected yet'
-                    ],
-                    concerns: analytics.areas_of_concern || [
-                        'No significant concerns identified'
-                    ],
-                    nextSteps: analytics.recommended_actions?.map(action => 
-                        `${action.action} (${action.urgency} priority - ${action.timeline})`
-                    ) || [
-                        'Continue monitoring attendance patterns'
-                    ]
+                    improvements: analytics.positive_improvements || ['No specific improvements detected yet'],
+                    concerns: analytics.areas_of_concern || ['No significant concerns identified'],
+                    nextSteps: analytics.recommended_actions?.map((action) => `${action.action} (${action.urgency} priority - ${action.timeline})`) || ['Continue monitoring attendance patterns']
                 };
                 return; // Exit early since we got data
             } else {
                 throw new Error('Invalid student ID and fallback failed');
             }
         }
-        
+
         console.log('Using student ID:', studentId);
-        
+
         // Fetch real smart analytics data from the API
         const response = await SmartAnalyticsService.getStudentAnalytics(studentId);
-        
+
         console.log('Analytics API Response:', response);
-        
+
         if (response.success && response.data) {
             const analytics = response.data;
             console.log('Analytics data structure:', analytics);
-            
+
             // Create realistic weekly attendance based on student's actual data
             const totalAbsences = student.total_absences || analytics.analytics?.total_absences_this_year || 0;
             const recentAbsences = student.recent_absences || analytics.analytics?.recent_absences || 0;
             const consecutiveAbsences = student.consecutive_absences || 0;
-            
+
             // Generate realistic weekly attendance data based on actual student metrics
             const weeklyData = [];
-            
+
             // Calculate date ranges for the last 4 weeks
             const today = new Date();
             const weekRanges = [];
-            
+
             for (let i = 3; i >= 0; i--) {
                 const weekEnd = new Date(today);
-                weekEnd.setDate(today.getDate() - (i * 7));
+                weekEnd.setDate(today.getDate() - i * 7);
                 const weekStart = new Date(weekEnd);
                 weekStart.setDate(weekEnd.getDate() - 6);
-                
+
                 weekRanges.push({
                     start: weekStart,
                     end: weekEnd,
                     label: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                 });
             }
-            
+
             // Calculate realistic distribution of absences across weeks
             let remainingAbsences = totalAbsences;
-            
+
             for (let i = 0; i < 4; i++) {
                 let weekAbsences = 0;
-                
+
                 // Smart distribution: put consecutive absences in week 3 if they exist
                 if (i === 2 && consecutiveAbsences >= 3) {
                     weekAbsences = Math.min(3, consecutiveAbsences, remainingAbsences);
@@ -604,11 +666,11 @@ async function loadProgressData(student) {
                     // Distribute remaining absences across other weeks
                     weekAbsences = Math.min(2, Math.floor(remainingAbsences / (4 - i)));
                 }
-                
+
                 remainingAbsences -= weekAbsences;
                 const weekPresent = Math.max(0, 5 - weekAbsences);
-                const weekLate = (i === 3 && weekAbsences === 0) ? 1 : 0; // Add late only if no absences
-                
+                const weekLate = i === 3 && weekAbsences === 0 ? 1 : 0; // Add late only if no absences
+
                 weeklyData.push({
                     week: weekRanges[i].label,
                     dateRange: `${weekRanges[i].start.toISOString().split('T')[0]} to ${weekRanges[i].end.toISOString().split('T')[0]}`,
@@ -618,11 +680,11 @@ async function loadProgressData(student) {
                     percentage: weekPresent > 0 ? Math.round((weekPresent / (weekPresent + weekAbsences + weekLate)) * 100) : 0
                 });
             }
-            
+
             const improvements = [];
             const concerns = [];
             const nextSteps = [];
-            
+
             if (totalAbsences === 0) {
                 improvements.push('Perfect attendance record maintained');
                 improvements.push('Consistent daily participation');
@@ -644,7 +706,7 @@ async function loadProgressData(student) {
                     nextSteps.push('Provide additional academic support if needed');
                 }
             }
-            
+
             if (improvements.length === 0) {
                 improvements.push('Working on improving attendance consistency');
             }
@@ -654,14 +716,14 @@ async function loadProgressData(student) {
             if (nextSteps.length === 0) {
                 nextSteps.push('Continue regular monitoring');
             }
-            
+
             // Map real analytics data to progress dialog format
             progressData.value = {
                 weeklyAttendance: weeklyData,
                 monthlyTrends: analytics.monthly_trends || [
                     { month: 'January', attendance: 85 },
-                    { month: 'February', attendance: Math.max(60, 100 - (totalAbsences * 10)) },
-                    { month: 'March', attendance: Math.max(50, 100 - (recentAbsences * 15)) }
+                    { month: 'February', attendance: Math.max(60, 100 - totalAbsences * 10) },
+                    { month: 'March', attendance: Math.max(50, 100 - recentAbsences * 15) }
                 ],
                 improvements: improvements,
                 concerns: concerns,
@@ -679,25 +741,23 @@ async function loadProgressData(student) {
         }
     } catch (error) {
         console.error('Error loading student analytics:', error);
-        
+
         // Provide meaningful mock data based on student info when API fails
         const studentName = student.first_name || student.firstName || 'Student';
-        
+
         // Generate date ranges for fallback data
         const today = new Date();
         const fallbackWeekRanges = [];
-        
+
         for (let i = 3; i >= 0; i--) {
             const weekEnd = new Date(today);
-            weekEnd.setDate(today.getDate() - (i * 7));
+            weekEnd.setDate(today.getDate() - i * 7);
             const weekStart = new Date(weekEnd);
             weekStart.setDate(weekEnd.getDate() - 6);
-            
-            fallbackWeekRanges.push(
-                `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-            );
+
+            fallbackWeekRanges.push(`${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`);
         }
-        
+
         progressData.value = {
             weeklyAttendance: [
                 { week: fallbackWeekRanges[0], present: 4, absent: 1, late: 0, percentage: 80 },
@@ -710,22 +770,9 @@ async function loadProgressData(student) {
                 { month: 'February', attendance: 78 },
                 { month: 'March', attendance: 82 }
             ],
-            improvements: [
-                `${studentName} has shown consistent morning arrival`,
-                'Attendance improved in recent weeks',
-                'Active participation in class activities'
-            ],
-            concerns: [
-                'Some absences noted in Week 3',
-                'Monitor for attendance patterns',
-                'Follow up on missed assignments'
-            ],
-            nextSteps: [
-                'Continue monitoring attendance patterns',
-                'Schedule parent meeting if needed',
-                'Provide additional support for missed work',
-                'Implement peer buddy system'
-            ]
+            improvements: [`${studentName} has shown consistent morning arrival`, 'Attendance improved in recent weeks', 'Active participation in class activities'],
+            concerns: ['Some absences noted in Week 3', 'Monitor for attendance patterns', 'Follow up on missed assignments'],
+            nextSteps: ['Continue monitoring attendance patterns', 'Schedule parent meeting if needed', 'Provide additional support for missed work', 'Implement peer buddy system']
         };
     }
 }
@@ -739,18 +786,6 @@ function savePlan() {
     showPlanDialog.value = false;
 }
 
-function getExistingPlan(student) {
-    // Simulate checking for existing plans
-    // In real implementation, this would query the database
-    return null;
-}
-
-function calculateConsecutiveAbsences(student) {
-    // Simulate calculating consecutive absences
-    // In real implementation, this would analyze recent attendance records
-    return Math.floor(Math.random() * 4); // 0-3 consecutive days
-}
-
 function formatDate(date) {
     if (!date) return '';
     return new Intl.DateTimeFormat('en-US', {
@@ -762,29 +797,29 @@ function formatDate(date) {
 
 function printAttendanceReport() {
     if (!selectedStudentForProgress.value) return;
-    
+
     const student = selectedStudentForProgress.value;
     const currentDate = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
     });
-    
+
     // Create a new window for the report
     const reportWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes');
-    
+
     if (!reportWindow) {
         alert('Unable to open print window. Please allow popups for this site.');
         return;
     }
-    
+
     // Generate the HTML content for the report
     const reportHTML = generateAttendanceReportHTML(student, currentDate);
-    
+
     // Write the HTML to the new window
     reportWindow.document.write(reportHTML);
     reportWindow.document.close();
-    
+
     // Wait for content to load, then print
     reportWindow.onload = () => {
         setTimeout(() => {
@@ -796,7 +831,7 @@ function printAttendanceReport() {
 function generateAttendanceReportHTML(student, currentDate) {
     const schoolYear = getCurrentSchoolYear();
     const overallAttendanceRate = calculateOverallAttendanceRate();
-    
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -810,7 +845,7 @@ function generateAttendanceReportHTML(student, currentDate) {
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Times New Roman', serif;
             line-height: 1.6;
@@ -818,14 +853,14 @@ function generateAttendanceReportHTML(student, currentDate) {
             background: white;
             padding: 20px;
         }
-        
+
         .report-container {
             max-width: 800px;
             margin: 0 auto;
             background: white;
             border: 2px solid #2c5aa0;
         }
-        
+
         .header {
             background: linear-gradient(135deg, #2c5aa0 0%, #1e3a8a 100%);
             color: white;
@@ -833,7 +868,7 @@ function generateAttendanceReportHTML(student, currentDate) {
             text-align: center;
             position: relative;
         }
-        
+
         .school-logo {
             width: 60px;
             height: 60px;
@@ -847,20 +882,20 @@ function generateAttendanceReportHTML(student, currentDate) {
             color: #2c5aa0;
             font-weight: bold;
         }
-        
+
         .school-name {
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 5px;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
-        
+
         .school-subtitle {
             font-size: 14px;
             opacity: 0.9;
             margin-bottom: 20px;
         }
-        
+
         .report-title {
             font-size: 20px;
             font-weight: bold;
@@ -869,11 +904,11 @@ function generateAttendanceReportHTML(student, currentDate) {
             border-radius: 25px;
             display: inline-block;
         }
-        
+
         .content {
             padding: 30px;
         }
-        
+
         .student-info {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -881,33 +916,33 @@ function generateAttendanceReportHTML(student, currentDate) {
             padding: 20px;
             margin-bottom: 30px;
         }
-        
+
         .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 15px;
         }
-        
+
         .info-item {
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
             border-bottom: 1px dotted #cbd5e0;
         }
-        
+
         .info-label {
             font-weight: bold;
             color: #4a5568;
         }
-        
+
         .info-value {
             color: #2d3748;
         }
-        
+
         .stats-section {
             margin-bottom: 30px;
         }
-        
+
         .section-title {
             font-size: 18px;
             font-weight: bold;
@@ -916,14 +951,14 @@ function generateAttendanceReportHTML(student, currentDate) {
             padding-bottom: 5px;
             border-bottom: 2px solid #e2e8f0;
         }
-        
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 15px;
             margin-bottom: 20px;
         }
-        
+
         .stat-card {
             background: white;
             border: 1px solid #e2e8f0;
@@ -932,35 +967,35 @@ function generateAttendanceReportHTML(student, currentDate) {
             text-align: center;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        
+
         .stat-number {
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 5px;
         }
-        
+
         .stat-label {
             font-size: 12px;
             color: #6b7280;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+
         .stat-card.present .stat-number { color: #16a34a; }
         .stat-card.absent .stat-number { color: #dc2626; }
         .stat-card.late .stat-number { color: #d97706; }
         .stat-card.excused .stat-number { color: #2563eb; }
-        
+
         .weekly-breakdown {
             margin-bottom: 30px;
         }
-        
+
         .week-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
         }
-        
+
         .week-card {
             background: white;
             border: 1px solid #e2e8f0;
@@ -968,27 +1003,27 @@ function generateAttendanceReportHTML(student, currentDate) {
             padding: 15px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        
+
         .week-title {
             font-weight: bold;
             color: #374151;
             margin-bottom: 10px;
             text-align: center;
         }
-        
+
         .week-stats {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
             font-size: 12px;
         }
-        
+
         .week-stat {
             display: flex;
             justify-content: space-between;
             padding: 4px 0;
         }
-        
+
         .attendance-rate {
             background: #f0f9ff;
             border: 1px solid #0ea5e9;
@@ -999,16 +1034,16 @@ function generateAttendanceReportHTML(student, currentDate) {
             font-weight: bold;
             color: #0369a1;
         }
-        
+
         .improvements-section, .concerns-section {
             margin-bottom: 25px;
         }
-        
+
         .improvements-list, .concerns-list, .next-steps-list {
             list-style: none;
             padding: 0;
         }
-        
+
         .improvements-list li, .concerns-list li, .next-steps-list li {
             padding: 8px 0;
             border-bottom: 1px dotted #e2e8f0;
@@ -1016,25 +1051,25 @@ function generateAttendanceReportHTML(student, currentDate) {
             align-items: center;
             gap: 10px;
         }
-        
+
         .improvements-list li::before {
             content: "✓";
             color: #16a34a;
             font-weight: bold;
         }
-        
+
         .concerns-list li::before {
             content: "⚠";
             color: #dc2626;
             font-weight: bold;
         }
-        
+
         .next-steps-list li::before {
             content: "→";
             color: #2563eb;
             font-weight: bold;
         }
-        
+
         .footer {
             background: #f8fafc;
             padding: 20px;
@@ -1043,7 +1078,7 @@ function generateAttendanceReportHTML(student, currentDate) {
             font-size: 12px;
             color: #6b7280;
         }
-        
+
         .signature-section {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -1052,13 +1087,13 @@ function generateAttendanceReportHTML(student, currentDate) {
             padding-top: 20px;
             border-top: 1px solid #e2e8f0;
         }
-        
+
         .signature-line {
             text-align: center;
             padding-top: 30px;
             border-top: 1px solid #333;
         }
-        
+
         @media print {
             body { padding: 0; }
             .report-container { border: none; }
@@ -1073,7 +1108,7 @@ function generateAttendanceReportHTML(student, currentDate) {
             <div class="school-subtitle">Learning and Management System</div>
             <div class="report-title">Student Attendance Report</div>
         </div>
-        
+
         <div class="content">
             <div class="student-info">
                 <h3 style="margin-bottom: 15px; color: #2c5aa0;">Student Information</h3>
@@ -1104,7 +1139,7 @@ function generateAttendanceReportHTML(student, currentDate) {
                     </div>
                 </div>
             </div>
-            
+
             <div class="stats-section">
                 <h3 class="section-title">Attendance Summary</h3>
                 <div class="stats-grid">
@@ -1131,11 +1166,13 @@ function generateAttendanceReportHTML(student, currentDate) {
                     </div>
                 </div>
             </div>
-            
+
             <div class="weekly-breakdown">
                 <h3 class="section-title">Weekly Attendance Breakdown</h3>
                 <div class="week-grid">
-                    ${progressData.value.weeklyAttendance.map(week => `
+                    ${progressData.value.weeklyAttendance
+                        .map(
+                            (week) => `
                         <div class="week-card">
                             <div class="week-title">${week.week}</div>
                             <div class="week-stats">
@@ -1154,37 +1191,51 @@ function generateAttendanceReportHTML(student, currentDate) {
                             </div>
                             <div class="attendance-rate">${week.percentage}%</div>
                         </div>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </div>
             </div>
-            
+
             <div class="improvements-section">
                 <h3 class="section-title">Positive Improvements</h3>
                 <ul class="improvements-list">
-                    ${progressData.value.improvements.map(improvement => `
+                    ${progressData.value.improvements
+                        .map(
+                            (improvement) => `
                         <li>${improvement}</li>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </ul>
             </div>
-            
+
             <div class="concerns-section">
                 <h3 class="section-title">Areas of Concern</h3>
                 <ul class="concerns-list">
-                    ${progressData.value.concerns.map(concern => `
+                    ${progressData.value.concerns
+                        .map(
+                            (concern) => `
                         <li>${concern}</li>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </ul>
             </div>
-            
+
             <div class="next-steps-section">
                 <h3 class="section-title">Recommended Next Steps</h3>
                 <ul class="next-steps-list">
-                    ${progressData.value.nextSteps.map(step => `
+                    ${progressData.value.nextSteps
+                        .map(
+                            (step) => `
                         <li>${step}</li>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </ul>
             </div>
-            
+
             <div class="signature-section">
                 <div>
                     <div class="signature-line">
@@ -1198,7 +1249,7 @@ function generateAttendanceReportHTML(student, currentDate) {
                 </div>
             </div>
         </div>
-        
+
         <div class="footer">
             <p>This report was generated by the Naawan Central School Learning and Management System</p>
             <p>Generated on ${currentDate} | Confidential Student Information</p>
@@ -1209,11 +1260,37 @@ function generateAttendanceReportHTML(student, currentDate) {
     `;
 }
 
+// Expanded groups state
+const expandedGroups = ref({ critical: true, high: false, medium: false });
+
+// Grouped students computed property
+const groupedStudents = computed(() => {
+    const groups = { critical: [], high: [], medium: [] };
+    
+    if (!studentsNeedingAttention.value || !Array.isArray(studentsNeedingAttention.value)) {
+        return groups;
+    }
+    
+    studentsNeedingAttention.value.forEach((student) => {
+        const riskLevel = getRiskLevel(student);
+        
+        if (riskLevel === 'critical') {
+            groups.critical.push(student);
+        } else if (riskLevel === 'high') {
+            groups.high.push(student);
+        } else if (riskLevel === 'medium') {
+            groups.medium.push(student);
+        }
+    });
+    
+    return groups;
+});
+
 function getCurrentSchoolYear() {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
-    
+
     // School year typically starts in June (month 5) and ends in March (month 2)
     if (currentMonth >= 5) {
         return `${currentYear}-${currentYear + 1}`;
@@ -1224,10 +1301,10 @@ function getCurrentSchoolYear() {
 
 function calculateOverallAttendanceRate() {
     if (!progressData.value.weeklyAttendance.length) return 0;
-    
+
     const totalWeeks = progressData.value.weeklyAttendance.length;
     const totalPercentage = progressData.value.weeklyAttendance.reduce((sum, week) => sum + week.percentage, 0);
-    
+
     return Math.round(totalPercentage / totalWeeks);
 }
 
@@ -1257,13 +1334,13 @@ function getStudentGradeLevel(student) {
         // Handle string grade levels
         return student.grade_level;
     }
-    
+
     // Check if section name contains grade info
     const section = student.section || '';
     if (section.toLowerCase().includes('kinder')) {
         return 'Kinder One';
     }
-    
+
     // Default fallback
     return 'Kinder One';
 }
@@ -1271,6 +1348,26 @@ function getStudentGradeLevel(student) {
 function getStudentSection(student) {
     // Get section name, default to current context
     return student.section || 'Kinder One';
+}
+
+// Missing functions for the compact grouped view
+function toggleGroup(riskType) {
+    expandedGroups.value[riskType] = !expandedGroups.value[riskType];
+}
+
+function viewStudentProfile(student) {
+    // Show detailed student profile - opens the progress dialog
+    trackProgress(student);
+}
+
+function monitorProgress(student) {
+    // Monitor progress function - same as trackProgress
+    trackProgress(student);
+}
+
+function createPlan(student) {
+    // Create plan function - opens the plan dialog
+    openPlanDialog(student);
 }
 </script>
 
@@ -1401,7 +1498,8 @@ function getStudentSection(student) {
     gap: 0.5rem;
 }
 
-.grade-badge, .section-badge {
+.grade-badge,
+.section-badge {
     background: #e9ecef;
     color: #495057;
     padding: 0.25rem 0.5rem;
@@ -1686,7 +1784,7 @@ function getStudentSection(student) {
     font-size: 0.75rem;
     font-weight: 600;
     color: white;
-    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
 }
 
 .improvement-list,
@@ -1695,6 +1793,153 @@ function getStudentSection(student) {
     list-style: none;
     padding: 0;
     margin: 0;
+}
+
+/* Risk Group Styles */
+.risk-group {
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.risk-group-header {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-left: 4px solid;
+}
+
+.risk-group-header:hover {
+    background-color: #f8f9fa;
+}
+
+.risk-group-header.critical {
+    background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+    border-left-color: #dc3545;
+}
+
+.risk-group-header.high {
+    background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);
+    border-left-color: #ffc107;
+}
+
+.risk-group-header.medium {
+    background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+    border-left-color: #0ea5e9;
+}
+
+.group-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s ease;
+}
+
+.risk-group-content {
+    padding: 0.5rem;
+    background: #fafbfc;
+}
+
+.compact-student-cards {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.compact-student-card {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    margin: 2px 0;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid;
+}
+
+.compact-student-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.compact-student-card.critical {
+    border-left-color: #dc3545;
+}
+
+.compact-student-card.high {
+    border-left-color: #ffc107;
+}
+
+.compact-student-card.medium {
+    border-left-color: #0ea5e9;
+}
+
+.student-compact-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.student-name-compact {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9rem;
+}
+
+.risk-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.75rem;
+}
+
+.risk-badge.critical {
+    background: #dc3545;
+}
+
+.risk-badge.high {
+    background: #ffc107;
+}
+
+.risk-badge.medium {
+    background: #0ea5e9;
+}
+
+.student-stats-compact {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    justify-content: center;
+}
+
+.stat-compact {
+    font-size: 0.75rem;
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.student-actions-compact {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
 }
 
 .improvement-item,
