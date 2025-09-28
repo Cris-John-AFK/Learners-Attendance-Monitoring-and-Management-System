@@ -15,6 +15,7 @@ use App\Http\Controllers\API\EnrollmentController;
 use App\Http\Controllers\API\QRCodeController;
 use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\AttendanceAnalyticsController;
+use App\Http\Controllers\API\GuardhouseController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -335,4 +336,16 @@ Route::prefix('admin/attendance-analytics')->group(function () {
     Route::get('/overview', [AttendanceAnalyticsController::class, 'getOverview']);
     Route::get('/grade/{gradeId}', [AttendanceAnalyticsController::class, 'getGradeDetails']);
     Route::get('/section/{sectionId}', [AttendanceAnalyticsController::class, 'getSectionDetails']);
+});
+
+// Guardhouse routes for attendance tracking
+Route::prefix('guardhouse')->group(function () {
+    Route::post('/verify-qr', [GuardhouseController::class, 'verifyQRCode']);
+    Route::post('/record-attendance', [GuardhouseController::class, 'recordAttendance']);
+    Route::get('/today-records', [GuardhouseController::class, 'getTodayRecords']);
+    Route::post('/manual-record', [GuardhouseController::class, 'manualRecord']);
+    
+    // Admin-only routes for historical data
+    Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
+    Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
 });

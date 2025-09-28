@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Default Avatars</title>
+</head>
+<body>
+    <h1>Default Avatar Generator</h1>
+    <p>Click the buttons below to generate and download default student avatars:</p>
+    
+    <button onclick="generateMaleAvatar()">Generate Male Student Avatar</button>
+    <button onclick="generateFemaleAvatar()">Generate Female Student Avatar</button>
+    <button onclick="generateGenericAvatar()">Generate Generic Student Avatar</button>
+    
+    <div id="preview" style="margin-top: 20px;"></div>
+
+    <script>
+        function generateAvatar(type, color, icon) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 200;
+            canvas.height = 200;
+
+            // Background
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, 200, 200);
+
+            // Icon/Text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(icon, 100, 100);
+
+            // Border
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(2, 2, 196, 196);
+
+            return canvas;
+        }
+
+        function downloadCanvas(canvas, filename) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function generateMaleAvatar() {
+            const canvas = generateAvatar('male', '#3b82f6', '👦');
+            const preview = document.getElementById('preview');
+            preview.innerHTML = '<h3>Male Student Avatar:</h3>';
+            preview.appendChild(canvas);
+            downloadCanvas(canvas, 'default-male-student.png');
+        }
+
+        function generateFemaleAvatar() {
+            const canvas = generateAvatar('female', '#ec4899', '👧');
+            const preview = document.getElementById('preview');
+            preview.innerHTML = '<h3>Female Student Avatar:</h3>';
+            preview.appendChild(canvas);
+            downloadCanvas(canvas, 'default-female-student.png');
+        }
+
+        function generateGenericAvatar() {
+            const canvas = generateAvatar('generic', '#64748b', '👤');
+            const preview = document.getElementById('preview');
+            preview.innerHTML = '<h3>Generic Student Avatar:</h3>';
+            preview.appendChild(canvas);
+            downloadCanvas(canvas, 'default-student.png');
+        }
+    </script>
+</body>
+</html>

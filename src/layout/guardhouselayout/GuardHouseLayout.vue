@@ -1,6 +1,7 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
+import GuardhouseService from '@/services/GuardhouseService';
 import axios from 'axios';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -71,6 +72,14 @@ const statusFilter = ref('all');
 const scanFeedback = ref({ show: false, type: '', message: '' });
 const cameraError = ref(null);
 
+// New verification system
+const showVerificationModal = ref(false);
+const verificationStudent = ref(null);
+const verificationRecordType = ref('check-in');
+const isLoadingVerification = ref(false);
+const verificationCountdown = ref(10);
+let verificationTimer = null;
+
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
@@ -80,14 +89,43 @@ const totalGuests = computed(() => guestAttendanceRecords.value.length);
 const timeInterval = ref(null);
 
 // Update time every second
-onMounted(() => {
+onMounted(async () => {
     timeInterval.value = setInterval(() => {
         currentDateTime.value = new Date();
     }, 1000);
 
     console.log('Component mounted, students data:', allStudents.value);
     console.log('Students data type:', typeof allStudents.value);
+    
+    // Load today's attendance records
+    await loadTodayAttendanceRecords();
 });
+
+// Load today's attendance records from the database
+const loadTodayAttendanceRecords = async () => {
+    try {
+        console.log('Loading today\'s attendance records...');
+        const response = await GuardhouseService.getTodayRecords();
+        
+        if (response.success) {
+            attendanceRecords.value = response.records || [];
+            console.log('Loaded attendance records:', attendanceRecords.value.length);
+        } else {
+            console.error('Failed to load attendance records:', response.message);
+            attendanceRecords.value = [];
+        }
+    } catch (error) {
+        console.error('Error loading attendance records:', error);
+        attendanceRecords.value = [];
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load today\'s attendance records',
+            life: 3000
+        });
+    }
+};
 
 // Clean up interval on component unmount
 onBeforeUnmount(() => {
@@ -95,6 +133,9 @@ onBeforeUnmount(() => {
         clearInterval(timeInterval.value);
         timeInterval.value = null;
     }
+
+    // Clean up verification timer
+    stopVerificationCountdown();
 
     // Make sure scanning is stopped to release camera
     scanning.value = false;
@@ -137,27 +178,23 @@ function isOutsideClicked(event) {
 const onDetect = async (detectedCodes) => {
     try {
         console.log('QR Code Detected:', detectedCodes);
-        if (detectedCodes.length > 0) {
+        if (detectedCodes.length > 0 && !isLoadingVerification.value) {
             // Pause scanning while processing to avoid multiple scans of the same code
             scanning.value = false;
+            isLoadingVerification.value = true;
 
             const qrData = detectedCodes[0].rawValue;
             console.log('Detected QR Data:', qrData);
 
-            // Process QR code scan in a microtask to avoid blocking the message channel
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            await processStudentScan(qrData);
-
-            // Wait a moment before restarting the scanner to avoid rapid scanning
-            setTimeout(() => {
-                scanning.value = true;
-            }, 1000);
+            // Process QR code scan with new verification system
+            await processQRCodeVerification(qrData);
         } else {
-            console.log('No valid QR code detected');
+            console.log('No valid QR code detected or verification in progress');
         }
     } catch (error) {
         console.error('Error in QR code detection:', error);
-        showScanFeedback('error', null, 'Error processing QR code');
+        showScanFeedback('error', 'Error processing QR code');
+        isLoadingVerification.value = false;
 
         // Restart scanner after error
         setTimeout(() => {
@@ -190,84 +227,219 @@ const restartCamera = () => {
     }, 500);
 };
 
-const processStudentScan = async (qrData) => {
+// New QR Code Verification Process
+const processQRCodeVerification = async (qrData) => {
     try {
-        console.log('Processing QR code:', qrData);
+        console.log('Processing QR code verification:', qrData);
 
-        // Validate QR code using the backend API
-        const validationResponse = await QRCodeAPIService.validateQRCode(qrData.trim());
+        // Call new GuardhouseService to verify QR code
+        const response = await GuardhouseService.verifyQRCode(qrData.trim());
 
-        if (!validationResponse.valid) {
+        if (!response.success) {
             console.log('Invalid QR code:', qrData);
-            showScanFeedback('error', null, 'Invalid QR code or QR code not registered');
+            showScanFeedback('error', response.message || 'Invalid QR code');
             await playStatusSound('error');
+            isLoadingVerification.value = false;
+            
+            // Restart scanner after a delay
+            setTimeout(() => {
+                scanning.value = true;
+            }, 2000);
             return false;
         }
 
-        const studentData = validationResponse.student;
-        console.log('QR code validated for student:', studentData);
+        const studentData = response.student;
+        const nextRecordType = response.next_record_type;
 
-        // Get today's records for this student
-        const todaysRecords = attendanceRecords.value.filter((record) => record.id.toString() === studentData.id.toString() && record.date === new Date().toLocaleDateString());
+        console.log('QR code verified for student:', studentData);
+        console.log('Next record type:', nextRecordType);
 
-        console.log("Today's records for this student:", todaysRecords);
+        // Set verification data and show modal
+        console.log('Setting verification student data:', studentData);
+        verificationStudent.value = studentData;
+        verificationRecordType.value = nextRecordType;
+        showVerificationModal.value = true;
+        isLoadingVerification.value = false;
+        
+        // Start countdown timer
+        startVerificationCountdown();
 
-        // Determine record type based on the pattern of previous records
-        let recordType;
-
-        if (todaysRecords.length === 0) {
-            // First scan of the day - always a check-in
-            recordType = 'check-in';
-        } else {
-            // Get the most recent record for this student
-            const latestRecord = [...todaysRecords].sort((a, b) => {
-                // Convert timestamps to Date objects for proper comparison
-                const timeA = new Date(`1/1/2023 ${a.timestamp}`);
-                const timeB = new Date(`1/1/2023 ${b.timestamp}`);
-                return timeB - timeA; // Sort in descending order (newest first)
-            })[0];
-
-            console.log('Latest record:', latestRecord);
-
-            // If the latest record is a check-in, this should be a check-out
-            // If the latest record is a check-out, this should be a check-in
-            recordType = latestRecord.recordType === 'check-in' ? 'check-out' : 'check-in';
-        }
-
-        console.log('Determined record type:', recordType);
-
-        // Create record with student data from QR validation
-        const record = {
-            id: studentData.id,
-            name: `${studentData.firstName} ${studentData.lastName}`,
-            gradeLevel: studentData.gradeLevel,
-            section: studentData.section,
-            photo: studentData.photo || '/demo/images/avatar/default-student.png',
-            contact: studentData.contact,
-            timestamp: new Date().toLocaleTimeString(),
-            date: new Date().toLocaleDateString(),
-            recordType: recordType,
-            recordId: `${studentData.id}-${Date.now()}` // Unique ID for each record
-        };
-
-        // Show feedback
-        showScanFeedback(recordType);
-
-        // Play sound based on record type
-        await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
-
-        // Add to records and show details
-        attendanceRecords.value.unshift(record); // Add to beginning
-        selectedStudent.value = record;
-
-        console.log('Student record created:', record);
         return true;
     } catch (error) {
-        console.error('Error processing QR code:', error);
-        showScanFeedback('error', null, 'Error validating QR code');
+        console.error('Error verifying QR code:', error);
+        showScanFeedback('error', error.message || 'Error validating QR code');
         await playStatusSound('error');
+        isLoadingVerification.value = false;
+        
+        // Restart scanner after error
+        setTimeout(() => {
+            scanning.value = true;
+        }, 2000);
         return false;
     }
+};
+
+// Handle verification modal events
+const onVerificationConfirm = async (data) => {
+    try {
+        console.log('Confirming verification:', data);
+        
+        // Record attendance using GuardhouseService
+        const response = await GuardhouseService.recordAttendance(
+            data.student.id,
+            data.student.qr_code,
+            data.recordType,
+            false, // not manual
+            null // no notes
+        );
+
+        if (response.success) {
+            // Create local record for display
+            const record = {
+                id: response.record.student_id,
+                name: response.record.student_name,
+                gradeLevel: response.record.grade_level,
+                section: response.record.section,
+                photo: response.record.photo,
+                timestamp: new Date(response.record.timestamp).toLocaleTimeString(),
+                date: new Date(response.record.date).toLocaleDateString(),
+                recordType: response.record.record_type,
+                recordId: `${response.record.id}-${Date.now()}`
+            };
+
+            // Show feedback
+            showScanFeedback(data.recordType, response.message);
+
+            // Play sound based on record type
+            await playStatusSound(data.recordType === 'check-in' ? 'success' : 'checkout');
+
+            // Add to records and show details
+            attendanceRecords.value.unshift(record);
+            selectedStudent.value = record;
+
+            console.log('Attendance recorded successfully:', record);
+            
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: response.message,
+                life: 3000
+            });
+        } else {
+            throw new Error(response.message || 'Failed to record attendance');
+        }
+    } catch (error) {
+        console.error('Error recording attendance:', error);
+        showScanFeedback('error', error.message || 'Failed to record attendance');
+        await playStatusSound('error');
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.message || 'Failed to record attendance',
+            life: 5000
+        });
+    } finally {
+        // Close modal and restart scanner
+        closeVerificationModal();
+    }
+};
+
+const onVerificationReject = (data) => {
+    console.log('Verification rejected:', data);
+    showScanFeedback('error', 'Verification rejected by guard');
+    
+    toast.add({
+        severity: 'warn',
+        summary: 'Verification Rejected',
+        detail: `${data.student.name} verification was rejected`,
+        life: 3000
+    });
+    
+    // Close modal and restart scanner
+    closeVerificationModal();
+};
+
+const onVerificationSkip = () => {
+    console.log('Verification skipped - proceeding to next student');
+    
+    // Close modal and restart scanner immediately
+    closeVerificationModal();
+};
+
+// Countdown timer functions
+const startVerificationCountdown = () => {
+    verificationCountdown.value = 10;
+    verificationTimer = setInterval(() => {
+        verificationCountdown.value--;
+        if (verificationCountdown.value <= 0) {
+            // Auto-confirm when countdown reaches 0
+            confirmVerification();
+        }
+    }, 1000);
+};
+
+const stopVerificationCountdown = () => {
+    if (verificationTimer) {
+        clearInterval(verificationTimer);
+        verificationTimer = null;
+    }
+};
+
+const closeVerificationModal = () => {
+    stopVerificationCountdown();
+    showVerificationModal.value = false;
+    verificationStudent.value = null;
+    isLoadingVerification.value = false;
+    
+    // Restart scanner after a short delay
+    setTimeout(() => {
+        scanning.value = true;
+    }, 500);
+};
+
+// New action methods for inline verification
+const confirmVerification = async () => {
+    if (isLoadingVerification.value || !verificationStudent.value) return;
+    
+    isLoadingVerification.value = true;
+    stopVerificationCountdown();
+    
+    try {
+        await onVerificationConfirm({
+            student: verificationStudent.value,
+            recordType: verificationRecordType.value
+        });
+    } finally {
+        closeVerificationModal();
+    }
+};
+
+const rejectVerification = () => {
+    if (isLoadingVerification.value || !verificationStudent.value) return;
+    
+    stopVerificationCountdown();
+    onVerificationReject({
+        student: verificationStudent.value,
+        recordType: verificationRecordType.value
+    });
+    closeVerificationModal();
+};
+
+const skipVerification = () => {
+    if (isLoadingVerification.value) return;
+    
+    stopVerificationCountdown();
+    closeVerificationModal();
+};
+
+const handleImageError = (event) => {
+    // Set default image based on gender or use generic default
+    const defaultImage = verificationStudent.value?.gender === 'male' 
+        ? '/demo/images/avatar/default-male-student.png'
+        : '/demo/images/avatar/default-female-student.png';
+    
+    event.target.src = defaultImage;
 };
 
 const showScanFeedback = (recordType, message = '') => {
@@ -318,10 +490,84 @@ const playStatusSound = async (type) => {
     console.log(`Playing ${type} sound`);
 };
 
-const manualCheckIn = () => {
+const manualCheckIn = async () => {
     const studentId = prompt('Enter student ID:');
-    if (studentId) {
-        processStudentScan(studentId);
+    if (!studentId) return;
+
+    try {
+        // Show loading feedback
+        showScanFeedback('info', 'Processing manual entry...');
+        
+        // Get student information first
+        const students = await GuardhouseService.getAllStudents();
+        const student = students.find(s => s.id.toString() === studentId.toString());
+        
+        if (!student) {
+            showScanFeedback('error', 'Student not found');
+            toast.add({
+                severity: 'error',
+                summary: 'Student Not Found',
+                detail: `No student found with ID: ${studentId}`,
+                life: 3000
+            });
+            return;
+        }
+
+        // Determine record type (check-in or check-out)
+        const recordType = prompt('Enter record type (check-in or check-out):', 'check-in');
+        if (!recordType || !['check-in', 'check-out'].includes(recordType)) {
+            showScanFeedback('error', 'Invalid record type');
+            return;
+        }
+
+        const notes = prompt('Enter notes (optional):', 'Manual entry by guard');
+
+        // Record manual attendance
+        const response = await GuardhouseService.manualRecord(studentId, recordType, notes);
+
+        if (response.success) {
+            // Create local record for display
+            const record = {
+                id: response.record.student_id,
+                name: response.record.student_name,
+                gradeLevel: response.record.grade_level,
+                section: response.record.section,
+                photo: response.record.photo,
+                timestamp: new Date(response.record.timestamp).toLocaleTimeString(),
+                date: new Date(response.record.date).toLocaleDateString(),
+                recordType: response.record.record_type,
+                recordId: `${response.record.id}-${Date.now()}`
+            };
+
+            // Show feedback
+            showScanFeedback(recordType, response.message);
+
+            // Play sound
+            await playStatusSound(recordType === 'check-in' ? 'success' : 'checkout');
+
+            // Add to records and show details
+            attendanceRecords.value.unshift(record);
+            selectedStudent.value = record;
+
+            toast.add({
+                severity: 'success',
+                summary: 'Manual Entry Successful',
+                detail: response.message,
+                life: 3000
+            });
+        } else {
+            throw new Error(response.message || 'Failed to record manual attendance');
+        }
+    } catch (error) {
+        console.error('Error with manual check-in:', error);
+        showScanFeedback('error', error.message || 'Manual entry failed');
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Manual Entry Failed',
+            detail: error.message || 'Failed to record manual attendance',
+            life: 5000
+        });
     }
 };
 
@@ -567,17 +813,106 @@ const logout = () => {
                             </div>
 
                             <div class="scanner-container" :class="{ 'scanning-active': scanning }">
+                                <!-- Show verification content when verifying student -->
+                                <div v-if="showVerificationModal && verificationStudent" class="verification-content">
+                                    <div class="verification-header">
+                                        <h3>{{ verificationRecordType === 'check-in' ? 'Student Check-In Verification' : 'Student Check-Out Verification' }}</h3>
+                                    </div>
+                                    
+                                    <!-- Student Photo and Info -->
+                                    <div class="student-display">
+                                        <div class="photo-container">
+                                            <img 
+                                                :src="verificationStudent.photo || '/demo/images/avatar/default-student.png'" 
+                                                :alt="verificationStudent.name || 'Student'" 
+                                                class="student-photo"
+                                                @error="handleImageError"
+                                            />
+                                        </div>
+                                        
+                                        <div class="student-info">
+                                            <h4 class="student-name">{{ verificationStudent.name || 'Unknown Student' }}</h4>
+                                            <div class="info-grid">
+                                                <div class="info-item">
+                                                    <span class="label">ID:</span>
+                                                    <span class="value">{{ verificationStudent.id || 'N/A' }}</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Grade:</span>
+                                                    <span class="value">{{ verificationStudent.gradeLevel || 'N/A' }}</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Section:</span>
+                                                    <span class="value">{{ verificationStudent.section || 'N/A' }}</span>
+                                                </div>
+                                                <div class="info-item">
+                                                    <span class="label">Action:</span>
+                                                    <span class="value record-type" :class="verificationRecordType === 'check-in' ? 'check-in' : 'check-out'">
+                                                        <i :class="verificationRecordType === 'check-in' ? 'pi pi-sign-in' : 'pi pi-sign-out'"></i>
+                                                        {{ verificationRecordType === 'check-in' ? 'Check In' : 'Check Out' }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Countdown Timer -->
+                                    <div class="countdown-section">
+                                        <div class="countdown-circle" :class="{ 'urgent': verificationCountdown <= 3 }">
+                                            <div class="countdown-number">{{ verificationCountdown }}</div>
+                                            <div class="countdown-label">seconds</div>
+                                        </div>
+                                        <p class="verification-text">
+                                            Please verify this student's identity
+                                        </p>
+                                    </div>
+
+                                    <!-- Action Buttons -->
+                                    <div class="action-buttons">
+                                        <button 
+                                            class="confirm-btn"
+                                            @click="confirmVerification"
+                                            :disabled="isLoadingVerification"
+                                        >
+                                            <i class="pi pi-check"></i>
+                                            Confirm
+                                        </button>
+                                        <button 
+                                            class="reject-btn"
+                                            @click="rejectVerification"
+                                            :disabled="isLoadingVerification"
+                                        >
+                                            <i class="pi pi-times"></i>
+                                            Reject
+                                        </button>
+                                        <button 
+                                            class="next-btn"
+                                            @click="skipVerification"
+                                            :disabled="isLoadingVerification"
+                                        >
+                                            <i class="pi pi-arrow-right"></i>
+                                            Next Student
+                                        </button>
+                                    </div>
+
+                                    <!-- Processing Indicator -->
+                                    <div v-if="isLoadingVerification" class="processing-overlay">
+                                        <div class="spinner"></div>
+                                        <p>Recording attendance...</p>
+                                    </div>
+                                </div>
+
                                 <!-- Show camera feed when scanning -->
-                                <qrcode-stream v-if="scanning && !cameraError" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'"></qrcode-stream>
+                                <qrcode-stream v-else-if="scanning && !cameraError && !showVerificationModal" @detect="onDetect" @error="onCameraError" class="qr-scanner" :torch="false" :camera="'auto'"></qrcode-stream>
 
                                 <!-- Show paused message when not scanning -->
-                                <div v-else-if="!scanning && !cameraError" class="scanner-paused">
+                                <div v-else-if="!scanning && !cameraError && !showVerificationModal" class="scanner-paused">
                                     <i class="pi pi-camera-off"></i>
                                     <p>Scanner paused</p>
                                 </div>
 
                                 <!-- Show error message when camera fails -->
-                                <div v-else class="scanner-error">
+                                <div v-else-if="cameraError && !showVerificationModal" class="scanner-error">
                                     <i class="pi pi-exclamation-triangle"></i>
                                     <p>{{ cameraError || 'Camera error occurred' }}</p>
                                     <button @click="restartCamera" class="restart-button">
@@ -803,6 +1138,7 @@ const logout = () => {
                 </Dialog>
             </div>
         </header>
+
     </div>
 </template>
 
@@ -1292,6 +1628,268 @@ const logout = () => {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+/* Verification Content Styles */
+.verification-content {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    display: flex;
+    flex-direction: column;
+    padding: 0.8rem;
+    overflow: hidden;
+    justify-content: space-between;
+}
+
+.verification-header {
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.verification-header h3 {
+    color: #2c5aa0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.student-display {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 0.8rem;
+    padding: 0.8rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: 80px;
+}
+
+.photo-container {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    overflow: hidden;
+    border-radius: 50%;
+}
+
+.student-photo {
+    width: 60px !important;
+    height: 60px !important;
+    max-width: 60px !important;
+    max-height: 60px !important;
+    min-width: 60px !important;
+    min-height: 60px !important;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    display: block;
+}
+
+.student-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.student-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 0.3rem 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.3rem;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.1rem 0;
+}
+
+.info-item .label {
+    font-weight: 500;
+    color: #64748b;
+    font-size: 0.7rem;
+}
+
+.info-item .value {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.7rem;
+}
+
+.record-type {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.record-type.check-in {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.record-type.check-out {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.countdown-section {
+    text-align: center;
+    margin-bottom: 0.8rem;
+    flex-shrink: 0;
+}
+
+.countdown-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.5rem;
+    box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
+    transition: all 0.3s ease;
+}
+
+.countdown-circle.urgent {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    animation: pulse 1s infinite;
+    box-shadow: 0 3px 8px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.countdown-number {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+}
+
+.countdown-label {
+    font-size: 0.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.verification-text {
+    color: #64748b;
+    font-size: 0.75rem;
+    margin: 0;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.action-buttons button {
+    padding: 0.5rem 0.8rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
+    justify-content: center;
+}
+
+.confirm-btn {
+    background: #10b981;
+    color: white;
+}
+
+.confirm-btn:hover:not(:disabled) {
+    background: #059669;
+    transform: translateY(-1px);
+}
+
+.reject-btn {
+    background: #ef4444;
+    color: white;
+}
+
+.reject-btn:hover:not(:disabled) {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.next-btn {
+    background: #64748b;
+    color: white;
+}
+
+.next-btn:hover:not(:disabled) {
+    background: #475569;
+    transform: translateY(-1px);
+}
+
+.action-buttons button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.processing-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    z-index: 10;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.processing-overlay p {
+    margin-top: 1rem;
+    color: #64748b;
+    font-weight: 500;
 }
 
 .scanner-paused {
