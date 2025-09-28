@@ -100,6 +100,9 @@ class SF2ReportController extends Controller
             // Populate day headers first
             $this->populateDayHeaders($worksheet, $month);
             
+            // Apply wrap text to learner's name header (red boxed area)
+            $worksheet->getStyle('B10:B12')->getAlignment()->setWrapText(true);
+            
             // Populate student data
             $this->populateStudentData($worksheet, $students);
             
@@ -158,17 +161,49 @@ class SF2ReportController extends Controller
         $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
         
-        foreach ($students as $student) {
-            // Get attendance records for this student in the specified month
-            $attendanceRecords = Attendance::where('student_id', $student->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->get()
-                ->keyBy('date');
+        Log::info("Getting attendance data for section {$section->id} from {$startDate} to {$endDate}");
+        
+        // Get real attendance records from the production system
+        $attendanceRecords = [];
+        try {
+            $records = \DB::table('attendance_sessions as s')
+                ->join('attendance_records as r', 's.id', '=', 'r.attendance_session_id')
+                ->join('attendance_statuses as st', 'r.attendance_status_id', '=', 'st.id')
+                ->where('s.section_id', $section->id)
+                ->whereBetween('s.session_date', [$startDate, $endDate])
+                ->where('r.is_current_version', true)
+                ->select([
+                    's.session_date',
+                    'r.student_id',
+                    'st.name as status_name',
+                    'st.code as status_code'
+                ])
+                ->get();
+                
+            // Group by student and date
+            foreach ($records as $record) {
+                $attendanceRecords[$record->student_id][$record->session_date] = [
+                    'status_name' => $record->status_name,
+                    'status_code' => $record->status_code
+                ];
+            }
             
+            Log::info("Found " . count($records) . " real attendance records");
+            
+            // Log all unique status names for debugging
+            $uniqueStatuses = $records->pluck('status_name')->unique();
+            Log::info("Unique attendance statuses found: " . $uniqueStatuses->implode(', '));
+            
+        } catch (\Exception $e) {
+            Log::info("Error fetching real attendance data: " . $e->getMessage());
+        }
+        
+        foreach ($students as $student) {
             // Calculate attendance statistics
             $totalDays = 0;
             $presentDays = 0;
             $absentDays = 0;
+            $lateDays = 0;
             $attendanceData = [];
             
             // Generate attendance data for each day of the month
@@ -177,24 +212,36 @@ class SF2ReportController extends Controller
                 // Skip weekends (assuming school days are Monday-Friday)
                 if ($currentDate->isWeekday()) {
                     $dateKey = $currentDate->format('Y-m-d');
-                    $attendance = $attendanceRecords->get($dateKey);
+                    $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
                     
-                    if ($attendance) {
-                        $status = $attendance->status; // 'present', 'absent', 'late'
-                        $attendanceData[$dateKey] = $status;
+                    if ($studentAttendance) {
+                        // Use real attendance data and map to simple status
+                        $statusName = strtolower($studentAttendance['status_name']);
                         
-                        if ($status === 'present' || $status === 'late') {
+                        if (in_array($statusName, ['present', 'on time'])) {
+                            $status = 'present';
+                            $presentDays++;
+                        } elseif (in_array($statusName, ['late', 'tardy', 'warning'])) {
+                            $status = 'late';
+                            $lateDays++;
+                            $presentDays++; // Late is still considered present for totals
+                        } elseif (in_array($statusName, ['excused'])) {
+                            $status = 'present'; // Treat excused as present for SF2
                             $presentDays++;
                         } else {
+                            $status = 'absent';
                             $absentDays++;
                         }
-                        $totalDays++;
+                        
+                        $attendanceData[$dateKey] = $status;
+                        Log::info("Student {$student->id} on {$dateKey}: {$statusName} -> {$status}");
                     } else {
-                        // No record means absent
-                        $attendanceData[$dateKey] = 'absent';
+                        // No attendance record means absent (no session was held or student was not marked)
+                        $status = 'absent';
+                        $attendanceData[$dateKey] = $status;
                         $absentDays++;
-                        $totalDays++;
                     }
+                    $totalDays++;
                 }
                 $currentDate->addDay();
             }
@@ -206,10 +253,42 @@ class SF2ReportController extends Controller
             $student->attendance_data = $attendanceData;
             $student->total_present = $presentDays;
             $student->total_absent = $absentDays;
+            $student->total_late = $lateDays;
             $student->attendance_rate = $attendanceRate;
+            
+            Log::info("Student {$student->firstName} {$student->lastName}: Present: {$presentDays}, Absent: {$absentDays}, Late: {$lateDays}");
         }
         
         return $students;
+    }
+
+    /**
+     * Generate sample attendance status for testing when no real data exists
+     */
+    private function generateSampleAttendanceStatus($studentId, $date)
+    {
+        // Create different attendance patterns for different students
+        $patterns = [
+            1 => ['present' => 85, 'late' => 10, 'absent' => 5],     // Good student
+            2 => ['present' => 90, 'late' => 5, 'absent' => 5],      // Excellent student  
+            3 => ['present' => 75, 'late' => 15, 'absent' => 10],    // Average student
+            4 => ['present' => 80, 'late' => 12, 'absent' => 8],     // Good student
+        ];
+        
+        $pattern = $patterns[$studentId] ?? ['present' => 80, 'late' => 10, 'absent' => 10];
+        
+        // Use date as seed for consistent results
+        $seed = (int)$date->format('Ymd') + $studentId;
+        srand($seed);
+        $random = rand(1, 100);
+        
+        if ($random <= $pattern['present']) {
+            return 'present';
+        } elseif ($random <= $pattern['present'] + $pattern['late']) {
+            return 'late';
+        } else {
+            return 'absent';
+        }
     }
 
     /**
@@ -521,12 +600,15 @@ class SF2ReportController extends Controller
                 
                 // Summary columns at the end (shifted one column right)
                 $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-                $worksheet->setCellValue("AK{$currentRow}", $student->total_present);  // PRESENT  
+                
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
                 $currentRow++;
                 $maleIndex++;
             }
+            
+            // Add MALE TOTAL Per Day at exactly row 35 (A35)
+            $this->addMaleTotalRow($worksheet, $maleStudents, 35);
             
             // Set FEMALE section to start directly at row 36 (no header)
             $currentRow = 36;
@@ -544,21 +626,361 @@ class SF2ReportController extends Controller
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
                 
                 // Summary columns (shifted one column right)
-                $worksheet->setCellValue("AI{$currentRow}", $student->total_absent);   // ABSENT
-                $worksheet->setCellValue("AJ{$currentRow}", $student->total_present);  // PRESENT
-                $worksheet->setCellValue("AK{$currentRow}", 0);                       // TARDY
+                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
+                
+                $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
                 $currentRow++;
                 $femaleIndex++;
             }
             
-            Log::info("Successfully populated " . count($students) . " students in SF2 format");
+            // Add FEMALE TOTAL Per Day at existing row 60 (use existing template row)
+            $this->addFemaleTotalRow($worksheet, $femaleStudents, 61);
+            
+            // Add Combined TOTAL PER DAY at existing row 61 (use existing template row)
+            $this->addCombinedTotalRow($worksheet, $students, 62);
+            
+            // Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
+            $this->applyCenterAlignmentToSummaryColumns($worksheet);
+            
+            // Apply vertical text and center alignment to total rows
+            $this->applyVerticalTextToTotalRows($worksheet);
+            
+            Log::info("Successfully populated " . count($students) . " students in SF2 format with all totals");
             
         } catch (\Exception $e) {
             Log::error("Error populating student data: " . $e->getMessage());
         }
     }
     
+    /**
+     * Add MALE TOTAL Per Day row at exactly row 35 (A35)
+     */
+    private function addMaleTotalRow($worksheet, $maleStudents, $row)
+    {
+        try {
+            Log::info("Adding MALE TOTAL Per Day at row {$row}");
+            
+            // Set exactly at A35: "MALE | TOTAL Per Day"
+            $worksheet->setCellValue("A{$row}", "MALE | TOTAL Per Day");
+            
+            // Get the month from the first student's attendance data to calculate daily totals
+            if ($maleStudents->count() > 0) {
+                $firstStudent = $maleStudents->first();
+                if (!empty($firstStudent->attendance_data)) {
+                    $firstDate = array_keys($firstStudent->attendance_data)[0];
+                    $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
+                    
+                    // Build column mapping for weekdays
+                    $columnMapping = $this->buildWeekdayColumnMapping($month);
+                    
+                    // Calculate daily totals for male students
+                    $dailyTotals = $this->calculateMaleDailyTotals($maleStudents, $month);
+                    
+                    // Populate daily totals in each column (D, E, F, G, etc.)
+                    foreach ($dailyTotals as $dayNumber => $totals) {
+                        if (isset($columnMapping[$dayNumber])) {
+                            $column = $columnMapping[$dayNumber];
+                            $presentCount = $totals['present'] ?? 0;
+                            $worksheet->setCellValue("{$column}{$row}", $presentCount);
+                        }
+                    }
+                    
+                    // Summary columns for male totals
+                    $totalAbsent = $maleStudents->sum('total_absent');
+                    $totalPresent = $maleStudents->sum('total_present');
+                    
+                     // ABSENT
+                    
+                    $worksheet->setCellValue("AG{$row}", $totalPresent);  // PRESENT
+                    $worksheet->getStyle("AG{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
+                                 // TARDY
+                    
+                }
+            }
+            
+            Log::info("Successfully added MALE TOTAL Per Day at A{$row}");
+            
+        } catch (\Exception $e) {
+            Log::error("Error adding MALE TOTAL row: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Add FEMALE TOTAL Per Day row at specified position
+     */
+    private function addFemaleTotalRow($worksheet, $femaleStudents, $row)
+    {
+        try {
+            Log::info("Adding FEMALE TOTAL Per Day at row {$row}");
+            
+            // Don't overwrite the existing "FEMALE | TOTAL Per Day" text - it's already in the template
+            // Just populate the daily totals and summary columns
+            
+            // Get the month from the first student's attendance data to calculate daily totals
+            if ($femaleStudents->count() > 0) {
+                $firstStudent = $femaleStudents->first();
+                if (!empty($firstStudent->attendance_data)) {
+                    $firstDate = array_keys($firstStudent->attendance_data)[0];
+                    $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
+                    
+                    // Build column mapping for weekdays
+                    $columnMapping = $this->buildWeekdayColumnMapping($month);
+                    
+                    // Calculate daily totals for female students
+                    $dailyTotals = $this->calculateFemaleDailyTotals($femaleStudents, $month);
+                    
+                    // Populate daily totals in each column (D, E, F, G, etc.)
+                    foreach ($dailyTotals as $dayNumber => $totals) {
+                        if (isset($columnMapping[$dayNumber])) {
+                            $column = $columnMapping[$dayNumber];
+                            $presentCount = $totals['present'] ?? 0;
+                            $worksheet->setCellValue("{$column}{$row}", $presentCount);
+                        }
+                    }
+                    
+                    // Summary columns for female totals
+                    $totalAbsent = $femaleStudents->sum('total_absent');
+                    $totalPresent = $femaleStudents->sum('total_present');
+                    
+                    
+                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                    
+                  
+                }
+            }
+            
+            Log::info("Successfully added FEMALE TOTAL Per Day at A{$row}");
+            
+        } catch (\Exception $e) {
+            Log::error("Error adding FEMALE TOTAL row: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Add Combined TOTAL PER DAY row at specified position
+     */
+    private function addCombinedTotalRow($worksheet, $allStudents, $row)
+    {
+        try {
+            Log::info("Adding Combined TOTAL PER DAY at row {$row}");
+            
+            // Don't overwrite the existing "Combined TOTAL PER DAY" text - it's already in the template
+            // Just populate the daily totals and summary columns
+            
+            // Get the month from the first student's attendance data to calculate daily totals
+            if ($allStudents->count() > 0) {
+                $firstStudent = $allStudents->first();
+                if (!empty($firstStudent->attendance_data)) {
+                    $firstDate = array_keys($firstStudent->attendance_data)[0];
+                    $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
+                    
+                    // Build column mapping for weekdays
+                    $columnMapping = $this->buildWeekdayColumnMapping($month);
+                    
+                    // Calculate daily totals for all students combined
+                    $dailyTotals = $this->calculateCombinedDailyTotals($allStudents, $month);
+                    
+                    // Populate daily totals in each column (D, E, F, G, etc.)
+                    foreach ($dailyTotals as $dayNumber => $totals) {
+                        if (isset($columnMapping[$dayNumber])) {
+                            $column = $columnMapping[$dayNumber];
+                            $presentCount = $totals['present'] ?? 0;
+                            $worksheet->setCellValue("{$column}{$row}", $presentCount);
+                        }
+                    }
+                    
+                    // Summary columns for combined totals
+                    $totalAbsent = $allStudents->sum('total_absent');
+                    $totalPresent = $allStudents->sum('total_present');
+                    
+                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                  
+                   
+                }
+            }
+            
+            Log::info("Successfully added Combined TOTAL PER DAY at A{$row}");
+            
+        } catch (\Exception $e) {
+            Log::error("Error adding Combined TOTAL row: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate daily totals for male students only
+     */
+    private function calculateMaleDailyTotals($maleStudents, $month)
+    {
+        try {
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            
+            $dailyTotals = [];
+            
+            // Loop through each day of the month
+            $currentDate = $startDate->copy();
+            while ($currentDate <= $endDate) {
+                if ($currentDate->isWeekday()) {
+                    $dayNumber = $currentDate->day;
+                    $dateKey = $currentDate->format('Y-m-d');
+                    
+                    $presentCount = 0;
+                    $absentCount = 0;
+                    $lateCount = 0;
+                    
+                    // Count attendance for male students only on this day
+                    foreach ($maleStudents as $student) {
+                        $status = $student->attendance_data[$dateKey] ?? 'absent';
+                        
+                        switch ($status) {
+                            case 'present':
+                                $presentCount++;
+                                break;
+                            case 'absent':
+                                $absentCount++;
+                                break;
+                            case 'late':
+                                $lateCount++;
+                                break;
+                        }
+                    }
+                    
+                    $dailyTotals[$dayNumber] = [
+                        'present' => $presentCount,
+                        'absent' => $absentCount,
+                        'late' => $lateCount,
+                        'total' => $presentCount + $absentCount + $lateCount
+                    ];
+                }
+                
+                $currentDate->addDay();
+            }
+            
+            return $dailyTotals;
+            
+        } catch (\Exception $e) {
+            Log::error("Error calculating male daily totals: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Calculate daily totals for female students only
+     */
+    private function calculateFemaleDailyTotals($femaleStudents, $month)
+    {
+        try {
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            
+            $dailyTotals = [];
+            
+            // Loop through each day of the month
+            $currentDate = $startDate->copy();
+            while ($currentDate <= $endDate) {
+                if ($currentDate->isWeekday()) {
+                    $dayNumber = $currentDate->day;
+                    $dateKey = $currentDate->format('Y-m-d');
+                    
+                    $presentCount = 0;
+                    $absentCount = 0;
+                    $lateCount = 0;
+                    
+                    // Count attendance for female students only on this day
+                    foreach ($femaleStudents as $student) {
+                        $status = $student->attendance_data[$dateKey] ?? 'absent';
+                        
+                        switch ($status) {
+                            case 'present':
+                                $presentCount++;
+                                break;
+                            case 'absent':
+                                $absentCount++;
+                                break;
+                            case 'late':
+                                $lateCount++;
+                                break;
+                        }
+                    }
+                    
+                    $dailyTotals[$dayNumber] = [
+                        'present' => $presentCount,
+                        'absent' => $absentCount,
+                        'late' => $lateCount,
+                        'total' => $presentCount + $absentCount + $lateCount
+                    ];
+                }
+                
+                $currentDate->addDay();
+            }
+            
+            return $dailyTotals;
+            
+        } catch (\Exception $e) {
+            Log::error("Error calculating female daily totals: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Calculate daily totals for all students combined
+     */
+    private function calculateCombinedDailyTotals($allStudents, $month)
+    {
+        try {
+            $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+            
+            $dailyTotals = [];
+            
+            // Loop through each day of the month
+            $currentDate = $startDate->copy();
+            while ($currentDate <= $endDate) {
+                if ($currentDate->isWeekday()) {
+                    $dayNumber = $currentDate->day;
+                    $dateKey = $currentDate->format('Y-m-d');
+                    
+                    $presentCount = 0;
+                    $absentCount = 0;
+                    $lateCount = 0;
+                    
+                    // Count attendance for all students on this day
+                    foreach ($allStudents as $student) {
+                        $status = $student->attendance_data[$dateKey] ?? 'absent';
+                        
+                        switch ($status) {
+                            case 'present':
+                                $presentCount++;
+                                break;
+                            case 'absent':
+                                $absentCount++;
+                                break;
+                            case 'late':
+                                $lateCount++;
+                                break;
+                        }
+                    }
+                    
+                    $dailyTotals[$dayNumber] = [
+                        'present' => $presentCount,
+                        'absent' => $absentCount,
+                        'late' => $lateCount,
+                        'total' => $presentCount + $absentCount + $lateCount
+                    ];
+                }
+                
+                $currentDate->addDay();
+            }
+            
+            return $dailyTotals;
+            
+        } catch (\Exception $e) {
+            Log::error("Error calculating combined daily totals: " . $e->getMessage());
+            return [];
+        }
+    }
+
     /**
      * Populate day headers in the calendar format matching the SF2 template
      */
@@ -593,7 +1015,12 @@ class SF2ReportController extends Controller
                         // Row 12: Day abbreviations (MON, TUE, WED, THU, FRI, MON, TUE, WED, etc.)
                         $worksheet->setCellValue("{$column}12", $dayOfWeek);
                         
-                        Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex})");
+                        // Set vertical text (letters stacked vertically) and wrap text
+                        $cellStyle = $worksheet->getStyle("{$column}12");
+                        $cellStyle->getAlignment()->setTextRotation(255);
+                        $cellStyle->getAlignment()->setWrapText(true);
+                        
+                        Log::info("Set day {$dayNumber} ({$dayOfWeek}) in column {$column} (position {$columnIndex}) with vertical text and wrap");
                         
                         $columnIndex++;
                     }
@@ -603,6 +1030,47 @@ class SF2ReportController extends Controller
             }
             
             Log::info("Successfully populated {$columnIndex} consecutive weekday headers for {$month}");
+            Log::info("Total columns available: " . count($columns));
+            Log::info("Last date processed: " . $currentDate->format('Y-m-d'));
+            
+            // Debug: Show which columns were used
+            for ($i = 0; $i < $columnIndex && $i < count($columns); $i++) {
+                Log::info("Column {$i}: {$columns[$i]}");
+            }
+            
+            // Fill any remaining empty columns with pattern continuation (but avoid summary columns)
+            // Summary columns are AC (ABSENT), AD (TARDY), AE, AF, AG, AH, AI, AJ, AK (PRESENT) - don't overwrite these
+            $summaryColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']; // Columns to avoid
+            
+            if ($columnIndex < count($columns)) {
+                Log::info("Filling remaining day columns from index {$columnIndex}, avoiding summary columns");
+                
+                for ($i = $columnIndex; $i < count($columns); $i++) {
+                    $column = $columns[$i];
+                    
+                    // Skip if this is a summary column
+                    if (in_array($column, $summaryColumns)) {
+                        Log::info("Skipping summary column: {$column}");
+                        continue;
+                    }
+                    
+                    // Continue the M T W TH F pattern
+                    $dayPattern = ['M', 'T', 'W', 'TH', 'F'];
+                    $patternIndex = $i % 5; // Cycle through M T W TH F
+                    $dayAbbrev = $dayPattern[$patternIndex];
+                    
+                    // Set empty day number and pattern day abbreviation
+                    $worksheet->setCellValue("{$column}11", '');
+                    $worksheet->setCellValue("{$column}12", $dayAbbrev);
+                    
+                    // Apply same formatting
+                    $cellStyle = $worksheet->getStyle("{$column}12");
+                    $cellStyle->getAlignment()->setTextRotation(255);
+                    $cellStyle->getAlignment()->setWrapText(true);
+                    
+                    Log::info("Filled column {$column} with pattern day: {$dayAbbrev}");
+                }
+            }
             
         } catch (\Exception $e) {
             Log::error("Error populating day headers: " . $e->getMessage());
@@ -615,16 +1083,16 @@ class SF2ReportController extends Controller
     private function getDayOfWeekAbbreviation($dayOfWeek)
     {
         $abbreviations = [
-            0 => 'SUN',  // Sunday
-            1 => 'M',    // Monday
-            2 => 'T',    // Tuesday
-            3 => 'W',    // Wednesday
-            4 => 'TH',   // Thursday
-            5 => 'F',    // Friday
-            6 => 'SAT'   // Saturday
+            0 => 'S',   // Sunday
+            1 => 'M',   // Monday
+            2 => 'T',   // Tuesday
+            3 => 'W',   // Wednesday
+            4 => 'TH',  // Thursday
+            5 => 'F',   // Friday
+            6 => 'S'    // Saturday
         ];
         
-        return $abbreviations[$dayOfWeek] ?? 'UNK';
+        return $abbreviations[$dayOfWeek] ?? 'U';
     }
     
     /**
@@ -1077,6 +1545,97 @@ class SF2ReportController extends Controller
                 return 'L';
             default:
                 return '-';
+        }
+    }
+
+    /**
+     * Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
+     */
+    private function applyCenterAlignmentToSummaryColumns($worksheet)
+    {
+        try {
+            Log::info("Applying center alignment to summary columns");
+            
+            // Define the summary columns that need center alignment
+            $summaryColumns = ['AC', 'AD', 'AE', 'AG']; // ABSENT, PRESENT, TARDY columns
+            
+            // Get the highest row with data
+            $highestRow = $worksheet->getHighestRow();
+            
+            // Apply vertical text and wrap text to MALE TOTAL row (row 35) - columns D to AB only
+            $maleRowColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
+            foreach ($maleRowColumns as $column) {
+                $cell = "{$column}35";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);   // Wrap text
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text (255 = vertical stacked)
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            }
+            
+            // Apply center alignment to all summary columns from row 10 to the highest row
+            foreach ($summaryColumns as $column) {
+                $range = "{$column}10:{$column}{$highestRow}";
+                $worksheet->getStyle($range)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($range)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                Log::info("Applied center alignment to range: {$range}");
+            }
+            
+            // Also center align the header row (around row 11-12) for the summary columns
+            foreach ($summaryColumns as $column) {
+                $headerRange = "{$column}11:{$column}12";
+                $worksheet->getStyle($headerRange)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($headerRange)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            Log::info("Successfully applied center alignment to summary columns");
+            
+        } catch (\Exception $e) {
+            Log::error("Error applying center alignment: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Apply vertical text and center alignment to total rows
+     */
+    private function applyVerticalTextToTotalRows($worksheet)
+    {
+        try {
+            Log::info("Applying center alignment to total rows");
+            
+            // Define the daily attendance columns (D to AB for days 1-31)
+            $dailyColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
+            
+            // Apply center alignment to MALE TOTAL row (row 35)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}35";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            // Apply center alignment to FEMALE TOTAL row (row 61)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}61";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            // Apply center alignment to Combined TOTAL row (row 62)
+            foreach ($dailyColumns as $column) {
+                $cell = "{$column}62";
+                $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
+                $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
+                $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+            }
+            
+            Log::info("Successfully applied center alignment to total rows");
+            
+        } catch (\Exception $e) {
+            Log::error("Error applying center alignment to total rows: " . $e->getMessage());
         }
     }
 }
