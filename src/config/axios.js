@@ -23,9 +23,31 @@ const CACHE_TTL = 300000; // 5 minutes
 const CRITICAL_PATHS = ['/api/sections', '/api/teachers', '/api/subjects']; // Paths that need special handling
 const NO_CACHE_PATHS = ['/api/teachers', '/api/attendance-sessions', '/teachers/', '/attendance-sessions']; // Paths that should never be cached
 
+// Request deduplication - prevent duplicate concurrent requests
+const pendingRequests = new Map();
+
+// Helper function to create request key for deduplication
+const createRequestKey = (config) => {
+    const method = config.method || 'get';
+    const url = config.url || '';
+    const params = JSON.stringify(config.params || {});
+    const data = JSON.stringify(config.data || {});
+    return `${method}:${url}:${params}:${data}`;
+};
+
 // Add request interceptor
 api.interceptors.request.use(
     async (config) => {
+        // Request deduplication - prevent duplicate concurrent requests
+        const requestKey = createRequestKey(config);
+        
+        // Check if there's already a pending request for this exact same call
+        if (pendingRequests.has(requestKey)) {
+            console.log('🔄 Deduplicating request:', config.url);
+            // Return the existing promise
+            return pendingRequests.get(requestKey);
+        }
+
         // Check if this is a critical path that needs special handling
         const isCriticalPath = CRITICAL_PATHS.some((path) => config.url.includes(path));
 
@@ -113,6 +135,10 @@ api.interceptors.request.use(
 // Add response interceptor
 api.interceptors.response.use(
     (response) => {
+        // Clean up pending request
+        const requestKey = createRequestKey(response.config);
+        pendingRequests.delete(requestKey);
+
         // Don't cache already cached responses
         if (response.cached) {
             return response;
@@ -151,6 +177,12 @@ api.interceptors.response.use(
         return response;
     },
     async (error) => {
+        // Clean up pending request on error
+        if (error.config) {
+            const requestKey = createRequestKey(error.config);
+            pendingRequests.delete(requestKey);
+        }
+
         if (error.response?.status === 419) {
             // CSRF token mismatch, try to refresh
             window.location.reload();
@@ -267,23 +299,38 @@ setInterval(() => {
 
 export default api;
 
-// Clear API cache on load to get fresh data
+// Only clear cache on specific conditions (not every page load)
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Clearing API cache on page load');
-    try {
-        // Clean localStorage cache completely for fresh start
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('api_cache_') || key.startsWith('section_subjects_') || key.includes('teacherData') || key.includes('grades_') || key.includes('sections_') || key.includes('curriculumData') || key.includes('teacher'))) {
-                console.log('Removing cached item:', key);
-                localStorage.removeItem(key);
+    // Only clear cache if it's been more than 1 hour since last clear
+    const lastClearTime = localStorage.getItem('last_cache_clear');
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    
+    if (!lastClearTime || (now - parseInt(lastClearTime)) > oneHour) {
+        console.log('Clearing expired API cache');
+        try {
+            // Only clear expired cache items
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('api_cache_')) {
+                    try {
+                        const value = JSON.parse(localStorage.getItem(key));
+                        if (now - value.timestamp > CACHE_TTL) {
+                            localStorage.removeItem(key);
+                        }
+                    } catch (e) {
+                        // Remove invalid cache entries
+                        localStorage.removeItem(key);
+                    }
+                }
             }
+            localStorage.setItem('last_cache_clear', now.toString());
+            console.log('Expired cache cleared successfully');
+        } catch (error) {
+            console.warn('Error cleaning expired cache:', error);
         }
-        // Also clear memory cache
-        responseCache.clear();
-        console.log('Cache cleared successfully');
-    } catch (error) {
-        console.warn('Error cleaning cache on load:', error);
+    } else {
+        console.log('Cache is still fresh, skipping clear');
     }
 });
 

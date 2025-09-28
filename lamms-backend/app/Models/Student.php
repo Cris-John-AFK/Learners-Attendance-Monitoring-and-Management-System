@@ -180,4 +180,5 @@ class Student extends Model
             ->forSchoolYear(now()->year . '-' . (now()->year + 1))
             ->first();
     }
+
 }

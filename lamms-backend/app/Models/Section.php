@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use App\Models\TeacherSectionSubject;
 
 class Section extends Model
 {
@@ -74,6 +75,11 @@ class Section extends Model
     {
         return $this->belongsToMany(Subject::class, 'teacher_section_subject')
             ->withPivot('teacher_id', 'is_primary', 'is_active');
+    }
+
+    public function teacherAssignments()
+    {
+        return $this->hasMany(TeacherSectionSubject::class);
     }
 
     public function schedules()

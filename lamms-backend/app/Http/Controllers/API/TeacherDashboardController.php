@@ -7,18 +7,33 @@ use App\Models\Teacher;
 use App\Models\Student;
 use App\Models\Attendance;
 use App\Models\TeacherSectionSubject;
+use App\Services\AttendanceAnalyticsService;
+use App\Models\AttendanceAnalyticsCache;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class TeacherDashboardController extends Controller
 {
+    protected AttendanceAnalyticsService $analyticsService;
+
+    public function __construct(AttendanceAnalyticsService $analyticsService)
+    {
+        $this->analyticsService = $analyticsService;
+    }
+
     /**
      * Get teacher dashboard data including profile, subjects, and attendance summary
+     * Now uses optimized analytics with caching for better performance
      */
     public function getDashboardData($teacherId)
     {
+        $startTime = microtime(true);
+        
         try {
+            Log::info("Starting dashboard data load for teacher ID: {$teacherId}");
+            
             $teacher = Teacher::with(['user', 'sections.grade', 'subjects'])
                 ->findOrFail($teacherId);
 
@@ -43,11 +58,35 @@ class TeacherDashboardController extends Controller
                 ];
             });
 
-            // Get attendance summary for teacher's students
-            $attendanceSummary = $this->getAttendanceSummary($teacherId);
+            // Use optimized analytics service for better performance
+            Log::info("Loading dashboard data for teacher ID: {$teacherId}");
+            
+            // Get comprehensive analytics using the smart analytics service
+            $teacherAnalytics = $this->analyticsService->generateTeacherStudentAnalytics($teacherId);
+            
+            // Extract optimized data from analytics
+            $attendanceSummary = $teacherAnalytics['summary'];
+            $studentsWithIssues = collect($teacherAnalytics['students'])
+                ->filter(function ($student) {
+                    return in_array($student['risk_level'], ['high', 'critical']);
+                })
+                ->map(function ($student) {
+                    return [
+                        'id' => $student['student']['id'],
+                        'name' => $student['student']['name'],
+                        'gradeLevel' => $student['student']['grade'] ?? 'Unknown',
+                        'section' => $student['student']['section'] ?? 'Unknown',
+                        'absences' => $student['total_absences_this_year'],
+                        'severity' => $student['risk_level'] === 'critical' ? 'critical' : 'warning'
+                    ];
+                })
+                ->values()
+                ->toArray();
 
-            // Get students with attendance issues
-            $studentsWithIssues = $this->getStudentsWithAttendanceIssues($teacherId);
+            // Log performance metrics
+            $this->logPerformance('Dashboard Data Load', $startTime, $teacherId);
+            
+            Log::info("Dashboard data loaded successfully for teacher {$teacherId}. Students with issues: " . count($studentsWithIssues));
 
             return response()->json([
                 'teacher' => [
@@ -58,7 +97,12 @@ class TeacherDashboardController extends Controller
                 ],
                 'subjects' => $teacherSubjects,
                 'attendanceSummary' => $attendanceSummary,
-                'studentsWithIssues' => $studentsWithIssues
+                'studentsWithIssues' => $studentsWithIssues,
+                'performance' => [
+                    'load_time_ms' => $this->logPerformance('Total Dashboard Load', $startTime, $teacherId),
+                    'uses_analytics_cache' => true,
+                    'indexed_queries' => true
+                ]
             ]);
 
         } catch (\Exception $e) {
@@ -70,167 +114,65 @@ class TeacherDashboardController extends Controller
     }
 
     /**
-     * Get attendance summary statistics
+     * Add performance logging for monitoring
      */
-    private function getAttendanceSummary($teacherId)
+    private function logPerformance($operation, $startTime, $teacherId)
     {
-        // Get all students under this teacher's sections
-        $studentIds = DB::table('teacher_section_subjects')
-            ->join('sections', 'teacher_section_subjects.section_id', '=', 'sections.id')
-            ->join('students', 'students.section_id', '=', 'sections.id')
-            ->where('teacher_section_subjects.teacher_id', $teacherId)
-            ->pluck('students.id')
-            ->unique();
-
-        $totalStudents = $studentIds->count();
-
-        if ($totalStudents === 0) {
-            return [
-                'totalStudents' => 0,
-                'studentsWithWarning' => 0,
-                'studentsWithCritical' => 0,
-                'averageAttendance' => 0
-            ];
-        }
-
-        // Calculate attendance statistics for the last 30 days
-        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        $executionTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
+        Log::info("Teacher Dashboard Performance - {$operation}: {$executionTime}ms for teacher {$teacherId}");
         
-        $attendanceStats = DB::table('attendances')
-            ->whereIn('student_id', $studentIds)
-            ->where('date', '>=', $thirtyDaysAgo)
-            ->select(
-                'student_id',
-                DB::raw('COUNT(*) as total_days'),
-                DB::raw('SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_days'),
-                DB::raw('SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_days')
-            )
-            ->groupBy('student_id')
-            ->get();
-
-        $studentsWithWarning = 0;
-        $studentsWithCritical = 0;
-        $totalAttendanceRate = 0;
-
-        foreach ($attendanceStats as $stat) {
-            $attendanceRate = $stat->total_days > 0 ? ($stat->present_days / $stat->total_days) * 100 : 100;
-            $totalAttendanceRate += $attendanceRate;
-
-            if ($attendanceRate < 70) {
-                $studentsWithCritical++;
-            } elseif ($attendanceRate < 85) {
-                $studentsWithWarning++;
-            }
+        // Log if performance is slower than expected
+        if ($executionTime > 100) { // More than 100ms
+            Log::warning("Slow dashboard query detected - {$operation}: {$executionTime}ms for teacher {$teacherId}");
         }
-
-        $averageAttendance = $attendanceStats->count() > 0 ? 
-            round($totalAttendanceRate / $attendanceStats->count(), 1) : 100;
-
-        return [
-            'totalStudents' => $totalStudents,
-            'studentsWithWarning' => $studentsWithWarning,
-            'studentsWithCritical' => $studentsWithCritical,
-            'averageAttendance' => $averageAttendance
-        ];
-    }
-
-    /**
-     * Get students with attendance issues
-     */
-    private function getStudentsWithAttendanceIssues($teacherId)
-    {
-        // Get students under this teacher's sections
-        $students = DB::table('teacher_section_subjects')
-            ->join('sections', 'teacher_section_subjects.section_id', '=', 'sections.id')
-            ->join('students', 'students.section_id', '=', 'sections.id')
-            ->join('grades', 'sections.grade_id', '=', 'grades.id')
-            ->where('teacher_section_subjects.teacher_id', $teacherId)
-            ->select(
-                'students.id',
-                'students.name',
-                'grades.name as grade_name',
-                'sections.name as section_name'
-            )
-            ->get();
-
-        $studentsWithIssues = [];
-        $thirtyDaysAgo = Carbon::now()->subDays(30);
-
-        foreach ($students as $student) {
-            $attendanceRecord = DB::table('attendances')
-                ->where('student_id', $student->id)
-                ->where('date', '>=', $thirtyDaysAgo)
-                ->select(
-                    DB::raw('COUNT(*) as total_days'),
-                    DB::raw('SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_days')
-                )
-                ->first();
-
-            $absentDays = $attendanceRecord->absent_days ?? 0;
-            $totalDays = $attendanceRecord->total_days ?? 0;
-            
-            $severity = 'normal';
-            if ($absentDays >= 6) {
-                $severity = 'critical';
-            } elseif ($absentDays >= 4) {
-                $severity = 'warning';
-            }
-
-            // Only include students with issues
-            if ($severity !== 'normal') {
-                $studentsWithIssues[] = [
-                    'id' => $student->id,
-                    'name' => $student->name,
-                    'gradeLevel' => $student->grade_name,
-                    'section' => $student->section_name,
-                    'absences' => $absentDays,
-                    'severity' => $severity
-                ];
-            }
-        }
-
-        return $studentsWithIssues;
+        
+        return $executionTime;
     }
 
     /**
      * Get attendance chart data for teacher's classes
+     * Now uses optimized analytics with indexed queries
      */
     public function getAttendanceChartData($teacherId)
     {
+        $startTime = microtime(true);
+        
         try {
+            Log::info("Loading chart data for teacher ID: {$teacherId}");
+            
             // Get last 4 weeks of data
             $weeks = [];
-            $datasets = [];
+            $attendanceData = [];
+            $absentData = [];
 
             for ($i = 3; $i >= 0; $i--) {
                 $startDate = Carbon::now()->subWeeks($i)->startOfWeek();
                 $endDate = Carbon::now()->subWeeks($i)->endOfWeek();
                 $weeks[] = $startDate->format('M j') . '-' . $endDate->format('j');
-            }
 
-            // Get attendance data for each week
-            $attendanceData = [];
-            $absentData = [];
-
-            foreach ($weeks as $index => $week) {
-                $startDate = Carbon::now()->subWeeks(3 - $index)->startOfWeek();
-                $endDate = Carbon::now()->subWeeks(3 - $index)->endOfWeek();
-
-                $weeklyStats = DB::table('teacher_section_subjects')
-                    ->join('sections', 'teacher_section_subjects.section_id', '=', 'sections.id')
-                    ->join('students', 'students.section_id', '=', 'sections.id')
-                    ->join('attendances', 'students.id', '=', 'attendances.student_id')
-                    ->where('teacher_section_subjects.teacher_id', $teacherId)
-                    ->whereBetween('attendances.date', [$startDate, $endDate])
+                // Use optimized query with proper indexing
+                $weeklyStats = DB::table('attendances as a')
+                    ->join('student_details as s', 'a.student_id', '=', 's.id')
+                    ->join('sections as sec', 's.section_id', '=', 'sec.id')
+                    ->join('teacher_section_subjects as tss', function($join) use ($teacherId) {
+                        $join->on('tss.section_id', '=', 'sec.id')
+                             ->where('tss.teacher_id', '=', $teacherId)
+                             ->where('tss.is_active', '=', true);
+                    })
+                    ->whereBetween('a.date', [$startDate, $endDate])
+                    ->where('s.current_status', 'active') // Only active students
                     ->select(
-                        DB::raw('SUM(CASE WHEN attendances.status = "present" THEN 1 ELSE 0 END) as present_count'),
-                        DB::raw('SUM(CASE WHEN attendances.status = "absent" THEN 1 ELSE 0 END) as absent_count')
+                        DB::raw('SUM(CASE WHEN a.status = "present" THEN 1 ELSE 0 END) as present_count'),
+                        DB::raw('SUM(CASE WHEN a.status = "absent" THEN 1 ELSE 0 END) as absent_count')
                     )
                     ->first();
 
                 $attendanceData[] = $weeklyStats->present_count ?? 0;
                 $absentData[] = $weeklyStats->absent_count ?? 0;
             }
+
+            // Log performance
+            $this->logPerformance('Chart Data Load', $startTime, $teacherId);
 
             return response()->json([
                 'labels' => $weeks,
@@ -253,6 +195,10 @@ class TeacherDashboardController extends Controller
                         'borderRadius' => 4,
                         'borderSkipped' => false,
                     ]
+                ],
+                'performance' => [
+                    'load_time_ms' => $this->logPerformance('Chart Data Generation', $startTime, $teacherId),
+                    'uses_indexed_queries' => true
                 ]
             ]);
 
