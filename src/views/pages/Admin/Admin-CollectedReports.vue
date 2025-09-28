@@ -20,9 +20,7 @@
                             <span class="text-gradient">Collected Reports</span>
                         </h1>
                         <p class="page-subtitle">Manage and view all system reports</p>
-                        <p class="debug-info" style="color: white; font-size: 0.9rem; margin-top: 0.5rem;">
-                            Debug: Notification Count = {{ newSubmissionsCount }}, Reports = {{ submittedReports.length }}
-                        </p>
+                        <p class="debug-info" style="color: white; font-size: 0.9rem; margin-top: 0.5rem">Debug: Notification Count = {{ newSubmissionsCount }}, Reports = {{ submittedReports.length }}</p>
                     </div>
                     <div class="header-actions">
                         <div class="notification-icon-container">
@@ -285,7 +283,7 @@
                         </div>
 
                         <div class="report-card-actions">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" @click="viewSubmittedReport(report)" v-tooltip.top="'View Report'" />
+                            <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" v-tooltip.top="'View Report'" />
                             <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadSubmittedReport(report)" v-tooltip.top="'Download Report'" />
                             <Button icon="pi pi-check" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="approveReport(report)" v-tooltip.top="'Approve Report'" v-if="report.status === 'submitted'" />
                             <Button icon="pi pi-times" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="rejectReport(report)" v-tooltip.top="'Reject Report'" v-if="report.status === 'submitted'" />
@@ -2771,7 +2769,7 @@ const loadRealCurriculumData = async () => {
                         section.gradeName = grade.name;
                         section.gradeId = grade.id;
                         section.curriculumId = activeCurriculum.id;
-                        
+
                         // Load real student count for this section
                         try {
                             const response = await fetch(`http://127.0.0.1:8000/api/sections/${section.id}/students/count`);
@@ -2785,7 +2783,7 @@ const loadRealCurriculumData = async () => {
                             console.warn(`Error loading student count for section ${section.name}:`, error);
                             section.studentCount = 0;
                         }
-                        
+
                         // Load teacher information
                         if (section.homeroom_teacher_id) {
                             try {
@@ -2803,7 +2801,7 @@ const loadRealCurriculumData = async () => {
                         } else {
                             section.teacher = 'No Teacher Assigned';
                         }
-                        
+
                         allSections.push(section);
                     }
                 } catch (error) {
@@ -2817,7 +2815,7 @@ const loadRealCurriculumData = async () => {
                 grades: realGrades.value,
                 sections: realSections.value
             });
-            
+
             // Force reactivity update
             loadingRealData.value = false;
 
@@ -3000,32 +2998,31 @@ const loadSubmittedReports = async () => {
         console.log('Loading submitted reports...');
         const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
         const data = await response.json();
-        
+
         console.log('API Response:', data);
-        
+
         if (data.success) {
             const newReports = data.data;
             const previousReports = submittedReports.value;
-            
+
             // Check for truly new submissions (not in previous list)
-            const newSubmissions = newReports.filter(report => {
-                return report.status === 'submitted' && 
-                       !previousReports.some(prev => prev.id === report.id);
+            const newSubmissions = newReports.filter((report) => {
+                return report.status === 'submitted' && !previousReports.some((prev) => prev.id === report.id);
             });
-            
+
             // Update submitted reports
             submittedReports.value = newReports;
-            
+
             // Update notification count (only count 'submitted' status reports)
-            const submittedCount = newReports.filter(report => report.status === 'submitted').length;
+            const submittedCount = newReports.filter((report) => report.status === 'submitted').length;
             newSubmissionsCount.value = submittedCount;
-            
+
             console.log('Submitted reports count:', submittedCount);
             console.log('New submissions:', newSubmissions.length);
-            
+
             // Show toast notification for new submissions (only after initial load)
             if (newSubmissions.length > 0 && previousReports.length > 0) {
-                newSubmissions.forEach(report => {
+                newSubmissions.forEach((report) => {
                     toast.add({
                         severity: 'info',
                         summary: 'New Report Submitted',
@@ -3034,7 +3031,7 @@ const loadSubmittedReports = async () => {
                     });
                 });
             }
-            
+
             // Update last checked time
             lastCheckedTime.value = new Date();
         }
@@ -3053,7 +3050,7 @@ const loadSubmittedReports = async () => {
 const startPolling = () => {
     // Load immediately
     loadSubmittedReports();
-    
+
     // Then poll every 30 seconds
     pollingInterval.value = setInterval(() => {
         loadSubmittedReports();
@@ -3084,7 +3081,7 @@ const viewSubmittedReport = (report) => {
     // Open the SF2 report in a new window/tab
     const url = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`;
     window.open(url, '_blank');
-    
+
     toast.add({
         severity: 'info',
         summary: 'Opening Report',
@@ -3096,7 +3093,7 @@ const viewSubmittedReport = (report) => {
 const downloadSubmittedReport = async (report) => {
     try {
         const response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`);
-        
+
         if (response.ok) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
@@ -3107,7 +3104,7 @@ const downloadSubmittedReport = async (report) => {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            
+
             toast.add({
                 severity: 'success',
                 summary: 'Download Complete',
@@ -3133,27 +3130,27 @@ const approveReport = async (report) => {
         const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 status: 'approved',
                 admin_notes: 'Report approved by admin'
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             // Update the report status in the local array
-            const reportIndex = submittedReports.value.findIndex(r => r.id === report.id);
+            const reportIndex = submittedReports.value.findIndex((r) => r.id === report.id);
             if (reportIndex !== -1) {
                 submittedReports.value[reportIndex].status = 'approved';
             }
-            
+
             // Update notification count
-            const submittedCount = submittedReports.value.filter(r => r.status === 'submitted').length;
+            const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
             newSubmissionsCount.value = submittedCount;
-            
+
             toast.add({
                 severity: 'success',
                 summary: 'Report Approved',
@@ -3179,27 +3176,27 @@ const rejectReport = async (report) => {
         const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 status: 'rejected',
                 admin_notes: 'Report rejected by admin - please review and resubmit'
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             // Update the report status in the local array
-            const reportIndex = submittedReports.value.findIndex(r => r.id === report.id);
+            const reportIndex = submittedReports.value.findIndex((r) => r.id === report.id);
             if (reportIndex !== -1) {
                 submittedReports.value[reportIndex].status = 'rejected';
             }
-            
+
             // Update notification count
-            const submittedCount = submittedReports.value.filter(r => r.status === 'submitted').length;
+            const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
             newSubmissionsCount.value = submittedCount;
-            
+
             toast.add({
                 severity: 'warn',
                 summary: 'Report Rejected',
@@ -3720,7 +3717,7 @@ onMounted(() => {
     setTimeout(() => {
         loading.value = false;
     }, 1000);
-    
+
     // Start polling for submitted reports
     startPolling();
 });
@@ -6091,7 +6088,7 @@ const reportTypes = ref([
     background-color: #f44336;
     border-radius: 50%;
     border: 2px solid #fff;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .report-status {
@@ -6307,17 +6304,17 @@ const reportTypes = ref([
         grid-template-columns: 1fr;
         gap: 1rem;
     }
-    
+
     .report-card-header {
         flex-direction: column;
         gap: 1rem;
         text-align: center;
     }
-    
+
     .report-card-actions {
         justify-content: center;
     }
-    
+
     .section-title {
         font-size: 1.8rem;
     }
