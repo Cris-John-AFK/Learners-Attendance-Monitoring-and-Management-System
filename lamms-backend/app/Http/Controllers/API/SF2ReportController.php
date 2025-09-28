@@ -1427,8 +1427,8 @@ class SF2ReportController extends Controller
                 ->leftJoin('teachers', 'submitted_sf2_reports.submitted_by', '=', 'teachers.id')
                 ->select(
                     'submitted_sf2_reports.*',
-                    'teachers.firstName as teacher_first_name',
-                    'teachers.lastName as teacher_last_name'
+                    'teachers.first_name as teacher_first_name',
+                    'teachers.last_name as teacher_last_name'
                 )
                 ->orderBy('submitted_at', 'desc')
                 ->get();

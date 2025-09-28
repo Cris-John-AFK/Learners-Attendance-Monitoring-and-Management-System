@@ -330,6 +330,9 @@ Route::post('teacher/reports/sf2/submit/{sectionId}/{month}', [\App\Http\Control
 Route::get('admin/reports/submitted', [\App\Http\Controllers\API\SF2ReportController::class, 'getSubmittedReports'])->name('admin.sf2.submitted');
 Route::put('admin/reports/submitted/{reportId}/status', [\App\Http\Controllers\API\SF2ReportController::class, 'updateReportStatus'])->name('admin.sf2.update.status');
 
+// Section student count route
+Route::get('sections/{sectionId}/students/count', [\App\Http\Controllers\API\SectionController::class, 'getStudentCount'])->name('sections.students.count');
+
 // Attendance Analytics routes for Admin Dashboard
 Route::prefix('admin/attendance-analytics')->group(function () {
     Route::get('/overview', [AttendanceAnalyticsController::class, 'getOverview']);

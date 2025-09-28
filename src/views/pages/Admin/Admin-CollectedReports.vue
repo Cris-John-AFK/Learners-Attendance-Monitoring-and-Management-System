@@ -20,6 +20,9 @@
                             <span class="text-gradient">Collected Reports</span>
                         </h1>
                         <p class="page-subtitle">Manage and view all system reports</p>
+                        <p class="debug-info" style="color: white; font-size: 0.9rem; margin-top: 0.5rem;">
+                            Debug: Notification Count = {{ newSubmissionsCount }}, Reports = {{ submittedReports.length }}
+                        </p>
                     </div>
                     <div class="header-actions">
                         <div class="notification-icon-container">
@@ -29,6 +32,7 @@
                         <Button label="Generate Report" icon="pi pi-plus" class="p-button-success" @click="showGenerateDialog = true" />
                         <Button label="Export All" icon="pi pi-download" class="p-button-outlined" @click="exportAllReports" />
                         <Button label="Test Notification" icon="pi pi-bell" class="p-button-warning p-button-outlined" @click="receiveNewSubmission" />
+                        <Button label="Reload Reports" icon="pi pi-refresh" class="p-button-info p-button-outlined" @click="loadSubmittedReports" />
                     </div>
                 </div>
             </div>
@@ -235,6 +239,56 @@
                                 <Button icon="pi pi-share-alt" class="p-button-rounded p-button-info p-button-outlined p-button-sm" @click="shareReport(report)" v-tooltip.top="'Share Report'" />
                                 <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="confirmDeleteReport(report)" v-tooltip.top="'Delete Report'" />
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submitted Reports Section -->
+            <div class="submitted-reports-section" v-if="submittedReports.length > 0">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        <span class="emoji-icon">📋</span>
+                        Submitted SF2 Reports
+                    </h2>
+                    <p class="section-subtitle">Reports submitted by teachers awaiting review</p>
+                </div>
+
+                <div class="submitted-reports-grid">
+                    <div v-for="report in submittedReports" :key="report.id" class="submitted-report-card">
+                        <div class="report-card-header">
+                            <div class="report-info">
+                                <h4 class="report-section-name">{{ report.section_name }}</h4>
+                                <p class="report-teacher">{{ report.teacher_name }}</p>
+                                <p class="report-month">{{ report.month_name }}</p>
+                            </div>
+                            <div class="report-status-badge">
+                                <span :class="['status-badge', getStatusClass(report.status)]">
+                                    {{ report.status.toUpperCase() }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="report-card-details">
+                            <div class="detail-item">
+                                <i class="pi pi-calendar"></i>
+                                <span>Submitted: {{ formatDate(report.submitted_at) }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <i class="pi pi-tag"></i>
+                                <span>Grade: {{ report.grade_level }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <i class="pi pi-file"></i>
+                                <span>Type: {{ report.report_type }}</span>
+                            </div>
+                        </div>
+
+                        <div class="report-card-actions">
+                            <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" @click="viewSubmittedReport(report)" v-tooltip.top="'View Report'" />
+                            <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadSubmittedReport(report)" v-tooltip.top="'Download Report'" />
+                            <Button icon="pi pi-check" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="approveReport(report)" v-tooltip.top="'Approve Report'" v-if="report.status === 'submitted'" />
+                            <Button icon="pi pi-times" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="rejectReport(report)" v-tooltip.top="'Reject Report'" v-if="report.status === 'submitted'" />
                         </div>
                     </div>
                 </div>
@@ -928,7 +982,7 @@ import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -966,6 +1020,9 @@ const selectedStatus = ref(null);
 
 // Notification system
 const newSubmissionsCount = ref(0);
+const submittedReports = ref([]);
+const pollingInterval = ref(null);
+const lastCheckedTime = ref(new Date());
 
 // Current month and year for navigation
 const currentMonth = ref(8); // September (0-indexed)
@@ -2613,17 +2670,18 @@ const gradeStatistics = computed(() => {
             // Get sections for this grade
             const gradeSections = realSections.value.filter((section) => section.gradeId === grade.id);
 
-            // Generate mock attendance data for each section
+            // Use real data from loaded sections
             const sectionsWithData = gradeSections.map((section) => {
-                const studentCount = Math.floor(Math.random() * 15) + 20; // 20-35 students
+                const studentCount = section.studentCount || 0;
+                // For now, generate mock attendance data until we have real attendance API
                 const presentCount = Math.floor(studentCount * (0.85 + Math.random() * 0.15)); // 85-100% attendance
                 const absentCount = studentCount - presentCount;
-                const attendanceRate = Math.round((presentCount / studentCount) * 100);
+                const attendanceRate = studentCount > 0 ? Math.round((presentCount / studentCount) * 100) : 0;
 
                 return {
                     id: section.id,
                     name: section.name,
-                    teacher: section.homeroom_teacher ? `${section.homeroom_teacher.first_name} ${section.homeroom_teacher.last_name}` : 'No Teacher Assigned',
+                    teacher: section.teacher || 'No Teacher Assigned',
                     studentCount,
                     presentCount,
                     absentCount,
@@ -2708,13 +2766,46 @@ const loadRealCurriculumData = async () => {
 
                     console.log(`Sections for grade ${grade.name}:`, sections);
 
-                    // Add grade info to each section
-                    sections.forEach((section) => {
+                    // Add grade info to each section and load student counts
+                    for (const section of sections) {
                         section.gradeName = grade.name;
                         section.gradeId = grade.id;
                         section.curriculumId = activeCurriculum.id;
+                        
+                        // Load real student count for this section
+                        try {
+                            const response = await fetch(`http://127.0.0.1:8000/api/sections/${section.id}/students/count`);
+                            if (response.ok) {
+                                const data = await response.json();
+                                section.studentCount = data.count || 0;
+                            } else {
+                                section.studentCount = 0;
+                            }
+                        } catch (error) {
+                            console.warn(`Error loading student count for section ${section.name}:`, error);
+                            section.studentCount = 0;
+                        }
+                        
+                        // Load teacher information
+                        if (section.homeroom_teacher_id) {
+                            try {
+                                const teacherResponse = await fetch(`http://127.0.0.1:8000/api/teachers/${section.homeroom_teacher_id}`);
+                                if (teacherResponse.ok) {
+                                    const teacherData = await teacherResponse.json();
+                                    section.teacher = `${teacherData.first_name} ${teacherData.last_name}`;
+                                } else {
+                                    section.teacher = 'No Teacher Assigned';
+                                }
+                            } catch (error) {
+                                console.warn(`Error loading teacher for section ${section.name}:`, error);
+                                section.teacher = 'No Teacher Assigned';
+                            }
+                        } else {
+                            section.teacher = 'No Teacher Assigned';
+                        }
+                        
                         allSections.push(section);
-                    });
+                    }
                 } catch (error) {
                     console.warn(`Error loading sections for grade ${grade.name}:`, error);
                 }
@@ -2726,6 +2817,9 @@ const loadRealCurriculumData = async () => {
                 grades: realGrades.value,
                 sections: realSections.value
             });
+            
+            // Force reactivity update
+            loadingRealData.value = false;
 
             toast.add({
                 severity: 'success',
@@ -2885,15 +2979,96 @@ const exportAllReports = () => {
 
 // Notification functions
 const scrollToSubmittedReports = () => {
-    const reportsSection = document.querySelector('.reports-table-container');
-    if (reportsSection) {
-        reportsSection.scrollIntoView({ behavior: 'smooth' });
+    const submittedSection = document.querySelector('.submitted-reports-section');
+    if (submittedSection) {
+        submittedSection.scrollIntoView({ behavior: 'smooth' });
         // Clear notification count when user clicks
         newSubmissionsCount.value = 0;
+    } else {
+        // Fallback to reports section if submitted section doesn't exist
+        const reportsSection = document.querySelector('.reports-table-container');
+        if (reportsSection) {
+            reportsSection.scrollIntoView({ behavior: 'smooth' });
+            newSubmissionsCount.value = 0;
+        }
     }
 };
 
-// Simulate receiving new submission notification
+// Load submitted reports from API
+const loadSubmittedReports = async () => {
+    try {
+        console.log('Loading submitted reports...');
+        const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
+        const data = await response.json();
+        
+        console.log('API Response:', data);
+        
+        if (data.success) {
+            const newReports = data.data;
+            const previousReports = submittedReports.value;
+            
+            // Check for truly new submissions (not in previous list)
+            const newSubmissions = newReports.filter(report => {
+                return report.status === 'submitted' && 
+                       !previousReports.some(prev => prev.id === report.id);
+            });
+            
+            // Update submitted reports
+            submittedReports.value = newReports;
+            
+            // Update notification count (only count 'submitted' status reports)
+            const submittedCount = newReports.filter(report => report.status === 'submitted').length;
+            newSubmissionsCount.value = submittedCount;
+            
+            console.log('Submitted reports count:', submittedCount);
+            console.log('New submissions:', newSubmissions.length);
+            
+            // Show toast notification for new submissions (only after initial load)
+            if (newSubmissions.length > 0 && previousReports.length > 0) {
+                newSubmissions.forEach(report => {
+                    toast.add({
+                        severity: 'info',
+                        summary: 'New Report Submitted',
+                        detail: `${report.teacher_name} submitted SF2 report for ${report.section_name}`,
+                        life: 5000
+                    });
+                });
+            }
+            
+            // Update last checked time
+            lastCheckedTime.value = new Date();
+        }
+    } catch (error) {
+        console.error('Error loading submitted reports:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Connection Error',
+            detail: 'Failed to load submitted reports. Please check if the server is running.',
+            life: 5000
+        });
+    }
+};
+
+// Start real-time polling
+const startPolling = () => {
+    // Load immediately
+    loadSubmittedReports();
+    
+    // Then poll every 30 seconds
+    pollingInterval.value = setInterval(() => {
+        loadSubmittedReports();
+    }, 30000);
+};
+
+// Stop polling
+const stopPolling = () => {
+    if (pollingInterval.value) {
+        clearInterval(pollingInterval.value);
+        pollingInterval.value = null;
+    }
+};
+
+// Simulate receiving new submission notification (for testing)
 const receiveNewSubmission = () => {
     newSubmissionsCount.value += 1;
     toast.add({
@@ -2902,6 +3077,147 @@ const receiveNewSubmission = () => {
         detail: 'A teacher has submitted a new SF2 report',
         life: 5000
     });
+};
+
+// Submitted reports actions
+const viewSubmittedReport = (report) => {
+    // Open the SF2 report in a new window/tab
+    const url = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`;
+    window.open(url, '_blank');
+    
+    toast.add({
+        severity: 'info',
+        summary: 'Opening Report',
+        detail: `Viewing SF2 report for ${report.section_name}`,
+        life: 3000
+    });
+};
+
+const downloadSubmittedReport = async (report) => {
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`);
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SF2_${report.section_name}_${report.month_name}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            toast.add({
+                severity: 'success',
+                summary: 'Download Complete',
+                detail: `SF2 report for ${report.section_name} downloaded successfully`,
+                life: 3000
+            });
+        } else {
+            throw new Error('Download failed');
+        }
+    } catch (error) {
+        console.error('Error downloading report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Download Failed',
+            detail: 'Failed to download the SF2 report',
+            life: 3000
+        });
+    }
+};
+
+const approveReport = async (report) => {
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                status: 'approved',
+                admin_notes: 'Report approved by admin'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update the report status in the local array
+            const reportIndex = submittedReports.value.findIndex(r => r.id === report.id);
+            if (reportIndex !== -1) {
+                submittedReports.value[reportIndex].status = 'approved';
+            }
+            
+            // Update notification count
+            const submittedCount = submittedReports.value.filter(r => r.status === 'submitted').length;
+            newSubmissionsCount.value = submittedCount;
+            
+            toast.add({
+                severity: 'success',
+                summary: 'Report Approved',
+                detail: `SF2 report for ${report.section_name} has been approved`,
+                life: 3000
+            });
+        } else {
+            throw new Error(data.message || 'Failed to approve report');
+        }
+    } catch (error) {
+        console.error('Error approving report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Approval Failed',
+            detail: 'Failed to approve the SF2 report',
+            life: 3000
+        });
+    }
+};
+
+const rejectReport = async (report) => {
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                status: 'rejected',
+                admin_notes: 'Report rejected by admin - please review and resubmit'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update the report status in the local array
+            const reportIndex = submittedReports.value.findIndex(r => r.id === report.id);
+            if (reportIndex !== -1) {
+                submittedReports.value[reportIndex].status = 'rejected';
+            }
+            
+            // Update notification count
+            const submittedCount = submittedReports.value.filter(r => r.status === 'submitted').length;
+            newSubmissionsCount.value = submittedCount;
+            
+            toast.add({
+                severity: 'warn',
+                summary: 'Report Rejected',
+                detail: `SF2 report for ${report.section_name} has been rejected`,
+                life: 3000
+            });
+        } else {
+            throw new Error(data.message || 'Failed to reject report');
+        }
+    } catch (error) {
+        console.error('Error rejecting report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Rejection Failed',
+            detail: 'Failed to reject the SF2 report',
+            life: 3000
+        });
+    }
 };
 
 // Section details methods
@@ -3404,6 +3720,14 @@ onMounted(() => {
     setTimeout(() => {
         loading.value = false;
     }, 1000);
+    
+    // Start polling for submitted reports
+    startPolling();
+});
+
+// Cleanup on unmount
+onUnmounted(() => {
+    stopPolling();
 });
 
 // Report types for dropdown
@@ -5821,6 +6145,181 @@ const reportTypes = ref([
     }
     100% {
         transform: scale(1);
+    }
+}
+
+/* Submitted Reports Section Styles */
+.submitted-reports-section {
+    margin: 2rem 0;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    color: white;
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.section-subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.submitted-reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.submitted-report-card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.submitted-report-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+}
+
+.report-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #f1f3f4;
+}
+
+.report-section-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+}
+
+.report-teacher {
+    font-size: 1rem;
+    color: #7f8c8d;
+    margin: 0 0 0.25rem 0;
+    font-weight: 500;
+}
+
+.report-month {
+    font-size: 0.9rem;
+    color: #95a5a6;
+    margin: 0;
+}
+
+.report-status-badge {
+    flex-shrink: 0;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.submitted {
+    background: linear-gradient(135deg, #ffc107, #fd7e14);
+    color: #212529;
+}
+
+.status-badge.approved {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+}
+
+.status-badge.rejected {
+    background: linear-gradient(135deg, #dc3545, #e83e8c);
+    color: white;
+}
+
+.status-badge.reviewed {
+    background: linear-gradient(135deg, #17a2b8, #6f42c1);
+    color: white;
+}
+
+.report-card-details {
+    margin-bottom: 1.5rem;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.detail-item:last-child {
+    margin-bottom: 0;
+}
+
+.detail-item i {
+    color: #6c757d;
+    font-size: 1rem;
+    width: 16px;
+    text-align: center;
+}
+
+.report-card-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.report-card-actions .p-button {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.report-card-actions .p-button:hover {
+    transform: translateY(-1px);
+}
+
+/* Responsive design for submitted reports */
+@media (max-width: 768px) {
+    .submitted-reports-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .report-card-header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .report-card-actions {
+        justify-content: center;
+    }
+    
+    .section-title {
+        font-size: 1.8rem;
     }
 }
 </style>

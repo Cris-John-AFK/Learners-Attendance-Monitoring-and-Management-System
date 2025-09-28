@@ -807,4 +807,33 @@ class SectionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get student count for a section
+     */
+    public function getStudentCount($sectionId)
+    {
+        try {
+            Log::info("Getting student count for section ID: {$sectionId}");
+            
+            $count = DB::table('student_section')
+                ->where('section_id', $sectionId)
+                ->where('is_active', true)
+                ->count();
+            
+            Log::info("Found {$count} students in section {$sectionId}");
+            
+            return response()->json([
+                'success' => true,
+                'count' => $count
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error getting student count for section {$sectionId}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get student count',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
