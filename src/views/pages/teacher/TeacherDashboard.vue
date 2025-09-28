@@ -4,6 +4,7 @@ import AttendanceInsights from '@/components/Teachers/AttendanceInsights.vue';
 import api from '@/config/axios';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService.js';
 import { AttendanceSummaryService } from '@/services/AttendanceSummaryService.js';
+import StudentAttendanceService from '@/services/StudentAttendanceService.js';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Chart from 'primevue/chart';
@@ -21,6 +22,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 // Import teacher authentication service
 import TeacherAuthService from '@/services/TeacherAuthService';
+
+// Import our new smart analytics services
+import SmartAnalyticsService from '@/services/SmartAnalyticsService';
+import CacheService from '@/services/CacheService';
+// Sticky notes service removed
+
+// Import new components
+// Sticky notes panel removed
 
 // Dashboard components
 const currentTeacher = ref(null);
@@ -48,6 +57,13 @@ const viewTypeOptions = [
     { label: 'All Students', value: 'all_students' }
 ];
 const viewType = ref('subject');
+
+// Smart Analytics & Notes features
+const smartAnalytics = ref({});
+const criticalStudents = ref([]);
+const unreadNotifications = ref(0);
+const studentsWithSmartAnalytics = ref([]);
+const showCriticalAlert = ref(false);
 const currentDate = ref(new Date());
 const currentMonth = ref(new Date().getMonth());
 const currentYear = ref(new Date().getFullYear());
@@ -314,19 +330,25 @@ onMounted(async () => {
             currentTeacher: currentTeacher.value
         });
         await loadAttendanceData();
-
         // Prepare chart data which includes setting up chart options
         prepareChartData();
 
-        // Set up auto-refresh to catch new student enrollments
-        refreshInterval = setInterval(refreshDashboardData, 10000); // Refresh every 10 seconds for testing
+        // Batch load all dashboard data efficiently
+        await Promise.all([
+            loadSmartAnalytics(),
+            loadCriticalStudents(),
+            loadAttendanceData(),
+            prepareChartData()
+        ]);
+
+        // Set up auto-refresh to catch new student enrollments (reduced frequency)
+        refreshInterval = setInterval(refreshDashboardData, 30000); // Refresh every 30 seconds
     } catch (error) {
-        console.error('Error initializing dashboard:', error);
+        console.error('Error in onMounted:', error);
     } finally {
         loading.value = false;
     }
 });
-
 // Clean up interval on unmount
 onUnmounted(() => {
     if (refreshInterval) {
@@ -438,118 +460,91 @@ function handleFallbackData() {
     }
 }
 
-// Load attendance data for the selected subject using real database API
+// Load attendance data for the selected subject with caching
 async function loadAttendanceData() {
     if (!selectedSubject.value || !currentTeacher.value) return;
 
+    console.log('Loading attendance data for subject:', selectedSubject.value);
+    
     try {
-        console.log('Loading attendance data for subject:', selectedSubject.value);
-
-        // Get the correct section ID from teacher assignments
-        const teacherAssignments = TeacherAuthService.getAssignments();
-        const assignment = teacherAssignments.find(a => a.subject_id === selectedSubject.value.id);
-        const sectionId = assignment?.section_id || selectedSubject.value.sectionId || selectedSubject.value.originalSubject?.sectionId;
-        
-        if (!sectionId) {
-            console.error('No section ID found for subject:', selectedSubject.value);
-            return;
-        }
-        
-        console.log('Using sectionId:', sectionId, 'for subject:', selectedSubject.value.name);
-        console.log('Found assignment:', assignment);
-
-        console.log('Calling getStudentsForTeacherSubject with params:', {
+        const sectionId = selectedSubject.value.sectionId;
+        const params = {
             teacherId: currentTeacher.value.id,
             sectionId: sectionId,
             subjectId: selectedSubject.value.id
-        });
+        };
 
-        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(currentTeacher.value.id, sectionId, selectedSubject.value.id);
-
-        console.log('Raw students response:', studentsResponse);
-
-        let students = [];
-        if (studentsResponse && studentsResponse.students) {
-            students = studentsResponse.students;
-            console.log('Students loaded from API:', students);
-        } else if (studentsResponse && Array.isArray(studentsResponse)) {
-            students = studentsResponse;
-            console.log('Students loaded from API (array format):', students);
-        } else {
-            console.error('No students found in response:', studentsResponse);
+        // Cache key for this specific data request
+        const cacheKey = CacheService.generateKey('attendance_data', params);
+        
+        // Try to get from cache first
+        const cachedData = CacheService.get(cacheKey);
+        if (cachedData) {
+            console.log('📦 Using cached attendance data');
+            attendanceSummary.value = cachedData.summary;
+            
+            // Update studentsWithAbsenceIssues from cached data
+            if (cachedData.summary.students) {
+                studentsWithAbsenceIssues.value = cachedData.summary.students.map(student => ({
+                    id: student.student_id,
+                    name: student.name,
+                    gradeLevel: student.grade_name || 'Unknown Grade',
+                    section: student.section_name || `Section ${student.section_id}`,
+                    absences: student.total_absences,
+                    severity: student.severity,
+                    attendanceRate: student.attendance_rate,
+                    totalPresent: student.total_present,
+                    totalLate: student.total_late
+                }));
+            }
+            return;
         }
 
-        // Calculate date range (current month)
-        const currentDate = new Date();
-        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        console.log('🌐 Fetching fresh attendance data...');
 
-        // Get attendance summary using the new service
-        let summaryData = null;
-        try {
-            const summaryResult = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
-                period: chartView.value,
+        // Batch API calls for better performance
+        const [studentsResponse, summaryResponse] = await Promise.all([
+            TeacherAttendanceService.getStudentsForTeacherSubject(
+                params.teacherId,
+                params.sectionId, 
+                params.subjectId
+            ),
+            AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
+                period: 'week',
                 viewType: viewType.value,
-                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
-            });
+                subjectId: selectedSubject.value.id
+            })
+        ]);
 
-            if (summaryResult && summaryResult.success) {
-                summaryData = summaryResult.data;
-                console.log('Attendance summary from database:', summaryData);
-            }
-        } catch (summaryError) {
-            console.error('Error fetching attendance summary:', summaryError);
+        if (studentsResponse.success && summaryResponse.success) {
+            const summary = {
+                totalStudents: summaryResponse.data.total_students,
+                averageAttendance: summaryResponse.data.average_attendance,
+                studentsWithWarning: summaryResponse.data.students_with_warning,
+                studentsWithCritical: summaryResponse.data.students_with_critical,
+                students: summaryResponse.data.students || []
+            };
+
+            // Cache the result for 2 minutes
+            CacheService.set(cacheKey, { summary }, 2 * 60 * 1000);
+            
+            attendanceSummary.value = summary;
+            
+            // Update studentsWithAbsenceIssues for the template
+            studentsWithAbsenceIssues.value = summaryResponse.data.students.map(student => ({
+                id: student.student_id,
+                name: student.name,
+                gradeLevel: student.grade_name || 'Unknown Grade',
+                section: student.section_name || `Section ${student.section_id}`,
+                absences: student.total_absences,
+                severity: student.severity,
+                attendanceRate: student.attendance_rate,
+                totalPresent: student.total_present,
+                totalLate: student.total_late
+            }));
+            
+            console.log('✅ Attendance data loaded and cached');
         }
-
-        // If no summary data, calculate from students
-        if (!summaryData) {
-            summaryData = {
-                totalStudents: students.length,
-                averageAttendance: 85,
-                studentsWithWarning: 0,
-                studentsWithCritical: 0
-            };
-        } else {
-            // Map API response fields to frontend expected fields
-            summaryData = {
-                totalStudents: summaryData.total_students || students.length,
-                averageAttendance: summaryData.average_attendance || 0,
-                studentsWithWarning: summaryData.students_with_warning || 0,
-                studentsWithCritical: summaryData.students_with_critical || 0,
-                students: summaryData.students || []
-            };
-        }
-
-        attendanceSummary.value = summaryData;
-
-        // Process students for absence issues using real data
-        studentsWithAbsenceIssues.value = students.map((student) => {
-            // Use real absence data from summary if available
-            const studentSummary = summaryData?.students?.find((s) => s.student_id === student.id);
-            const absences = studentSummary?.total_absences || 0;
-            const recentAbsences = studentSummary?.recent_absences || 0;
-
-            let severity = 'normal';
-            if (recentAbsences >= CRITICAL_THRESHOLD) {
-                severity = 'critical';
-            } else if (recentAbsences >= WARNING_THRESHOLD) {
-                severity = 'warning';
-            }
-
-            return {
-                id: student.id,
-                name: student.first_name + ' ' + student.last_name,
-                gradeLevel: student.grade_level || 3,
-                section: student.section_name || 'Unknown',
-                absences: absences,
-                recentAbsences: recentAbsences,
-                severity: severity
-            };
-        });
-
-        console.log('Attendance data loaded successfully');
-        console.log('Updated attendance summary:', attendanceSummary.value);
-        console.log('Updated students list:', studentsWithAbsenceIssues.value);
     } catch (error) {
         console.error('Error loading attendance data:', error);
         // Fallback data
@@ -557,9 +552,9 @@ async function loadAttendanceData() {
             totalStudents: 0,
             averageAttendance: 0,
             studentsWithWarning: 0,
-            studentsWithCritical: 0
+            studentsWithCritical: 0,
+            students: []
         };
-        studentsWithAbsenceIssues.value = [];
     }
 }
 
@@ -936,36 +931,84 @@ function formatDateShort(date) {
 }
 
 // Open student profile with attendance history
-function openStudentProfile(student) {
+async function openStudentProfile(student) {
     selectedStudent.value = student;
-    prepareCalendarData(student);
+    await prepareCalendarData(student);
     studentProfileVisible.value = true;
 }
 
 // Prepare calendar data for the student profile using StudentAttendanceService
-function prepareCalendarData(student) {
+async function prepareCalendarData(student) {
     if (!selectedSubject.value || !student) return;
 
-    // Get all attendance records for this student in this subject
-    const records = StudentAttendanceService.getSubjectAttendanceRecords([student.id], selectedSubject.value.id, currentMonth.value, currentYear.value);
-
-    // Find absent days
-    absentDays.value = records.filter((record) => record.status === 'ABSENT').map((record) => new Date(record.date));
-
-    // Generate calendar data for current month
+    // Generate calendar data for current month first
     const daysInMonth = new Date(currentYear.value, currentMonth.value + 1, 0).getDate();
 
-    // Generate calendar entries
-    calendarData.value = Array.from({ length: daysInMonth }, (_, i) => {
-        const date = new Date(currentYear.value, currentMonth.value, i + 1);
-        const isAbsent = absentDays.value.some((d) => d.getDate() === date.getDate() && d.getMonth() === date.getMonth() && d.getFullYear() === date.getFullYear());
+    // Initialize calendar data
+    calendarData.value = Array.from({ length: daysInMonth }, (_, i) => ({
+        date: new Date(currentYear.value, currentMonth.value, i + 1),
+        day: i + 1,
+        isAbsent: false,
+        status: null
+    }));
 
-        return {
-            date,
-            day: i + 1,
-            isAbsent
-        };
-    });
+    try {
+        // Get all attendance records for this student in this subject
+        const response = await StudentAttendanceService.getSubjectAttendanceRecords([student.id], selectedSubject.value.id, currentMonth.value, currentYear.value);
+        
+        console.log('Attendance records response:', response);
+        
+        const records = response.records || [];
+        
+        console.log('Current month/year for calendar:', currentMonth.value, currentYear.value);
+        console.log('Individual records:', records);
+
+        // Find absent days for the absence history section
+        absentDays.value = records
+            .filter((record) => record.status === 'ABSENT')
+            .map((record) => new Date(record.date));
+
+        // Create a map of dates to attendance status for calendar display
+        const attendanceMap = {};
+        records.forEach(record => {
+            const date = new Date(record.date);
+            const day = date.getDate();
+            const month = date.getMonth(); // 0-based month
+            const year = date.getFullYear();
+            
+            console.log(`Record: ${record.date} -> Day: ${day}, Month: ${month}, Year: ${year}, Status: ${record.status}`);
+            console.log(`Calendar showing: Month: ${currentMonth.value}, Year: ${currentYear.value}`);
+            
+            // Only map records that match the current calendar month/year
+            if (month === currentMonth.value && year === currentYear.value) {
+                attendanceMap[day] = record.status;
+                console.log(`✅ Mapped day ${day} to status ${record.status}`);
+            } else {
+                console.log(`❌ Skipped - record is for ${month}/${year}, calendar shows ${currentMonth.value}/${currentYear.value}`);
+            }
+        });
+
+        console.log('Final attendance map for calendar:', attendanceMap);
+        console.log('Calendar data before mapping:', calendarData.value);
+        
+        // Update calendar data with attendance status
+        calendarData.value = calendarData.value.map(calDay => {
+            const status = attendanceMap[calDay.day] || null;
+            const updatedDay = {
+                ...calDay,
+                status: status,
+                isAbsent: status === 'ABSENT'
+            };
+            console.log(`Day ${calDay.day}: status = ${status}`, updatedDay);
+            return updatedDay;
+        });
+        
+        console.log('Calendar data after mapping:', calendarData.value);
+
+    } catch (error) {
+        console.error('Error loading attendance records:', error);
+        absentDays.value = []; // Fallback to empty array
+    }
 }
 
 // Handle subject change
@@ -1079,6 +1122,67 @@ function ensureStudentAttendanceService() {
         StudentAttendanceService.getSubjectAttendanceRecords = getAttendanceRecords;
     }
 }
+
+// Smart Analytics Functions
+async function loadSmartAnalytics() {
+    try {
+        if (!currentTeacher.value?.id) return;
+        
+        const response = await SmartAnalyticsService.getTeacherStudentAnalytics(currentTeacher.value.id);
+        if (response.success) {
+            smartAnalytics.value = response.data;
+            studentsWithSmartAnalytics.value = response.data.students || [];
+            
+            // Update existing attendance summary with smart analytics
+            if (attendanceSummary.value) {
+                attendanceSummary.value.criticalStudents = response.data.summary?.critical_cases || 0;
+                attendanceSummary.value.studentsExceeding18 = response.data.summary?.exceeding_18_limit || 0;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading smart analytics:', error);
+    }
+}
+
+async function loadCriticalStudents() {
+    try {
+        if (!currentTeacher.value?.id) return;
+        
+        const response = await SmartAnalyticsService.getCriticalAbsenteeism(currentTeacher.value.id);
+        if (response.success) {
+            criticalStudents.value = response.data.students || [];
+        }
+    } catch (error) {
+        console.error('Error loading critical students:', error);
+    }
+}
+
+// Sticky notes functionality removed
+
+// Enhanced student profile with smart analytics
+async function showStudentProfile(student) {
+    try {
+        selectedStudent.value = student;
+        
+        // Load smart analytics for this student
+        const analyticsResponse = await SmartAnalyticsService.getStudentAnalytics(student.id);
+        if (analyticsResponse.success) {
+            selectedStudent.value.smartAnalytics = analyticsResponse.data;
+        }
+        
+        // Load calendar attendance data for this student
+        await prepareCalendarData(student);
+        
+        studentProfileVisible.value = true;
+    } catch (error) {
+        console.error('Error loading student analytics:', error);
+        studentProfileVisible.value = true; // Still show profile even if analytics fail
+    }
+}
+
+// Sticky notes functionality removed
+
+// Sticky notes functionality removed
 </script>
 
 <template>
@@ -1110,8 +1214,9 @@ function ensureStudentAttendanceService() {
                         <p class="text-blue-200 font-medium text-sm mt-1">Section: {{ currentTeacher?.section || 'Malikhain (Grade 3)' }}</p>
                     </div>
 
-                    <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end">
+                    <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end items-center">
                         <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-3xl" @change="onSubjectChange" />
+                        
                     </div>
                 </div>
             </div>
@@ -1178,8 +1283,8 @@ function ensureStudentAttendanceService() {
                         <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
                     </div>
                     <div>
-                        <div class="text-sm text-gray-500 mb-1 font-medium">Critical ({{ CRITICAL_THRESHOLD }}+ absences)</div>
-                        <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
+                        <div class="text-sm text-gray-500 mb-1 font-medium">🚨 18+ Absences (Smart Detection)</div>
+                        <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
                     </div>
                 </div>
             </div>
@@ -1438,7 +1543,27 @@ function ensureStudentAttendanceService() {
                     </div>
                 </div>
 
-                <h4 class="font-medium mb-3">Attendance Calendar: {{ selectedSubject?.name }}</h4>
+                <div class="flex justify-between items-center mb-3">
+                    <div>
+                        <h4 class="font-medium">Attendance Calendar: {{ selectedSubject?.name }}</h4>
+                        <p class="text-sm text-gray-600">{{ new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}</p>
+                    </div>
+                    <div class="flex items-center space-x-4 text-xs">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 bg-red-100 border border-red-200 rounded-full"></div>
+                            <span class="text-gray-600">Absent</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded-full"></div>
+                            <span class="text-gray-600">Late</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 bg-green-100 border border-green-200 rounded-full"></div>
+                            <span class="text-gray-600">Present</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="calendar-view mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
                     <div class="calendar-header grid grid-cols-7 gap-1 mb-2">
                         <div v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-center font-medium text-gray-600 text-xs">
@@ -1454,14 +1579,36 @@ function ensureStudentAttendanceService() {
                         <div
                             v-for="calDay in calendarData"
                             :key="calDay.day"
-                            class="calendar-day h-10 w-10 flex items-center justify-center rounded-full transition-all"
+                            class="calendar-day h-10 w-10 flex items-center justify-center rounded-full transition-all cursor-pointer relative"
                             :class="{
-                                'bg-red-100 text-red-800 border border-red-200': calDay.isAbsent,
-                                'hover:bg-gray-100': !calDay.isAbsent,
+                                'bg-red-100 text-red-800 border border-red-200 font-semibold': calDay.status === 'ABSENT',
+                                'bg-yellow-100 text-yellow-800 border border-yellow-200 font-semibold': calDay.status === 'LATE',
+                                'bg-green-100 text-green-800 border border-green-200': calDay.status === 'PRESENT',
+                                'hover:bg-gray-100': !calDay.status,
                                 'bg-gray-200 text-gray-400': new Date(currentYear, currentMonth, calDay.day).getDay() === 0 || new Date(currentYear, currentMonth, calDay.day).getDay() === 6
                             }"
+                            :title="calDay.status ? `${calDay.status} on ${calDay.day}/${currentMonth + 1}/${currentYear}` : ''"
+                            :data-status="calDay.status"
+                            :data-day="calDay.day"
                         >
                             {{ calDay.day }}
+                            <!-- Debug info -->
+                            <span v-if="calDay.status" class="absolute top-0 left-0 text-xs text-blue-600">{{ calDay.status.charAt(0) }}</span>
+                            <!-- Status indicator dot -->
+                            <div v-if="calDay.status" class="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+                                :class="{
+                                    'bg-red-500': calDay.status === 'ABSENT',
+                                    'bg-yellow-500': calDay.status === 'LATE',
+                                    'bg-green-500': calDay.status === 'PRESENT'
+                                }">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Calendar summary -->
+                    <div v-if="absentDays.length > 0" class="mt-4 pt-4 border-t border-gray-200">
+                        <div class="text-sm text-gray-600 text-center">
+                            <span class="font-medium text-red-600">{{ absentDays.length }}</span> absent days this month
                         </div>
                     </div>
                 </div>
@@ -1484,14 +1631,6 @@ function ensureStudentAttendanceService() {
                 </div>
             </div>
 
-            <template #footer>
-                <div class="flex justify-between">
-                    <Button label="Close" icon="pi pi-times" @click="studentProfileVisible = false" class="p-button-text" />
-                    <div>
-                        <Button label="Contact Parent" icon="pi pi-envelope" class="p-button-primary" />
-                    </div>
-                </div>
-            </template>
         </Dialog>
 
         <!-- Debug Data -->
@@ -1512,6 +1651,42 @@ function ensureStudentAttendanceService() {
             <h3 class="loading-text">Please wait while we prepare your dashboard...</h3>
         </div>
     </div>
+
+
+    <!-- Critical Students Alert Dialog -->
+    <Dialog v-model:visible="showCriticalAlert" 
+            header="🚨 Critical Attendance Cases"
+            :style="{ width: '600px' }"
+            :modal="true">
+        <div v-if="criticalStudents.length > 0" class="space-y-4">
+            <p class="text-gray-700 mb-4">
+                The following students have exceeded the 18-absence limit and require immediate attention:
+            </p>
+            
+            <div v-for="student in criticalStudents" :key="student.id" 
+                 class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="font-medium text-red-900">{{ student.name }}</h4>
+                        <p class="text-sm text-red-700">
+                            Total Absences: {{ student.total_absences }} | 
+                            Attendance Rate: {{ student.attendance_percentage }}%
+                        </p>
+                    </div>
+                    <Button @click="showStudentProfile(student)" 
+                            label="View Details" 
+                            icon="pi pi-eye" 
+                            class="p-button-sm p-button-outlined" />
+                </div>
+            </div>
+        </div>
+        
+        <template #footer>
+            <Button @click="showCriticalAlert = false" 
+                    label="Close" 
+                    class="p-button-text" />
+        </template>
+    </Dialog>
 </template>
 
 <style scoped>

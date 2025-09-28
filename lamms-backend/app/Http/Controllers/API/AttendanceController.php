@@ -744,4 +744,83 @@ class AttendanceController extends Controller
             return response()->json(['error' => 'Failed to mark attendance'], 500);
         }
     }
+
+    /**
+     * Get attendance records for students (for calendar display)
+     */
+    public function getAttendanceRecords(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'student_ids' => 'required|string',
+                'subject_id' => 'required|integer',
+                'month' => 'required|integer|min:0|max:11',
+                'year' => 'required|integer|min:2020|max:2030'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $studentIds = explode(',', $request->student_ids);
+            $subjectId = $request->subject_id;
+            $month = $request->month + 1; // Convert JS month (0-11) to PHP month (1-12)
+            $year = $request->year;
+
+            // Get attendance records from attendance_records table with sessions
+            $records = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as as', 'ar.attendance_session_id', '=', 'as.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIds)
+                ->where('as.subject_id', $subjectId)
+                ->whereYear('as.session_date', $year)
+                ->whereMonth('as.session_date', $month)
+                ->where('ar.is_current_version', true)
+                ->select([
+                    'ar.student_id',
+                    'as.session_date as date',
+                    'ast.name as status',
+                    'ast.code as status_code',
+                    'ar.marked_at'
+                ])
+                ->get()
+                ->map(function ($record) {
+                    // Map status codes to full names
+                    $statusMap = [
+                        'P' => 'PRESENT',
+                        'A' => 'ABSENT', 
+                        'L' => 'LATE'
+                    ];
+                    
+                    return [
+                        'student_id' => $record->student_id,
+                        'date' => $record->date,
+                        'status' => $statusMap[$record->status_code] ?? 'UNKNOWN',
+                        'status_name' => $record->status,
+                        'status_code' => $record->status_code,
+                        'marked_at' => $record->marked_at
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'records' => $records,
+                'count' => $records->count(),
+                'month' => $month,
+                'year' => $year
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching attendance records: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch attendance records',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
 }

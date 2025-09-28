@@ -97,7 +97,7 @@ const scannedStudents = ref([]);
 const lastScannedStudent = ref(null);
 
 // Track attendance method for notifications
-const attendanceMethod = ref('manual'); // 'manual' or 'qr'
+const attendanceMethod = ref('seat_plan'); // 'seat_plan', 'roll_call', or 'qr'
 
 // Loading states
 const isCompletingSession = ref(false);
@@ -242,9 +242,37 @@ const initializeAttendanceSession = async () => {
             const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == resolvedSubjectId);
 
             if (matchingSession) {
-                currentSession.value = matchingSession;
-                sessionActive.value = true;
-                console.log('Found active session:', matchingSession);
+                // Check if session is from today - don't auto-resume old sessions
+                const sessionDate = new Date(matchingSession.session_date || matchingSession.created_at);
+                const today = new Date();
+                
+                // Use UTC dates to avoid timezone issues
+                const sessionDateUTC = sessionDate.toISOString().split('T')[0]; // YYYY-MM-DD
+                const todayUTC = today.toISOString().split('T')[0]; // YYYY-MM-DD
+                const isToday = sessionDateUTC === todayUTC;
+                
+                console.log('Session date check:');
+                console.log('- Session date (original):', matchingSession.session_date);
+                console.log('- Session date (parsed):', sessionDate.toISOString());
+                console.log('- Session date (UTC):', sessionDateUTC);
+                console.log('- Today date (UTC):', todayUTC);
+                console.log('- Is today?', isToday);
+                
+                if (isToday) {
+                    currentSession.value = matchingSession;
+                    sessionActive.value = true;
+                    console.log('Found active session from today:', matchingSession);
+                    console.log('Session details - ID:', matchingSession.id, 'Date:', matchingSession.session_date, 'Status:', matchingSession.status);
+                } else {
+                    console.log('Found old active session from', sessionDate.toDateString(), '- not resuming');
+                    // Optionally auto-complete old sessions
+                    try {
+                        await AttendanceSessionService.completeSession(matchingSession.id);
+                        console.log('Auto-completed old session:', matchingSession.id);
+                    } catch (error) {
+                        console.error('Error auto-completing old session:', error);
+                    }
+                }
             }
         }
     } catch (error) {
@@ -789,7 +817,7 @@ const startQRScanner = async () => {
     } catch (error) {
         console.error('Failed to start QR scanner:', error);
         showQRScanner.value = false;
-        attendanceMethod.value = 'manual'; // Reset to manual on error
+        attendanceMethod.value = 'seat_plan'; // Reset to seat plan on error
     }
 };
 
@@ -1817,13 +1845,13 @@ const calculateSessionStatistics = () => {
 
 // Method selection functions
 const selectSeatPlanMethod = async () => {
-    attendanceMethod.value = 'manual'; // Set method to manual for seating plan
+    attendanceMethod.value = 'seat_plan'; // Set method to seat plan
     await createAttendanceSession();
     showAttendanceMethodModal.value = false;
 };
 
 const selectRollCallMethod = async () => {
-    attendanceMethod.value = 'manual'; // Set method to manual for roll call
+    attendanceMethod.value = 'roll_call'; // Set method to roll call
     await createAttendanceSession();
     showAttendanceMethodModal.value = false;
     startRollCall();
@@ -1889,9 +1917,15 @@ const completeAttendanceSession = async () => {
         completedSessionData.value = response.summary;
 
         // Add notification with correct method
+        const methodNames = {
+            'qr': 'QR Code Scan',
+            'seat_plan': 'Seat Plan',
+            'roll_call': 'Roll Call'
+        };
+        
         const sessionSummaryWithMethod = {
             ...response.summary,
-            method: attendanceMethod.value === 'qr' ? 'QR Code Scan' : 'Manual Entry'
+            method: methodNames[attendanceMethod.value] || 'Manual Entry'
         };
         console.log('Adding session completion notification:', sessionSummaryWithMethod);
         const notification = NotificationService.addSessionCompletionNotification(sessionSummaryWithMethod);
@@ -2376,6 +2410,19 @@ onMounted(async () => {
     loadTodayAttendanceFromDatabase();
 });
 
+// Watch for session status changes and clear statuses when session becomes inactive
+watch(sessionActive, (newValue, oldValue) => {
+    console.log('Session active changed:', oldValue, '->', newValue);
+    if (!newValue && oldValue) {
+        // Session just became inactive, clear all student statuses
+        clearStudentStatuses();
+    } else if (newValue && !oldValue) {
+        // Session just became active, clear any cached statuses to start fresh
+        console.log('Session became active - clearing cached statuses for fresh start');
+        clearStudentStatuses();
+    }
+});
+
 // Function to check for and load cached attendance data for a specific date
 const loadCachedAttendanceData = () => {
     // Reset all statuses first
@@ -2404,7 +2451,12 @@ const loadCachedAttendanceData = () => {
                             if (colIndex < seatPlan.value[rowIndex].length) {
                                 // Only copy the status - preserve other seat properties
                                 if (seatPlan.value[rowIndex][colIndex].studentId === cachedSeat.studentId) {
-                                    seatPlan.value[rowIndex][colIndex].status = cachedSeat.status;
+                                    // Only apply cached status if there's an active session
+                                    if (sessionActive.value) {
+                                        seatPlan.value[rowIndex][colIndex].status = cachedSeat.status;
+                                    } else {
+                                        seatPlan.value[rowIndex][colIndex].status = null; // Clear status when no active session
+                                    }
                                 }
                             }
                         });
@@ -3149,6 +3201,41 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
     }
 };
 
+// Clear all student statuses when no session is active
+const clearStudentStatuses = () => {
+    console.log('Clearing all student statuses - no active session');
+    for (let i = 0; i < seatPlan.value.length; i++) {
+        for (let j = 0; j < seatPlan.value[i].length; j++) {
+            if (seatPlan.value[i][j].studentId) {
+                seatPlan.value[i][j].status = null;
+            }
+        }
+    }
+};
+
+// Debug function to force complete current session (can be called from console)
+const forceCompleteCurrentSession = async () => {
+    if (currentSession.value) {
+        try {
+            console.log('Force completing session:', currentSession.value.id);
+            await AttendanceSessionService.completeSession(currentSession.value.id);
+            sessionActive.value = false;
+            currentSession.value = null;
+            clearStudentStatuses();
+            console.log('Session force completed successfully');
+        } catch (error) {
+            console.error('Error force completing session:', error);
+        }
+    } else {
+        console.log('No active session to complete');
+    }
+};
+
+// Make debug function available globally for console access
+if (typeof window !== 'undefined') {
+    window.forceCompleteCurrentSession = forceCompleteCurrentSession;
+}
+
 // Load attendance data from database for today
 const loadTodayAttendanceFromDatabase = async () => {
     try {
@@ -3183,7 +3270,13 @@ const loadTodayAttendanceFromDatabase = async () => {
                 for (let i = 0; i < seatPlan.value.length; i++) {
                     for (let j = 0; j < seatPlan.value[i].length; j++) {
                         if (seatPlan.value[i][j].studentId === student.id) {
-                            seatPlan.value[i][j].status = todayAttendance?.status || null;
+                            // Only show attendance status if there's an active session
+                            // If no active session, clear any status to show neutral state
+                            if (sessionActive.value) {
+                                seatPlan.value[i][j].status = todayAttendance?.status || null;
+                            } else {
+                                seatPlan.value[i][j].status = null; // Clear status when no active session
+                            }
                             break;
                         }
                     }
@@ -3191,6 +3284,7 @@ const loadTodayAttendanceFromDatabase = async () => {
             });
 
             console.log('Loaded attendance records from database:', attendanceRecords.value);
+            console.log('Session active:', sessionActive.value, '- Status display:', sessionActive.value ? 'enabled' : 'disabled');
         }
     } catch (error) {
         console.error('Error loading attendance from database:', error);
@@ -3535,9 +3629,15 @@ const saveCompletedSession = (sessionData) => {
     completedSessionData.value = sessionData;
 
     // Add notification to the system with correct method
+    const methodNames = {
+        'qr': 'QR Code Scan',
+        'seat_plan': 'Seat Plan',
+        'roll_call': 'Roll Call'
+    };
+    
     const sessionDataWithMethod = {
         ...sessionData,
-        method: attendanceMethod.value === 'qr' ? 'QR Code Scan' : 'Manual Entry'
+        method: methodNames[attendanceMethod.value] || 'Manual Entry'
     };
     NotificationService.addSessionCompletionNotification(sessionDataWithMethod);
 
@@ -3968,7 +4068,7 @@ const titleRef = ref(null);
 
             <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" />
 
-            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
+            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
 
             <Button
                 :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
@@ -3979,7 +4079,7 @@ const titleRef = ref(null);
                 :disabled="isCompletingSession"
             />
 
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession" />
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession || !sessionActive" />
 
             <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
         </div>
@@ -4478,6 +4578,15 @@ const titleRef = ref(null);
 </template>
 
 <style>
+/* Disabled button cursor styling */
+.p-button:disabled {
+    cursor: not-allowed !important;
+}
+
+.p-button:disabled:hover {
+    cursor: not-allowed !important;
+}
+
 /* Add these styles for the side-by-side layout */
 .edit-layout {
     display: flex;

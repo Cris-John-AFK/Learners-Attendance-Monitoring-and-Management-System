@@ -1,12 +1,13 @@
 <script setup>
-import { useLayout } from '@/layout/composables/layout';
-import Dialog from 'primevue/dialog';
-import { computed, ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
 import NotificationBell from '@/components/NotificationBell.vue';
-import NotificationService from '@/services/NotificationService';
+import { useLayout } from '@/layout/composables/layout';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
+import NotificationService from '@/services/NotificationService';
 import TeacherAuthService from '@/services/TeacherAuthService';
+import Dialog from 'primevue/dialog';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+// Sticky notes removed
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -75,10 +76,10 @@ const selectedSession = ref(null);
 const handleNotificationClick = (notification) => {
     console.log('Notification clicked:', notification);
     NotificationService.markAsRead(notification.id);
-    
+
     // Force reactive update
     notifications.value = [...NotificationService.getNotifications()];
-    
+
     if (notification.type === 'session_completed') {
         // Show session summary dialog instead of navigating
         showSessionSummaryDialog(notification);
@@ -90,19 +91,16 @@ const showSessionSummaryDialog = async (notification) => {
         // Debug: Log the full notification structure
         console.log('Full notification object:', notification);
         console.log('Notification data:', notification.data);
-        
+
         // Extract session ID from notification - the backend sends session_id in the data
-        const sessionId = notification.data?.session_id || 
-                         notification.sessionId || 
-                         notification.metadata?.sessionId || 
-                         notification.data?.id;
-        
+        const sessionId = notification.data?.session_id || notification.sessionId || notification.metadata?.sessionId || notification.data?.id;
+
         console.log('Extracted session ID:', sessionId);
-        
+
         if (!sessionId) {
             console.error('No session ID found in notification. Available fields:', Object.keys(notification));
             console.error('Notification data keys:', notification.data ? Object.keys(notification.data) : 'No data object');
-            
+
             // Try to use data from the notification itself for display
             const notificationData = notification.data || {};
             selectedSession.value = {
@@ -119,8 +117,7 @@ const showSessionSummaryDialog = async (notification) => {
                     present: notificationData.statistics?.present || 0,
                     absent: notificationData.statistics?.absent || 0,
                     late: notificationData.statistics?.late || 0,
-                    attendanceRate: notificationData.statistics?.total_students > 0 ? 
-                        Math.round(((notificationData.statistics.present + notificationData.statistics.late) / notificationData.statistics.total_students) * 100) : 0
+                    attendanceRate: notificationData.statistics?.total_students > 0 ? Math.round(((notificationData.statistics.present + notificationData.statistics.late) / notificationData.statistics.total_students) * 100) : 0
                 }
             };
             showSessionSummary.value = true;
@@ -129,14 +126,14 @@ const showSessionSummaryDialog = async (notification) => {
 
         // Fetch real session data from API
         const sessionData = await AttendanceSessionService.getSessionSummary(sessionId);
-        
+
         // Transform API response to match dialog format
         const session = sessionData.session;
         const stats = sessionData.statistics;
         const records = sessionData.attendance_records;
-        
+
         // Map attendance records to student list with better error handling
-        const students = records.map(record => {
+        const students = records.map((record) => {
             console.log('Processing record:', record);
             return {
                 id: record.student?.id || 'unknown',
@@ -148,7 +145,7 @@ const showSessionSummaryDialog = async (notification) => {
 
         // Add unmarked students as absent with better error handling
         if (sessionData.unmarked_students) {
-            sessionData.unmarked_students.forEach(student => {
+            sessionData.unmarked_students.forEach((student) => {
                 students.push({
                     id: student.id,
                     name: `${student.firstName || student.first_name || 'Unknown'} ${student.lastName || student.last_name || 'Student'}`,
@@ -175,7 +172,7 @@ const showSessionSummaryDialog = async (notification) => {
                 attendanceRate: Math.round(((stats.present + stats.late) / stats.total_students) * 100)
             }
         };
-        
+
         showSessionSummary.value = true;
     } catch (error) {
         console.error('Error fetching session summary:', error);
@@ -204,18 +201,23 @@ const showSessionSummaryDialog = async (notification) => {
 // Helper function to map status codes to labels
 const getStatusLabel = (code) => {
     switch (code) {
-        case 'P': return 'Present';
-        case 'A': return 'Absent';
-        case 'L': return 'Late';
-        case 'E': return 'Excused';
-        default: return 'Unknown';
+        case 'P':
+            return 'Present';
+        case 'A':
+            return 'Absent';
+        case 'L':
+            return 'Late';
+        case 'E':
+            return 'Excused';
+        default:
+            return 'Unknown';
     }
 };
 
 const handleMarkAllRead = () => {
     console.log('Mark all as read clicked');
     NotificationService.markAllAsRead();
-    
+
     // Force reactive update
     notifications.value = [...NotificationService.getNotifications()];
 };
@@ -223,7 +225,7 @@ const handleMarkAllRead = () => {
 const handleRemoveNotification = (notificationId) => {
     console.log('Remove notification:', notificationId);
     NotificationService.removeNotification(notificationId);
-    
+
     // Force reactive update
     notifications.value = [...NotificationService.getNotifications()];
 };
@@ -232,10 +234,10 @@ const logout = async () => {
     try {
         // Use TeacherAuthService to properly logout
         await TeacherAuthService.logout();
-        
+
         // Show success message
         isLogoutSuccess.value = true;
-        
+
         // Redirect to general login page after a short delay
         setTimeout(() => {
             router.push('/');
@@ -257,12 +259,12 @@ onMounted(async () => {
         console.log('Initializing notifications for teacher:', teacherData.teacher.id);
         await NotificationService.setCurrentTeacher(teacherData.teacher.id);
     }
-    
+
     // Force refresh notifications on mount
     NotificationService.loadNotifications();
     notifications.value = NotificationService.getNotifications();
     console.log('Initial notifications loaded:', notifications.value.length);
-    
+
     unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
         console.log('Notifications updated:', updatedNotifications);
         notifications.value = [...updatedNotifications]; // Force reactivity with new array
@@ -295,13 +297,10 @@ onUnmounted(() => {
                     <span>Calendar</span>
                 </button>
 
+                <!-- Sticky notes removed -->
+
                 <!-- Notification Bell -->
-                <NotificationBell
-                    :notifications="notifications"
-                    @notification-clicked="handleNotificationClick"
-                    @mark-all-read="handleMarkAllRead"
-                    @remove-notification="handleRemoveNotification"
-                />
+                <NotificationBell :notifications="notifications" @notification-clicked="handleNotificationClick" @mark-all-read="handleMarkAllRead" @remove-notification="handleRemoveNotification" />
 
                 <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
                     <i class="pi pi-cog"></i>
@@ -426,12 +425,7 @@ onUnmounted(() => {
                             <div class="col-time">Time In</div>
                         </div>
                         <div class="table-body">
-                            <div 
-                                v-for="student in selectedSession.students" 
-                                :key="student.id"
-                                class="table-row"
-                                :class="student.status.toLowerCase()"
-                            >
+                            <div v-for="student in selectedSession.students" :key="student.id" class="table-row" :class="student.status.toLowerCase()">
                                 <div class="col-name">
                                     <i class="pi pi-user student-icon"></i>
                                     {{ student.name }}
@@ -452,20 +446,6 @@ onUnmounted(() => {
                     </div>
                 </div>
             </div>
-            <template #footer>
-                <button class="p-button p-button-secondary" @click="showSessionSummary = false">
-                    <i class="pi pi-times"></i>
-                    Close
-                </button>
-                <button class="p-button p-button-primary">
-                    <i class="pi pi-print"></i>
-                    Print Report
-                </button>
-                <button class="p-button p-button-success">
-                    <i class="pi pi-download"></i>
-                    Export to Excel
-                </button>
-            </template>
         </Dialog>
     </div>
 </template>
@@ -661,7 +641,9 @@ onUnmounted(() => {
     padding: 1.5rem;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
 .summary-card:hover {
@@ -700,11 +682,21 @@ onUnmounted(() => {
     opacity: 0.8;
 }
 
-.summary-card.total .card-icon { color: #2196f3; }
-.summary-card.present .card-icon { color: #4caf50; }
-.summary-card.absent .card-icon { color: #f44336; }
-.summary-card.late .card-icon { color: #ff9800; }
-.summary-card.rate .card-icon { color: #9c27b0; }
+.summary-card.total .card-icon {
+    color: #2196f3;
+}
+.summary-card.present .card-icon {
+    color: #4caf50;
+}
+.summary-card.absent .card-icon {
+    color: #f44336;
+}
+.summary-card.late .card-icon {
+    color: #ff9800;
+}
+.summary-card.rate .card-icon {
+    color: #9c27b0;
+}
 
 .card-content {
     flex: 1;

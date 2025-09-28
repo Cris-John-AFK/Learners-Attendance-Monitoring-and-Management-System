@@ -426,12 +426,6 @@ const rejectVerification = () => {
     closeVerificationModal();
 };
 
-const skipVerification = () => {
-    if (isLoadingVerification.value) return;
-    
-    stopVerificationCountdown();
-    closeVerificationModal();
-};
 
 const handleImageError = (event) => {
     // Set default image based on gender or use generic default
@@ -884,14 +878,6 @@ const logout = () => {
                                         >
                                             <i class="pi pi-times"></i>
                                             Reject
-                                        </button>
-                                        <button 
-                                            class="next-btn"
-                                            @click="skipVerification"
-                                            :disabled="isLoadingVerification"
-                                        >
-                                            <i class="pi pi-arrow-right"></i>
-                                            Next Student
                                         </button>
                                     </div>
 

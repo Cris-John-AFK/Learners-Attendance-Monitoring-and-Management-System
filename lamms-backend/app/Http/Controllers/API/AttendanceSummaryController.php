@@ -5,20 +5,32 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AttendanceSummaryController extends Controller
 {
     /**
-     * Get attendance summary for teacher's students
+     * Get attendance summary for teacher's students - OPTIMIZED VERSION
      */
     public function getTeacherAttendanceSummary(Request $request)
     {
+        $startTime = microtime(true);
+
         try {
             $teacherId = $request->query('teacher_id');
-            $period = $request->query('period', 'month'); // day, week, month
-            $viewType = $request->query('view_type', 'subject'); // subject, all_students
+            $period = $request->query('period', 'week');
+            $viewType = $request->query('view_type', 'subject');
             $subjectId = $request->query('subject_id');
+
+            if (!$teacherId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Teacher ID is required'
+                ], 400);
+            }
+
+            Log::info("Loading attendance summary for teacher {$teacherId}, period: {$period}, viewType: {$viewType}, subjectId: {$subjectId}");
 
             // Calculate date range based on period
             $endDate = Carbon::now();
@@ -31,17 +43,27 @@ class AttendanceSummaryController extends Controller
                     break;
                 case 'month':
                 default:
-                    $startDate = $endDate->copy()->subMonths(6);
+                    $startDate = $endDate->copy()->subMonths(1);
                     break;
             }
 
-            // Get students for this teacher - check both teacher assignments and actual attendance sessions
+            // OPTIMIZED: Single query to get students with attendance data and proper grade/section info
             $studentsQuery = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
                 ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
+                ->join('sections as sec', 'ss.section_id', '=', 'sec.id')
+                ->join('curriculum_grade as cg', 'sec.curriculum_grade_id', '=', 'cg.id')
+                ->join('grades as g', 'cg.grade_id', '=', 'g.id')
+                ->leftJoin('attendance_records as ar', 'sd.id', '=', 'ar.student_id')
+                ->leftJoin('attendance_sessions as ases', function($join) use ($startDate, $endDate) {
+                    $join->on('ar.attendance_session_id', '=', 'ases.id')
+                         ->whereBetween('ases.session_date', [$startDate, $endDate]);
+                })
+                ->leftJoin('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                 ->where('tss.teacher_id', $teacherId)
+                ->where('tss.is_active', true)
                 ->where('ss.is_active', true)
-                ->where('sd.isActive', true);
+                ->where('sd.current_status', 'active');
 
             if ($viewType === 'subject' && $subjectId) {
                 $studentsQuery->where('tss.subject_id', $subjectId);
@@ -51,180 +73,71 @@ class AttendanceSummaryController extends Controller
                 'sd.id as student_id',
                 'sd.firstName as first_name',
                 'sd.lastName as last_name',
-                'ss.section_id'
-            ])->distinct()->get();
+                'sd.name as full_name',
+                'ss.section_id',
+                'sec.name as section_name',
+                'g.name as grade_name',
+                DB::raw('COUNT(CASE WHEN ast.code = \'A\' THEN 1 END) as total_absences'),
+                DB::raw('COUNT(CASE WHEN ast.code = \'P\' THEN 1 END) as total_present'),
+                DB::raw('COUNT(CASE WHEN ast.code = \'L\' THEN 1 END) as total_late'),
+                DB::raw('COUNT(ar.id) as total_records')
+            ])
+            ->groupBy('sd.id', 'sd.firstName', 'sd.lastName', 'sd.name', 'ss.section_id', 'sec.name', 'g.name')
+            ->get();
 
-            // Also get students who have attendance records for this teacher (fallback)
-            if ($students->isEmpty()) {
-                $studentsFromAttendance = DB::table('student_details as sd')
-                    ->join('attendance_records as ar', 'sd.id', '=', 'ar.student_id')
-                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                    ->where('ases.teacher_id', $teacherId)
-                    ->select([
-                        'sd.id as student_id',
-                        'sd.firstName as first_name',
-                        'sd.lastName as last_name',
-                        'ases.section_id'
-                    ])
-                    ->distinct()
-                    ->get();
-                
-                if (!$studentsFromAttendance->isEmpty()) {
-                    $students = $studentsFromAttendance;
-                }
-            }
+            Log::info("Found {$students->count()} students for teacher {$teacherId}");
 
             $totalStudents = $students->count();
             $studentsWithWarning = 0;
             $studentsWithCritical = 0;
+            $totalPresent = 0;
+            $totalAbsent = 0;
 
             $studentSummaries = [];
 
-            // Check if attendance_statuses table exists
-            $statusTableExists = DB::select("SELECT to_regclass('attendance_statuses') as exists");
-            $hasStatusTable = $statusTableExists[0]->exists !== null;
-
             foreach ($students as $student) {
-                $totalAbsences = 0;
-                $recentAbsenceCount = 0;
+                $absences = (int)$student->total_absences;
+                $present = (int)$student->total_present;
+                $late = (int)$student->total_late;
+                $totalRecords = (int)$student->total_records;
 
-                if ($hasStatusTable) {
-                    // Use proper joins with attendance_statuses table
-                    $absenceQuery = DB::table('attendance_records as ar')
-                        ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                        ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                        ->where('ar.student_id', $student->student_id)
-                        ->where('ases.teacher_id', $teacherId)
-                        ->where('ast.name', 'Absent');
+                $attendanceRate = $totalRecords > 0 ? round(($present / $totalRecords) * 100, 1) : 0;
 
-                    if ($viewType === 'subject' && $subjectId) {
-                        $absenceQuery->where('ases.subject_id', $subjectId);
-                    }
-
-                    $totalAbsences = $absenceQuery->count();
-
-                    // Count recent absences (past week)
-                    $recentAbsenceQuery = DB::table('attendance_records as ar')
-                        ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                        ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                        ->where('ar.student_id', $student->student_id)
-                        ->where('ases.teacher_id', $teacherId)
-                        ->where('ast.name', 'Absent')
-                        ->where('ases.session_date', '>=', Carbon::now()->subWeek());
-
-                    if ($viewType === 'subject' && $subjectId) {
-                        $recentAbsenceQuery->where('ases.subject_id', $subjectId);
-                    }
-
-                    $recentAbsenceCount = $recentAbsenceQuery->count();
-                } else {
-                    // Fallback: assume attendance_status_id 2 is absent (based on sample data)
-                    $absenceQuery = DB::table('attendance_records as ar')
-                        ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                        ->where('ar.student_id', $student->student_id)
-                        ->where('ases.teacher_id', $teacherId)
-                        ->where('ar.attendance_status_id', 2); // Assuming 2 = absent
-
-                    if ($viewType === 'subject' && $subjectId) {
-                        $absenceQuery->where('ases.subject_id', $subjectId);
-                    }
-
-                    $totalAbsences = $absenceQuery->count();
-
-                    // Recent absences
-                    $recentAbsenceQuery = DB::table('attendance_records as ar')
-                        ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                        ->where('ar.student_id', $student->student_id)
-                        ->where('ases.teacher_id', $teacherId)
-                        ->where('ar.attendance_status_id', 2)
-                        ->where('ases.session_date', '>=', Carbon::now()->subWeek());
-
-                    if ($viewType === 'subject' && $subjectId) {
-                        $recentAbsenceQuery->where('ases.subject_id', $subjectId);
-                    }
-
-                    $recentAbsenceCount = $recentAbsenceQuery->count();
-                }
-
-                // Determine severity
-                if ($recentAbsenceCount >= 5) {
+                // Determine severity based on absences
+                $severity = 'normal';
+                if ($absences >= 5) {
+                    $severity = 'critical';
                     $studentsWithCritical++;
-                } elseif ($recentAbsenceCount >= 3) {
+                } elseif ($absences >= 3) {
+                    $severity = 'warning';
                     $studentsWithWarning++;
                 }
 
+                $totalPresent += $present;
+                $totalAbsent += $absences;
+
                 $studentSummaries[] = [
                     'student_id' => $student->student_id,
+                    'name' => $student->full_name ?: ($student->first_name . ' ' . $student->last_name),
                     'first_name' => $student->first_name,
                     'last_name' => $student->last_name,
-                    'total_absences' => $totalAbsences,
-                    'recent_absences' => $recentAbsenceCount
+                    'section_id' => $student->section_id,
+                    'section_name' => $student->section_name,
+                    'grade_name' => $student->grade_name,
+                    'total_absences' => $absences,
+                    'total_present' => $present,
+                    'total_late' => $late,
+                    'attendance_rate' => $attendanceRate,
+                    'severity' => $severity,
+                    'recent_absences' => $absences
                 ];
             }
 
-            // Calculate average attendance
-            $presentCount = 0;
-            if ($hasStatusTable) {
-                $presentQuery = DB::table('attendance_records as ar')
-                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                    ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                    ->whereIn('ar.student_id', $students->pluck('student_id'))
-                    ->where('ases.teacher_id', $teacherId)
-                    ->where('ast.name', 'Present')
-                    ->whereBetween('ases.session_date', [$startDate, $endDate]);
+            // Calculate overall average attendance
+            $totalRecords = $totalPresent + $totalAbsent;
+            $averageAttendance = $totalRecords > 0 ? round(($totalPresent / $totalRecords) * 100, 1) : 0;
 
-                if ($viewType === 'subject' && $subjectId) {
-                    $presentQuery->where('ases.subject_id', $subjectId);
-                }
-
-                $presentCount = $presentQuery->count();
-            } else {
-                // Fallback: assume attendance_status_id 1 is present
-                $presentQuery = DB::table('attendance_records as ar')
-                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                    ->whereIn('ar.student_id', $students->pluck('student_id'))
-                    ->where('ases.teacher_id', $teacherId)
-                    ->where('ar.attendance_status_id', 1)
-                    ->whereBetween('ases.session_date', [$startDate, $endDate]);
-
-                if ($viewType === 'subject' && $subjectId) {
-                    $presentQuery->where('ases.subject_id', $subjectId);
-                }
-
-                $presentCount = $presentQuery->count();
-            }
-
-            // Calculate total attendance records (present + absent + late + excused)
-            $totalAttendanceRecords = 0;
-            if ($hasStatusTable) {
-                $totalRecordsQuery = DB::table('attendance_records as ar')
-                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                    ->whereIn('ar.student_id', $students->pluck('student_id'))
-                    ->where('ases.teacher_id', $teacherId)
-                    ->whereBetween('ases.session_date', [$startDate, $endDate]);
-
-                if ($viewType === 'subject' && $subjectId) {
-                    $totalRecordsQuery->where('ases.subject_id', $subjectId);
-                }
-
-                $totalAttendanceRecords = $totalRecordsQuery->count();
-            } else {
-                $totalRecordsQuery = DB::table('attendance_records as ar')
-                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-                    ->whereIn('ar.student_id', $students->pluck('student_id'))
-                    ->where('ases.teacher_id', $teacherId)
-                    ->whereBetween('ases.session_date', [$startDate, $endDate]);
-
-                if ($viewType === 'subject' && $subjectId) {
-                    $totalRecordsQuery->where('ases.subject_id', $subjectId);
-                }
-
-                $totalAttendanceRecords = $totalRecordsQuery->count();
-            }
-
-            // Calculate average attendance based on actual records
-            $averageAttendance = $totalAttendanceRecords > 0 ? 
-                round(($presentCount / $totalAttendanceRecords) * 100) : 0;
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
             return response()->json([
                 'success' => true,
@@ -233,305 +146,260 @@ class AttendanceSummaryController extends Controller
                     'average_attendance' => $averageAttendance,
                     'students_with_warning' => $studentsWithWarning,
                     'students_with_critical' => $studentsWithCritical,
-                    'students' => $studentSummaries
-                ]
+                    'students' => $studentSummaries,
+                    'period' => $period,
+                    'date_range' => [
+                        'start' => $startDate->format('Y-m-d'),
+                        'end' => $endDate->format('Y-m-d')
+                    ]
+                ],
+                'execution_time_ms' => $executionTime,
+                'message' => 'Attendance summary retrieved successfully'
             ]);
 
         } catch (\Exception $e) {
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::error('Error in getTeacherAttendanceSummary: ' . $e->getMessage(), [
+                'teacher_id' => $teacherId ?? null,
+                'execution_time_ms' => $executionTime,
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching attendance summary: ' . $e->getMessage()
+                'message' => 'Failed to retrieve attendance summary',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+                'execution_time_ms' => $executionTime
             ], 500);
         }
     }
 
     /**
-     * Get attendance trends for teacher's students
+     * Get attendance trends for charts - OPTIMIZED VERSION
      */
     public function getTeacherAttendanceTrends(Request $request)
     {
+        $startTime = microtime(true);
+
         try {
             $teacherId = $request->query('teacher_id');
-            $period = $request->query('period', 'week'); // day, week, month
-            $viewType = $request->query('view_type', 'subject'); // subject, all_students
+            $period = $request->query('period', 'week');
+            $viewType = $request->query('view_type', 'subject');
             $subjectId = $request->query('subject_id');
 
-            // Check if attendance_statuses table exists
-            $statusTableExists = DB::select("SELECT to_regclass('attendance_statuses') as exists");
-            $hasStatusTable = $statusTableExists[0]->exists !== null;
+            if (!$teacherId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Teacher ID is required'
+                ], 400);
+            }
 
-            $trendsData = [];
+            // Calculate date range and labels
+            $endDate = Carbon::now();
+            $labels = [];
+            $periods = [];
 
             switch ($period) {
                 case 'day':
-                    $trendsData = $this->getDailyTrends($teacherId, $subjectId, $viewType, $hasStatusTable);
+                    for ($i = 6; $i >= 0; $i--) {
+                        $date = $endDate->copy()->subDays($i);
+                        $labels[] = $date->format('M j');
+                        $periods[] = $date->format('Y-m-d');
+                    }
                     break;
                 case 'week':
-                    $trendsData = $this->getWeeklyTrends($teacherId, $subjectId, $viewType, $hasStatusTable);
+                    for ($i = 3; $i >= 0; $i--) {
+                        $weekEnd = $endDate->copy()->subWeeks($i);
+                        $weekStart = $weekEnd->copy()->subDays(6);
+                        $labels[] = $weekStart->format('M j') . ' - ' . $weekEnd->format('M j');
+                        $periods[] = [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')];
+                    }
                     break;
                 case 'month':
-                    $trendsData = $this->getMonthlyTrends($teacherId, $subjectId, $viewType, $hasStatusTable);
+                    for ($i = 5; $i >= 0; $i--) {
+                        $date = $endDate->copy()->subMonths($i);
+                        $labels[] = $date->format('M Y');
+                        $periods[] = [
+                            $date->startOfMonth()->format('Y-m-d'),
+                            $date->endOfMonth()->format('Y-m-d')
+                        ];
+                    }
                     break;
             }
 
+            // Get attendance data for each period
+            $presentData = [];
+            $absentData = [];
+            $lateData = [];
+
+            foreach ($periods as $periodRange) {
+                $startDate = is_array($periodRange) ? $periodRange[0] : $periodRange;
+                $endDateRange = is_array($periodRange) ? $periodRange[1] : $periodRange;
+
+                $attendanceQuery = DB::table('attendance_records as ar')
+                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                    ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                    ->join('student_details as sd', 'ar.student_id', '=', 'sd.id')
+                    ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+                    ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
+                    ->where('tss.teacher_id', $teacherId)
+                    ->where('tss.is_active', true)
+                    ->where('ss.is_active', true)
+                    ->whereBetween('ases.session_date', [$startDate, $endDateRange]);
+
+                if ($viewType === 'subject' && $subjectId) {
+                    $attendanceQuery->where('tss.subject_id', $subjectId);
+                }
+
+                $counts = $attendanceQuery->select([
+                    DB::raw('COUNT(CASE WHEN ast.code = \'P\' THEN 1 END) as present_count'),
+                    DB::raw('COUNT(CASE WHEN ast.code = \'A\' THEN 1 END) as absent_count'),
+                    DB::raw('COUNT(CASE WHEN ast.code = \'L\' THEN 1 END) as late_count')
+                ])->first();
+
+                $presentData[] = (int)$counts->present_count;
+                $absentData[] = (int)$counts->absent_count;
+                $lateData[] = (int)$counts->late_count;
+            }
+
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
             return response()->json([
                 'success' => true,
-                'data' => $trendsData
+                'data' => [
+                    'labels' => $labels,
+                    'datasets' => [
+                        [
+                            'label' => 'Present',
+                            'data' => $presentData,
+                            'backgroundColor' => 'rgba(16, 185, 129, 0.9)',
+                            'borderColor' => '#10b981'
+                        ],
+                        [
+                            'label' => 'Absent',
+                            'data' => $absentData,
+                            'backgroundColor' => 'rgba(239, 68, 68, 0.9)',
+                            'borderColor' => '#ef4444'
+                        ],
+                        [
+                            'label' => 'Late',
+                            'data' => $lateData,
+                            'backgroundColor' => 'rgba(245, 158, 11, 0.9)',
+                            'borderColor' => '#f59e0b'
+                        ]
+                    ]
+                ],
+                'execution_time_ms' => $executionTime,
+                'message' => 'Attendance trends retrieved successfully'
             ]);
 
         } catch (\Exception $e) {
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::error('Error in getTeacherAttendanceTrends: ' . $e->getMessage(), [
+                'teacher_id' => $teacherId ?? null,
+                'execution_time_ms' => $executionTime
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching attendance trends: ' . $e->getMessage()
+                'message' => 'Failed to retrieve attendance trends',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+                'execution_time_ms' => $executionTime
             ], 500);
         }
     }
 
-    private function getDailyTrends($teacherId, $subjectId, $viewType, $hasStatusTable)
+    /**
+     * Get attendance records for student calendar display
+     */
+    public function getStudentAttendanceRecords(Request $request)
     {
-        // Get last 7 days
-        $days = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $date = Carbon::now()->subDays($i)->toDateString();
-            $days[] = $date;
-        }
+        $startTime = microtime(true);
+        
+        try {
+            $studentIds = $request->query('student_ids');
+            $subjectId = $request->query('subject_id');
+            $month = $request->query('month');
+            $year = $request->query('year');
 
-        $presentData = [];
-        $absentData = [];
-        $lateData = [];
-        $excusedData = [];
-
-        foreach ($days as $date) {
-            if ($hasStatusTable) {
-                $presentCount = $this->getAttendanceCountByStatus($teacherId, $subjectId, $viewType, $date, 'present');
-                $absentCount = $this->getAttendanceCountByStatus($teacherId, $subjectId, $viewType, $date, 'absent');
-                $lateCount = $this->getAttendanceCountByStatus($teacherId, $subjectId, $viewType, $date, 'late');
-                $excusedCount = $this->getAttendanceCountByStatus($teacherId, $subjectId, $viewType, $date, 'excused');
-            } else {
-                // Fallback with status IDs
-                $presentCount = $this->getAttendanceCountByStatusId($teacherId, $subjectId, $viewType, $date, 1);
-                $absentCount = $this->getAttendanceCountByStatusId($teacherId, $subjectId, $viewType, $date, 2);
-                $lateCount = $this->getAttendanceCountByStatusId($teacherId, $subjectId, $viewType, $date, 3);
-                $excusedCount = $this->getAttendanceCountByStatusId($teacherId, $subjectId, $viewType, $date, 4);
+            if (!$studentIds) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student IDs are required'
+                ], 400);
             }
 
-            $presentData[] = $presentCount;
-            $absentData[] = $absentCount;
-            $lateData[] = $lateCount;
-            $excusedData[] = $excusedCount;
-        }
+            // Convert student_ids to array
+            $studentIdsArray = is_string($studentIds) ? explode(',', $studentIds) : [$studentIds];
+            
+            // Calculate date range for the month
+            $startDate = Carbon::create($year, $month + 1, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month + 1, 1)->endOfMonth();
 
-        return [
-            'labels' => array_map(function($date) {
-                return Carbon::parse($date)->format('M j');
-            }, $days),
-            'datasets' => [
-                [
-                    'label' => 'Present',
-                    'backgroundColor' => '#4CAF50',
-                    'data' => $presentData
-                ],
-                [
-                    'label' => 'Absent',
-                    'backgroundColor' => '#F44336',
-                    'data' => $absentData
-                ],
-                [
-                    'label' => 'Late',
-                    'backgroundColor' => '#FF9800',
-                    'data' => $lateData
-                ],
-                [
-                    'label' => 'Excused',
-                    'backgroundColor' => '#9E9E9E',
-                    'data' => $excusedData
-                ]
-            ]
-        ];
-    }
+            Log::info("Getting attendance records for students: " . implode(',', $studentIdsArray) . " for month {$month}/{$year}");
 
-    private function getWeeklyTrends($teacherId, $subjectId, $viewType, $hasStatusTable)
-    {
-        // Get last 4 weeks
-        $weeks = [];
-        for ($i = 3; $i >= 0; $i--) {
-            $startOfWeek = Carbon::now()->subWeeks($i)->startOfWeek()->toDateString();
-            $endOfWeek = Carbon::now()->subWeeks($i)->endOfWeek()->toDateString();
-            $weeks[] = ['start' => $startOfWeek, 'end' => $endOfWeek, 'label' => 'Week ' . (4 - $i)];
-        }
+            // Get attendance records from attendance_records table
+            $recordsQuery = DB::table('attendance_records as ar')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                ->whereIn('ar.student_id', $studentIdsArray)
+                ->whereBetween('ases.session_date', [$startDate, $endDate]);
 
-        $presentData = [];
-        $absentData = [];
-        $lateData = [];
-        $excusedData = [];
-
-        foreach ($weeks as $week) {
-            if ($hasStatusTable) {
-                $presentCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 'present');
-                $absentCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 'absent');
-                $lateCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 'late');
-                $excusedCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 'excused');
-            } else {
-                $presentCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 1);
-                $absentCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 2);
-                $lateCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 3);
-                $excusedCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $week['start'], $week['end'], 4);
+            if ($subjectId) {
+                $recordsQuery->where('ases.subject_id', $subjectId);
             }
 
-            $presentData[] = $presentCount;
-            $absentData[] = $absentCount;
-            $lateData[] = $lateCount;
-            $excusedData[] = $excusedCount;
+            $records = $recordsQuery->select([
+                'ar.student_id',
+                'ases.session_date as date',
+                'ast.code',
+                'ast.name as status_name',
+                'ases.subject_id'
+            ])->get();
+
+            // Transform records to match expected format
+            $transformedRecords = $records->map(function($record) {
+                $status = 'PRESENT';
+                if ($record->code === 'A') $status = 'ABSENT';
+                elseif ($record->code === 'L') $status = 'LATE';
+                elseif ($record->code === 'E') $status = 'EXCUSED';
+
+                return [
+                    'studentId' => $record->student_id,
+                    'date' => $record->date,
+                    'status' => $status,
+                    'subjectId' => $record->subject_id
+                ];
+            });
+
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::info("Found " . $transformedRecords->count() . " attendance records");
+
+            return response()->json([
+                'success' => true,
+                'records' => $transformedRecords,
+                'count' => $transformedRecords->count(),
+                'execution_time_ms' => $executionTime,
+                'message' => 'Attendance records retrieved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Error in getStudentAttendanceRecords: ' . $e->getMessage(), [
+                'student_ids' => $studentIds ?? null,
+                'execution_time_ms' => $executionTime
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve attendance records',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+                'execution_time_ms' => $executionTime
+            ], 500);
         }
-
-        return [
-            'labels' => array_column($weeks, 'label'),
-            'datasets' => [
-                [
-                    'label' => 'Present',
-                    'backgroundColor' => '#4CAF50',
-                    'data' => $presentData
-                ],
-                [
-                    'label' => 'Absent',
-                    'backgroundColor' => '#F44336',
-                    'data' => $absentData
-                ],
-                [
-                    'label' => 'Late',
-                    'backgroundColor' => '#FF9800',
-                    'data' => $lateData
-                ],
-                [
-                    'label' => 'Excused',
-                    'backgroundColor' => '#9E9E9E',
-                    'data' => $excusedData
-                ]
-            ]
-        ];
-    }
-
-    private function getMonthlyTrends($teacherId, $subjectId, $viewType, $hasStatusTable)
-    {
-        // Get last 6 months
-        $months = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $startOfMonth = Carbon::now()->subMonths($i)->startOfMonth()->toDateString();
-            $endOfMonth = Carbon::now()->subMonths($i)->endOfMonth()->toDateString();
-            $label = Carbon::now()->subMonths($i)->format('M Y');
-            $months[] = ['start' => $startOfMonth, 'end' => $endOfMonth, 'label' => $label];
-        }
-
-        $presentData = [];
-        $absentData = [];
-        $lateData = [];
-        $excusedData = [];
-
-        foreach ($months as $month) {
-            if ($hasStatusTable) {
-                $presentCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 'present');
-                $absentCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 'absent');
-                $lateCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 'late');
-                $excusedCount = $this->getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 'excused');
-            } else {
-                $presentCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 1);
-                $absentCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 2);
-                $lateCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 3);
-                $excusedCount = $this->getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $month['start'], $month['end'], 4);
-            }
-
-            $presentData[] = $presentCount;
-            $absentData[] = $absentCount;
-            $lateData[] = $lateCount;
-            $excusedData[] = $excusedCount;
-        }
-
-        return [
-            'labels' => array_column($months, 'label'),
-            'datasets' => [
-                [
-                    'label' => 'Present',
-                    'backgroundColor' => '#4CAF50',
-                    'data' => $presentData
-                ],
-                [
-                    'label' => 'Absent',
-                    'backgroundColor' => '#F44336',
-                    'data' => $absentData
-                ],
-                [
-                    'label' => 'Late',
-                    'backgroundColor' => '#FF9800',
-                    'data' => $lateData
-                ],
-                [
-                    'label' => 'Excused',
-                    'backgroundColor' => '#9E9E9E',
-                    'data' => $excusedData
-                ]
-            ]
-        ];
-    }
-
-    private function getAttendanceCountByStatus($teacherId, $subjectId, $viewType, $date, $status)
-    {
-        $query = DB::table('attendance_records as ar')
-            ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-            ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-            ->where('ases.teacher_id', $teacherId)
-            ->where('ases.session_date', $date)
-            ->where('ast.name', ucfirst($status));
-
-        if ($viewType === 'subject' && $subjectId) {
-            $query->where('ases.subject_id', $subjectId);
-        }
-
-        return $query->count();
-    }
-
-    private function getAttendanceCountByStatusId($teacherId, $subjectId, $viewType, $date, $statusId)
-    {
-        $query = DB::table('attendance_records as ar')
-            ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-            ->where('ases.teacher_id', $teacherId)
-            ->where('ases.session_date', $date)
-            ->where('ar.attendance_status_id', $statusId);
-
-        if ($viewType === 'subject' && $subjectId) {
-            $query->where('ases.subject_id', $subjectId);
-        }
-
-        return $query->count();
-    }
-
-    private function getAttendanceCountByStatusRange($teacherId, $subjectId, $viewType, $startDate, $endDate, $status)
-    {
-        $query = DB::table('attendance_records as ar')
-            ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-            ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-            ->where('ases.teacher_id', $teacherId)
-            ->whereBetween('ases.session_date', [$startDate, $endDate])
-            ->where('ast.name', ucfirst($status));
-
-        if ($viewType === 'subject' && $subjectId) {
-            $query->where('ases.subject_id', $subjectId);
-        }
-
-        return $query->count();
-    }
-
-    private function getAttendanceCountByStatusIdRange($teacherId, $subjectId, $viewType, $startDate, $endDate, $statusId)
-    {
-        $query = DB::table('attendance_records as ar')
-            ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
-            ->where('ases.teacher_id', $teacherId)
-            ->whereBetween('ases.session_date', [$startDate, $endDate])
-            ->where('ar.attendance_status_id', $statusId);
-
-        if ($viewType === 'subject' && $subjectId) {
-            $query->where('ases.subject_id', $subjectId);
-        }
-
-        return $query->count();
     }
 }

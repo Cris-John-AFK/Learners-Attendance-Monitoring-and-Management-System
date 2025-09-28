@@ -4,7 +4,9 @@ class NotificationService {
         this.listeners = [];
         this.currentTeacherId = null;
         this.teacherAssignments = null;
-        this.loadNotifications();
+        this.baseURL = 'http://localhost:8000/api';
+        // Load notifications asynchronously
+        this.loadNotifications().catch(console.error);
     }
 
     /**
@@ -31,7 +33,7 @@ class NotificationService {
             }
             
             // Reload notifications for this teacher
-            this.loadNotifications();
+            await this.loadNotifications();
             this.notifyListeners();
         }
     }
@@ -89,62 +91,125 @@ class NotificationService {
     }
 
     /**
-     * Add session completion notification
+     * Add session completion notification to database
      */
-    addSessionCompletionNotification(sessionData) {
-        console.log('Creating session completion notification with data:', sessionData);
-        console.log('Session data keys:', Object.keys(sessionData));
-        console.log('Current teacher ID:', this.currentTeacherId);
-        console.log('Teacher assignments:', this.teacherAssignments);
-        
-        // Ensure we have teacher ID - use current teacher if not provided in session data
-        const teacherId = sessionData.teacher_id || this.currentTeacherId;
-        
-        const notification = {
-            type: 'session_completed',
-            title: 'Attendance Session Completed',
-            message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || sessionData.present_count || 0} present, ${sessionData.statistics?.absent || sessionData.absent_count || 0} absent`,
-            sessionId: sessionData.session_id || sessionData.id, // Include session ID for database lookup
-            subject: sessionData.subject_name,
-            section: sessionData.section_name,
-            method: sessionData.method || 'Manual Entry',
-            metadata: {
-                sessionId: sessionData.session_id || sessionData.id,
-                teacherId: teacherId,
-                sectionId: sessionData.section_id,
-                subjectId: sessionData.subject_id
-            },
-            data: sessionData
-        };
+    async addSessionCompletionNotification(sessionData) {
+        try {
+            console.log('Creating session completion notification with data:', sessionData);
+            
+            // Ensure we have teacher ID - use current teacher if not provided in session data
+            const teacherId = sessionData.teacher_id || this.currentTeacherId;
+            
+            if (!teacherId) {
+                console.error('No teacher ID available for notification');
+                return null;
+            }
 
-        console.log('Notification object created:', notification);
-        console.log('Notification metadata:', notification.metadata);
-        console.log('Using teacher ID:', teacherId);
-        const result = this.addNotification(notification);
-        console.log('addNotification returned:', result);
-        
-        return result;
-    }
+            const notificationData = {
+                user_id: teacherId,
+                type: 'session_completed',
+                title: 'Attendance Session Completed',
+                message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || sessionData.present_count || 0} present, ${sessionData.statistics?.absent || sessionData.absent_count || 0} absent`,
+                priority: 'medium',
+                data: {
+                    sessionId: sessionData.session_id || sessionData.id,
+                    subject: sessionData.subject_name,
+                    section: sessionData.section_name,
+                    method: sessionData.method || 'Manual Entry',
+                    statistics: sessionData.statistics,
+                    session_date: sessionData.session_date || new Date().toISOString()
+                }
+            };
 
-    /**
-     * Mark notification as read
-     */
-    markAsRead(notificationId) {
-        const notification = this.notifications.find(n => n.id === notificationId);
-        if (notification) {
-            notification.read = true;
-            this.saveNotifications();
-            this.notifyListeners();
+            console.log('Sending notification to database:', notificationData);
+
+            const response = await fetch(`${this.baseURL}/notifications`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                },
+                body: JSON.stringify(notificationData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Notification saved to database:', result);
+                
+                // Reload notifications to get the latest from database
+                await this.loadNotifications();
+                
+                return result.data;
+            } else {
+                const error = await response.json();
+                console.error('Failed to save notification to database:', error);
+                return null;
+            }
+        } catch (error) {
+            console.error('Error creating session completion notification:', error);
+            return null;
         }
     }
 
     /**
-     * Mark all notifications as read
+     * Mark notification as read in database
      */
-    markAllAsRead() {
-        this.notifications.forEach(n => n.read = true);
-        this.saveNotifications();
-        this.notifyListeners();
+    async markAsRead(notificationId) {
+        try {
+            const response = await fetch(`${this.baseURL}/notifications/${notificationId}/mark-read`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: this.currentTeacherId
+                })
+            });
+
+            if (response.ok) {
+                // Update local notification
+                const notification = this.notifications.find(n => n.id === notificationId);
+                if (notification) {
+                    notification.read = true;
+                    this.notifyListeners();
+                }
+                console.log('Notification marked as read in database');
+            } else {
+                console.error('Failed to mark notification as read in database');
+            }
+        } catch (error) {
+            console.error('Error marking notification as read:', error);
+        }
+    }
+
+    /**
+     * Mark all notifications as read in database
+     */
+    async markAllAsRead() {
+        try {
+            const response = await fetch(`${this.baseURL}/notifications/mark-all-read`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: this.currentTeacherId
+                })
+            });
+
+            if (response.ok) {
+                // Update local notifications
+                this.notifications.forEach(n => n.read = true);
+                this.notifyListeners();
+                console.log('All notifications marked as read in database');
+            } else {
+                console.error('Failed to mark all notifications as read in database');
+            }
+        } catch (error) {
+            console.error('Error marking all notifications as read:', error);
+        }
     }
 
     /**
@@ -185,14 +250,29 @@ class NotificationService {
             const metadata = notification.metadata || {};
             
             console.log('Filtering notification:', {
+                id: notification.id,
                 type: notification.type,
+                title: notification.title,
                 metadata: metadata,
                 currentTeacherId: this.currentTeacherId,
-                teacherAssignments: this.teacherAssignments
+                metadataTeacherId: metadata.teacherId,
+                metadataUserId: metadata.userId
             });
             
-            // If notification has teacher ID, check if it matches
-            if (metadata.teacherId && metadata.teacherId !== this.currentTeacherId) {
+            // Check if notification belongs to current teacher (multiple ways to check)
+            const teacherIdMatch = metadata.teacherId === this.currentTeacherId;
+            const userIdMatch = metadata.userId === this.currentTeacherId;
+            
+            console.log('Teacher ID checks:', {
+                teacherIdMatch,
+                userIdMatch,
+                currentTeacherId: this.currentTeacherId,
+                metadataTeacherId: metadata.teacherId,
+                metadataUserId: metadata.userId
+            });
+            
+            // If notification has explicit teacher ID mismatch, filter out
+            if (metadata.teacherId && !teacherIdMatch && !userIdMatch) {
                 console.log('Notification filtered out: teacher ID mismatch');
                 return false;
             }
@@ -207,9 +287,9 @@ class NotificationService {
                 return isAssigned;
             }
 
-            // If no specific assignment info, show if it belongs to this teacher
-            const belongsToTeacher = metadata.teacherId === this.currentTeacherId;
-            console.log('Belongs to teacher check:', belongsToTeacher);
+            // Show if it belongs to this teacher (either teacherId or userId match)
+            const belongsToTeacher = teacherIdMatch || userIdMatch;
+            console.log('Final belongs to teacher check:', belongsToTeacher);
             return belongsToTeacher;
         });
     }
@@ -277,69 +357,179 @@ class NotificationService {
     }
 
     /**
-     * Load notifications from localStorage
+     * Get authentication token for API calls
      */
-    loadNotifications() {
+    getAuthToken() {
+        // First try the teacher_token key used by TeacherAuthService
+        let token = localStorage.getItem('teacher_token');
+        
+        if (!token) {
+            // Fallback to sessionStorage
+            token = sessionStorage.getItem('teacher_token');
+        }
+        
+        if (!token) {
+            // Fallback to teacher_data structure
+            const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+            token = teacherData.token || teacherData.access_token || '';
+        }
+        
+        console.log('NotificationService.getAuthToken():', token ? 'Token found' : 'No token found');
+        return token || '';
+    }
+
+    /**
+     * Load notifications from database
+     */
+    async loadNotifications() {
         try {
-            const saved = localStorage.getItem('lamms_notifications');
-            if (saved) {
-                this.notifications = JSON.parse(saved);
-                // Clean up old notifications on load
-                this.clearOldNotifications();
-            } else {
-                // Create sample notifications for demo
-                this.createSampleNotifications();
+            if (!this.currentTeacherId) {
+                console.log('No teacher ID set, cannot load notifications');
+                return;
             }
+
+            const response = await fetch(`${this.baseURL}/notifications?user_id=${this.currentTeacherId}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data.notifications) {
+                    // Transform database notifications to match frontend format
+                    this.notifications = result.data.notifications.all.map(notification => ({
+                        id: notification.id,
+                        type: notification.type,
+                        title: notification.title,
+                        message: notification.message,
+                        timestamp: notification.created_at,
+                        read: notification.is_read,
+                        priority: notification.priority,
+                        data: notification.data,
+                        metadata: {
+                            ...notification.data,
+                            teacherId: notification.user_id,  // Map user_id to teacherId for filtering
+                            userId: notification.user_id
+                        }
+                    }));
+                    
+                    console.log('Loaded notifications from database:', this.notifications.length);
+                } else {
+                    console.log('No notifications found in database response');
+                    this.notifications = [];
+                }
+            } else {
+                console.error('Failed to load notifications from database');
+                // Fallback to localStorage for backward compatibility
+                await this.loadFromLocalStorage();
+            }
+            
+            this.notifyListeners();
         } catch (error) {
-            console.error('Error loading notifications:', error);
-            this.notifications = [];
-            this.createSampleNotifications();
+            console.error('Error loading notifications from database:', error);
+            // Fallback to localStorage for backward compatibility
+            await this.loadFromLocalStorage();
         }
     }
 
     /**
-     * Create sample notifications for demo
+     * Fallback method to load from localStorage
      */
-    createSampleNotifications() {
-        const sampleNotifications = [
-            {
-                id: Date.now() + 1,
-                type: 'attendance_alert',
-                title: 'Student Attendance Alert',
-                message: 'Cris John has been absent for 3 consecutive days',
-                timestamp: new Date().toISOString(),
-                read: false,
-                priority: 'high',
-                studentName: 'Cris John',
-                section: 'Grade 3-A',
-                subject: 'Mathematics'
-            },
-            {
-                id: Date.now() + 2,
-                type: 'session_completed',
-                title: 'Attendance Session Completed',
-                message: 'Mathematics - 18 present, 2 absent',
-                timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-                read: false,
-                priority: 'medium',
-                subject: 'Mathematics',
-                section: 'Grade 3-A',
-                method: 'QR Code Scan'
-            },
-            {
-                id: Date.now() + 3,
+    async loadFromLocalStorage() {
+        try {
+            const saved = localStorage.getItem('lamms_notifications');
+            if (saved) {
+                this.notifications = JSON.parse(saved);
+                this.clearOldNotifications();
+            } else {
+                this.notifications = [];
+            }
+        } catch (error) {
+            console.error('Error loading from localStorage:', error);
+            this.notifications = [];
+        }
+    }
+
+    /**
+     * Add only system notifications without overwriting existing ones
+     */
+    async addSystemNotifications() {
+        try {
+            // Add a recent system update notification
+            const systemNotification = {
+                id: Date.now() + Math.random(),
                 type: 'system_update',
                 title: 'System Update',
-                message: 'New attendance tracking features are now available',
-                timestamp: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-                read: true,
+                message: 'Attendance tracking dashboard has been updated with real-time data',
+                timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+                read: false,
                 priority: 'low'
-            }
-        ];
+            };
 
-        this.notifications = sampleNotifications;
-        this.saveNotifications();
-        console.log('Sample notifications created:', this.notifications.length);
+            this.notifications.push(systemNotification);
+            this.saveNotifications();
+            console.log('System notification added without overwriting existing notifications');
+        } catch (error) {
+            console.error('Error adding system notifications:', error);
+        }
+    }
+
+    /**
+     * Create dynamic notifications based on real data
+     */
+    async createSampleNotifications() {
+        try {
+            const dynamicNotifications = [];
+            
+            // Generate attendance alerts based on real student data
+            if (this.currentTeacherId) {
+                const response = await fetch(`http://localhost:8000/api/attendance/summary?teacher_id=${this.currentTeacherId}&period=week&view_type=subject&subject_id=2`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data.students) {
+                        // Create notifications for students with attendance issues
+                        data.data.students.forEach(student => {
+                            if (student.total_absences >= 3) {
+                                dynamicNotifications.push({
+                                    id: Date.now() + Math.random(),
+                                    type: 'attendance_alert',
+                                    title: 'Student Attendance Alert',
+                                    message: `${student.name} has ${student.total_absences} absences (${student.severity} level)`,
+                                    timestamp: new Date().toISOString(),
+                                    read: false,
+                                    priority: student.severity === 'critical' ? 'high' : 'medium',
+                                    studentName: student.name,
+                                    section: student.section_name || 'Kinder One',
+                                    subject: 'English',
+                                    teacherId: this.currentTeacherId
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Add a recent system update notification
+            dynamicNotifications.push({
+                id: Date.now() + Math.random(),
+                type: 'system_update',
+                title: 'System Update',
+                message: 'Attendance tracking dashboard has been updated with real-time data',
+                timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+                read: false,
+                priority: 'low'
+            });
+
+            this.notifications = dynamicNotifications;
+            this.saveNotifications();
+            console.log('Dynamic notifications created:', this.notifications.length);
+        } catch (error) {
+            console.error('Error creating dynamic notifications:', error);
+            // Fallback to empty array if API fails
+            this.notifications = [];
+        }
     }
 
     /**

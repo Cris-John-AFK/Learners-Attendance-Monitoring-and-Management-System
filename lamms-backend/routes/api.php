@@ -190,6 +190,9 @@ Route::prefix('attendance')->group(function () {
     // Get attendance reports
     Route::get('/reports/section/{sectionId}', [AttendanceController::class, 'getAttendanceReport']);
     
+    // Get attendance records for students (for calendar display)
+    Route::get('/records', [AttendanceController::class, 'getAttendanceRecords']);
+    
     // Dashboard routes for teacher analytics
     Route::get('/trends', [AttendanceController::class, 'getAttendanceTrends']);
     Route::get('/summary', [AttendanceController::class, 'getAttendanceSummary']);
@@ -228,6 +231,7 @@ Route::prefix('teachers/{teacherId}')->group(function () {
 // Attendance summary routes
 Route::get('/attendance/summary', [App\Http\Controllers\API\AttendanceSummaryController::class, 'getTeacherAttendanceSummary']);
 Route::get('/attendance/trends', [App\Http\Controllers\API\AttendanceSummaryController::class, 'getTeacherAttendanceTrends']);
+Route::get('/attendance/records', [App\Http\Controllers\API\AttendanceSummaryController::class, 'getStudentAttendanceRecords']);
 
 // Admin attendance analytics routes
 Route::get('/admin/attendance/analytics', [App\Http\Controllers\API\AdminAttendanceAnalyticsController::class, 'getAttendanceAnalytics']);
@@ -348,4 +352,105 @@ Route::prefix('guardhouse')->group(function () {
     // Admin-only routes for historical data
     Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
     Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
+});
+
+// Smart Attendance Analytics Routes
+Route::prefix('analytics')->group(function () {
+    // Student Analytics
+    Route::get('/student/{studentId}', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getStudentAnalytics']);
+    Route::post('/student/{studentId}/refresh', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'refreshStudentAnalytics']);
+    Route::get('/student/{studentId}/patterns', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getAttendancePatterns']);
+    
+    // Teacher Analytics
+    Route::get('/teacher/students', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getTeacherStudentAnalytics']);
+    
+    // Critical Cases
+    Route::get('/critical-absenteeism', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getCriticalAbsenteeism']);
+    
+    // Bulk Operations
+    Route::post('/bulk-refresh', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'bulkRefreshAnalytics']);
+    
+    // UI Support
+    Route::get('/urgency-legend', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getUrgencyLegend']);
+});
+
+// Teacher Dashboard Enhancement Routes
+Route::prefix('teacher')->group(function () {
+    // Optimized Dashboard Routes
+    Route::get('/{teacherId}/dashboard', [App\Http\Controllers\API\TeacherDashboardController::class, 'getDashboardData']);
+    Route::get('/{teacherId}/chart-data', [App\Http\Controllers\API\TeacherDashboardController::class, 'getAttendanceChartData']);
+    
+    // Sticky notes functionality removed
+    
+    // Student Management (Three-View System)
+    Route::prefix('students')->group(function () {
+        Route::get('/', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'getStudents']);
+        Route::post('/{studentId}/change-status', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'changeStudentStatus']);
+        Route::get('/status-options', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'getStatusOptions']);
+    });
+});
+
+// Admin Student Management & Archive System Routes
+Route::prefix('admin')->group(function () {
+    // Student Management (replaces delete functionality)
+    Route::prefix('students')->group(function () {
+        Route::get('/', [App\Http\Controllers\API\AdminStudentManagementController::class, 'index']);
+        Route::post('/{studentId}/change-status', [App\Http\Controllers\API\AdminStudentManagementController::class, 'changeStatus']);
+        Route::get('/{studentId}/status-history', [App\Http\Controllers\API\AdminStudentManagementController::class, 'getStatusHistory']);
+        Route::post('/{studentId}/archive', [App\Http\Controllers\API\AdminStudentManagementController::class, 'archiveStudent']);
+    });
+    
+    // Archive Management
+    Route::prefix('archive')->group(function () {
+        Route::get('/students', [App\Http\Controllers\API\AdminStudentManagementController::class, 'getArchivedStudents']);
+        Route::post('/students/{archiveId}/restore', [App\Http\Controllers\API\AdminStudentManagementController::class, 'restoreStudent']);
+    });
+});
+
+// Notification System Routes
+Route::prefix('notifications')->group(function () {
+    Route::get('/', [App\Http\Controllers\API\NotificationController::class, 'index']);
+    Route::post('/', [App\Http\Controllers\API\NotificationController::class, 'store']);
+    Route::post('/{notificationId}/mark-read', [App\Http\Controllers\API\NotificationController::class, 'markAsRead']);
+    Route::post('/mark-all-read', [App\Http\Controllers\API\NotificationController::class, 'markAllAsRead']);
+    Route::get('/unread-count', [App\Http\Controllers\API\NotificationController::class, 'getUnreadCount']);
+    Route::get('/statistics', [App\Http\Controllers\API\NotificationController::class, 'getStatistics']);
+    Route::delete('/{notificationId}', [App\Http\Controllers\API\NotificationController::class, 'destroy']);
+    
+    // Development/Testing route
+    Route::post('/test', [App\Http\Controllers\API\NotificationController::class, 'createTestNotification']);
+});
+
+// Debug/Testing Routes (remove in production)
+Route::get('/debug/analytics-cache', function() {
+    $cacheCount = \App\Models\AttendanceAnalyticsCache::count();
+    $todayCache = \App\Models\AttendanceAnalyticsCache::where('analysis_date', now()->toDateString())->count();
+    $criticalCases = \App\Models\AttendanceAnalyticsCache::where('exceeds_18_absence_limit', true)->count();
+    
+    return response()->json([
+        'total_cache_records' => $cacheCount,
+        'today_cache_records' => $todayCache,
+        'critical_cases' => $criticalCases,
+        'sample_records' => \App\Models\AttendanceAnalyticsCache::latest()->take(3)->get()
+    ]);
+});
+
+Route::post('/debug/generate-analytics-cache', function() {
+    $students = \App\Models\Student::take(5)->get();
+    $generated = 0;
+    
+    foreach ($students as $student) {
+        try {
+            \App\Models\AttendanceAnalyticsCache::generateForStudent($student->id);
+            $generated++;
+        } catch (\Exception $e) {
+            Log::error("Failed to generate analytics for student {$student->id}: " . $e->getMessage());
+        }
+    }
+    
+    return response()->json([
+        'success' => true,
+        'message' => "Generated analytics cache for {$generated} students",
+        'generated_count' => $generated
+    ]);
 });
