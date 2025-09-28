@@ -328,6 +328,7 @@ Route::post('teacher/reports/sf2/submit/{sectionId}/{month}', [\App\Http\Control
 
 // Admin routes for managing submitted SF2 reports
 Route::get('admin/reports/submitted', [\App\Http\Controllers\API\SF2ReportController::class, 'getSubmittedReports'])->name('admin.sf2.submitted');
+Route::get('admin/reports/sf2/submitted/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'getSubmittedReportData'])->name('admin.sf2.submitted.data');
 Route::put('admin/reports/submitted/{reportId}/status', [\App\Http\Controllers\API\SF2ReportController::class, 'updateReportStatus'])->name('admin.sf2.update.status');
 
 // Section student count route

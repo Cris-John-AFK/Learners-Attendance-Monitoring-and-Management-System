@@ -1372,7 +1372,17 @@ class SF2ReportController extends Controller
                 ], 409);
             }
             
-            // Create submission record
+            // Get the actual SF2 report data to store
+            $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
+            
+            Log::info("Storing SF2 submission data", [
+                'section_id' => $sectionId,
+                'month' => $month,
+                'students_count' => count($sf2Data['students']),
+                'teacher_id' => $section->teacher_id
+            ]);
+            
+            // Create submission record with actual SF2 data
             $submissionId = \DB::table('submitted_sf2_reports')->insertGetId([
                 'section_id' => $sectionId,
                 'section_name' => $section->name,
@@ -1383,15 +1393,17 @@ class SF2ReportController extends Controller
                 'status' => 'submitted',
                 'submitted_by' => $section->teacher_id ?? 1,
                 'submitted_at' => now(),
+                'sf2_data' => json_encode($sf2Data), // Store the actual SF2 data as JSON
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
-            Log::info("SF2 report submitted successfully", [
+            Log::info("SF2 report submitted successfully with real data", [
                 'submission_id' => $submissionId,
                 'section_id' => $sectionId,
                 'month' => $month,
-                'teacher_id' => $section->teacher_id
+                'teacher_id' => $section->teacher_id,
+                'data_size' => strlen(json_encode($sf2Data))
             ]);
             
             return response()->json([
@@ -1402,12 +1414,14 @@ class SF2ReportController extends Controller
                     'section_name' => $section->name,
                     'month' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
                     'status' => 'submitted',
-                    'submitted_at' => now()->toISOString()
+                    'submitted_at' => now()->toISOString(),
+                    'students_count' => count($sf2Data['students'])
                 ]
             ]);
             
         } catch (\Exception $e) {
             Log::error("Error submitting SF2 report: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
@@ -1415,6 +1429,98 @@ class SF2ReportController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+    
+    /**
+     * Get SF2 report data for submission (internal method)
+     */
+    private function getReportDataForSubmission($sectionId, $month)
+    {
+        // Get section with students and teacher
+        $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+        
+        // Get students with attendance data
+        $students = $this->getStudentsWithAttendance($section, $month);
+        
+        // Calculate summary statistics
+        $maleStudents = $students->where('gender', 'Male');
+        $femaleStudents = $students->where('gender', 'Female');
+        
+        $summary = [
+            'male' => [
+                'enrollment' => $maleStudents->count(),
+                'total_present' => $maleStudents->sum('total_present'),
+                'total_absent' => $maleStudents->sum('total_absent'),
+                'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0
+            ],
+            'female' => [
+                'enrollment' => $femaleStudents->count(),
+                'total_present' => $femaleStudents->sum('total_present'),
+                'total_absent' => $femaleStudents->sum('total_absent'),
+                'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0
+            ],
+            'total' => [
+                'enrollment' => $students->count(),
+                'total_present' => $students->sum('total_present'),
+                'total_absent' => $students->sum('total_absent'),
+                'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
+            ]
+        ];
+        
+        // Get days in month for headers
+        $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+        $daysInMonth = [];
+        
+        $currentDate = $startDate->copy();
+        while ($currentDate <= $endDate) {
+            if ($currentDate->isWeekday()) {
+                $daysInMonth[] = [
+                    'date' => $currentDate->format('Y-m-d'),
+                    'day' => $currentDate->format('j'),
+                    'dayName' => $currentDate->format('D')
+                ];
+            }
+            $currentDate->addDay();
+        }
+        
+        return [
+            'section' => [
+                'id' => $section->id,
+                'name' => $section->name,
+                'grade_level' => $section->grade_level,
+                'teacher' => $section->teacher ? [
+                    'name' => $section->teacher->first_name . ' ' . $section->teacher->last_name,
+                    'id' => $section->teacher->id
+                ] : null
+            ],
+            'month' => $month,
+            'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+            'students' => $students->map(function($student) {
+                return [
+                    'id' => $student->id,
+                    'name' => $student->lastName . ', ' . $student->firstName . ' ' . $student->middleName,
+                    'firstName' => $student->firstName,
+                    'lastName' => $student->lastName,
+                    'middleName' => $student->middleName,
+                    'gender' => $student->gender,
+                    'attendance' => $student->attendance_data, // Use 'attendance' key for frontend compatibility
+                    'totalPresent' => $student->total_present,
+                    'totalAbsent' => $student->total_absent,
+                    'attendanceRate' => $student->attendance_rate,
+                    'status' => 'active'
+                ];
+            })->values()->toArray(),
+            'days_in_month' => $daysInMonth,
+            'summary' => $summary,
+            'school_info' => [
+                'name' => 'Naawan Central School',
+                'school_id' => '123456',
+                'school_year' => '2024-2025',
+                'division' => 'REGION X - NORTHERN MINDANAO',
+                'district' => 'NAAWAN DISTRICT'
+            ]
+        ];
     }
 
     /**
@@ -1463,6 +1569,111 @@ class SF2ReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch submitted reports',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get stored SF2 submission data for admin view
+     */
+    public function getSubmittedReportData($sectionId, $month)
+    {
+        try {
+            Log::info("Fetching submitted SF2 data", [
+                'section_id' => $sectionId,
+                'month' => $month
+            ]);
+            
+            // Find the submitted report for this section and month
+            $submittedReport = \DB::table('submitted_sf2_reports')
+                ->where('section_id', $sectionId)
+                ->where('month', $month)
+                ->first();
+            
+            if (!$submittedReport) {
+                Log::info("No submitted SF2 report found", [
+                    'section_id' => $sectionId,
+                    'month' => $month
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No submitted SF2 report found for this section and month'
+                ], 404);
+            }
+            
+            // Decode the stored SF2 data
+            $sf2Data = null;
+            if (!empty($submittedReport->sf2_data)) {
+                $sf2Data = json_decode($submittedReport->sf2_data, true);
+            }
+            
+            // If no stored SF2 data (legacy submission) or failed to decode, generate it now
+            if (!$sf2Data) {
+                Log::info("No stored SF2 data found, generating from current data", [
+                    'submission_id' => $submittedReport->id,
+                    'has_sf2_data' => !empty($submittedReport->sf2_data)
+                ]);
+                
+                try {
+                    // Generate SF2 data from current attendance records
+                    $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
+                    
+                    // Update the submission with the generated data for future use
+                    \DB::table('submitted_sf2_reports')
+                        ->where('id', $submittedReport->id)
+                        ->update([
+                            'sf2_data' => json_encode($sf2Data),
+                            'updated_at' => now()
+                        ]);
+                    
+                    Log::info("Generated and stored SF2 data for legacy submission", [
+                        'submission_id' => $submittedReport->id,
+                        'students_count' => count($sf2Data['students'] ?? [])
+                    ]);
+                    
+                } catch (\Exception $e) {
+                    Log::error("Failed to generate SF2 data for legacy submission", [
+                        'submission_id' => $submittedReport->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to retrieve or generate SF2 data for this submission'
+                    ], 500);
+                }
+            }
+            
+            Log::info("Successfully retrieved submitted SF2 data", [
+                'submission_id' => $submittedReport->id,
+                'students_count' => count($sf2Data['students'] ?? []),
+                'status' => $submittedReport->status
+            ]);
+            
+            // Add submission metadata to the response
+            $sf2Data['submission_info'] = [
+                'id' => $submittedReport->id,
+                'status' => $submittedReport->status,
+                'submitted_at' => $submittedReport->submitted_at,
+                'submitted_by' => $submittedReport->submitted_by,
+                'reviewed_at' => $submittedReport->reviewed_at,
+                'admin_notes' => $submittedReport->admin_notes
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $sf2Data
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("Error fetching submitted SF2 data: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch submitted SF2 data',
                 'error' => $e->getMessage()
             ], 500);
         }

@@ -497,8 +497,8 @@
                                         </div>
                                     </td>
                                     <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
-                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance[day.date])]">
-                                            {{ getAttendanceMark(student.attendance[day.date]) }}
+                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance?.[day.date])]">
+                                            {{ getAttendanceMark(student.attendance?.[day.date]) }}
                                         </span>
                                     </td>
                                     <td class="summary-cell present-count">{{ student.totalPresent }}</td>
@@ -549,8 +549,8 @@
                                         </div>
                                     </td>
                                     <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
-                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance[day.date])]">
-                                            {{ getAttendanceMark(student.attendance[day.date]) }}
+                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance?.[day.date])]">
+                                            {{ getAttendanceMark(student.attendance?.[day.date]) }}
                                         </span>
                                     </td>
                                     <td class="summary-cell present-count">{{ student.totalPresent }}</td>
@@ -3218,14 +3218,182 @@ const rejectReport = async (report) => {
 };
 
 // Section details methods
-const viewSectionDetails = (section) => {
+const viewSectionDetails = async (section) => {
     // Close the main report dialog first
     showViewDialog.value = false;
+    
+    // Load real student data for this section
+    await loadSectionStudents(section);
+    
     // Wait a moment then open the section details dialog
     setTimeout(() => {
         selectedSectionDetails.value = section;
         showSectionDetailsDialog.value = true;
     }, 100);
+};
+
+// Load real students from database and integrate with SF2 data
+const loadSectionStudents = async (section) => {
+    try {
+        console.log('Loading students for section:', section.name, 'ID:', section.id);
+        
+        // Step 1: Get section details to get section name
+        const sectionResponse = await fetch(`http://127.0.0.1:8000/api/sections/${section.id}`);
+        if (!sectionResponse.ok) {
+            throw new Error(`Failed to fetch section details: ${sectionResponse.status}`);
+        }
+        const sectionData = await sectionResponse.json();
+        const sectionNameFromAPI = sectionData.name;
+        console.log('Section name from API:', sectionNameFromAPI);
+        
+        // Step 2: Get all students and filter by section name
+        const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
+        if (!studentsResponse.ok) {
+            throw new Error(`Failed to fetch students: ${studentsResponse.status}`);
+        }
+        const studentsData = await studentsResponse.json();
+        
+        // Filter students by section name
+        const filteredStudents = studentsData.filter(student => 
+            student.section === sectionNameFromAPI || 
+            student.current_section_name === sectionNameFromAPI
+        );
+        
+        console.log('Found students for section:', filteredStudents.length);
+        
+        // Step 3: Check for submitted SF2 reports for this section and month
+        const currentMonth = getCurrentMonthForAPI();
+        console.log('Checking for submitted SF2 data for month:', currentMonth);
+        
+        let sf2Data = null;
+        try {
+            // First try to get stored submitted SF2 data (admin endpoint)
+            const submittedSF2Response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${section.id}/${currentMonth}`);
+            if (submittedSF2Response.ok) {
+                const submittedData = await submittedSF2Response.json();
+                if (submittedData.success) {
+                    sf2Data = submittedData.data;
+                    console.log('Found submitted SF2 data:', sf2Data);
+                    
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Real Submitted SF2 Data Loaded',
+                        detail: `Showing data submitted by ${sf2Data.section?.teacher?.name || 'teacher'} (Status: ${sf2Data.submission_info?.status || 'submitted'})`,
+                        life: 5000
+                    });
+                }
+            } else {
+                console.log('No submitted SF2 data found, trying live data...');
+                
+                // Fallback to live SF2 data (teacher endpoint)
+                const liveSF2Response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${section.id}/${currentMonth}`);
+                if (liveSF2Response.ok) {
+                    const liveData = await liveSF2Response.json();
+                    if (liveData.success) {
+                        sf2Data = liveData.data;
+                        console.log('Found live SF2 data:', sf2Data);
+                        
+                        toast.add({
+                            severity: 'info',
+                            summary: 'Live SF2 Data Loaded',
+                            detail: 'Showing current attendance data (not yet submitted)',
+                            life: 4000
+                        });
+                    }
+                } else {
+                    console.log('No SF2 data found, using sample data');
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Sample Data Only',
+                        detail: 'No SF2 report data found for this section and month',
+                        life: 4000
+                    });
+                }
+            }
+        } catch (sf2Error) {
+            console.log('Error fetching SF2 data:', sf2Error);
+            toast.add({
+                severity: 'error',
+                summary: 'Error Loading SF2 Data',
+                detail: 'Failed to fetch SF2 report data from server',
+                life: 4000
+            });
+        }
+        
+        // Step 4: Process students and integrate with SF2 data
+        const processedStudents = filteredStudents.map((student, index) => {
+            // Try to find matching student in SF2 data
+            let sf2StudentData = null;
+            if (sf2Data && sf2Data.students) {
+                sf2StudentData = sf2Data.students.find(sf2Student => 
+                    sf2Student.id === student.id || 
+                    (sf2Student.firstName === student.firstName && sf2Student.lastName === student.lastName)
+                );
+            }
+            
+            return {
+                id: student.id || index + 1,
+                firstName: student.firstName || student.name?.split(' ')[0] || 'Unknown',
+                lastName: student.lastName || student.name?.split(' ').slice(1).join(' ') || 'Student',
+                middleName: student.middleName || '',
+                gender: student.gender || (index % 2 === 0 ? 'Male' : 'Female'),
+                gradeLevel: student.gradeLevel || sectionData.grade || 'Unknown',
+                section: sectionNameFromAPI,
+                
+                // Use real SF2 attendance data if available, otherwise generate sample
+                attendance: sf2StudentData ? sf2StudentData.attendance : generateSampleAttendance(),
+                totalPresent: sf2StudentData ? sf2StudentData.totalPresent : 15,
+                totalAbsent: sf2StudentData ? sf2StudentData.totalAbsent : 5,
+                attendanceRate: sf2StudentData ? sf2StudentData.attendanceRate : 75,
+                status: sf2StudentData ? sf2StudentData.status : 'active'
+            };
+        });
+        
+        // Step 5: Update the sectionStudents data
+        sectionStudents.value[sectionNameFromAPI] = processedStudents;
+        
+        console.log('Updated section students:', processedStudents.length, 'students loaded');
+        
+    } catch (error) {
+        console.error('Error loading section students:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error Loading Students',
+            detail: 'Failed to load student data from database',
+            life: 5000
+        });
+        
+        // Fallback to existing sample data
+        console.log('Falling back to sample data for section:', section.name);
+    }
+};
+
+// Helper function to get current month in API format
+const getCurrentMonthForAPI = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+};
+
+// Generate sample attendance data when real data is not available
+const generateSampleAttendance = () => {
+    const attendance = {};
+    const daysInMonth = attendanceDays.value.length;
+    
+    attendanceDays.value.forEach(day => {
+        // Generate realistic attendance pattern (80% present, 15% absent, 5% late)
+        const rand = Math.random();
+        if (rand < 0.80) {
+            attendance[day.date] = 'present';
+        } else if (rand < 0.95) {
+            attendance[day.date] = 'absent';
+        } else {
+            attendance[day.date] = 'late';
+        }
+    });
+    
+    return attendance;
 };
 
 const downloadSectionReport = (section) => {

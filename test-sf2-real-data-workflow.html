@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test SF2 Real Data Workflow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>SF2 Real Data Workflow Test</h1>
+    <p>This test verifies the complete workflow: Teacher Submit → Database Store → Admin Retrieve Real Data</p>
+
+    <div class="step">
+        <h3>Step 1: Test SF2 Data Generation</h3>
+        <button onclick="testSF2DataGeneration()">Test SF2 Data Generation</button>
+        <div id="sf2DataResult"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 2: Test SF2 Submission to Admin</h3>
+        <button onclick="testSF2Submission()">Submit SF2 Report</button>
+        <div id="submissionResult"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 3: Test Admin Retrieval of Submitted Data</h3>
+        <button onclick="testAdminRetrieval()">Get Submitted SF2 Data</button>
+        <div id="retrievalResult"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 4: Compare Data Integrity</h3>
+        <button onclick="compareDataIntegrity()">Compare Submitted vs Retrieved</button>
+        <div id="comparisonResult"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000/api';
+        let originalSF2Data = null;
+        let submittedData = null;
+        let retrievedData = null;
+
+        // Test section and month (adjust as needed)
+        const TEST_SECTION_ID = 1; // Matatag section
+        const TEST_MONTH = '2025-09';
+
+        async function testSF2DataGeneration() {
+            const resultDiv = document.getElementById('sf2DataResult');
+            resultDiv.innerHTML = '<p>Testing SF2 data generation...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/teacher/reports/sf2/data/${TEST_SECTION_ID}/${TEST_MONTH}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    originalSF2Data = data.data;
+                    resultDiv.innerHTML = `
+                        <div class="test-section success">
+                            <h4>✅ SF2 Data Generated Successfully</h4>
+                            <p><strong>Section:</strong> ${originalSF2Data.section.name}</p>
+                            <p><strong>Students:</strong> ${originalSF2Data.students.length}</p>
+                            <p><strong>Month:</strong> ${originalSF2Data.month_name}</p>
+                            <p><strong>Teacher:</strong> ${originalSF2Data.section.teacher?.name || 'N/A'}</p>
+                            <details>
+                                <summary>View Raw Data</summary>
+                                <pre>${JSON.stringify(originalSF2Data, null, 2)}</pre>
+                            </details>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.message || 'Failed to generate SF2 data');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ SF2 Data Generation Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testSF2Submission() {
+            const resultDiv = document.getElementById('submissionResult');
+            
+            if (!originalSF2Data) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ No SF2 Data Available</h4>
+                        <p>Please run Step 1 first to generate SF2 data</p>
+                    </div>
+                `;
+                return;
+            }
+
+            resultDiv.innerHTML = '<p>Submitting SF2 report to admin...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/teacher/reports/sf2/submit/${TEST_SECTION_ID}/${TEST_MONTH}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    submittedData = data.data;
+                    resultDiv.innerHTML = `
+                        <div class="test-section success">
+                            <h4>✅ SF2 Report Submitted Successfully</h4>
+                            <p><strong>Submission ID:</strong> ${submittedData.submission_id}</p>
+                            <p><strong>Section:</strong> ${submittedData.section_name}</p>
+                            <p><strong>Month:</strong> ${submittedData.month}</p>
+                            <p><strong>Status:</strong> ${submittedData.status}</p>
+                            <p><strong>Students Count:</strong> ${submittedData.students_count}</p>
+                            <p><strong>Submitted At:</strong> ${submittedData.submitted_at}</p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.message || 'Failed to submit SF2 report');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ SF2 Submission Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testAdminRetrieval() {
+            const resultDiv = document.getElementById('retrievalResult');
+            resultDiv.innerHTML = '<p>Retrieving submitted SF2 data for admin...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/reports/sf2/submitted/${TEST_SECTION_ID}/${TEST_MONTH}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    retrievedData = data.data;
+                    resultDiv.innerHTML = `
+                        <div class="test-section success">
+                            <h4>✅ Submitted SF2 Data Retrieved Successfully</h4>
+                            <p><strong>Section:</strong> ${retrievedData.section.name}</p>
+                            <p><strong>Students:</strong> ${retrievedData.students.length}</p>
+                            <p><strong>Month:</strong> ${retrievedData.month_name}</p>
+                            <p><strong>Teacher:</strong> ${retrievedData.section.teacher?.name || 'N/A'}</p>
+                            <p><strong>Submission Status:</strong> ${retrievedData.submission_info.status}</p>
+                            <p><strong>Submitted At:</strong> ${retrievedData.submission_info.submitted_at}</p>
+                            <details>
+                                <summary>View Retrieved Data</summary>
+                                <pre>${JSON.stringify(retrievedData, null, 2)}</pre>
+                            </details>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.message || 'Failed to retrieve submitted SF2 data');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ Admin Retrieval Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function compareDataIntegrity() {
+            const resultDiv = document.getElementById('comparisonResult');
+
+            if (!originalSF2Data || !retrievedData) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ Insufficient Data for Comparison</h4>
+                        <p>Please complete Steps 1-3 first</p>
+                    </div>
+                `;
+                return;
+            }
+
+            resultDiv.innerHTML = '<p>Comparing original vs retrieved data...</p>';
+
+            try {
+                const comparison = {
+                    sectionMatch: originalSF2Data.section.name === retrievedData.section.name,
+                    monthMatch: originalSF2Data.month === retrievedData.month,
+                    studentsCountMatch: originalSF2Data.students.length === retrievedData.students.length,
+                    teacherMatch: originalSF2Data.section.teacher?.name === retrievedData.section.teacher?.name,
+                    studentsDataMatch: true
+                };
+
+                // Compare student data
+                const studentComparisons = [];
+                for (let i = 0; i < Math.min(originalSF2Data.students.length, retrievedData.students.length); i++) {
+                    const original = originalSF2Data.students[i];
+                    const retrieved = retrievedData.students[i];
+                    
+                    const studentMatch = {
+                        name: original.firstName === retrieved.firstName && original.lastName === retrieved.lastName,
+                        gender: original.gender === retrieved.gender,
+                        attendance: JSON.stringify(original.attendance_data || original.attendance) === JSON.stringify(retrieved.attendance)
+                    };
+                    
+                    studentComparisons.push({
+                        student: `${original.firstName} ${original.lastName}`,
+                        match: studentMatch.name && studentMatch.gender && studentMatch.attendance,
+                        details: studentMatch
+                    });
+                    
+                    if (!studentMatch.name || !studentMatch.gender || !studentMatch.attendance) {
+                        comparison.studentsDataMatch = false;
+                    }
+                }
+
+                const overallMatch = Object.values(comparison).every(match => match === true);
+
+                resultDiv.innerHTML = `
+                    <div class="test-section ${overallMatch ? 'success' : 'error'}">
+                        <h4>${overallMatch ? '✅' : '❌'} Data Integrity Check</h4>
+                        <p><strong>Overall Match:</strong> ${overallMatch ? 'PASSED' : 'FAILED'}</p>
+                        <ul>
+                            <li>Section Name: ${comparison.sectionMatch ? '✅' : '❌'}</li>
+                            <li>Month: ${comparison.monthMatch ? '✅' : '❌'}</li>
+                            <li>Students Count: ${comparison.studentsCountMatch ? '✅' : '❌'}</li>
+                            <li>Teacher: ${comparison.teacherMatch ? '✅' : '❌'}</li>
+                            <li>Students Data: ${comparison.studentsDataMatch ? '✅' : '❌'}</li>
+                        </ul>
+                        <details>
+                            <summary>Student-by-Student Comparison</summary>
+                            <ul>
+                                ${studentComparisons.map(comp => `
+                                    <li>${comp.student}: ${comp.match ? '✅' : '❌'}</li>
+                                `).join('')}
+                            </ul>
+                        </details>
+                        ${overallMatch ? 
+                            '<p><strong>🎉 SUCCESS:</strong> Real data is properly stored and retrieved from backend!</p>' :
+                            '<p><strong>⚠️ WARNING:</strong> Data integrity issues detected. Check the details above.</p>'
+                        }
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ Comparison Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
