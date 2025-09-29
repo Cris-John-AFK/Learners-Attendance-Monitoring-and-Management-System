@@ -1,10 +1,16 @@
-import axios from '@/config/axios';
+import axios from 'axios';
 
 class TeacherAuthService {
     constructor() {
-        this.baseURL = '/api/teacher';
-        this.tokenKey = 'teacher_token';
+        this.baseURL = 'http://localhost:8000/api/teachers';
         this.teacherKey = 'teacher_data';
+        this.tokenKey = 'teacher_token';
+        
+        // Clear old authentication data on initialization (only once)
+        if (!sessionStorage.getItem('auth_cleaned')) {
+            TeacherAuthService.clearOldAuthData();
+            sessionStorage.setItem('auth_cleaned', 'true');
+        }
     }
 
     /**
@@ -12,10 +18,13 @@ class TeacherAuthService {
      */
     async login(username, password) {
         try {
+            console.log('🔐 Starting login process for:', username);
             const response = await axios.post(`${this.baseURL}/login`, {
                 username,
                 password
             });
+
+            console.log('📡 Login API response:', response.data);
 
             if (response.data.success) {
                 const { teacher, user, assignments, token } = response.data.data;
@@ -28,18 +37,10 @@ class TeacherAuthService {
                     loginTime: new Date().toISOString()
                 };
                 
-                localStorage.setItem(this.tokenKey, token);
-                localStorage.setItem(this.teacherKey, JSON.stringify(authData));
-
-                // Set default authorization header
-                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-                console.log('Teacher login successful, data stored:', {
-                    teacherId: teacher.id,
-                    username: user.username,
-                    assignmentsCount: assignments.length
-                });
-
+                // Store teacher data and token with tab-specific keys
+                TeacherAuthService.setAuthData(authData, token);
+                
+                console.log('Auth data stored successfully for tab:', TeacherAuthService.getTabId());
                 return {
                     success: true,
                     data: { teacher, user, assignments }
@@ -52,10 +53,12 @@ class TeacherAuthService {
             };
 
         } catch (error) {
-            console.error('Login error:', error);
+            console.error('🚨 Login error:', error);
+            console.error('🚨 Error response:', error.response?.data);
+            console.error('🚨 Error status:', error.response?.status);
             return {
                 success: false,
-                message: error.response?.data?.message || 'Login failed'
+                message: error.response?.data?.message || error.message || 'Login failed'
             };
         }
     }
@@ -65,22 +68,25 @@ class TeacherAuthService {
      */
     async logout() {
         try {
-            const token = this.getToken();
-            if (token) {
-                await axios.post(`${this.baseURL}/logout`);
-            }
+            const tabId = TeacherAuthService.getTabId();
+            const teacherKey = `teacher_data_${tabId}`;
+            const tokenKey = `teacher_token_${tabId}`;
+            
+            // Remove tab-specific data
+            localStorage.removeItem(teacherKey);
+            localStorage.removeItem(tokenKey);
+            sessionStorage.removeItem('tab_id');
+            
+            delete axios.defaults.headers.common['Authorization'];
+            
+            console.log('Logged out from tab:', tabId);
         } catch (error) {
             console.error('Logout error:', error);
-        } finally {
-            // Clear local storage and headers
-            localStorage.removeItem(this.tokenKey);
-            localStorage.removeItem(this.teacherKey);
-            delete axios.defaults.headers.common['Authorization'];
         }
     }
 
     /**
-     * Get current teacher profile
+     * Get profile
      */
     async getProfile() {
         try {
@@ -134,33 +140,27 @@ class TeacherAuthService {
     }
 
     /**
-     * Get stored token
+     * Get stored token for current tab
      */
     getToken() {
-        // Try multiple storage locations
-        let token = localStorage.getItem(this.tokenKey);
-        if (!token) {
-            token = sessionStorage.getItem(this.tokenKey);
-        }
-        if (!token && window.teacherAuth) {
-            token = window.teacherAuth.token;
-        }
-        return token;
+        const tabId = TeacherAuthService.getTabId();
+        const tokenKey = `teacher_token_${tabId}`;
+        return localStorage.getItem(tokenKey);
     }
 
     /**
-     * Get stored teacher data
+     * Get stored teacher data for current tab
      */
     getTeacherData() {
-        // Try multiple storage locations
-        let data = localStorage.getItem(this.teacherKey);
-        if (!data) {
-            data = sessionStorage.getItem(this.teacherKey);
+        try {
+            const tabId = TeacherAuthService.getTabId();
+            const teacherKey = `teacher_data_${tabId}`;
+            const data = localStorage.getItem(teacherKey);
+            return data ? JSON.parse(data) : null;
+        } catch (error) {
+            console.error('Error parsing teacher data:', error);
+            return null;
         }
-        if (!data && window.teacherAuth) {
-            return window.teacherAuth.data;
-        }
-        return data ? JSON.parse(data) : null;
     }
 
     /**
@@ -168,98 +168,152 @@ class TeacherAuthService {
      */
     getAssignments() {
         const teacherData = this.getTeacherData();
+        console.log('🔍 Teacher data for assignments:', teacherData);
+        
         if (!teacherData || !teacherData.assignments) {
+            console.log('❌ No assignments found in teacher data');
             return [];
         }
+        
+        console.log('✅ Found assignments:', teacherData.assignments);
         return teacherData.assignments;
     }
 
     /**
-     * Get teacher assignments grouped by type
-     */
-    getGroupedAssignments() {
-        const teacherData = this.getTeacherData();
-        if (!teacherData || !teacherData.assignments) {
-            return {
-                homeroom: [],
-                subjects: []
-            };
-        }
-
-        const assignments = teacherData.assignments;
-        const grouped = {
-            homeroom: [],
-            subjects: []
-        };
-
-        assignments.forEach(assignment => {
-            if (assignment.role === 'homeroom_teacher' || assignment.subject_name === 'Homeroom') {
-                grouped.homeroom.push(assignment);
-            } else if (assignment.subject_id && assignment.subject_name !== 'Homeroom') {
-                grouped.subjects.push(assignment);
-            }
-        });
-
-        return grouped;
-    }
-
-    /**
-     * Get unique subjects taught by teacher
+     * Get unique subjects for the teacher
      */
     getUniqueSubjects() {
-        const teacherData = this.getTeacherData();
-        if (!teacherData || !teacherData.assignments) {
-            return [];
-        }
+        const assignments = this.getAssignments();
+        const subjects = [];
+        const seen = new Set();
 
-        const subjectMap = new Map();
-        teacherData.assignments.forEach(assignment => {
-            if (assignment.subject_id && assignment.subject_name) {
-                subjectMap.set(assignment.subject_id, {
-                    id: assignment.subject_id,
-                    name: assignment.subject_name,
-                    sections: []
+        console.log('🔍 Processing assignments for unique subjects:', assignments);
+
+        assignments.forEach(assignment => {
+            const subjectId = assignment.subject_id;
+            const subjectName = assignment.subject_name || 'Homeroom';
+            
+            if (!seen.has(subjectId)) {
+                seen.add(subjectId);
+                subjects.push({
+                    id: subjectId,
+                    name: subjectName,
+                    sections: [{
+                        id: assignment.section_id,
+                        name: assignment.section_name,
+                        grade: assignment.grade_name
+                    }],
+                    originalSubject: {
+                        id: subjectId,
+                        name: subjectName,
+                        sectionId: assignment.section_id
+                    }
                 });
             }
         });
 
-        // Add sections to each subject
-        teacherData.assignments.forEach(assignment => {
-            if (assignment.subject_id && subjectMap.has(assignment.subject_id)) {
-                const subject = subjectMap.get(assignment.subject_id);
-                subject.sections.push({
-                    id: assignment.section_id,
-                    name: assignment.section_name,
-                    grade: assignment.grade_name,
-                    assignment_id: assignment.assignment_id
-                });
-            }
-        });
-
-        return Array.from(subjectMap.values());
+        console.log('✅ Unique subjects generated:', subjects);
+        return subjects;
     }
 
     /**
-     * Initialize authentication on app start
+     * Get current teacher info
+     */
+    getCurrentTeacher() {
+        const teacherData = this.getTeacherData();
+        return teacherData ? teacherData.teacher : null;
+    }
+
+    /**
+     * Get current user info
+     */
+    getCurrentUser() {
+        const teacherData = this.getTeacherData();
+        return teacherData ? teacherData.user : null;
+    }
+
+    /**
+     * Initialize authentication state
      */
     initializeAuth() {
-        // Add delay to ensure localStorage is ready
-        setTimeout(() => {
-            const token = this.getToken();
-            const teacherData = this.getTeacherData();
-            
-            console.log('TeacherAuthService.initializeAuth() called (delayed):');
-            console.log('- Token found:', !!token);
-            console.log('- Teacher data found:', !!teacherData);
-            console.log('- All localStorage keys:', Object.keys(localStorage));
-            
-            if (token) {
-                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                console.log('- Authorization header set');
-            } else {
-                console.log('- No token found, skipping header setup');
-            }
-        }, 100);
+        console.log('TeacherAuthService.initializeAuth() called (delayed):');
+        console.log('- Token found:', !!this.getToken());
+        console.log('- Teacher data found:', !!this.getTeacherData());
+        console.log('- All localStorage keys:', Object.keys(localStorage));
+        
+        const token = this.getToken();
+        if (token) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            console.log('- Authorization header set');
+        }
+    }
+
+    /**
+     * Store teacher data and token with tab-specific keys
+     */
+    static setAuthData(teacherData, token) {
+        const tabId = this.getTabId();
+        const teacherKey = `teacher_data_${tabId}`;
+        const tokenKey = `teacher_token_${tabId}`;
+        
+        localStorage.setItem(teacherKey, JSON.stringify(teacherData));
+        localStorage.setItem(tokenKey, token);
+        localStorage.setItem('current_teacher_tab', tabId);
+        
+        // Set axios default header for future requests
+        if (axios.defaults.headers) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        }
+        
+        console.log('Auth data stored successfully for tab:', tabId);
+    }
+
+    /**
+     * Generate unique tab ID
+     */
+    static getTabId() {
+        let tabId = sessionStorage.getItem('tab_id');
+        if (!tabId) {
+            tabId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            sessionStorage.setItem('tab_id', tabId);
+        }
+        return tabId;
+    }
+
+    /**
+     * Clear old authentication data (for migration)
+     */
+    static clearOldAuthData() {
+        // Remove old non-tab-specific keys
+        localStorage.removeItem('teacher_data');
+        localStorage.removeItem('teacher_token');
+        localStorage.removeItem('current_teacher_tab');
+        
+        console.log('Cleared old authentication data');
+    }
+
+    /**
+     * Get stored teacher data for current tab (static version)
+     */
+    static getTeacherData() {
+        try {
+            const tabId = this.getTabId();
+            const teacherKey = `teacher_data_${tabId}`;
+            const data = localStorage.getItem(teacherKey);
+            return data ? JSON.parse(data) : null;
+        } catch (error) {
+            console.error('Error parsing teacher data:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get stored token for current tab (static version)
+     */
+    static getToken() {
+        const tabId = this.getTabId();
+        const tokenKey = `teacher_token_${tabId}`;
+        return localStorage.getItem(tokenKey);
     }
 }
 

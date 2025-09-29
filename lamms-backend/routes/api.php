@@ -57,6 +57,7 @@ Route::get('/sections/{section}/direct-subjects', [SectionController::class, 'ge
 
 // Teacher routes
 Route::prefix('teachers')->group(function () {
+    Route::post('/login', [TeacherAuthController::class, 'login']);
     Route::get('/', [TeacherController::class, 'index']);
     Route::get('/active', [TeacherController::class, 'getActiveTeachers']);
     Route::get('/section/{sectionId}', [TeacherController::class, 'getTeachersBySection']);

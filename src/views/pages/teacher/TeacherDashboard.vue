@@ -474,8 +474,11 @@ async function loadAttendanceData() {
             subjectId: selectedSubject.value.id
         };
 
-        // Cache key for this specific data request
-        const cacheKey = CacheService.generateKey('attendance_data', params);
+        // Cache key for this specific data request (include viewType to separate caches)
+        const cacheKey = CacheService.generateKey('attendance_data', {
+            ...params,
+            viewType: viewType.value
+        });
         
         // Try to get from cache first
         const cachedData = CacheService.get(cacheKey);
@@ -511,8 +514,17 @@ async function loadAttendanceData() {
             ),
             AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
                 period: 'week',
-                viewType: viewType.value,
-                subjectId: selectedSubject.value.id
+                viewType: 'all_students',  // Make it general, not subject-specific
+                subjectId: null            // No subject filtering
+            }).then(result => {
+                console.log('🔍 Attendance Summary API called with:', {
+                    teacherId: currentTeacher.value.id,
+                    period: 'week',
+                    viewType: 'all_students',
+                    subjectId: null
+                });
+                console.log('📊 Attendance Summary API response:', result);
+                return result;
             })
         ]);
 
@@ -742,11 +754,22 @@ async function prepareChartData() {
         };
 
         try {
+            const trendsParams = {
+                teacherId: currentTeacher.value.id,
+                period: chartView.value,
+                viewType: viewType.value,
+                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
+            };
+            
+            console.log('🔍 Calling getAttendanceTrends with:', JSON.stringify(trendsParams, null, 2));
+
             const trendsResult = await AttendanceSummaryService.getAttendanceTrends(currentTeacher.value.id, {
                 period: chartView.value,
                 viewType: viewType.value,
                 subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
             });
+            
+            console.log('📊 Full trends response:', trendsResult);
 
             if (trendsResult && trendsResult.success && trendsResult.data) {
                 // Process the database response - API returns labels and datasets structure
@@ -1035,18 +1058,39 @@ function onChartViewChange() {
     prepareChartData();
 }
 
-// Watch for subject changes to update data
-watch(selectedSubject, (newSubject) => {
-    if (newSubject) {
+// Watch for subject changes and reload data
+watch(selectedSubject, async (newSubject, oldSubject) => {
+    if (newSubject && newSubject.id !== oldSubject?.id) {
         console.log('Subject changed to:', newSubject);
-        loadAttendanceData();
+        
+        // Clear any cached attendance data for both old and new subjects
+        // Clear cache for both view types to ensure fresh data
+        const cacheParams = {
+            teacherId: currentTeacher.value.id,
+            sectionId: selectedSubject.value.sectionId,
+            subjectId: selectedSubject.value.id
+        };
+
+        // Clear cache for both subject and all_students views
+        ['subject', 'all_students'].forEach(vType => {
+            const cacheKey = CacheService.generateKey('attendance_data', {
+                ...cacheParams,
+                viewType: vType
+            });
+            CacheService.delete(cacheKey);
+            console.log(`🗑️ Clearing ${vType} cache:`, cacheKey);
+        });
+
+        // Reload attendance data
+        await loadAttendanceData();
         prepareChartData();
     }
 });
 
-// Watch for chart view changes to update chart data
-watch(chartView, (newView) => {
-    console.log('Chart view changed to:', newView);
+// Watch for view type changes
+watch(viewType, async () => {
+    console.log('View type changed to:', viewType.value);
+    await loadAttendanceData();
     prepareChartData();
 });
 
@@ -1321,7 +1365,7 @@ async function showStudentProfile(student) {
                         </div>
 
                         <div v-else class="chart-container">
-                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="Date.now()" style="height: 300px" class="stylish-chart" />
+                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="`chart-${selectedSubject?.id}-${chartView}`" style="height: 300px" class="stylish-chart" />
                         </div>
 
                         <!-- Fallback for chart rendering issues -->
@@ -1348,7 +1392,7 @@ async function showStudentProfile(student) {
 
                 <!-- Enhanced Attendance Insights Card -->
                 <div class="col-span-12 lg:col-span-4">
-                    <AttendanceInsights :students="attendanceSummary?.students || []" :selectedSubject="selectedSubject" />
+                    <AttendanceInsights :students="attendanceSummary?.students || []" :selectedSubject="null" />
                 </div>
             </div>
 
