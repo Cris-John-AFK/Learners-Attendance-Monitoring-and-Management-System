@@ -307,8 +307,8 @@ onMounted(() => {
             <div class="text-center mb-6">
                 <div class="flex justify-between items-center mb-6">
                     <!-- Left DepEd Seal Logo -->
-                    <div class="w-20 h-20 flex items-center justify-center">
-                        <img src="/demo/images/dep-ed-logo.png" alt="DepEd Seal" class="w-16 h-16 object-contain" />
+                    <div class="w-32 h-32 flex items-center justify-center">
+                        <img src="/demo/images/dep-ed-logo.png" alt="DepEd Seal" class="w-28 h-28 object-contain" />
                     </div>
 
                     <!-- Center Title -->
@@ -318,8 +318,8 @@ onMounted(() => {
                     </div>
 
                     <!-- Right DepEd Logo -->
-                    <div class="w-20 h-20 flex items-center justify-center">
-                        <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="w-16 h-16 object-contain" />
+                    <div class="w-40 h-32 flex items-center justify-center">
+                        <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="w-36 h-24 object-contain" />
                     </div>
                 </div>
             </div>
@@ -443,7 +443,7 @@ onMounted(() => {
                         <!-- Male Daily Totals Row -->
                         <tr class="bg-blue-50">
                             <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< MALE TOTAL Per Day >>>></td>
+                            <td class="border border-gray-800 p-2 font-bold text-center">MALE | TOTAL Per Day</td>
                             <td
                                 v-for="day in reportData.days_in_month"
                                 :key="day.date"
@@ -476,7 +476,7 @@ onMounted(() => {
                         <!-- Female Daily Totals Row -->
                         <tr class="bg-pink-50">
                             <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< FEMALE TOTAL Per Day >>>></td>
+                            <td class="border border-gray-800 p-2 font-bold text-center">FEMALE | TOTAL Per Day</td>
                             <td
                                 v-for="day in reportData.days_in_month"
                                 :key="day.date"
@@ -494,7 +494,7 @@ onMounted(() => {
                         <!-- Combined Total Row -->
                         <tr class="bg-yellow-100">
                             <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center"><<<< TOTAL Per Day >>>></td>
+                            <td class="border border-gray-800 p-2 font-bold text-center">Combined TOTAL PER DAY</td>
                             <td
                                 v-for="day in reportData.days_in_month"
                                 :key="day.date"
@@ -513,93 +513,169 @@ onMounted(() => {
             </div>
 
             <!-- Summary Statistics -->
-            <div class="grid grid-cols-2 gap-8 text-sm">
+            <div class="grid grid-cols-3 gap-6 text-xs mt-8">
                 <!-- Left Column - Guidelines -->
-                <div class="space-y-4">
+                <div class="p-3">
                     <h3 class="font-bold underline">GUIDELINES:</h3>
-                    <div class="space-y-2">
-                        <p>1. This form should be accomplished daily. SF2 is to be submitted to the school head/principal at the end of each month.</p>
-                        <p>2. "Learner" refers to anyone who is enrolled in the school.</p>
-                        <p>3. Percentage of Enrollment = (Total enrollment as of end of the month ÷ Total enrollment as of the beginning of the month) × 100</p>
-                        <p>4. Average Daily Attendance = (Total number of days in reporting month ÷ Number of school days in reporting month) × 100</p>
-                        <p>5. Every end of the month, this form should be submitted to the office of the school head/principal for consolidation.</p>
+                    <div class="space-y-2 text-xs">
+                        <p>1. The attendance shall be accomplished daily. Refer to the codes for checking learners' attendance.</p>
+                        <p>2. Dates shall be written in the preceding columns beside Learner's Name.</p>
+                        <p>3. To compute the following:</p>
+
+                        <div class="ml-4 space-y-2">
+                            <div class="flex items-center">
+                                <span class="w-4">a.</span>
+                                <span class="italic mr-2">Percentage of Enrollment =</span>
+                                <div class="text-center border-b border-gray-800 px-2">
+                                    <div>Registered Learner as of End of the Month</div>
+                                    <div class="border-b border-gray-800 mb-1"></div>
+                                    <div>Enrollment as of 1st Friday of June</div>
+                                </div>
+                                <span class="ml-2">x 100</span>
+                            </div>
+
+                            <div class="flex items-center">
+                                <span class="w-4">b.</span>
+                                <span class="italic mr-2">Average Daily Attendance =</span>
+                                <div class="text-center border-b border-gray-800 px-2">
+                                    <div>Total Daily Attendance</div>
+                                    <div class="border-b border-gray-800 mb-1"></div>
+                                    <div>Number of School Days in reporting month</div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center">
+                                <span class="w-4">c.</span>
+                                <span class="italic mr-2">Percentage of Attendance for the month =</span>
+                                <div class="text-center border-b border-gray-800 px-2">
+                                    <div>Average daily attendance</div>
+                                    <div class="border-b border-gray-800 mb-1"></div>
+                                    <div>Registered Learner as of End of the month</div>
+                                </div>
+                                <span class="ml-2">x 100</span>
+                            </div>
+                        </div>
+
+                        <p>
+                            4. Every End of the month, the class adviser will submit this form to the office of the principal for recording of summary table into the School Form 4. Once signed by the principal, this form should be returned to the
+                            adviser.
+                        </p>
+                        <p>5. The adviser will extend neccessary intervention including but not limited to home visitation to learner/s that committed 5 consecutive days of absences or those with potentials of dropping out</p>
+                        <p>6. Attendance performance of learner is expected to reflect in Form 137 and Form 138 every grading period</p>
+                        <p class="ml-4">* Beginning of School Year cut-off report is every 1st Friday of School Calendar Days</p>
+                    </div>
+                </div>
+
+                <!-- Middle Column - Codes for Checking Attendance -->
+                <div class="border border-gray-800 p-3">
+                    <h3 class="font-bold text-center mb-2">CODES FOR CHECKING ATTENDANCE</h3>
+                    <div class="space-y-1 text-xs">
+                        <p><strong>Mark Present:</strong> (✓) Absent: Tardy (half shaded) Upper (L) for Late, Lower (E) for Excused</p>
+                        <p><strong>REASONS/CAUSES OF DROP OUTS</strong></p>
+                        <p><strong>Domestic Related Factors</strong></p>
+                        <p>a.1 Had to take care of siblings</p>
+                        <p>a.2 Early marriage/pregnancy</p>
+                        <p>a.3 Parents' attitude toward schooling</p>
+                        <p>a.4 Family problems</p>
+                        <p><strong>Individual Related Factors</strong></p>
+                        <p>b.1 Illness</p>
+                        <p>b.2 Overage</p>
+                        <p>b.3 Death</p>
+                        <p>b.4 Drug Abuse</p>
+                        <p>b.5 Poor academic performance</p>
+                        <p>b.6 Lack of interest/distractions</p>
+                        <p>b.7 Hunger/Malnutrition</p>
+                        <p>b.8 Child labor/street children</p>
+                        <p>c.1 Teacher Factor</p>
+                        <p>c.2 Physical condition of classroom</p>
+                        <p>c.3 Peer influence</p>
+                        <p>d Geographic/Environmental</p>
+                        <p>e.1 Distance between home and school</p>
+                        <p>e.2 Armed conflict (incl. Tribal wars & conflicts)</p>
+                        <p>e.3 Calamities/Disasters</p>
+                        <p>e.4 Financial Related</p>
+                        <p>e.5 Child labor: work</p>
+                        <p>f Others: _______</p>
                     </div>
                 </div>
 
                 <!-- Right Column - Summary Data -->
-                <div class="border border-gray-800">
-                    <table class="w-full border-collapse text-xs">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="border border-gray-800 p-2 text-left">LEARNERS</th>
-                                <th class="border border-gray-800 p-2 text-center">M</th>
-                                <th class="border border-gray-800 p-2 text-center">F</th>
-                                <th class="border border-gray-800 p-2 text-center">TOTAL</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="border border-gray-800 p-2">1. Enrollment as of (beginning of the reporting month)</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.male.enrollment }}</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.female.enrollment }}</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">{{ reportData.summary.total.enrollment }}</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">2. Late Enrollment during the month</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">0</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">3. Registered Learners as of end of the month</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.male.enrollment }}</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.female.enrollment }}</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">{{ reportData.summary.total.enrollment }}</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">4. Percentage of Enrollment</td>
-                                <td class="border border-gray-800 p-2 text-center">100%</td>
-                                <td class="border border-gray-800 p-2 text-center">100%</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">100%</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">5. Average Daily Attendance</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.male.attendance_rate }}%</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.female.attendance_rate }}%</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">{{ reportData.summary.total.attendance_rate }}%</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">6. Percentage of Attendance for the month</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.male.attendance_rate }}%</td>
-                                <td class="border border-gray-800 p-2 text-center">{{ reportData.summary.female.attendance_rate }}%</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">{{ reportData.summary.total.attendance_rate }}%</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">7. Number of students absent for 5 consecutive days or more</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">0</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">8. Drop out</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">0</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">9. Transferred out</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">0</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-800 p-2">10. Transferred in</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center">0</td>
-                                <td class="border border-gray-800 p-2 text-center font-bold">0</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="space-y-4">
+                    <div class="border border-gray-800">
+                        <div class="bg-gray-100 p-2 text-center font-bold">Summary for the Month</div>
+                        <table class="w-full border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-800 p-1 text-left"></th>
+                                    <th class="border border-gray-800 p-1 text-center">M</th>
+                                    <th class="border border-gray-800 p-1 text-center">F</th>
+                                    <th class="border border-gray-800 p-1 text-center">TOTAL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">• Enrollment as of (1st Friday of June)</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.enrollment }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.enrollment }}</td>
+                                    <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.enrollment }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Late Enrollment during the month (beyond cut-off)</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Registered Learner as of end of the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.enrollment }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.enrollment }}</td>
+                                    <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.enrollment }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Percentage of Enrollment as of end of the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Average Daily Attendance</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.attendance_rate }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.attendance_rate }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.total.attendance_rate }}%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Percentage of Attendance for the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.attendance_rate }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.attendance_rate }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.total.attendance_rate }}%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Number of students absent for 5 consecutive days or more</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Drop out</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Transferred out</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Transferred in</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
