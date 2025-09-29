@@ -251,6 +251,16 @@ Route::post('/attendance-sessions/{sessionId}/complete', [AttendanceSessionContr
 // Students endpoint for attendance sessions
 Route::get('/attendance-sessions/students', [App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 
+// Subject Schedule Management routes
+Route::prefix('subject-schedules')->group(function () {
+    Route::get('/time-slots', [App\Http\Controllers\API\SubjectScheduleController::class, 'getTimeSlots']);
+    Route::get('/all', [App\Http\Controllers\API\SubjectScheduleController::class, 'getAllSchedules']);
+    Route::get('/teacher/{teacherId}', [App\Http\Controllers\API\SubjectScheduleController::class, 'getTeacherSchedules']);
+    Route::get('/available-slots', [App\Http\Controllers\API\SubjectScheduleController::class, 'getAvailableTimeSlots']);
+    Route::post('/save', [App\Http\Controllers\API\SubjectScheduleController::class, 'saveSchedule']);
+    Route::delete('/{id}', [App\Http\Controllers\API\SubjectScheduleController::class, 'deleteSchedule']);
+});
+
 // Student Management routes for seating arrangements and student operations
 Route::prefix('student-management')->group(function () {
     // Student listing routes

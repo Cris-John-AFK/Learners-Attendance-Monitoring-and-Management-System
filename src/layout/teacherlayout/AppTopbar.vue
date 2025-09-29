@@ -319,9 +319,9 @@ onUnmounted(() => {
                 <!-- Notification Bell -->
                 <NotificationBell :notifications="notifications" @notification-clicked="handleNotificationClick" @mark-all-read="handleMarkAllRead" @remove-notification="handleRemoveNotification" />
 
-                <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
-                    <i class="pi pi-cog"></i>
-                    <span>Settings</span>
+                <button type="button" class="layout-topbar-action" @click="$router.push('/teacher/schedules')">
+                    <i class="pi pi-calendar-clock"></i>
+                    <span>My Schedules</span>
                 </button>
 
                 <!-- Profile Button with Dropdown -->
