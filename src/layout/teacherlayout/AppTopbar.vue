@@ -14,30 +14,47 @@ const router = useRouter();
 
 const isCalendarOpen = ref(false); // Modal control
 
-// Sample school activities
+// DepEd School Calendar Activities
 const activities = ref([
-    { description: 'Christmas Holiday', dates: '2025-12-25', color: 'red' },
-    { description: 'New Year Holiday', dates: '2025-01-01', color: 'red' },
-    { description: 'Teacher Meeting', dates: '2025-04-10', color: 'blue' },
-    { description: 'Final Exams Start', dates: '2025-06-05', color: 'green' },
-    { description: 'Parent-Teacher Conference', dates: '2025-05-20', color: 'orange' }
+    // DepEd National Holidays 2024-2025
+    { description: 'Ninoy Aquino Day', dates: '2024-08-21', color: 'red' },
+    { description: 'National Heroes Day', dates: '2024-08-26', color: 'red' },
+    { description: 'All Saints Day', dates: '2024-11-01', color: 'red' },
+    { description: 'Bonifacio Day', dates: '2024-11-30', color: 'red' },
+    { description: 'Christmas Day', dates: '2024-12-25', color: 'red' },
+    { description: 'Rizal Day', dates: '2024-12-30', color: 'red' },
+    { description: 'New Year\'s Day', dates: '2025-01-01', color: 'red' },
+    { description: 'Araw ng Kagitingan', dates: '2025-04-09', color: 'red' },
+    { description: 'Maundy Thursday', dates: '2025-04-17', color: 'red' },
+    { description: 'Good Friday', dates: '2025-04-18', color: 'red' },
+    { description: 'Labor Day', dates: '2025-05-01', color: 'red' },
+    { description: 'Independence Day', dates: '2025-06-12', color: 'red' },
+    
+    // School Events (can be customized by teachers/admin)
+    { description: 'School Year Start', dates: '2024-08-26', color: 'green' },
+    { description: 'First Quarter End', dates: '2024-10-31', color: 'blue' },
+    { description: 'Second Quarter End', dates: '2025-01-24', color: 'blue' },
+    { description: 'Third Quarter End', dates: '2025-04-04', color: 'blue' },
+    { description: 'School Year End', dates: '2025-05-30', color: 'green' }
 ]);
 
 const attributes = computed(() => {
     // Extract holiday dates
     const holidayDates = activities.value.map((event) => event.dates);
 
-    // Generate teacher workdays for Mon-Fri, but exclude holidays
-    const teacherWorkdays = [];
-    let currentDate = new Date('2025-01-01'); // Start of the year
-    const endDate = new Date('2025-12-31'); // End of the year
+    // Generate DepEd school days (Mon-Fri during school year, excluding holidays)
+    const schoolDays = [];
+    
+    // DepEd School Year 2024-2025: August 26, 2024 to May 30, 2025
+    let currentDate = new Date('2024-08-26'); // School year start
+    const endDate = new Date('2025-05-30'); // School year end
 
     while (currentDate <= endDate) {
         const isoDate = currentDate.toISOString().split('T')[0]; // Format YYYY-MM-DD
 
-        // If it's Mon-Fri and NOT a holiday, add it as a teacher workday
+        // If it's Mon-Fri and NOT a holiday, add it as a school day
         if ([1, 2, 3, 4, 5].includes(currentDate.getDay()) && !holidayDates.includes(isoDate)) {
-            teacherWorkdays.push(isoDate);
+            schoolDays.push(isoDate);
         }
 
         // Move to the next day
@@ -51,11 +68,11 @@ const attributes = computed(() => {
             dot: { color: event.color },
             popover: { label: event.description }
         })),
-        // Mark filtered teacher workdays
+        // Mark DepEd school days
         {
-            dates: teacherWorkdays, // Only includes valid Mon-Fri workdays, excluding holidays
-            highlight: { color: 'blue', fillMode: 'light' },
-            popover: { label: 'Teacher Workday' }
+            dates: schoolDays, // Only includes valid Mon-Fri school days, excluding holidays
+            highlight: { color: 'green', fillMode: 'light' },
+            popover: { label: 'School Day (Classes)' }
         }
     ];
 });
@@ -302,9 +319,9 @@ onUnmounted(() => {
                 <!-- Notification Bell -->
                 <NotificationBell :notifications="notifications" @notification-clicked="handleNotificationClick" @mark-all-read="handleMarkAllRead" @remove-notification="handleRemoveNotification" />
 
-                <button type="button" class="layout-topbar-action" @click="$router.push('/pages/settings')">
-                    <i class="pi pi-cog"></i>
-                    <span>Settings</span>
+                <button type="button" class="layout-topbar-action" @click="$router.push('/teacher/schedules')">
+                    <i class="pi pi-calendar-clock"></i>
+                    <span>My Schedules</span>
                 </button>
 
                 <!-- Profile Button with Dropdown -->

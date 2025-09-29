@@ -95,6 +95,16 @@ const router = createRouter({
                     path: '/teacher/sf2-report/:sectionId',
                     name: 'teacher-sf2-report',
                     component: () => import('@/views/pages/teacher/TeacherSF2Report.vue')
+                },
+                {
+                    path: '/teacher/schedules',
+                    name: 'teacher-schedules',
+                    component: () => import('@/views/pages/teacher/TeacherSectionSchedules.vue')
+                },
+                {
+                    path: '/teacher/create-schedule',
+                    name: 'teacher-create-schedule',
+                    component: () => import('@/views/pages/teacher/CreateSchedule.vue')
                 }
             ]
         },
@@ -164,6 +174,11 @@ const router = createRouter({
                     path: '/curriculum',
                     name: 'curriculum',
                     component: () => import('@/views/pages/Admin/Curriculum.vue')
+                },
+                {
+                    path: '/admin/subject-scheduling',
+                    name: 'admin-subject-scheduling',
+                    component: () => import('@/views/pages/Admin/SubjectScheduling.vue')
                 }
             ]
         },

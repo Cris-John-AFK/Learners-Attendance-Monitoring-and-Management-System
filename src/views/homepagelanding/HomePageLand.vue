@@ -73,6 +73,7 @@
 
 <script setup>
 import api from '@/config/axios';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -117,39 +118,26 @@ const handleLogin = async () => {
         // Check if this is a teacher login attempt first
         if (username.value.includes('.')) {
             try {
-                // Authenticate with the backend API
-                const response = await api.post('/api/teacher/login', {
-                    username: username.value,
-                    password: password.value
-                });
+                console.log('🔐 Attempting teacher login via TeacherAuthService');
+                
+                // Use the new TeacherAuthService for authentication
+                const result = await TeacherAuthService.login(username.value, password.value);
 
-                if (response.data.success) {
-                    const teacherData = response.data.data;
-                    const token = teacherData.token;
+                console.log('📡 TeacherAuthService login result:', result);
 
-                    // Store authentication data
-                    localStorage.setItem('teacher_token', token);
-                    localStorage.setItem('teacher_data', JSON.stringify(teacherData));
-                    sessionStorage.setItem('teacher_token', token);
-                    sessionStorage.setItem('teacher_data', JSON.stringify(teacherData));
-                    window.teacherAuth = { token, data: teacherData };
-
-                    console.log('Teacher login successful via API:', teacherData);
-
+                if (result.success) {
+                    console.log('✅ Teacher login successful, redirecting to dashboard');
                     // Redirect to teacher dashboard
-                    window.location.href = '/teacher';
+                    router.push('/teacher');
+                    return;
+                } else {
+                    console.log('❌ Teacher login failed:', result.message);
+                    errorMessage.value = result.message || 'Login failed. Please check your credentials.';
                     return;
                 }
             } catch (apiError) {
-                console.error('Teacher login failed:', apiError);
-
-                if (apiError.response?.status === 422) {
-                    errorMessage.value = 'Invalid username or password';
-                } else if (apiError.response?.status === 404) {
-                    errorMessage.value = 'Teacher profile not found';
-                } else {
-                    errorMessage.value = 'Login failed. Please check your credentials and try again.';
-                }
+                console.error('🚨 Teacher login error:', apiError);
+                errorMessage.value = 'Login failed. Please check your credentials and try again.';
                 return;
             }
         }

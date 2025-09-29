@@ -13,6 +13,7 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
+import MultiSelect from 'primevue/multiselect';
 import TabMenu from 'primevue/tabmenu';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
@@ -264,7 +265,7 @@ const availableTeachers = ref([]);
 const showScheduleDialog = ref(false);
 const selectedSubjectForSchedule = ref(null);
 const schedule = ref({
-    day: 'Monday',
+    days: ['Monday'], // Changed to array for multiple selection
     start_time: '08:00',
     end_time: '09:00',
     teacher_id: null
@@ -1678,13 +1679,13 @@ onMounted(() => {
             // Force refresh sections with multiple strategies
             try {
                 console.log('Force refreshing sections for grade:', selectedGrade.value.id);
-                
+
                 // Strategy 1: Clear cache and reload
                 CurriculumService.clearAllCaches();
-                
+
                 // Strategy 2: Try multiple endpoints to get sections
                 let sectionsForGrade = null;
-                
+
                 try {
                     sectionsForGrade = await CurriculumService.getSectionsByGrade(selectedCurriculum.value.id, selectedGrade.value.id);
                     console.log('Got sections from nested endpoint:', sectionsForGrade?.length || 0);
@@ -2083,7 +2084,7 @@ onMounted(() => {
             console.log('Selected section:', selectedSection.value);
 
             // Basic validation
-            if (!schedule.value.day || !schedule.value.start_time || !schedule.value.end_time) {
+            if (!schedule.value.days || schedule.value.days.length === 0 || !schedule.value.start_time || !schedule.value.end_time) {
                 toast.add({
                     severity: 'warn',
                     summary: 'Warning',
@@ -2130,39 +2131,62 @@ onMounted(() => {
             // Show loading state
             loading.value = true;
 
-            // Create schedule data
-            const scheduleData = {
-                day: schedule.value.day,
-                start_time: schedule.value.start_time,
-                end_time: schedule.value.end_time,
-                teacher_id: schedule.value.teacher_id || null
-            };
+            const successfulDays = [];
+            const failedDays = [];
 
-            console.log('Saving schedule with data:', scheduleData);
-            console.log('Using CurriculumService.setSubjectSchedule with:', curriculumId, gradeId, sectionId, subjectId);
+            // Create schedules for each selected day
+            for (const day of schedule.value.days) {
+                try {
+                    const scheduleData = {
+                        day: day,
+                        start_time: schedule.value.start_time,
+                        end_time: schedule.value.end_time,
+                        teacher_id: schedule.value.teacher_id || null
+                    };
 
-            // Save using the correct CurriculumService method
-            await CurriculumService.setSubjectSchedule(curriculumId, gradeId, sectionId, subjectId, scheduleData);
+                    console.log(`Saving schedule for ${day} with data:`, scheduleData);
 
-            // Show success message
-            toast.add({
-                severity: 'success',
-                summary: 'Success',
-                detail: 'Schedule saved successfully',
-                life: 3000
-            });
+                    // Save using the correct CurriculumService method
+                    await CurriculumService.setSubjectSchedule(curriculumId, gradeId, sectionId, subjectId, scheduleData);
+                    successfulDays.push(day);
+                } catch (dayError) {
+                    console.error(`Error saving schedule for ${day}:`, dayError);
+                    failedDays.push(day);
+                }
+            }
 
-            // Close the schedule dialog - the onDialogHide will handle reopening the subject list dialog
-            showScheduleDialog.value = false;
+            // Show results
+            if (successfulDays.length > 0) {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Schedules Created',
+                    detail: `Schedules created for: ${successfulDays.join(', ')}`,
+                    life: 5000
+                });
+            }
 
-            // Refresh subject list to show updated schedules
-            refreshSectionSubjects();
+            if (failedDays.length > 0) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Some Schedules Failed',
+                    detail: `Failed to create schedules for: ${failedDays.join(', ')}`,
+                    life: 5000
+                });
+            }
+
+            // Close the schedule dialog if at least one was successful
+            if (successfulDays.length > 0) {
+                showScheduleDialog.value = false;
+                // Refresh subject list to show updated schedules
+                refreshSectionSubjects();
+            }
+
         } catch (error) {
-            console.error('Error saving schedule:', error);
+            console.error('Error saving schedules:', error);
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: 'Failed to save schedule: ' + (error.message || 'Unknown error'),
+                detail: 'Failed to save schedules: ' + (error.message || 'Unknown error'),
                 life: 3000
             });
         } finally {
@@ -3147,56 +3171,52 @@ const openHomeRoomTeacherDialog = async (section) => {
     }
 };
 
-// Add a watch to update time slots when day changes
+// Add a watch to update time slots when days change
 watch(
-    () => schedule.value.day,
-    (newDay) => {
-        if (newDay && showScheduleDialog.value) {
-            // Get suggested time slot for the new day
-            const suggestedTimes = getNextAvailableTimeSlot(newDay);
+    () => schedule.value.days,
+    (newDays) => {
+        if (newDays && newDays.length > 0 && showScheduleDialog.value) {
+            // Get suggested time slot for the first selected day
+            const firstDay = newDays[0];
+            const suggestedTimes = getNextAvailableTimeSlot(firstDay);
 
-            // Update the schedule times
-            schedule.value.start_time = suggestedTimes.start_time;
-            schedule.value.end_time = suggestedTimes.end_time;
+            if (suggestedTimes) {
+                schedule.value.start_time = suggestedTimes.start_time;
+                schedule.value.end_time = suggestedTimes.end_time;
+                console.log(`Auto-suggested time slot for ${firstDay}: ${suggestedTimes.start_time} - ${suggestedTimes.end_time}`);
+            }
+        }
+    },
+    { deep: true }
+);
 
-            console.log(`Updated schedule times for ${newDay}: ${suggestedTimes.start_time} - ${suggestedTimes.end_time}`);
+// Auto-calculate end time when start time changes (Quality of Life improvement)
+watch(
+    () => schedule.value.start_time,
+    (newStartTime) => {
+        if (newStartTime && !schedule.value.end_time) {
+            // Auto-set end time to 1 hour after start time
+            const [hours, minutes] = newStartTime.split(':');
+            const startHour = parseInt(hours);
+            const startMinute = parseInt(minutes);
+            
+            // Add 1 hour
+            let endHour = startHour + 1;
+            let endMinute = startMinute;
+            
+            // Handle 24-hour overflow
+            if (endHour >= 24) {
+                endHour = endHour - 24;
+            }
+            
+            // Format with leading zeros
+            const formattedEndTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+            schedule.value.end_time = formattedEndTime;
+            
+            console.log('🕒 Auto-calculated end time:', formattedEndTime);
         }
     }
 );
-
-const openAssignTeacherDialog = () => {
-    if (!teachers.value || teachers.value.length === 0) {
-        console.log('No teachers found, loading teachers...');
-        loadTeachers()
-            .then(() => {
-                if (teachers.value.length === 0) {
-                    toast.add({
-                        severity: 'warn',
-                        summary: 'No Teachers',
-                        detail: 'No teachers found in the database. Please add teachers first.',
-                        life: 5000
-                    });
-                } else {
-                    // Continue opening the dialog if teachers were found
-                    selectedTeacher.value = null;
-                    homeRoomTeacherAssignmentDialog.value = true;
-                }
-            })
-            .catch((error) => {
-                console.error('Failed to load teachers:', error);
-                toast.add({
-                    severity: 'error',
-                    summary: 'Error',
-                    detail: 'Failed to load teachers: ' + error.message,
-                    life: 5000
-                });
-            });
-    } else {
-        // Teachers already loaded, open dialog
-        selectedTeacher.value = null;
-        homeRoomTeacherAssignmentDialog.value = true;
-    }
-};
 
 // Add a watch to update the curriculum name when year range changes
 watch(
@@ -3310,7 +3330,7 @@ const saveNewGrade = async () => {
 
         // Refresh grades - reload all grades and update main display
         await loadAllGrades();
-        
+
         // Also refresh the main grades display - always show all grades since we're not curriculum-specific
         const allGrades = await GradesService.getGrades();
         grades.value = Array.isArray(allGrades) ? allGrades : [];
@@ -3782,12 +3802,45 @@ const saveSectionDetailsFromHub = async () => {
     try {
         loading.value = true;
 
-        // Update section via API
-        await api.put(`/api/sections/${selectedSectionForHub.value.id}`, {
+        // Get the curriculum_grade_id - first try to get it from the section, 
+        // otherwise find it from the curriculum-grade relationship
+        let curriculumGradeId = selectedSectionForHub.value.curriculum_grade_id;
+        
+        if (!curriculumGradeId) {
+            // Try to get it from the relationship endpoint
+            try {
+                const relationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
+                curriculumGradeId = relationshipResponse.data.id;
+                console.log('Found curriculum_grade_id from relationship:', curriculumGradeId);
+            } catch (relationshipError) {
+                console.warn('Could not get curriculum_grade_id from relationship:', relationshipError);
+                // Fallback: try to create the relationship if it doesn't exist
+                try {
+                    const createResponse = await api.post(`/api/curriculums/${curriculum.value.id}/grades`, {
+                        grade_id: selectedGradeForSections.value.id
+                    });
+                    curriculumGradeId = createResponse.data.id;
+                    console.log('Created curriculum_grade relationship with id:', curriculumGradeId);
+                } catch (createError) {
+                    console.error('Could not create curriculum_grade relationship:', createError);
+                    throw new Error('Unable to establish curriculum-grade relationship');
+                }
+            }
+        }
+
+        // Prepare update data with required fields
+        const updateData = {
             name: selectedSectionForHub.value.name,
-            description: selectedSectionForHub.value.description,
-            capacity: selectedSectionForHub.value.capacity
-        });
+            description: selectedSectionForHub.value.description || '',
+            capacity: selectedSectionForHub.value.capacity || 30,
+            curriculum_grade_id: curriculumGradeId,
+            homeroom_teacher_id: selectedSectionForHub.value.homeroom_teacher_id || null
+        };
+
+        console.log('Updating section with data:', updateData);
+
+        // Update section via API
+        await api.put(`/api/sections/${selectedSectionForHub.value.id}`, updateData);
 
         // Clear cache and refresh
         CurriculumService.clearCache();
@@ -3805,11 +3858,28 @@ const saveSectionDetailsFromHub = async () => {
         });
     } catch (error) {
         console.error('Error updating section:', error);
+        
+        let errorMessage = 'Failed to update section';
+        
+        if (error.response?.data?.message) {
+            errorMessage = error.response.data.message;
+        } else if (error.response?.data?.errors) {
+            const errors = error.response.data.errors;
+            const firstError = Object.values(errors)[0];
+            if (Array.isArray(firstError)) {
+                errorMessage = firstError[0];
+            } else {
+                errorMessage = firstError;
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to update section',
-            life: 3000
+            detail: errorMessage,
+            life: 5000
         });
     } finally {
         loading.value = false;
@@ -4054,7 +4124,7 @@ const saveNewSection = async () => {
 
         // Simplified approach - use curriculum and grade IDs directly
         let curriculumGradeId = 1; // Default fallback since we have a simple setup
-        
+
         // Quick check if relationship exists, create if not
         try {
             const relationshipResponse = await api.get(`/api/curriculums/${curriculum.value.id}/grades/${selectedGradeForSections.value.id}/relationship`);
@@ -4826,15 +4896,6 @@ watch(
                 <div class="nav-left">
                     <h2 class="text-2xl font-semibold">Curriculum Management</h2>
                 </div>
-                <div class="search-container">
-                    <div class="search-input-wrapper">
-                        <i class="pi pi-search search-icon"></i>
-                        <input v-model="searchQuery" type="text" class="search-input" placeholder="Search grades..." />
-                        <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''">
-                            <i class="pi pi-times"></i>
-                        </button>
-                    </div>
-                </div>
                 <div class="nav-right">
                     <Button label="Add Grade Level" icon="pi pi-plus" class="add-button p-button-success" @click="openAddGradeDialog" />
                 </div>
@@ -5321,8 +5382,9 @@ watch(
                 @hide="handleScheduleDialogClose"
             >
                 <div class="p-field mb-3">
-                    <label for="day" class="font-medium mb-2 block">Day</label>
-                    <Select id="day" v-model="schedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Day" class="w-full" />
+                    <label for="days" class="font-medium mb-2 block">Days</label>
+                    <MultiSelect id="days" v-model="schedule.days" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select Days" class="w-full" display="chip" :maxSelectedLabels="3" />
+                    <small class="text-xs text-gray-500 mt-1">💡 Select multiple days to create schedules for all at once</small>
                 </div>
 
                 <div class="p-field mb-3">

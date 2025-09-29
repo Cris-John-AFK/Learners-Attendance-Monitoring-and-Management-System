@@ -7,6 +7,7 @@ use App\Models\AttendanceRecord;
 use App\Models\StudentSection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class AttendanceSessionController extends Controller
@@ -22,6 +23,12 @@ class AttendanceSessionController extends Controller
             $sectionId = $request->query('section_id');
             $subjectId = $request->query('subject_id');
             
+            Log::info("Getting students for teacher subject", [
+                'teacher_id' => $teacherId,
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId
+            ]);
+            
             // Get all active students in the section
             $students = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
@@ -29,7 +36,7 @@ class AttendanceSessionController extends Controller
                 ->where('ss.section_id', $sectionId)
                 ->where('ss.is_active', true)
                 ->where('ss.status', 'enrolled')
-                ->where('sd.isActive', true)
+                ->where('sd.current_status', 'active')
                 ->select([
                     'sd.id',
                     'sd.firstName as first_name',
@@ -45,6 +52,8 @@ class AttendanceSessionController extends Controller
                 ->orderBy('sd.firstName')
                 ->get();
 
+            Log::info("Found {$students->count()} students for section {$sectionId}");
+
             return response()->json([
                 'success' => true,
                 'students' => $students,
@@ -54,6 +63,13 @@ class AttendanceSessionController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Error in getStudentsForTeacherSubject: ' . $e->getMessage(), [
+                'teacher_id' => $teacherId ?? null,
+                'section_id' => $sectionId ?? null,
+                'subject_id' => $subjectId ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching students: ' . $e->getMessage()

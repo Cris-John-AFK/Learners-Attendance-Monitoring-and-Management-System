@@ -144,10 +144,20 @@ const removeNotification = (notificationId) => {
 };
 
 const formatTime = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    
     const now = new Date();
     const notificationTime = new Date(timestamp);
+    
+    // Check if the date is valid
+    if (isNaN(notificationTime.getTime())) {
+        return 'Just now';
+    }
+    
     const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
     
+    // Handle negative differences (future dates)
+    if (diffInMinutes < 0) return 'Just now';
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     

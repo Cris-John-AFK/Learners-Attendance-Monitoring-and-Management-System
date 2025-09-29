@@ -33,7 +33,13 @@ export const AttendanceSummaryService = {
                 subject_id: options.subjectId || null
             };
 
+            console.log('📊 AttendanceSummaryService.getAttendanceTrends called with params:', params);
+            
             const response = await api.get('/api/attendance/trends', { params });
+            
+            console.log('📊 AttendanceSummaryService.getAttendanceTrends response:', response.data);
+            console.log('📊 Response data structure:', JSON.stringify(response.data, null, 2));
+            
             return response.data;
         } catch (error) {
             console.error('Error fetching attendance trends:', error);

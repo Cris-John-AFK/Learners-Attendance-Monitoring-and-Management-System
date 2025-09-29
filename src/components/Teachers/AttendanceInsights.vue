@@ -5,7 +5,7 @@
                 <i class="pi pi-lightbulb"></i>
                 Attendance Insights
             </h3>
-            <small class="insights-subtitle">{{ selectedSubject?.name || 'All Students' }}</small>
+            <small class="insights-subtitle">All Students</small>
         </div>
 
         <!-- Risk Assessment Cards -->
@@ -73,24 +73,6 @@
                                 <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
                                 <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
                             </div>
-                            <div class="student-actions-compact">
-                                <Button 
-                                    icon="pi pi-chart-line" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="monitorProgress(student)"
-                                    v-tooltip="'Monitor Progress'"
-                                />
-                                <Button 
-                                    icon="pi pi-file-edit" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="createPlan(student)"
-                                    v-tooltip="'Create Plan'"
-                                />
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -124,24 +106,6 @@
                                 <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
                                 <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
                             </div>
-                            <div class="student-actions-compact">
-                                <Button 
-                                    icon="pi pi-chart-line" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="monitorProgress(student)"
-                                    v-tooltip="'Monitor Progress'"
-                                />
-                                <Button 
-                                    icon="pi pi-file-edit" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="createPlan(student)"
-                                    v-tooltip="'Create Plan'"
-                                />
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -174,24 +138,6 @@
                                 <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
                                 <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
                                 <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
-                            </div>
-                            <div class="student-actions-compact">
-                                <Button 
-                                    icon="pi pi-chart-line" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="monitorProgress(student)"
-                                    v-tooltip="'Monitor Progress'"
-                                />
-                                <Button 
-                                    icon="pi pi-file-edit" 
-                                    size="small" 
-                                    text 
-                                    class="p-button-sm"
-                                    @click.stop="createPlan(student)"
-                                    v-tooltip="'Create Plan'"
-                                />
                             </div>
                         </div>
                     </div>
@@ -872,22 +818,15 @@ function generateAttendanceReportHTML(student, currentDate) {
         .school-logo {
             width: 60px;
             height: 60px;
-            background: white;
-            border-radius: 50%;
-            margin: 0 auto 15px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            color: #2c5aa0;
-            font-weight: bold;
         }
 
-        .school-name {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        .school-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
 
         .school-subtitle {
@@ -1103,9 +1042,11 @@ function generateAttendanceReportHTML(student, currentDate) {
 <body>
     <div class="report-container">
         <div class="header">
-            <div class="school-logo">NCS</div>
+            <div class="school-logo">
+                <img src="/demo/images/logo.png" alt="NCS Logo" />
+            </div>
             <div class="school-name">Naawan Central School</div>
-            <div class="school-subtitle">Learning and Management System</div>
+            <div class="school-subtitle">Attendance Monitoring System</div>
             <div class="report-title">Student Attendance Report</div>
         </div>
 
@@ -1251,7 +1192,7 @@ function generateAttendanceReportHTML(student, currentDate) {
         </div>
 
         <div class="footer">
-            <p>This report was generated by the Naawan Central School Learning and Management System</p>
+            <p>This report was generated by the Naawan Central School Attendance Monitoring System</p>
             <p>Generated on ${currentDate} | Confidential Student Information</p>
         </div>
     </div>
@@ -1360,15 +1301,6 @@ function viewStudentProfile(student) {
     trackProgress(student);
 }
 
-function monitorProgress(student) {
-    // Monitor progress function - same as trackProgress
-    trackProgress(student);
-}
-
-function createPlan(student) {
-    // Create plan function - opens the plan dialog
-    openPlanDialog(student);
-}
 </script>
 
 <style scoped>
@@ -1900,12 +1832,16 @@ function createPlan(student) {
 .risk-badge {
     width: 24px;
     height: 24px;
+    min-width: 24px;
+    min-height: 24px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-size: 0.75rem;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .risk-badge.critical {
@@ -1936,11 +1872,6 @@ function createPlan(student) {
     white-space: nowrap;
 }
 
-.student-actions-compact {
-    display: flex;
-    gap: 0.25rem;
-    flex-shrink: 0;
-}
 
 .improvement-item,
 .concern-item,
