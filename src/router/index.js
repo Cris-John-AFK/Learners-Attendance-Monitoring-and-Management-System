@@ -100,6 +100,11 @@ const router = createRouter({
                     path: '/teacher/schedules',
                     name: 'teacher-schedules',
                     component: () => import('@/views/pages/teacher/TeacherSectionSchedules.vue')
+                },
+                {
+                    path: '/teacher/create-schedule',
+                    name: 'teacher-create-schedule',
+                    component: () => import('@/views/pages/teacher/CreateSchedule.vue')
                 }
             ]
         },

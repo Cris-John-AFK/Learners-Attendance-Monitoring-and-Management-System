@@ -41,19 +41,27 @@ export const SubjectScheduleService = {
     },
 
     /**
-     * Get available time slots for a section on a specific day
+     * Get available time slots for a teacher on a specific day
      */
-    async getAvailableTimeSlots(sectionId, day, excludeId = null) {
+    async getAvailableTimeSlots(params) {
         try {
-            const params = { section_id: sectionId, day };
-            if (excludeId) {
-                params.exclude_id = excludeId;
-            }
-            
             const response = await api.get('/api/subject-schedules/available-slots', { params });
             return response.data;
         } catch (error) {
             console.error('Error fetching available time slots:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Check for time conflicts
+     */
+    async checkTimeConflict(conflictData) {
+        try {
+            const response = await api.post('/api/subject-schedules/check-conflict', conflictData);
+            return response.data;
+        } catch (error) {
+            console.error('Error checking time conflict:', error);
             throw error;
         }
     },

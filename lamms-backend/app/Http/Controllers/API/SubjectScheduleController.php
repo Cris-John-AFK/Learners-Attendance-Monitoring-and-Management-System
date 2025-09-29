@@ -93,6 +93,9 @@ class SubjectScheduleController extends Controller
     public function getTeacherSchedules($teacherId)
     {
         try {
+            // First, try to auto-assign teacher_id to schedules that don't have it
+            $this->autoAssignTeacherToSchedules($teacherId);
+            
             $schedules = DB::table('subject_schedules as ss')
                 ->join('sections as sec', 'ss.section_id', '=', 'sec.id')
                 ->join('subjects as sub', 'ss.subject_id', '=', 'sub.id')
@@ -123,6 +126,31 @@ class SubjectScheduleController extends Controller
                 'success' => false,
                 'message' => 'Error fetching teacher schedules: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Auto-assign teacher_id to schedules based on teacher assignments
+     */
+    private function autoAssignTeacherToSchedules($teacherId)
+    {
+        try {
+            // Get teacher assignments
+            $assignments = DB::table('teacher_section_subject as tss')
+                ->where('tss.teacher_id', $teacherId)
+                ->select('tss.section_id', 'tss.subject_id')
+                ->get();
+
+            foreach ($assignments as $assignment) {
+                // Update schedules that match this teacher's assignments but don't have teacher_id set
+                DB::table('subject_schedules')
+                    ->where('section_id', $assignment->section_id)
+                    ->where('subject_id', $assignment->subject_id)
+                    ->whereNull('teacher_id')
+                    ->update(['teacher_id' => $teacherId]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Error auto-assigning teacher to schedules: ' . $e->getMessage());
         }
     }
 

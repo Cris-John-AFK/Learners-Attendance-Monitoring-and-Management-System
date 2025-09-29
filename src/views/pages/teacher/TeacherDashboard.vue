@@ -1,6 +1,7 @@
 <script setup>
 import BookFlipLoader from '@/components/BookFlipLoader.vue';
 import AttendanceInsights from '@/components/Teachers/AttendanceInsights.vue';
+import ScheduleStatusWidget from '@/components/Teachers/ScheduleStatusWidget.vue';
 import api from '@/config/axios';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService.js';
 import { AttendanceSummaryService } from '@/services/AttendanceSummaryService.js';
@@ -1263,6 +1264,14 @@ async function showStudentProfile(student) {
                         
                     </div>
                 </div>
+            </div>
+
+            <!-- Schedule Status Widget -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="lg:col-span-1">
+                    <ScheduleStatusWidget />
+                </div>
+                
             </div>
 
             <!-- Attendance Stats Summary Cards -->

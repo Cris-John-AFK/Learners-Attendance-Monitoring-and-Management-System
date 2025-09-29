@@ -6,9 +6,7 @@
                     <i class="pi pi-calendar mr-2"></i>
                     My Subject Schedules
                 </h2>
-                <p class="card-subtitle">
-                    View your assigned subject schedules across all sections. This shows when you're scheduled to teach each subject.
-                </p>
+                <p class="card-subtitle">View your assigned subject schedules across all sections. This shows when you're scheduled to teach each subject.</p>
             </div>
 
             <!-- Loading State -->
@@ -51,242 +49,336 @@
                                     <Tag v-if="assignment.hasSchedule" value="Scheduled" severity="success" />
                                     <Tag v-else value="No Schedule" severity="warning" />
                                 </div>
-                                <Button 
-                                    v-if="!assignment.hasSchedule"
-                                    label="Create Schedule" 
-                                    icon="pi pi-calendar-plus" 
-                                    size="small"
-                                    class="w-full mt-3"
-                                    @click="openCreateScheduleDialog(assignment)"
-                                />
+                                <Button v-if="!assignment.hasSchedule" label="Create Schedule" icon="pi pi-calendar-plus" size="small" class="w-full mt-3" @click="openCreateScheduleDialog(assignment)" :disabled="false" />
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Schedules Content -->
-            <div v-else>
-                <!-- Weekly Schedule View -->
-                <div class="weekly-schedule mb-6">
-                    <h3 class="text-lg font-semibold mb-4">Weekly Schedule Overview</h3>
-                    
-                    <div class="schedule-grid">
-                        <div class="grid">
-                            <div v-for="day in weekdays" :key="day.value" class="col-12 lg:col">
-                                <div class="day-column">
-                                    <div class="day-header">
-                                        {{ day.label }}
+            <!-- Schedules Display -->
+            <div v-else class="schedule-content">
+                <!-- Create Schedule Button -->
+                <div class="create-schedule-section mb-6">
+                    <div class="flex justify-content-between align-items-center gap-3">
+                        <h3 class="text-lg font-semibold mb-0">My Schedules</h3>
+                        <Button 
+                            label="Create Schedule" 
+                            icon="pi pi-plus" 
+                            severity="success" 
+                            @click="openCreateScheduleModal" 
+                            class="create-schedule-btn flex-shrink-0"
+                        />
+                    </div>
+                </div>
+
+                <!-- Weekly Schedule Overview -->
+                <h3 class="text-lg font-semibold mb-4">Weekly Schedule Overview</h3>
+                <div class="schedule-grid">
+                    <div class="grid">
+                        <div v-for="day in weekdays" :key="day.value" class="col-12 md:col-2">
+                            <div class="day-column">
+                                <div class="day-header">
+                                    {{ day.label }}
+                                </div>
+                                <div class="day-content">
+                                    <div v-for="schedule in getSchedulesForDay(day.value)" :key="schedule.id" class="schedule-item" :class="getScheduleItemClass(schedule)">
+                                        <div class="schedule-time">
+                                            {{ SubjectScheduleService.formatTimeRange(schedule.start_time, schedule.end_time) }}
+                                        </div>
+                                        <div class="schedule-subject">
+                                            {{ schedule.subject_name }}
+                                        </div>
+                                        <div class="schedule-section">
+                                            {{ schedule.section_name }}
+                                        </div>
                                     </div>
-                                    <div class="day-content">
-                                        <div 
-                                            v-for="schedule in getSchedulesForDay(day.value)" 
-                                            :key="schedule.id"
-                                            class="schedule-item"
-                                            :class="getScheduleItemClass(schedule)"
-                                        >
-                                            <div class="schedule-time">
-                                                {{ SubjectScheduleService.formatTimeRange(schedule.start_time, schedule.end_time) }}
-                                            </div>
-                                            <div class="schedule-subject">
-                                                {{ schedule.subject_name }}
-                                            </div>
-                                            <div class="schedule-section">
-                                                {{ schedule.section_name }}
-                                            </div>
-                                        </div>
-                                        
-                                        <div v-if="getSchedulesForDay(day.value).length === 0" class="no-schedule">
-                                            <i class="pi pi-minus text-gray-400"></i>
-                                            <span class="text-gray-500 text-sm">No classes</span>
-                                        </div>
+
+                                    <div v-if="getSchedulesForDay(day.value).length === 0" class="no-schedule">
+                                        <i class="pi pi-minus text-gray-400"></i>
+                                        <span class="text-gray-500 text-sm">No classes</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Detailed Schedule Table -->
-                <div class="detailed-schedule">
-                    <h3 class="text-lg font-semibold mb-4">Detailed Schedule List</h3>
-                    
-                    <DataTable 
-                        :value="schedules" 
-                        :loading="loading"
-                        responsiveLayout="scroll"
-                        class="p-datatable-sm"
-                        :sortField="'day'"
-                        :sortOrder="1"
-                    >
-                        <Column field="day" header="Day" sortable>
-                            <template #body="{ data }">
-                                <Tag 
-                                    :value="SubjectScheduleService.getDayDisplayName(data.day)" 
-                                    :severity="getDaySeverity(data.day)"
-                                />
-                            </template>
-                        </Column>
-                        
-                        <Column field="time_range" header="Time" sortable>
-                            <template #body="{ data }">
-                                <span class="font-mono font-semibold">
-                                    {{ SubjectScheduleService.formatTimeRange(data.start_time, data.end_time) }}
-                                </span>
-                            </template>
-                        </Column>
-                        
-                        <Column field="subject_name" header="Subject" sortable>
-                            <template #body="{ data }">
-                                <div class="flex align-items-center">
-                                    <i class="pi pi-book mr-2 text-blue-600"></i>
-                                    <span class="font-semibold">{{ data.subject_name }}</span>
-                                </div>
-                            </template>
-                        </Column>
-                        
-                        <Column field="section_name" header="Section" sortable>
-                            <template #body="{ data }">
-                                <div class="flex align-items-center">
-                                    <i class="pi pi-users mr-2 text-green-600"></i>
-                                    <span>{{ data.section_name }}</span>
-                                </div>
-                            </template>
-                        </Column>
-                        
-                        <Column header="Actions" :exportable="false">
-                            <template #body="{ data }">
-                                <div class="flex gap-2">
-                                    <Button 
-                                        icon="pi pi-eye" 
-                                        size="small" 
-                                        severity="info"
-                                        @click="viewScheduleDetails(data)"
-                                        v-tooltip.top="'View Details'"
-                                    />
-                                    <Button 
-                                        icon="pi pi-calendar-plus" 
-                                        size="small" 
-                                        severity="success"
-                                        @click="createAttendanceSession(data)"
-                                        v-tooltip.top="'Create Attendance Session'"
-                                        :disabled="!isCurrentTimeSlot(data)"
-                                    />
-                                </div>
-                            </template>
-                        </Column>
-                    </DataTable>
-                </div>
+            <!-- Detailed Schedule Table -->
+            <div class="detailed-schedule">
+                <h3 class="text-lg font-semibold mb-4">Detailed Schedule List</h3>
 
-                <!-- Current/Next Class Info -->
-                <div v-if="currentSchedule || nextSchedule" class="current-schedule-info mt-6">
-                    <div class="grid">
-                        <div v-if="currentSchedule" class="col-12 md:col-6">
-                            <div class="current-class-card">
-                                <div class="card-header-small">
-                                    <i class="pi pi-clock text-green-600 mr-2"></i>
-                                    <span class="font-semibold text-green-600">Current Class</span>
-                                </div>
-                                <div class="class-info">
-                                    <h4>{{ currentSchedule.subject_name }}</h4>
-                                    <p>{{ currentSchedule.section_name }}</p>
-                                    <p class="time-info">
-                                        {{ SubjectScheduleService.formatTimeRange(currentSchedule.start_time, currentSchedule.end_time) }}
-                                    </p>
-                                </div>
-                                <Button 
-                                    label="Take Attendance" 
-                                    icon="pi pi-check" 
-                                    class="w-full mt-3"
-                                    @click="createAttendanceSession(currentSchedule)"
-                                />
+                <DataTable :value="schedules" :loading="loading" responsiveLayout="scroll" class="p-datatable-sm" :sortField="'day'" :sortOrder="1">
+                    <Column field="day" header="Day" sortable>
+                        <template #body="{ data }">
+                            <Tag :value="SubjectScheduleService.getDayDisplayName(data.day)" :severity="getDaySeverity(data.day)" />
+                        </template>
+                    </Column>
+
+                    <Column field="time_range" header="Time" sortable>
+                        <template #body="{ data }">
+                            <span class="font-mono font-semibold">
+                                {{ SubjectScheduleService.formatTimeRange(data.start_time, data.end_time) }}
+                            </span>
+                        </template>
+                    </Column>
+
+                    <Column field="subject_name" header="Subject" sortable>
+                        <template #body="{ data }">
+                            <div class="flex align-items-center">
+                                <i class="pi pi-book mr-2 text-blue-600"></i>
+                                <span class="font-semibold">{{ data.subject_name }}</span>
                             </div>
+                        </template>
+                    </Column>
+
+                    <Column field="section_name" header="Section" sortable>
+                        <template #body="{ data }">
+                            <div class="flex align-items-center">
+                                <i class="pi pi-users mr-2 text-green-600"></i>
+                                <span>{{ data.section_name }}</span>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <Column header="Actions" :exportable="false">
+                        <template #body="{ data }">
+                            <div class="flex gap-2">
+                                <Button icon="pi pi-eye" size="small" severity="info" @click="viewScheduleDetails(data)" v-tooltip.top="'View Details'" />
+                                <Button icon="pi pi-pencil" size="small" severity="warning" @click="editSchedule(data)" v-tooltip.top="'Edit Schedule'" />
+                                <Button icon="pi pi-calendar-plus" size="small" severity="success" @click="createAttendanceSession(data)" v-tooltip.top="'Create Attendance Session'" :disabled="!isCurrentTimeSlot(data)" />
+                            </div>
+                        </template>
+                    </Column>
+                </DataTable>
+            </div>
+
+            <!-- Current/Next Class Info -->
+            <div v-if="currentSchedule || nextSchedule" class="current-schedule-info mt-6">
+                <div class="grid">
+                    <div v-if="currentSchedule" class="col-12 md:col-6">
+                        <div class="current-class-card">
+                            <div class="card-header-small">
+                                <i class="pi pi-clock text-green-600 mr-2"></i>
+                                <span class="font-semibold text-green-600">Current Class</span>
+                            </div>
+                            <div class="class-info">
+                                <h4>{{ currentSchedule.subject_name }}</h4>
+                                <p>{{ currentSchedule.section_name }}</p>
+                                <p class="time-info">
+                                    {{ SubjectScheduleService.formatTimeRange(currentSchedule.start_time, currentSchedule.end_time) }}
+                                </p>
+                            </div>
+                            <Button label="Take Attendance" icon="pi pi-check" class="w-full mt-3" @click="createAttendanceSession(currentSchedule)" />
                         </div>
-                        
-                        <div v-if="nextSchedule" class="col-12 md:col-6">
-                            <div class="next-class-card">
-                                <div class="card-header-small">
-                                    <i class="pi pi-clock text-blue-600 mr-2"></i>
-                                    <span class="font-semibold text-blue-600">Next Class</span>
-                                </div>
-                                <div class="class-info">
-                                    <h4>{{ nextSchedule.subject_name }}</h4>
-                                    <p>{{ nextSchedule.section_name }}</p>
-                                    <p class="time-info">
-                                        {{ SubjectScheduleService.formatTimeRange(nextSchedule.start_time, nextSchedule.end_time) }}
-                                    </p>
-                                </div>
-                                <div class="countdown mt-2">
-                                    <small class="text-gray-600">Starts in {{ getTimeUntilNext(nextSchedule) }}</small>
-                                </div>
+                    </div>
+
+                    <div v-if="nextSchedule" class="col-12 md:col-6">
+                        <div class="next-class-card">
+                            <div class="card-header-small">
+                                <i class="pi pi-clock text-blue-600 mr-2"></i>
+                                <span class="font-semibold text-blue-600">Next Class</span>
+                            </div>
+                            <div class="class-info">
+                                <h4>{{ nextSchedule.subject_name }}</h4>
+                                <p>{{ nextSchedule.section_name }}</p>
+                                <p class="time-info">
+                                    {{ SubjectScheduleService.formatTimeRange(nextSchedule.start_time, nextSchedule.end_time) }}
+                                </p>
+                            </div>
+                            <div class="countdown mt-2">
+                                <small class="text-gray-600">Starts in {{ getTimeUntilNext(nextSchedule) }}</small>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Schedule Details Dialog -->
-        <Dialog 
-            v-model:visible="showDetailsDialog" 
-            header="Schedule Details"
-            :modal="true" 
-            :closable="true"
-            :style="{ width: '500px' }"
-        >
-            <div v-if="selectedSchedule" class="schedule-details">
-                <div class="detail-item">
-                    <label>Subject:</label>
-                    <span class="font-semibold">{{ selectedSchedule.subject_name }}</span>
-                </div>
-                <div class="detail-item">
-                    <label>Section:</label>
-                    <span>{{ selectedSchedule.section_name }}</span>
-                </div>
-                <div class="detail-item">
-                    <label>Day:</label>
-                    <span>{{ SubjectScheduleService.getDayDisplayName(selectedSchedule.day) }}</span>
-                </div>
-                <div class="detail-item">
-                    <label>Time:</label>
-                    <span class="font-mono">{{ SubjectScheduleService.formatTimeRange(selectedSchedule.start_time, selectedSchedule.end_time) }}</span>
-                </div>
-                <div class="detail-item">
-                    <label>Duration:</label>
-                    <span>{{ getScheduleDuration(selectedSchedule) }} minutes</span>
+    <!-- Schedule Details Dialog -->
+    <Dialog v-model:visible="showDetailsDialog" header="Schedule Details" :modal="true" :closable="true" :style="{ width: '500px' }">
+        <div v-if="selectedSchedule" class="schedule-details">
+            <div class="detail-item">
+                <label>Subject:</label>
+                <span class="font-semibold">{{ selectedSchedule.subject_name }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Section:</label>
+                <span>{{ selectedSchedule.section_name }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Day:</label>
+                <span>{{ SubjectScheduleService.getDayDisplayName(selectedSchedule.day) }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Time:</label>
+                <span class="font-mono">{{ SubjectScheduleService.formatTimeRange(selectedSchedule.start_time, selectedSchedule.end_time) }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Duration:</label>
+                <span>{{ getScheduleDuration(selectedSchedule) }} minutes</span>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex justify-content-end gap-2">
+                <Button label="Close" icon="pi pi-times" severity="secondary" @click="showDetailsDialog = false" />
+                <Button label="Take Attendance" icon="pi pi-check" @click="createAttendanceSession(selectedSchedule)" :disabled="!isCurrentTimeSlot(selectedSchedule)" />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Edit Schedule Dialog -->
+    <Dialog v-model:visible="showEditDialog" header="Edit Schedule" :modal="true" :closable="true" :style="{ width: '600px' }">
+        <div v-if="editingSchedule" class="edit-schedule-form">
+            <div class="field">
+                <label for="edit-subject" class="block text-900 font-medium mb-2">Subject</label>
+                <div class="p-inputgroup">
+                    <span class="p-inputgroup-addon">
+                        <i class="pi pi-book"></i>
+                    </span>
+                    <InputText id="edit-subject" v-model="editingSchedule.subject_name" disabled class="w-full" />
                 </div>
             </div>
 
-            <template #footer>
-                <div class="flex justify-content-end gap-2">
-                    <Button 
-                        label="Close" 
-                        icon="pi pi-times" 
-                        severity="secondary"
-                        @click="showDetailsDialog = false"
-                    />
-                    <Button 
-                        label="Take Attendance" 
-                        icon="pi pi-check" 
-                        @click="createAttendanceSession(selectedSchedule)"
-                        :disabled="!isCurrentTimeSlot(selectedSchedule)"
-                    />
+            <div class="field">
+                <label for="edit-section" class="block text-900 font-medium mb-2">Section</label>
+                <div class="p-inputgroup">
+                    <span class="p-inputgroup-addon">
+                        <i class="pi pi-users"></i>
+                    </span>
+                    <InputText id="edit-section" v-model="editingSchedule.section_name" disabled class="w-full" />
                 </div>
-            </template>
-        </Dialog>
-    </div>
+            </div>
+
+            <div class="field">
+                <label for="edit-day" class="block text-900 font-medium mb-2">Day</label>
+                <Dropdown id="edit-day" v-model="editingSchedule.day" :options="dayOptions" optionLabel="label" optionValue="value" placeholder="Select a day" class="w-full" />
+            </div>
+
+            <div class="grid">
+                <div class="col-6">
+                    <div class="field">
+                        <label for="edit-start-time" class="block text-900 font-medium mb-2">Start Time</label>
+                        <InputMask id="edit-start-time" v-model="editingSchedule.start_time" mask="99:99" placeholder="HH:MM" class="w-full" />
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="field">
+                        <label for="edit-end-time" class="block text-900 font-medium mb-2">End Time</label>
+                        <InputMask id="edit-end-time" v-model="editingSchedule.end_time" mask="99:99" placeholder="HH:MM" class="w-full" />
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="editValidationError" class="p-message p-message-error mt-3">
+                <span class="p-message-text">{{ editValidationError }}</span>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex justify-content-end gap-2">
+                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="cancelEdit" />
+                <Button label="Save Changes" icon="pi pi-check" @click="saveScheduleChanges" :loading="saving" />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Create New Schedule Dialog -->
+    <Dialog v-model:visible="showCreateDialog" header="Create New Schedule" :modal="true" :closable="true" :style="{ width: '600px' }">
+        <div class="create-schedule-form">
+            <div class="field">
+                <label for="create-subject" class="block text-900 font-medium mb-2">Subject</label>
+                <Dropdown
+                    id="create-subject"
+                    v-model="selectedSubjectForCreate"
+                    :options="availableSubjectsForCreate"
+                    optionLabel="display_name"
+                    optionValue="value"
+                    optionDisabled="disabled"
+                    placeholder="Select a subject"
+                    class="w-full"
+                    :disabled="loading"
+                    @change="onSubjectChange"
+                >
+                    <template #option="{ option }">
+                        <div
+                            :class="{
+                                'text-gray-400 cursor-not-allowed': option.disabled,
+                                'cursor-pointer': !option.disabled
+                            }"
+                            :title="option.tooltip"
+                        >
+                            <i :class="option.disabled ? 'pi pi-ban text-red-500 mr-2' : 'pi pi-book text-blue-600 mr-2'"></i>
+                            {{ option.display_name }}
+                            <small v-if="option.section_name" class="text-gray-500 ml-2">({{ option.section_name }})</small>
+                        </div>
+                    </template>
+                </Dropdown>
+            </div>
+
+            <div class="field">
+                <label for="create-day" class="block text-900 font-medium mb-2">Day</label>
+                <Dropdown id="create-day" v-model="selectedDayForCreate" :options="availableDaysForCreate" optionLabel="label" optionValue="value" optionDisabled="disabled" placeholder="Select a day" class="w-full" :disabled="!selectedSubjectForCreate">
+                    <template #option="{ option }">
+                        <div
+                            :class="{
+                                'text-gray-400 cursor-not-allowed': option.disabled,
+                                'cursor-pointer': !option.disabled
+                            }"
+                            :title="option.tooltip"
+                        >
+                            <i :class="option.disabled ? 'pi pi-ban text-red-500 mr-2' : 'pi pi-calendar text-green-600 mr-2'"></i>
+                            {{ option.label }}
+                        </div>
+                    </template>
+                </Dropdown>
+            </div>
+
+            <div class="grid">
+                <div class="col-6">
+                    <div class="field">
+                        <label for="create-start-time" class="block text-900 font-medium mb-2">Start Time</label>
+                        <InputMask id="create-start-time" v-model="createStartTime" mask="99:99" placeholder="HH:MM" class="w-full" />
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="field">
+                        <label for="create-end-time" class="block text-900 font-medium mb-2">End Time</label>
+                        <InputMask id="create-end-time" v-model="createEndTime" mask="99:99" placeholder="HH:MM" class="w-full" />
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="createValidationError" class="p-message p-message-error mt-3">
+                <span class="p-message-text">{{ createValidationError }}</span>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex justify-content-end gap-2">
+                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="cancelCreate" />
+                <Button label="Create Schedule" icon="pi pi-check" @click="createNewSchedule" :loading="creating" />
+            </div>
+        </template>
+    </Dialog>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 // PrimeVue Components
 import Button from 'primevue/button';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputMask from 'primevue/inputmask';
+import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Tag from 'primevue/tag';
 
@@ -307,6 +399,21 @@ const selectedSchedule = ref(null);
 const selectedAssignment = ref(null);
 const currentTime = ref(new Date());
 
+// Edit Schedule Data
+const showEditDialog = ref(false);
+const editingSchedule = ref(null);
+const saving = ref(false);
+const editValidationError = ref('');
+
+// Create Schedule Data
+const showCreateDialog = ref(false);
+const selectedSubjectForCreate = ref(null);
+const selectedDayForCreate = ref(null);
+const createStartTime = ref('');
+const createEndTime = ref('');
+const creating = ref(false);
+const createValidationError = ref('');
+
 // Timer for updating current time
 let timeUpdateInterval = null;
 
@@ -317,46 +424,98 @@ const currentSchedule = computed(() => {
     const now = currentTime.value;
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const currentTimeStr = now.toTimeString().split(' ')[0];
-    
-    return schedules.value.find(schedule => 
-        schedule.day === currentDay &&
-        schedule.start_time <= currentTimeStr &&
-        schedule.end_time > currentTimeStr
-    );
+
+    return schedules.value.find((schedule) => schedule.day === currentDay && schedule.start_time <= currentTimeStr && schedule.end_time > currentTimeStr);
 });
 
 const nextSchedule = computed(() => {
     const now = currentTime.value;
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const currentTimeStr = now.toTimeString().split(' ')[0];
-    
+
     // Find next schedule today
-    const todaySchedules = schedules.value
-        .filter(schedule => schedule.day === currentDay && schedule.start_time > currentTimeStr)
-        .sort((a, b) => a.start_time.localeCompare(b.start_time));
-    
+    const todaySchedules = schedules.value.filter((schedule) => schedule.day === currentDay && schedule.start_time > currentTimeStr).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
     if (todaySchedules.length > 0) {
         return todaySchedules[0];
     }
-    
+
     // If no more classes today, find first class tomorrow or next day
     const dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
     const currentDayIndex = dayOrder.indexOf(currentDay);
-    
+
     for (let i = 1; i < dayOrder.length; i++) {
         const nextDayIndex = (currentDayIndex + i) % dayOrder.length;
         const nextDay = dayOrder[nextDayIndex];
-        
-        const nextDaySchedules = schedules.value
-            .filter(schedule => schedule.day === nextDay)
-            .sort((a, b) => a.start_time.localeCompare(b.start_time));
-        
+
+        const nextDaySchedules = schedules.value.filter((schedule) => schedule.day === nextDay).sort((a, b) => a.start_time.localeCompare(b.start_time));
+
         if (nextDaySchedules.length > 0) {
             return nextDaySchedules[0];
         }
     }
-    
+
     return null;
+});
+
+// Day options for dropdown
+const dayOptions = computed(() => [
+    { label: 'Monday', value: 'Monday' },
+    { label: 'Tuesday', value: 'Tuesday' },
+    { label: 'Wednesday', value: 'Wednesday' },
+    { label: 'Thursday', value: 'Thursday' },
+    { label: 'Friday', value: 'Friday' }
+]);
+
+// Available subjects for create dialog with smart filtering
+const availableSubjectsForCreate = computed(() => {
+    if (!teacherAssignments.value.length) return [];
+
+    return teacherAssignments.value.map((assignment) => {
+        // Get existing schedules for this subject-section combination
+        const existingSchedules = schedules.value.filter((schedule) => schedule.subject_id === assignment.subject_id && schedule.section_id === assignment.section_id);
+
+        // Check if subject has all 5 weekdays scheduled
+        const scheduledDays = existingSchedules.map((s) => s.day);
+        const allDaysScheduled = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].every((day) => scheduledDays.includes(day));
+
+        const isDisabled = allDaysScheduled;
+
+        return {
+            value: `${assignment.subject_id}_${assignment.section_id}`,
+            display_name: assignment.subject_name,
+            section_name: assignment.section_name,
+            subject_id: assignment.subject_id,
+            section_id: assignment.section_id,
+            disabled: isDisabled,
+            tooltip: isDisabled ? 'This subject already has a complete schedule (Monday-Friday)' : `Create schedule for ${assignment.subject_name} in ${assignment.section_name}`,
+            existing_days: scheduledDays
+        };
+    });
+});
+
+// Available days for create dialog based on selected subject
+const availableDaysForCreate = computed(() => {
+    if (!selectedSubjectForCreate.value) {
+        return dayOptions.value.map((day) => ({ ...day, disabled: true, tooltip: 'Please select a subject first' }));
+    }
+
+    // Find the selected subject info
+    const selectedSubject = availableSubjectsForCreate.value.find((subject) => subject.value === selectedSubjectForCreate.value);
+
+    if (!selectedSubject) {
+        return dayOptions.value.map((day) => ({ ...day, disabled: true, tooltip: 'Invalid subject selection' }));
+    }
+
+    // Return days with disabled state for already scheduled days
+    return dayOptions.value.map((day) => {
+        const isAlreadyScheduled = selectedSubject.existing_days.includes(day.value);
+        return {
+            ...day,
+            disabled: isAlreadyScheduled,
+            tooltip: isAlreadyScheduled ? `${day.label} is already scheduled for this subject` : `Available for scheduling`
+        };
+    });
 });
 
 // Methods
@@ -365,7 +524,7 @@ const loadSchedules = async () => {
     try {
         const teacherData = TeacherAuthService.getTeacherData();
         console.log('Teacher data structure:', teacherData);
-        
+
         // Extract teacher ID from the nested structure
         let teacherId = null;
         if (teacherData?.teacher?.id) {
@@ -375,13 +534,13 @@ const loadSchedules = async () => {
         } else if (teacherData?.user?.id) {
             teacherId = teacherData.user.id;
         }
-        
+
         if (!teacherId) {
             throw new Error('Teacher not authenticated - no teacher ID found');
         }
-        
+
         console.log('Using teacher ID:', teacherId);
-        
+
         // Load schedules first, then assignments (so we can mark which have schedules)
         await loadTeacherSchedules(teacherId);
         await loadTeacherAssignments(teacherId);
@@ -414,7 +573,7 @@ const loadTeacherAssignments = async (teacherId) => {
         // Get teacher assignments from TeacherAuthService
         const teacherData = TeacherAuthService.getTeacherData();
         if (teacherData?.assignments) {
-            teacherAssignments.value = teacherData.assignments.map(assignment => ({
+            teacherAssignments.value = teacherData.assignments.map((assignment) => ({
                 id: `${assignment.section_id}_${assignment.subject_id}`,
                 section_id: assignment.section_id,
                 subject_id: assignment.subject_id,
@@ -422,15 +581,12 @@ const loadTeacherAssignments = async (teacherId) => {
                 subject_name: assignment.subject_name,
                 hasSchedule: false // Will be updated below
             }));
-            
+
             // Mark assignments that have schedules
-            teacherAssignments.value.forEach(assignment => {
-                assignment.hasSchedule = schedules.value.some(schedule => 
-                    schedule.section_id == assignment.section_id && 
-                    schedule.subject_id == assignment.subject_id
-                );
+            teacherAssignments.value.forEach((assignment) => {
+                assignment.hasSchedule = schedules.value.some((schedule) => schedule.section_id == assignment.section_id && schedule.subject_id == assignment.subject_id);
             });
-            
+
             console.log('Loaded teacher assignments:', teacherAssignments.value.length);
         } else {
             teacherAssignments.value = [];
@@ -442,16 +598,14 @@ const loadTeacherAssignments = async (teacherId) => {
 };
 
 const getSchedulesForDay = (day) => {
-    return schedules.value
-        .filter(schedule => schedule.day === day)
-        .sort((a, b) => a.start_time.localeCompare(b.start_time));
+    return schedules.value.filter((schedule) => schedule.day === day).sort((a, b) => a.start_time.localeCompare(b.start_time));
 };
 
 const getScheduleItemClass = (schedule) => {
     const now = currentTime.value;
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const currentTimeStr = now.toTimeString().split(' ')[0];
-    
+
     if (schedule.day === currentDay) {
         if (schedule.start_time <= currentTimeStr && schedule.end_time > currentTimeStr) {
             return 'current-schedule';
@@ -461,17 +615,17 @@ const getScheduleItemClass = (schedule) => {
             return 'past-schedule';
         }
     }
-    
+
     return '';
 };
 
 const getDaySeverity = (day) => {
     const severities = {
-        'monday': 'info',
-        'tuesday': 'success',
-        'wednesday': 'warning',
-        'thursday': 'danger',
-        'friday': 'secondary'
+        monday: 'info',
+        tuesday: 'success',
+        wednesday: 'warning',
+        thursday: 'danger',
+        friday: 'secondary'
     };
     return severities[day] || 'info';
 };
@@ -480,27 +634,25 @@ const isCurrentTimeSlot = (schedule) => {
     const now = currentTime.value;
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const currentTimeStr = now.toTimeString().split(' ')[0];
-    
-    return schedule.day === currentDay &&
-           schedule.start_time <= currentTimeStr &&
-           schedule.end_time > currentTimeStr;
+
+    return schedule.day === currentDay && schedule.start_time <= currentTimeStr && schedule.end_time > currentTimeStr;
 };
 
 const getTimeUntilNext = (schedule) => {
     const now = currentTime.value;
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    
+
     if (schedule.day === currentDay) {
         const [hours, minutes] = schedule.start_time.split(':');
         const scheduleTime = new Date();
         scheduleTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-        
+
         const diff = scheduleTime - now;
         if (diff > 0) {
             const diffMinutes = Math.floor(diff / (1000 * 60));
             const diffHours = Math.floor(diffMinutes / 60);
             const remainingMinutes = diffMinutes % 60;
-            
+
             if (diffHours > 0) {
                 return `${diffHours}h ${remainingMinutes}m`;
             } else {
@@ -508,17 +660,17 @@ const getTimeUntilNext = (schedule) => {
             }
         }
     }
-    
+
     return 'Tomorrow or later';
 };
 
 const getScheduleDuration = (schedule) => {
     const [startHours, startMinutes] = schedule.start_time.split(':').map(Number);
     const [endHours, endMinutes] = schedule.end_time.split(':').map(Number);
-    
+
     const startTotalMinutes = startHours * 60 + startMinutes;
     const endTotalMinutes = endHours * 60 + endMinutes;
-    
+
     return endTotalMinutes - startTotalMinutes;
 };
 
@@ -527,15 +679,252 @@ const viewScheduleDetails = (schedule) => {
     showDetailsDialog.value = true;
 };
 
+const editSchedule = (schedule) => {
+    console.log('✏️ Editing schedule:', schedule);
+
+    // Create a copy of the schedule for editing
+    editingSchedule.value = {
+        id: schedule.id,
+        subject_id: schedule.subject_id,
+        section_id: schedule.section_id,
+        subject_name: schedule.subject_name,
+        section_name: schedule.section_name,
+        day: schedule.day,
+        start_time: schedule.start_time,
+        end_time: schedule.end_time
+    };
+
+    editValidationError.value = '';
+    showEditDialog.value = true;
+};
+
+const cancelEdit = () => {
+    editingSchedule.value = null;
+    editValidationError.value = '';
+    showEditDialog.value = false;
+};
+
+const validateScheduleEdit = () => {
+    if (!editingSchedule.value.day) {
+        return 'Please select a day';
+    }
+
+    if (!editingSchedule.value.start_time || !editingSchedule.value.end_time) {
+        return 'Please enter both start and end times';
+    }
+
+    // Validate time format (HH:MM)
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(editingSchedule.value.start_time)) {
+        return 'Invalid start time format. Use HH:MM (24-hour format)';
+    }
+
+    if (!timeRegex.test(editingSchedule.value.end_time)) {
+        return 'Invalid end time format. Use HH:MM (24-hour format)';
+    }
+
+    // Validate that end time is after start time
+    const startTime = new Date(`2000-01-01 ${editingSchedule.value.start_time}:00`);
+    const endTime = new Date(`2000-01-01 ${editingSchedule.value.end_time}:00`);
+
+    if (endTime <= startTime) {
+        return 'End time must be after start time';
+    }
+
+    return null;
+};
+
+const saveScheduleChanges = async () => {
+    const validationError = validateScheduleEdit();
+    if (validationError) {
+        editValidationError.value = validationError;
+        return;
+    }
+
+    saving.value = true;
+    editValidationError.value = '';
+
+    try {
+        const teacherData = TeacherAuthService.getTeacherData();
+        let teacherId = teacherData?.id || teacherData?.teacher?.id || teacherData?.user?.id;
+
+        const scheduleData = {
+            id: editingSchedule.value.id,
+            teacher_id: teacherId,
+            section_id: editingSchedule.value.section_id,
+            subject_id: editingSchedule.value.subject_id,
+            day: editingSchedule.value.day,
+            start_time: editingSchedule.value.start_time + ':00', // Add seconds
+            end_time: editingSchedule.value.end_time + ':00'
+        };
+
+        console.log('💾 Saving schedule changes:', scheduleData);
+
+        const response = await SubjectScheduleService.saveSchedule(scheduleData);
+
+        if (response.success) {
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Schedule updated successfully',
+                life: 3000
+            });
+
+            // Reload schedules to show updated data
+            await loadSchedules();
+
+            // Close dialog
+            cancelEdit();
+        } else {
+            throw new Error(response.message || 'Failed to update schedule');
+        }
+    } catch (error) {
+        console.error('❌ Error updating schedule:', error);
+        editValidationError.value = error.message || 'Failed to update schedule. Please try again.';
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update schedule',
+            life: 3000
+        });
+    } finally {
+        saving.value = false;
+    }
+};
+
+// Create Schedule Methods
+const openCreateScheduleModal = () => {
+    console.log('🆕 Opening create schedule modal');
+    resetCreateForm();
+    showCreateDialog.value = true;
+};
+
+const resetCreateForm = () => {
+    selectedSubjectForCreate.value = null;
+    selectedDayForCreate.value = null;
+    createStartTime.value = '';
+    createEndTime.value = '';
+    createValidationError.value = '';
+};
+
+const cancelCreate = () => {
+    resetCreateForm();
+    showCreateDialog.value = false;
+};
+
+const onSubjectChange = () => {
+    // Reset day selection when subject changes
+    selectedDayForCreate.value = null;
+    createValidationError.value = '';
+};
+
+const validateCreateSchedule = () => {
+    if (!selectedSubjectForCreate.value) {
+        return 'Please select a subject';
+    }
+
+    if (!selectedDayForCreate.value) {
+        return 'Please select a day';
+    }
+
+    if (!createStartTime.value || !createEndTime.value) {
+        return 'Please enter both start and end times';
+    }
+
+    // Validate time format (HH:MM)
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(createStartTime.value)) {
+        return 'Invalid start time format. Use HH:MM (24-hour format)';
+    }
+
+    if (!timeRegex.test(createEndTime.value)) {
+        return 'Invalid end time format. Use HH:MM (24-hour format)';
+    }
+
+    // Validate that end time is after start time
+    const startTime = new Date(`2000-01-01 ${createStartTime.value}:00`);
+    const endTime = new Date(`2000-01-01 ${createEndTime.value}:00`);
+
+    if (endTime <= startTime) {
+        return 'End time must be after start time';
+    }
+
+    return null;
+};
+
+const createNewSchedule = async () => {
+    const validationError = validateCreateSchedule();
+    if (validationError) {
+        createValidationError.value = validationError;
+        return;
+    }
+
+    creating.value = true;
+    createValidationError.value = '';
+
+    try {
+        const teacherData = TeacherAuthService.getTeacherData();
+        let teacherId = teacherData?.id || teacherData?.teacher?.id || teacherData?.user?.id;
+
+        // Parse subject and section IDs from selected value
+        const [subjectId, sectionId] = selectedSubjectForCreate.value.split('_');
+
+        const scheduleData = {
+            teacher_id: teacherId,
+            section_id: parseInt(sectionId),
+            subject_id: parseInt(subjectId),
+            day: selectedDayForCreate.value,
+            start_time: createStartTime.value + ':00', // Add seconds
+            end_time: createEndTime.value + ':00'
+        };
+
+        console.log('🆕 Creating new schedule:', scheduleData);
+
+        const response = await SubjectScheduleService.saveSchedule(scheduleData);
+
+        if (response.success) {
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Schedule created successfully',
+                life: 3000
+            });
+
+            // Reload schedules to show new data
+            await loadSchedules();
+
+            // Close dialog
+            cancelCreate();
+        } else {
+            throw new Error(response.message || 'Failed to create schedule');
+        }
+    } catch (error) {
+        console.error('❌ Error creating schedule:', error);
+        createValidationError.value = error.message || 'Failed to create schedule. Please try again.';
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to create schedule',
+            life: 3000
+        });
+    } finally {
+        creating.value = false;
+    }
+};
+
 const createAttendanceSession = (schedule) => {
+    console.log('🎯 Starting attendance session for schedule:', schedule);
+
     // Navigate to attendance taking page with schedule context
     router.push({
-        name: 'teacher-subject-attendance',
+        name: 'subject-attendance',
         params: {
-            sectionId: schedule.section_id,
-            subjectId: schedule.subject_id
+            subjectId: schedule.subject_id || schedule.subject?.id
         },
         query: {
+            sectionId: schedule.section_id,
             scheduleId: schedule.id,
             autoStart: 'true'
         }
@@ -543,27 +932,47 @@ const createAttendanceSession = (schedule) => {
 };
 
 const openCreateScheduleDialog = (assignment) => {
+    console.log('🔧 Create Schedule button clicked!', assignment);
+
     selectedAssignment.value = assignment;
     showCreateScheduleDialog.value = true;
-    
+
+    console.log('📝 Assignment details:', {
+        subject: assignment.subject_name,
+        section: assignment.section_name,
+        section_id: assignment.section_id,
+        subject_id: assignment.subject_id
+    });
+
     toast.add({
         severity: 'info',
         summary: 'Schedule Creation',
         detail: `Creating schedule for ${assignment.subject_name} in ${assignment.section_name}`,
         life: 3000
     });
-    
-    // For now, redirect to admin interface or show a message
-    // In a full implementation, you'd have a schedule creation form here
+
+    // Redirect to teacher schedule creation interface
     setTimeout(() => {
-        toast.add({
-            severity: 'warn',
-            summary: 'Feature Coming Soon',
-            detail: 'Schedule creation interface will be available soon. Please contact your administrator.',
-            life: 5000
+        console.log('🚀 Redirecting to teacher schedule creation interface...');
+
+        // Navigate to teacher schedule creation with query parameters
+        router.push({
+            path: '/teacher/create-schedule',
+            query: {
+                section_id: assignment.section_id,
+                subject_id: assignment.subject_id,
+                section_name: assignment.section_name,
+                subject_name: assignment.subject_name
+            }
         });
+
         showCreateScheduleDialog.value = false;
-    }, 1000);
+    }, 1500);
+};
+
+const getCurrentTeacherId = () => {
+    const teacherData = TeacherAuthService.getTeacherData();
+    return teacherData?.teacher?.id || teacherData?.id || teacherData?.user?.id;
 };
 
 const updateCurrentTime = () => {
@@ -573,7 +982,7 @@ const updateCurrentTime = () => {
 // Lifecycle
 onMounted(() => {
     loadSchedules();
-    
+
     // Update current time every minute
     timeUpdateInterval = setInterval(updateCurrentTime, 60000);
 });
@@ -836,11 +1245,11 @@ onUnmounted(() => {
     .day-column {
         margin-bottom: 0.5rem;
     }
-    
+
     .day-content {
         min-height: 150px;
     }
-    
+
     .schedule-item {
         font-size: 0.6875rem;
     }

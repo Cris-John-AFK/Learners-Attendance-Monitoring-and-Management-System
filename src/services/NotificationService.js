@@ -65,126 +65,52 @@ class NotificationService {
     }
 
     /**
-     * Add a new notification
-     */
-    addNotification(notification) {
-        console.log('Adding notification:', notification);
-        
-        const newNotification = {
-            id: Date.now() + Math.random(),
-            timestamp: new Date().toISOString(),
-            read: false,
-            ...notification
-        };
-
-        console.log('New notification created:', newNotification);
-        this.notifications.unshift(newNotification);
-        console.log('Total notifications after add:', this.notifications.length);
-        
-        this.saveNotifications();
-        console.log('Notifications saved to localStorage');
-        
-        this.notifyListeners();
-        console.log('Listeners notified');
-        
-        return newNotification;
-    }
-
-    /**
-     * Add session completion notification to database
-     */
-    async addSessionCompletionNotification(sessionData) {
-        try {
-            console.log('Creating session completion notification with data:', sessionData);
-            
-            // Ensure we have teacher ID - use current teacher if not provided in session data
-            const teacherId = sessionData.teacher_id || this.currentTeacherId;
-            
-            if (!teacherId) {
-                console.error('No teacher ID available for notification');
-                return null;
-            }
-
-            const notificationData = {
-                user_id: teacherId,
-                type: 'session_completed',
-                title: 'Attendance Session Completed',
-                message: `${sessionData.subject_name || 'Homeroom'} - ${sessionData.statistics?.present || sessionData.present_count || 0} present, ${sessionData.statistics?.absent || sessionData.absent_count || 0} absent`,
-                priority: 'medium',
-                data: {
-                    sessionId: sessionData.session_id || sessionData.id,
-                    subject: sessionData.subject_name,
-                    section: sessionData.section_name,
-                    method: sessionData.method || 'Manual Entry',
-                    statistics: sessionData.statistics,
-                    session_date: sessionData.session_date || new Date().toISOString()
-                }
-            };
-
-            console.log('Sending notification to database:', notificationData);
-
-            const response = await fetch(`${this.baseURL}/notifications`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.getAuthToken()}`
-                },
-                body: JSON.stringify(notificationData)
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                console.log('Notification saved to database:', result);
-                
-                // Reload notifications to get the latest from database
-                await this.loadNotifications();
-                
-                return result.data;
-            } else {
-                const error = await response.json();
-                console.error('Failed to save notification to database:', error);
-                return null;
-            }
-        } catch (error) {
-            console.error('Error creating session completion notification:', error);
-            return null;
-        }
-    }
-
-    /**
      * Mark notification as read in database
      */
     async markAsRead(notificationId) {
         try {
-            const response = await fetch(`${this.baseURL}/notifications/${notificationId}/mark-read`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.getAuthToken()}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    user_id: this.currentTeacherId
-                })
-            });
-
-            if (response.ok) {
-                // Update local notification
-                const notification = this.notifications.find(n => n.id === notificationId);
-                if (notification) {
-                    notification.read = true;
-                    this.notifyListeners();
-                }
-                console.log('Notification marked as read in database');
-            } else {
-                console.error('Failed to mark notification as read in database');
+            // Update local state first
+            const notification = this.notifications.find(n => n.id === notificationId);
+            if (notification) {
+                notification.is_read = true;
+                notification.read = true;
             }
+
+            // Only try to update database for non-schedule notifications
+            if (notification && notification.metadata?.source !== 'schedule_notification_service') {
+                const token = this.getAuthToken();
+                if (!token) {
+                    console.warn('No auth token available for marking notification as read');
+                    this.notifyListeners();
+                    return;
+                }
+
+                const response = await fetch(`${this.baseURL}/notifications/${notificationId}/mark-read`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            } else {
+                console.log('📝 Schedule notification marked as read locally only');
+            }
+
+            this.notifyListeners();
         } catch (error) {
-            console.error('Error marking notification as read:', error);
+            console.error('Failed to mark notification as read in database:', error);
+            
+            // Local state is already updated, just notify listeners
+            this.notifyListeners();
         }
     }
 
     /**
-     * Mark all notifications as read in database
+     * Mark all notifications as read
      */
     async markAllAsRead() {
         try {
@@ -262,14 +188,48 @@ class NotificationService {
             // Check if notification belongs to current teacher (multiple ways to check)
             const teacherIdMatch = metadata.teacherId === this.currentTeacherId;
             const userIdMatch = metadata.userId === this.currentTeacherId;
+            const directTeacherIdMatch = notification.teacher_id === this.currentTeacherId;
             
             console.log('Teacher ID checks:', {
                 teacherIdMatch,
                 userIdMatch,
+                directTeacherIdMatch,
                 currentTeacherId: this.currentTeacherId,
                 metadataTeacherId: metadata.teacherId,
-                metadataUserId: metadata.userId
+                metadataUserId: metadata.userId,
+                notificationTeacherId: notification.teacher_id,
+                notificationType: notification.type,
+                notificationTitle: notification.title
             });
+            
+            // Special handling for schedule notifications - bypass all other checks
+            if (notification.type === 'schedule') {
+                console.log('🔍 Schedule notification detailed check:', {
+                    teacherIdMatch,
+                    userIdMatch,
+                    directTeacherIdMatch,
+                    metadataTeacherId: metadata.teacherId,
+                    metadataUserId: metadata.userId,
+                    notificationTeacherId: notification.teacher_id,
+                    currentTeacherId: this.currentTeacherId,
+                    metadataTeacherIdType: typeof metadata.teacherId,
+                    currentTeacherIdType: typeof this.currentTeacherId
+                });
+                
+                if (directTeacherIdMatch || teacherIdMatch || userIdMatch) {
+                    console.log('✅ Schedule notification belongs to teacher - bypassing assignment check');
+                    return true;
+                } else {
+                    console.log('❌ Schedule notification does not belong to teacher');
+                    return false;
+                }
+            }
+            
+            // First priority: Direct teacher ID matches (for all notifications)
+            if (teacherIdMatch || userIdMatch || directTeacherIdMatch) {
+                console.log('Notification belongs to teacher via direct ID match');
+                return true;
+            }
             
             // If notification has explicit teacher ID mismatch, filter out
             if (metadata.teacherId && !teacherIdMatch && !userIdMatch) {
@@ -277,7 +237,7 @@ class NotificationService {
                 return false;
             }
 
-            // If notification has subject/section info, check if teacher is assigned
+            // Secondary: If notification has subject/section info, check if teacher is assigned
             if (metadata.subjectId && metadata.sectionId) {
                 const isAssigned = this.teacherAssignments.some(assignment => 
                     assignment.subject_id === metadata.subjectId && 
@@ -287,10 +247,9 @@ class NotificationService {
                 return isAssigned;
             }
 
-            // Show if it belongs to this teacher (either teacherId or userId match)
-            const belongsToTeacher = teacherIdMatch || userIdMatch;
-            console.log('Final belongs to teacher check:', belongsToTeacher);
-            return belongsToTeacher;
+            // Default: show notification if no specific filtering rules apply
+            console.log('No specific filtering rules apply, showing notification');
+            return true;
         });
     }
 
@@ -554,6 +513,60 @@ class NotificationService {
      */
     hasUnreadNotifications() {
         return this.getUnreadCount() > 0;
+    }
+
+    /**
+     * Add a new notification programmatically
+     */
+    addNotification(notification) {
+        // Check if we should stack this notification with an existing one
+        const existingNotificationIndex = this.notifications.findIndex(n => 
+            n.type === notification.type && 
+            n.title === notification.title &&
+            n.metadata?.subjectId === notification.metadata?.subjectId &&
+            n.metadata?.schedule_type === notification.metadata?.schedule_type
+        );
+        
+        if (existingNotificationIndex !== -1) {
+            // Update existing notification instead of creating a new one
+            const existingNotification = this.notifications[existingNotificationIndex];
+            
+            // Update the count if it exists, otherwise set to 2
+            existingNotification.count = (existingNotification.count || 1) + 1;
+            existingNotification.timestamp = notification.timestamp;
+            existingNotification.created_at = notification.created_at;
+            existingNotification.is_read = false; // Mark as unread since it's updated
+            
+            // Update the message to show count
+            if (existingNotification.count > 1) {
+                const baseMessage = existingNotification.message.replace(/ \(\d+x\)$/, '');
+                existingNotification.message = `${baseMessage} (${existingNotification.count}x)`;
+            }
+            
+            console.log('📚 Stacked notification:', notification.title, `(${existingNotification.count}x)`);
+        } else {
+            // Add new notification
+            notification.count = 1;
+            this.notifications.unshift(notification);
+            
+            console.log('📬 Added new notification:', notification.title);
+        }
+        
+        // Keep only last 50 notifications
+        if (this.notifications.length > 50) {
+            this.notifications = this.notifications.slice(0, 50);
+        }
+        
+        console.log('📊 Total notifications after add:', this.notifications.length);
+        console.log('🔍 Notification details:', {
+            id: notification.id,
+            type: notification.type,
+            teacher_id: notification.teacher_id,
+            metadata: notification.metadata
+        });
+        
+        // Notify listeners immediately
+        this.notifyListeners();
     }
 }
 

@@ -212,6 +212,7 @@ Route::prefix('attendance-sessions')->group(function () {
     Route::post('/{sessionId}/attendance', [AttendanceSessionController::class, 'markSessionAttendance']);
     Route::post('/{sessionId}/qr-attendance', [AttendanceSessionController::class, 'markQRAttendance']);
     Route::put('/{sessionId}/students/{studentId}', [AttendanceSessionController::class, 'updateStudentAttendance']);
+    Route::post('/{sessionId}/auto-mark-absent', [AttendanceSessionController::class, 'autoMarkAbsent']);
     
     // Reports
     Route::get('/reports/weekly', [AttendanceSessionController::class, 'getWeeklyReport']);
@@ -257,8 +258,20 @@ Route::prefix('subject-schedules')->group(function () {
     Route::get('/all', [App\Http\Controllers\API\SubjectScheduleController::class, 'getAllSchedules']);
     Route::get('/teacher/{teacherId}', [App\Http\Controllers\API\SubjectScheduleController::class, 'getTeacherSchedules']);
     Route::get('/available-slots', [App\Http\Controllers\API\SubjectScheduleController::class, 'getAvailableTimeSlots']);
+    Route::post('/check-conflict', [App\Http\Controllers\API\SubjectScheduleController::class, 'checkTimeConflict']);
     Route::post('/save', [App\Http\Controllers\API\SubjectScheduleController::class, 'saveSchedule']);
     Route::delete('/{id}', [App\Http\Controllers\API\SubjectScheduleController::class, 'deleteSchedule']);
+});
+
+// Schedule Notification routes
+Route::prefix('schedule-notifications')->group(function () {
+    Route::get('/teacher/{teacherId}/upcoming', [App\Http\Controllers\API\ScheduleNotificationController::class, 'getUpcomingSchedules']);
+    Route::get('/teacher/{teacherId}/current-status', [App\Http\Controllers\API\ScheduleNotificationController::class, 'getCurrentScheduleStatus']);
+    Route::get('/schedule/{scheduleId}/active-session', [App\Http\Controllers\API\ScheduleNotificationController::class, 'getActiveSession']);
+    Route::post('/validate-timing', [App\Http\Controllers\API\ScheduleNotificationController::class, 'validateSessionTiming']);
+    Route::get('/auto-absence/needed', [App\Http\Controllers\API\ScheduleNotificationController::class, 'getSchedulesNeedingAutoAbsence']);
+    Route::post('/auto-absence/process', [App\Http\Controllers\API\ScheduleNotificationController::class, 'processAutoAbsence']);
+    Route::post('/auto-absence/session/{sessionId}', [App\Http\Controllers\API\ScheduleNotificationController::class, 'markAutoAbsence']);
 });
 
 // Student Management routes for seating arrangements and student operations

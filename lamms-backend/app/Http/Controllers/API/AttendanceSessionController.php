@@ -961,6 +961,114 @@ class AttendanceSessionController extends Controller
     }
 
     /**
+     * Auto-mark absent students when schedule ends
+     */
+    public function autoMarkAbsent(Request $request, $sessionId)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'schedule_id' => 'required|integer',
+                'subject_id' => 'required|integer',
+                'section_id' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Find the session
+            $session = AttendanceSession::find($sessionId);
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance session not found'
+                ], 404);
+            }
+
+            // Get all students in the section
+            $students = Student::where('section_id', $request->section_id)
+                ->where('is_active', true)
+                ->get();
+
+            // Get students who already have attendance records for this session
+            $existingRecords = AttendanceRecord::where('session_id', $sessionId)
+                ->pluck('student_id')
+                ->toArray();
+
+            // Find students without attendance records
+            $unmarkedStudents = $students->whereNotIn('id', $existingRecords);
+
+            $markedCount = 0;
+            $absentStatusId = AttendanceStatus::where('name', 'Absent')->first()->id;
+
+            // Mark unmarked students as absent
+            foreach ($unmarkedStudents as $student) {
+                AttendanceRecord::create([
+                    'session_id' => $sessionId,
+                    'student_id' => $student->id,
+                    'status_id' => $absentStatusId,
+                    'recorded_at' => now(),
+                    'recorded_by_teacher_id' => $session->teacher_id,
+                    'method' => 'Auto-marked (Schedule End)',
+                    'notes' => 'Automatically marked absent when schedule ended'
+                ]);
+
+                // Log audit event
+                $this->logAuditEvent(
+                    'attendance_record',
+                    $student->id,
+                    'auto_mark_absent',
+                    $session->teacher_id,
+                    [
+                        'session_id' => $sessionId,
+                        'schedule_id' => $request->schedule_id,
+                        'student_name' => $student->first_name . ' ' . $student->last_name,
+                        'reason' => 'Schedule ended, student not marked'
+                    ]
+                );
+
+                $markedCount++;
+            }
+
+            // Update session status to completed if not already
+            if ($session->status !== 'completed') {
+                $session->update([
+                    'status' => 'completed',
+                    'ended_at' => now()
+                ]);
+            }
+
+            Log::info('Auto-marked absent students', [
+                'session_id' => $sessionId,
+                'schedule_id' => $request->schedule_id,
+                'marked_count' => $markedCount,
+                'total_students' => $students->count(),
+                'existing_records' => count($existingRecords)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Students automatically marked absent',
+                'marked_absent_count' => $markedCount,
+                'total_students' => $students->count(),
+                'already_marked' => count($existingRecords)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error auto-marking absent students: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to auto-mark absent students',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Log audit events
      */
     private function logAuditEvent($entityType, $entityId, $action, $teacherId, $context = [])
