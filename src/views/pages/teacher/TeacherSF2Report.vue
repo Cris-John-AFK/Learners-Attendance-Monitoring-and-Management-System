@@ -221,7 +221,7 @@ const getAttendanceColor = (status) => {
 // Get day of week abbreviation
 const getDayOfWeek = (dateString) => {
     const date = new Date(dateString);
-    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const days = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
     return days[date.getDay()];
 };
 
@@ -305,22 +305,10 @@ onMounted(() => {
         <div v-else-if="reportData" class="sf2-report-card bg-white rounded-lg shadow-lg p-8 max-w-full overflow-x-auto">
             <!-- Header -->
             <div class="text-center mb-6">
-                <div class="flex justify-between items-start mb-6">
-                    <!-- Left Logo and Info -->
-                    <div class="flex items-start w-1/4">
-                        <div class="w-20 h-20 border-2 border-gray-800 rounded-full flex items-center justify-center mr-3">
-                            <div class="text-center">
-                                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
-                                    <span class="text-white font-bold text-xs">LOGO</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-left text-xs leading-tight">
-                            <p class="font-bold">Republic of the Philippines</p>
-                            <p class="font-bold">Department of Education</p>
-                            <p class="font-medium">{{ reportData.school_info.division || 'REGION X - NORTHERN MINDANAO' }}</p>
-                            <p class="font-medium">{{ reportData.school_info.district || 'NAAWAN DISTRICT' }}</p>
-                        </div>
+                <div class="flex justify-between items-center mb-6">
+                    <!-- Left DepEd Seal Logo -->
+                    <div class="w-20 h-20 flex items-center justify-center">
+                        <img src="/demo/images/dep-ed-logo.png" alt="DepEd Seal" class="w-16 h-16 object-contain" />
                     </div>
 
                     <!-- Center Title -->
@@ -329,17 +317,9 @@ onMounted(() => {
                         <p class="text-xs text-gray-700 italic">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
                     </div>
 
-                    <!-- Right Logo -->
-                    <div class="flex items-start justify-end w-1/4">
-                        <div class="text-right text-xs mr-3 leading-tight">
-                            <p class="font-bold text-red-600 text-lg">DepEd</p>
-                            <p class="font-bold text-blue-600 text-xs">DEPARTMENT OF EDUCATION</p>
-                        </div>
-                        <div class="w-20 h-20 border-2 border-gray-800 rounded-full flex items-center justify-center">
-                            <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center">
-                                <span class="text-white font-bold text-xs">LOGO</span>
-                            </div>
-                        </div>
+                    <!-- Right DepEd Logo -->
+                    <div class="w-20 h-20 flex items-center justify-center">
+                        <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="w-16 h-16 object-contain" />
                     </div>
                 </div>
             </div>
