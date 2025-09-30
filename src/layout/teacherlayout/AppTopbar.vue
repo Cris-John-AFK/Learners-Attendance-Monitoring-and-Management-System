@@ -840,4 +840,11 @@ onUnmounted(() => {
     background: #fff3e0;
     color: #ef6c00;
 }
+
+/* Hide topbar when printing */
+@media print {
+    .layout-topbar {
+        display: none !important;
+    }
+}
 </style>
