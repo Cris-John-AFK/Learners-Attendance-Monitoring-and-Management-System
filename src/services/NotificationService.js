@@ -5,8 +5,11 @@ class NotificationService {
         this.currentTeacherId = null;
         this.teacherAssignments = null;
         this.baseURL = 'http://localhost:8000/api';
+        this.refreshInterval = null;
         // Load notifications asynchronously
         this.loadNotifications().catch(console.error);
+        // Start auto-refresh every 30 seconds (optimized for performance)
+        this.startAutoRefresh();
     }
 
     /**
@@ -520,6 +523,35 @@ class NotificationService {
         
         // Notify listeners immediately
         this.notifyListeners();
+    }
+
+    /**
+     * Start auto-refresh for notifications
+     * Optimized: Only refreshes if teacher is set and page is visible
+     */
+    startAutoRefresh() {
+        // Clear any existing interval
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+        }
+
+        // Refresh every 30 seconds (balanced for performance)
+        this.refreshInterval = setInterval(() => {
+            // Only refresh if teacher is set and page is visible
+            if (this.currentTeacherId && !document.hidden) {
+                this.loadNotifications().catch(console.error);
+            }
+        }, 30000); // 30 seconds
+    }
+
+    /**
+     * Stop auto-refresh (cleanup)
+     */
+    stopAutoRefresh() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+        }
     }
 }
 

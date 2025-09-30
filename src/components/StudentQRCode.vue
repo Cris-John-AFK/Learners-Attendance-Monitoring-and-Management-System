@@ -1,8 +1,18 @@
 <template>
     <div class="student-qr-code">
+        <div class="school-logo print-only">
+            <img src="/demo/images/logo.png" alt="NCS Logo" class="school-logo-image" />
+            <h2 class="school-name">Naawan Central School</h2>
+            <p class="school-subtitle">Student Identification</p>
+        </div>
+        
         <div class="qr-header">
             <h3 class="student-name">{{ studentName }}</h3>
             <p class="student-id">ID: {{ studentId }}</p>
+            <div class="student-details print-only">
+                <p class="detail-item"><strong>Section:</strong> {{ section }}</p>
+                <p class="detail-item"><strong>Grade:</strong> {{ grade }}</p>
+            </div>
         </div>
         
         <div class="qr-container">
@@ -67,6 +77,14 @@ const props = defineProps({
     studentName: {
         type: String,
         default: 'Student'
+    },
+    section: {
+        type: String,
+        default: 'N/A'
+    },
+    grade: {
+        type: String,
+        default: 'N/A'
     },
     size: {
         type: Number,
@@ -232,5 +250,163 @@ const downloadAsPNG = async () => {
 
 .download-buttons .p-button {
     flex: 1;
+}
+
+/* Print-only elements - hidden on screen */
+.print-only {
+    display: none;
+}
+
+/* Print Styles - Beautiful centered layout */
+@media print {
+    /* Hide screen-only elements */
+    .qr-actions,
+    button,
+    .p-button {
+        display: none !important;
+    }
+
+    /* Show print-only elements */
+    .print-only {
+        display: block !important;
+    }
+
+    /* Center card on page */
+    .student-qr-code {
+        max-width: 600px;
+        width: 90%;
+        height: auto;
+        margin: 0 auto !important;
+        padding: 3rem;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: white !important;
+        transform: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* School branding */
+    .school-logo {
+        text-align: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 3px solid #2196F3;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .school-logo-image {
+        width: 100px;
+        height: 100px;
+        object-fit: contain;
+        margin: 0 auto 1rem auto;
+        display: block;
+    }
+
+    .school-name {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #2196F3;
+        margin: 0 0 0.5rem 0;
+        letter-spacing: 1px;
+    }
+
+    .school-subtitle {
+        font-size: 1.1rem;
+        color: #666;
+        margin: 0;
+        font-weight: 500;
+    }
+
+    /* Student header */
+    .qr-header {
+        text-align: center;
+        margin-bottom: 2rem;
+        width: 100%;
+    }
+
+    .student-name {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0 0 0.75rem 0;
+        letter-spacing: 1px;
+    }
+
+    .student-id {
+        font-size: 1.2rem;
+        color: #666;
+        margin: 0 0 1.5rem 0;
+        font-weight: 600;
+        background-color: #f0f0f0;
+        padding: 0.5rem 1.5rem;
+        border-radius: 20px;
+        display: inline-block;
+    }
+
+    /* Student details */
+    .student-details {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        width: 100%;
+    }
+
+    .detail-item {
+        font-size: 1.1rem;
+        color: #555;
+        margin: 0.5rem 0;
+        padding: 0.5rem;
+    }
+
+    .detail-item strong {
+        color: #2196F3;
+        font-weight: 700;
+        display: inline-block;
+        min-width: 100px;
+    }
+
+    /* QR Code container */
+    .qr-container {
+        width: 350px;
+        height: 350px;
+        padding: 1.5rem;
+        background: white;
+        border: 5px solid #2196F3;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.3) !important;
+        margin-bottom: 2rem;
+    }
+
+    .qr-image img {
+        width: 300px !important;
+        height: 300px !important;
+        border-radius: 8px;
+    }
+
+    /* Footer instruction */
+    .student-qr-code::after {
+        content: "Scan this QR code for attendance tracking";
+        display: block;
+        text-align: center;
+        font-size: 1rem;
+        color: #888;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 2px solid #e0e0e0;
+        width: 100%;
+        font-style: italic;
+    }
 }
 </style>

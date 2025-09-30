@@ -74,7 +74,7 @@
             </div>
 
             <div class="notification-footer" v-if="notifications.length > 3">
-                <button class="view-all-notifications">
+                <button class="view-all-notifications" @click="viewAllNotifications">
                     View all notifications
                 </button>
             </div>
@@ -141,6 +141,12 @@ const markAllAsRead = () => {
 
 const removeNotification = (notificationId) => {
     emit('remove-notification', notificationId);
+};
+
+const viewAllNotifications = () => {
+    closeDropdown();
+    // Navigate to notifications page (you can create this route)
+    window.location.href = '/teacher/notifications';
 };
 
 const formatTime = (timestamp) => {

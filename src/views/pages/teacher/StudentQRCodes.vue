@@ -26,10 +26,12 @@
 
         <!-- QR code grid -->
         <div v-else class="qrcode-grid">
-            <div v-for="student in filteredStudents" :key="student.id" class="qrcode-item p-3">
+            <div v-for="student in filteredStudents" :key="student.id" class="qrcode-item p-3 print-page">
                 <StudentQRCode 
                     :studentId="student.id" 
-                    :studentName="student.full_name || student.name || `${student.first_name} ${student.last_name}` || `Student ${student.id}`" 
+                    :studentName="student.full_name || student.name || `${student.first_name} ${student.last_name}` || `Student ${student.id}`"
+                    :section="student.section_name || 'N/A'"
+                    :grade="student.grade_level || 'N/A'"
                 />
             </div>
         </div>
@@ -206,24 +208,104 @@ const regenerateQRCodes = async () => {
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
+/* Print Styles - One QR code per page */
 @media print {
-    .header,
-    .flex,
-    .search-container,
-    .p-button {
+    /* Remove browser default headers and footers */
+    @page {
+        margin: 0;
+        size: auto;
+    }
+
+    /* Hide EVERYTHING except our content */
+    body > *:not(.student-qrcodes-page) {
         display: none !important;
     }
 
-    .qrcode-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
+    /* Hide all UI elements and navigation */
+    .header,
+    .flex,
+    .search-container,
+    .p-button,
+    button,
+    nav,
+    .layout-topbar,
+    .layout-sidebar,
+    .layout-menu,
+    .layout-main-container,
+    header,
+    [class*="topbar"],
+    [class*="sidebar"],
+    [class*="menu"],
+    [class*="navigation"],
+    [class*="nav"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    
+    /* Hide parent layout elements */
+    .layout-wrapper > *:not(.layout-main),
+    .layout-main > *:not(.student-qrcodes-page),
+    #app > *:not(.student-qrcodes-page) {
+        display: none !important;
     }
 
+    /* Reset page layout */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100%;
+        overflow: visible !important;
+    }
+
+    /* Force remove all wrappers and containers */
+    body * {
+        visibility: hidden !important;
+    }
+
+    .student-qrcodes-page,
+    .student-qrcodes-page *,
+    .print-page,
+    .print-page * {
+        visibility: visible !important;
+    }
+
+    .student-qrcodes-page {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white;
+    }
+
+    /* One card per page layout */
+    .qrcode-grid {
+        display: block !important;
+    }
+
+    /* Each QR code takes full page */
     .qrcode-item {
-        page-break-inside: avoid;
-        background-color: white;
-        box-shadow: none;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: 100vh !important;
+        width: 100% !important;
+    }
+
+    /* Last item doesn't need break after */
+    .qrcode-item:last-child {
+        page-break-after: avoid !important;
     }
 }
 </style>
