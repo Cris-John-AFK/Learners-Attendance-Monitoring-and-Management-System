@@ -34,11 +34,11 @@ const fixedWeekdayColumns = computed(() => {
     const totalColumns = 25; // 5 weeks × 5 weekdays
     const weekdays = ['M', 'T', 'W', 'TH', 'F'];
     const columns = [];
-    
+
     // Create a map of dates from backend data
     const dateMap = {};
     if (reportData.value?.days_in_month) {
-        reportData.value.days_in_month.forEach(day => {
+        reportData.value.days_in_month.forEach((day) => {
             const date = new Date(day.date);
             const dayOfWeek = date.getDay(); // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
             dateMap[day.date] = {
@@ -47,25 +47,25 @@ const fixedWeekdayColumns = computed(() => {
             };
         });
     }
-    
+
     // Get all dates sorted
     const sortedDates = Object.keys(dateMap).sort();
     let dateIndex = 0;
-    
+
     // Generate 25 fixed columns
     for (let i = 0; i < totalColumns; i++) {
         const weekdayIndex = i % 5; // 0=M, 1=T, 2=W, 3=TH, 4=F
         const weekdayName = weekdays[weekdayIndex];
         const expectedDayOfWeek = weekdayIndex + 1; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
-        
+
         // Check if we have a date that matches this weekday position
         let hasDate = false;
         let dateInfo = null;
-        
+
         if (dateIndex < sortedDates.length) {
             const currentDate = sortedDates[dateIndex];
             const currentDateInfo = dateMap[currentDate];
-            
+
             // If this date matches the expected weekday
             if (currentDateInfo.dayOfWeek === expectedDayOfWeek) {
                 hasDate = true;
@@ -73,7 +73,7 @@ const fixedWeekdayColumns = computed(() => {
                 dateIndex++;
             }
         }
-        
+
         columns.push({
             date: hasDate ? dateInfo.date : null,
             day: hasDate ? dateInfo.day : '',
@@ -81,7 +81,7 @@ const fixedWeekdayColumns = computed(() => {
             isEmpty: !hasDate
         });
     }
-    
+
     return columns;
 });
 
@@ -499,12 +499,14 @@ onMounted(() => {
                                 {{ col.dayName }}
                             </th>
                             <th
-                                class="border-2 border-gray-900 bg-gray-50 text-center text-xs font-bold"
-                                style="width: 40px; padding: 2px 6px 2px 2px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 1px solid #000; border-right: 1px solid #000"
+                                class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
+                                style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 2px solid #000"
                             >
                                 ABSENT
                             </th>
-                            <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000">TARDY</th>
+                            <th class="border-2 border-gray-900 bg-gray-50 text-center font-bold" style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000">
+                                TARDY
+                            </th>
                         </tr>
                     </thead>
 
@@ -540,7 +542,7 @@ onMounted(() => {
                                 :class="col.isEmpty ? 'bg-gray-100' : ''"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : (maleDailyTotals[col.date]?.present || 0) }}
+                                {{ col.isEmpty ? '' : maleDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -578,7 +580,7 @@ onMounted(() => {
                                 :class="col.isEmpty ? 'bg-gray-100' : ''"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : (femaleDailyTotals[col.date]?.present || 0) }}
+                                {{ col.isEmpty ? '' : femaleDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -596,7 +598,7 @@ onMounted(() => {
                                 :class="col.isEmpty ? 'bg-gray-100' : ''"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : (combinedDailyTotals[col.date]?.present || 0) }}
+                                {{ col.isEmpty ? '' : combinedDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
