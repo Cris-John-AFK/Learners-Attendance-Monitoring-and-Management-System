@@ -797,86 +797,120 @@ onMounted(() => {
 
 /* Print Styles */
 @media print {
-    /* Hide everything by default */
-    body * {
-        visibility: hidden !important;
-    }
-
-    /* Show only the SF2 report card and its children */
-    .sf2-report-card,
-    .sf2-report-card * {
-        visibility: visible !important;
-    }
-
-    /* Hide all layout elements completely */
-    .layout-wrapper,
-    .layout-topbar,
-    .layout-sidebar,
-    .layout-main-container,
-    .layout-main,
-    header,
-    nav,
-    aside,
-    .topbar,
-    .sidebar,
-    .no-print,
-    button,
-    .p-button,
-    .p-calendar,
-    .p-toast,
-    [class*="topbar"],
-    [class*="sidebar"],
-    [class*="layout-"] {
+    /* Hide no-print elements */
+    .no-print {
         display: none !important;
-        visibility: hidden !important;
-        position: absolute !important;
-        left: -9999px !important;
     }
 
-    /* Position the report card at the top left */
-    .sf2-report-card {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
-        box-shadow: none !important;
-        border-radius: 0 !important;
-        padding: 20px !important;
-        margin: 0 !important;
-        background: white !important;
+    /* Page setup - Multiple pages allowed */
+    @page {
+        size: A4 landscape;
+        margin: 0.5cm;
     }
 
-    /* Remove all backgrounds */
+    /* Remove container backgrounds and constraints */
     body,
-    html,
+    html {
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
     .sf2-report-container {
         background: white !important;
-        background-color: white !important;
         padding: 0 !important;
         margin: 0 !important;
+        min-height: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Allow report card to flow naturally across multiple pages */
+    .sf2-report-card {
+        position: relative !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 10px !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: visible !important;
+        page-break-after: auto !important;
+        height: auto !important;
     }
 
     /* Attendance table print optimization */
+    .attendance-table-container {
+        overflow: visible !important;
+        page-break-inside: avoid;
+    }
+
     .attendance-table-container table {
-        font-size: 9px;
+        font-size: 7px !important;
+        width: 100% !important;
         page-break-inside: avoid;
     }
 
     .attendance-table-container th,
     .attendance-table-container td {
-        padding: 1px 2px;
+        padding: 1px 2px !important;
+        font-size: 7px !important;
+    }
+
+    /* Summary section - allow page break if needed */
+    .grid {
+        page-break-inside: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Reduce margins and padding for compact print */
+    .sf2-report-card h1,
+    .sf2-report-card h2,
+    .sf2-report-card h3 {
+        margin: 2px 0 !important;
+        font-size: 10px !important;
+    }
+
+    .sf2-report-card p {
+        margin: 1px 0 !important;
+        font-size: 7px !important;
     }
 
     /* Preserve colors and backgrounds */
-    body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 
-    /* Page setup */
-    @page {
-        size: landscape;
-        margin: 0.5cm;
+    /* Ensure footer section is visible */
+    .sf2-report-card > div {
+        page-break-inside: avoid;
+    }
+
+    /* Scale down text in summary sections */
+    .text-xs {
+        font-size: 6px !important;
+    }
+
+    /* Reduce spacing */
+    .mb-6 {
+        margin-bottom: 8px !important;
+    }
+
+    .mb-8 {
+        margin-bottom: 10px !important;
+    }
+
+    .mt-8 {
+        margin-top: 10px !important;
+    }
+
+    .gap-6 {
+        gap: 8px !important;
     }
 }
 
