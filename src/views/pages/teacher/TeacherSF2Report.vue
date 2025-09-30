@@ -29,6 +29,62 @@ const femaleStudents = computed(() => {
     return reportData.value.students.filter((student) => student.gender === 'Female');
 });
 
+// Generate fixed M-T-W-TH-F columns (always 5 weeks = 25 columns)
+const fixedWeekdayColumns = computed(() => {
+    const totalColumns = 25; // 5 weeks × 5 weekdays
+    const weekdays = ['M', 'T', 'W', 'TH', 'F'];
+    const columns = [];
+    
+    // Create a map of dates from backend data
+    const dateMap = {};
+    if (reportData.value?.days_in_month) {
+        reportData.value.days_in_month.forEach(day => {
+            const date = new Date(day.date);
+            const dayOfWeek = date.getDay(); // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+            dateMap[day.date] = {
+                ...day,
+                dayOfWeek
+            };
+        });
+    }
+    
+    // Get all dates sorted
+    const sortedDates = Object.keys(dateMap).sort();
+    let dateIndex = 0;
+    
+    // Generate 25 fixed columns
+    for (let i = 0; i < totalColumns; i++) {
+        const weekdayIndex = i % 5; // 0=M, 1=T, 2=W, 3=TH, 4=F
+        const weekdayName = weekdays[weekdayIndex];
+        const expectedDayOfWeek = weekdayIndex + 1; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+        
+        // Check if we have a date that matches this weekday position
+        let hasDate = false;
+        let dateInfo = null;
+        
+        if (dateIndex < sortedDates.length) {
+            const currentDate = sortedDates[dateIndex];
+            const currentDateInfo = dateMap[currentDate];
+            
+            // If this date matches the expected weekday
+            if (currentDateInfo.dayOfWeek === expectedDayOfWeek) {
+                hasDate = true;
+                dateInfo = currentDateInfo;
+                dateIndex++;
+            }
+        }
+        
+        columns.push({
+            date: hasDate ? dateInfo.date : null,
+            day: hasDate ? dateInfo.day : '',
+            dayName: weekdayName,
+            isEmpty: !hasDate
+        });
+    }
+    
+    return columns;
+});
+
 // Calculate daily totals for male students
 const maleDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month || !maleStudents.value.length) return {};
@@ -409,7 +465,7 @@ onMounted(() => {
                             <th rowspan="3" class="border-2 border-gray-900 p-2 bg-gray-50 text-left font-bold" style="width: 200px; vertical-align: middle; border-right: 2px solid #000">
                                 <div class="text-xs leading-tight">LEARNER'S NAME<br />(Last Name, First Name, Middle Name)</div>
                             </th>
-                            <th :colspan="reportData.days_in_month.length" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold">
+                            <th :colspan="fixedWeekdayColumns.length" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold">
                                 <div class="text-xs">(1st row for date, 2nd row for Day: M,T,W,TH,F) for the present (✓), (✗) for absent, and (L) for late</div>
                             </th>
                             <th colspan="2" rowspan="2" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="border-left: 2px solid #000; vertical-align: middle">
@@ -422,27 +478,32 @@ onMounted(() => {
                         <!-- Row 2: Day Numbers -->
                         <tr>
                             <th
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, index) in fixedWeekdayColumns"
+                                :key="`day-${index}`"
                                 class="border border-gray-900 p-0.5 bg-gray-50 text-center font-bold"
-                                :style="{ width: '22px', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :style="{ width: '22px', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                <div class="text-xs">{{ day.day }}</div>
+                                <div class="text-xs">{{ col.day }}</div>
                             </th>
                         </tr>
                         <!-- Row 3: Day of Week and Column Headers -->
                         <tr>
                             <!-- Day of week labels -->
                             <th
-                                v-for="day in reportData.days_in_month"
-                                :key="`dow-${day.date}`"
+                                v-for="(col, index) in fixedWeekdayColumns"
+                                :key="`dow-${index}`"
                                 class="border-2 border-gray-900 p-0.5 text-center text-xs font-bold"
-                                :class="getDayOfWeekClass(day.date)"
-                                :style="{ height: '24px', borderTop: '2px solid #000', borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : 'bg-white'"
+                                :style="{ height: '24px', borderTop: '2px solid #000', borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ getDayOfWeek(day.date) }}
+                                {{ col.dayName }}
                             </th>
-                            <th class="border-2 border-gray-900 bg-gray-50 text-center text-xs font-bold" style="width: 40px; padding: 2px 6px 2px 2px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 1px solid #000; border-right: 1px solid #000">ABSENT</th>
+                            <th
+                                class="border-2 border-gray-900 bg-gray-50 text-center text-xs font-bold"
+                                style="width: 40px; padding: 2px 6px 2px 2px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 1px solid #000; border-right: 1px solid #000"
+                            >
+                                ABSENT
+                            </th>
                             <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000">TARDY</th>
                         </tr>
                     </thead>
@@ -450,19 +511,19 @@ onMounted(() => {
                     <!-- Male Students Section -->
                     <tbody>
                         <tr>
-                            <td :colspan="reportData.days_in_month.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">MALE</td>
+                            <td :colspan="fixedWeekdayColumns.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">MALE</td>
                         </tr>
                         <tr v-for="(student, index) in maleStudents" :key="student.id" style="height: 20px">
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
                             <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
                             <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, idx) in fixedWeekdayColumns"
+                                :key="`student-${student.id}-day-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center text-xs"
-                                :class="getAttendanceColor(student.attendance_data[day.date])"
-                                :style="{ borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ getAttendanceMark(student.attendance_data[day.date]) }}
+                                {{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
@@ -473,12 +534,13 @@ onMounted(() => {
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">MALE | TOTAL Per Day</td>
                             <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, idx) in fixedWeekdayColumns"
+                                :key="`male-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ maleDailyTotals[day.date]?.present || 0 }}
+                                {{ col.isEmpty ? '' : (maleDailyTotals[col.date]?.present || 0) }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -487,19 +549,19 @@ onMounted(() => {
 
                         <!-- Female Students Section -->
                         <tr>
-                            <td :colspan="reportData.days_in_month.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">FEMALE</td>
+                            <td :colspan="fixedWeekdayColumns.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">FEMALE</td>
                         </tr>
                         <tr v-for="(student, index) in femaleStudents" :key="student.id" style="height: 20px">
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
                             <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
                             <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, idx) in fixedWeekdayColumns"
+                                :key="`student-${student.id}-day-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center text-xs"
-                                :class="getAttendanceColor(student.attendance_data[day.date])"
-                                :style="{ borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ getAttendanceMark(student.attendance_data[day.date]) }}
+                                {{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
@@ -510,12 +572,13 @@ onMounted(() => {
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">FEMALE | TOTAL Per Day</td>
                             <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, idx) in fixedWeekdayColumns"
+                                :key="`female-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ femaleDailyTotals[day.date]?.present || 0 }}
+                                {{ col.isEmpty ? '' : (femaleDailyTotals[col.date]?.present || 0) }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -527,12 +590,13 @@ onMounted(() => {
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">Combined TOTAL PER DAY</td>
                             <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
+                                v-for="(col, idx) in fixedWeekdayColumns"
+                                :key="`combined-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ combinedDailyTotals[day.date]?.present || 0 }}
+                                {{ col.isEmpty ? '' : (combinedDailyTotals[col.date]?.present || 0) }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
