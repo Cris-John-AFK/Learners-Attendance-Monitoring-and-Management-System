@@ -17,4 +17,11 @@
     color: var(--text-color);
     border-top: 1px solid var(--surface-border);
 }
+
+/* Hide footer when printing */
+@media print {
+    .layout-footer {
+        display: none !important;
+    }
+}
 </style>

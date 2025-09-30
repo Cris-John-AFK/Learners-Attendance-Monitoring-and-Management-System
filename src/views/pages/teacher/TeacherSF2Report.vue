@@ -685,35 +685,38 @@ onMounted(() => {
             </div>
 
             <!-- Footer -->
-            <div class="mt-8 text-sm">
+            <div class="mt-8 text-sm bg-white">
                 <!-- Certification Statement -->
                 <div class="mb-6">
                     <p class="italic">I certify that this is a true and correct report.</p>
                 </div>
 
-                <!-- Signatures Section -->
-                <div class="grid grid-cols-2 gap-8">
-                    <div class="space-y-4">
-                        <div>
-                            <p class="mb-2">Prepared by:</p>
-                            <div class="border-b border-gray-800 w-64 mb-2"></div>
-                            <p class="text-center font-medium">{{ reportData.section.teacher?.name || 'Maria Santos' }}</p>
-                            <p class="text-center text-xs italic">(Signature of Teacher over Printed Name)</p>
+                <!-- Signatures Section - Horizontal Layout -->
+                <div class="flex items-start justify-between">
+                    <!-- Left: Prepared by -->
+                    <div style="width: 25%;">
+                        <div class="flex items-baseline gap-2 mb-1">
+                            <span>Prepared by:</span>
+                            <span class="font-medium">{{ reportData.section.teacher?.name || 'Maria Santos' }}</span>
                         </div>
+                        <div class="border-b border-gray-800 w-64 mb-1"></div>
+                        <p class="text-xs italic">(Signature of Teacher over Printed Name)</p>
                     </div>
-                    <div class="space-y-4">
-                        <div>
-                            <p class="mb-2">Attested by:</p>
-                            <div class="border-b border-gray-800 w-64 mb-2"></div>
-                            <p class="text-center font-medium">Principal Name</p>
-                            <p class="text-center text-xs italic">(Signature of School Head over Printed Name)</p>
+                    
+                    <!-- Right: Attested by -->
+                    <div style="width: 25%; padding-right: 2rem;">
+                        <div class="flex items-baseline gap-2 mb-1">
+                            <span>Attested by:</span>
+                            <span class="font-medium">Principal Name</span>
                         </div>
+                        <div class="border-b border-gray-800 w-64 mb-1"></div>
+                        <p class="text-xs italic">(Signature of School Head over Printed Name)</p>
                     </div>
                 </div>
             </div>
 
             <!-- Form Footer -->
-            <div class="mt-8 text-xs text-center text-gray-600">
+            <div class="mt-8 text-xs text-center text-gray-600 bg-white">
                 <p>School Form 2 - Page 2 of ___</p>
             </div>
         </div>
@@ -911,6 +914,11 @@ onMounted(() => {
 
     .gap-6 {
         gap: 8px !important;
+    }
+
+    /* Ensure white background for footer/signature sections */
+    .bg-white {
+        background-color: white !important;
     }
 }
 
