@@ -262,13 +262,13 @@
                 <div class="col-6">
                     <div class="field">
                         <label for="edit-start-time" class="block text-900 font-medium mb-2">Start Time</label>
-                        <InputMask id="edit-start-time" v-model="editingSchedule.start_time" mask="99:99" placeholder="HH:MM" class="w-full" />
+                        <Calendar id="edit-start-time" v-model="editingSchedule.start_time" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="field">
                         <label for="edit-end-time" class="block text-900 font-medium mb-2">End Time</label>
-                        <InputMask id="edit-end-time" v-model="editingSchedule.end_time" mask="99:99" placeholder="HH:MM" class="w-full" />
+                        <Calendar id="edit-end-time" v-model="editingSchedule.end_time" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
                     </div>
                 </div>
             </div>
@@ -341,13 +341,13 @@
                 <div class="col-6">
                     <div class="field">
                         <label for="create-start-time" class="block text-900 font-medium mb-2">Start Time</label>
-                        <InputMask id="create-start-time" v-model="createStartTime" mask="99:99" placeholder="HH:MM" class="w-full" />
+                        <Calendar id="create-start-time" v-model="createStartTime" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="field">
                         <label for="create-end-time" class="block text-900 font-medium mb-2">End Time</label>
-                        <InputMask id="create-end-time" v-model="createEndTime" mask="99:99" placeholder="HH:MM" class="w-full" />
+                        <Calendar id="create-end-time" v-model="createEndTime" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
                     </div>
                 </div>
             </div>
@@ -374,10 +374,10 @@ import { useRouter } from 'vue-router';
 // PrimeVue Components
 import Button from 'primevue/button';
 import Column from 'primevue/column';
+import Calendar from 'primevue/calendar';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputMask from 'primevue/inputmask';
 import InputText from 'primevue/inputtext';
 import ProgressSpinner from 'primevue/progressspinner';
 import Tag from 'primevue/tag';
@@ -409,8 +409,8 @@ const editValidationError = ref('');
 const showCreateDialog = ref(false);
 const selectedSubjectForCreate = ref(null);
 const selectedDayForCreate = ref(null);
-const createStartTime = ref('');
-const createEndTime = ref('');
+const createStartTime = ref(null);
+const createEndTime = ref(null);
 const creating = ref(false);
 const createValidationError = ref('');
 
@@ -713,25 +713,46 @@ const validateScheduleEdit = () => {
         return 'Please enter both start and end times';
     }
 
-    // Validate time format (HH:MM)
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(editingSchedule.value.start_time)) {
-        return 'Invalid start time format. Use HH:MM (24-hour format)';
-    }
-
-    if (!timeRegex.test(editingSchedule.value.end_time)) {
-        return 'Invalid end time format. Use HH:MM (24-hour format)';
-    }
-
     // Validate that end time is after start time
-    const startTime = new Date(`2000-01-01 ${editingSchedule.value.start_time}:00`);
-    const endTime = new Date(`2000-01-01 ${editingSchedule.value.end_time}:00`);
+    // Handle both Date objects (from Calendar component) and string values
+    let startTime, endTime;
+    
+    if (editingSchedule.value.start_time instanceof Date) {
+        startTime = editingSchedule.value.start_time;
+    } else {
+        startTime = new Date(`2000-01-01 ${editingSchedule.value.start_time}:00`);
+    }
+    
+    if (editingSchedule.value.end_time instanceof Date) {
+        endTime = editingSchedule.value.end_time;
+    } else {
+        endTime = new Date(`2000-01-01 ${editingSchedule.value.end_time}:00`);
+    }
 
     if (endTime <= startTime) {
         return 'End time must be after start time';
     }
 
     return null;
+};
+
+// Helper function to convert Date object to HH:MM format
+const formatTimeForAPI = (timeValue) => {
+    if (!timeValue) return '';
+    
+    // If it's already a string in HH:MM format, return it
+    if (typeof timeValue === 'string' && timeValue.match(/^\d{2}:\d{2}$/)) {
+        return timeValue + ':00';
+    }
+    
+    // If it's a Date object, convert it
+    if (timeValue instanceof Date) {
+        const hours = String(timeValue.getHours()).padStart(2, '0');
+        const minutes = String(timeValue.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}:00`;
+    }
+    
+    return timeValue;
 };
 
 const saveScheduleChanges = async () => {
@@ -754,8 +775,8 @@ const saveScheduleChanges = async () => {
             section_id: editingSchedule.value.section_id,
             subject_id: editingSchedule.value.subject_id,
             day: editingSchedule.value.day,
-            start_time: editingSchedule.value.start_time + ':00', // Add seconds
-            end_time: editingSchedule.value.end_time + ':00'
+            start_time: formatTimeForAPI(editingSchedule.value.start_time),
+            end_time: formatTimeForAPI(editingSchedule.value.end_time)
         };
 
         console.log('💾 Saving schedule changes:', scheduleData);
@@ -803,8 +824,8 @@ const openCreateScheduleModal = () => {
 const resetCreateForm = () => {
     selectedSubjectForCreate.value = null;
     selectedDayForCreate.value = null;
-    createStartTime.value = '';
-    createEndTime.value = '';
+    createStartTime.value = null;
+    createEndTime.value = null;
     createValidationError.value = '';
 };
 
@@ -832,19 +853,9 @@ const validateCreateSchedule = () => {
         return 'Please enter both start and end times';
     }
 
-    // Validate time format (HH:MM)
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(createStartTime.value)) {
-        return 'Invalid start time format. Use HH:MM (24-hour format)';
-    }
-
-    if (!timeRegex.test(createEndTime.value)) {
-        return 'Invalid end time format. Use HH:MM (24-hour format)';
-    }
-
     // Validate that end time is after start time
-    const startTime = new Date(`2000-01-01 ${createStartTime.value}:00`);
-    const endTime = new Date(`2000-01-01 ${createEndTime.value}:00`);
+    const startTime = createStartTime.value instanceof Date ? createStartTime.value : new Date(`2000-01-01 ${createStartTime.value}:00`);
+    const endTime = createEndTime.value instanceof Date ? createEndTime.value : new Date(`2000-01-01 ${createEndTime.value}:00`);
 
     if (endTime <= startTime) {
         return 'End time must be after start time';
@@ -875,8 +886,8 @@ const createNewSchedule = async () => {
             section_id: parseInt(sectionId),
             subject_id: parseInt(subjectId),
             day: selectedDayForCreate.value,
-            start_time: createStartTime.value + ':00', // Add seconds
-            end_time: createEndTime.value + ':00'
+            start_time: formatTimeForAPI(createStartTime.value),
+            end_time: formatTimeForAPI(createEndTime.value)
         };
 
         console.log('🆕 Creating new schedule:', scheduleData);

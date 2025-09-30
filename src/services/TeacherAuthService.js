@@ -127,14 +127,7 @@ class TeacherAuthService {
         const token = this.getToken();
         const teacherData = this.getTeacherData();
         
-        console.log('TeacherAuthService.isAuthenticated() check:');
-        console.log('- Token exists:', !!token);
-        console.log('- Teacher data exists:', !!teacherData);
-        console.log('- Token value:', token ? token.substring(0, 20) + '...' : 'null');
-        console.log('- Teacher data:', teacherData ? { id: teacherData.teacher?.id, username: teacherData.user?.username } : 'null');
-        
         const isAuth = !!(token && teacherData);
-        console.log('- Final authentication result:', isAuth);
         
         return isAuth;
     }
@@ -168,14 +161,11 @@ class TeacherAuthService {
      */
     getAssignments() {
         const teacherData = this.getTeacherData();
-        console.log('🔍 Teacher data for assignments:', teacherData);
-        
         if (!teacherData || !teacherData.assignments) {
-            console.log('❌ No assignments found in teacher data');
             return [];
         }
         
-        console.log('✅ Found assignments:', teacherData.assignments);
+        // Found assignments
         return teacherData.assignments;
     }
 
@@ -187,7 +177,7 @@ class TeacherAuthService {
         const subjects = [];
         const seen = new Set();
 
-        console.log('🔍 Processing assignments for unique subjects:', assignments);
+        // Processing assignments
 
         assignments.forEach(assignment => {
             const subjectId = assignment.subject_id;
@@ -212,7 +202,7 @@ class TeacherAuthService {
             }
         });
 
-        console.log('✅ Unique subjects generated:', subjects);
+        // Generated unique subjects
         return subjects;
     }
 
@@ -236,15 +226,9 @@ class TeacherAuthService {
      * Initialize authentication state
      */
     initializeAuth() {
-        console.log('TeacherAuthService.initializeAuth() called (delayed):');
-        console.log('- Token found:', !!this.getToken());
-        console.log('- Teacher data found:', !!this.getTeacherData());
-        console.log('- All localStorage keys:', Object.keys(localStorage));
-        
         const token = this.getToken();
         if (token) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            console.log('- Authorization header set');
         }
     }
 
@@ -265,7 +249,7 @@ class TeacherAuthService {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         }
         
-        console.log('Auth data stored successfully for tab:', tabId);
+        // Auth data stored
     }
 
     /**
@@ -289,7 +273,7 @@ class TeacherAuthService {
         localStorage.removeItem('teacher_token');
         localStorage.removeItem('current_teacher_tab');
         
-        console.log('Cleared old authentication data');
+        // Cleared old data
     }
 
     /**

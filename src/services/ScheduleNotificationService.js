@@ -1,15 +1,18 @@
-import axios from 'axios';
 import TeacherAuthService from './TeacherAuthService';
 import NotificationService from './NotificationService';
+import axios from 'axios';
 
 class ScheduleNotificationService {
     constructor() {
-        this.notifications = [];
-        this.listeners = [];
-        this.timers = new Map();
-        this.isActive = false;
+        this.schedules = [];
+        this.currentSchedule = null;
+        this.currentSchedules = []; // Initialize current schedules array
+        this.notificationService = NotificationService;
         this.checkInterval = null;
-        this.currentSchedules = [];
+        this.notifiedSchedules = new Set(); // Track schedules we've already notified about
+        this.processedScheduleEnds = new Set(); // Track schedules that have ended and been processed
+        this.listeners = []; // Initialize listeners array
+        this.timers = new Map(); // Initialize timers map for schedule notifications
     }
 
     /**
@@ -18,7 +21,7 @@ class ScheduleNotificationService {
     async initialize() {
         if (this.isActive) return;
         
-        console.log('🔔 Initializing Schedule Notification Service');
+        console.log('Initializing Schedule Notification Service');
         
         try {
             // Check if teacher is authenticated
@@ -158,6 +161,15 @@ class ScheduleNotificationService {
      */
     async handleScheduleEnd(schedule) {
         try {
+            // Create a unique key for this schedule end event (schedule_id + date)
+            const today = new Date().toISOString().split('T')[0];
+            const scheduleEndKey = `${schedule.id}_${today}`;
+            
+            // Check if we've already processed this schedule end today
+            if (this.processedScheduleEnds.has(scheduleEndKey)) {
+                return; // Already processed, skip
+            }
+            
             console.log('🏁 Schedule ended, checking for auto-absent marking:', schedule.subject_name);
             
             // Check if there's an active session for this schedule
@@ -191,8 +203,43 @@ class ScheduleNotificationService {
                     console.warn('⚠️ Failed to auto-mark absent students:', markAbsentResponse.data.message);
                 }
             } else {
-                console.log('ℹ️ No active session found for ended schedule:', schedule.subject_name);
+                console.log('⚠️ No active session found - creating session and marking all students absent:', schedule.subject_name);
+                
+                // No session exists, create one automatically and mark all students absent
+                const today = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
+                const createSessionResponse = await axios.post('/api/schedule-notifications/auto-create-session', {
+                    schedule_id: schedule.id,
+                    teacher_id: schedule.teacher_id,
+                    subject_id: schedule.subject_id,
+                    section_id: schedule.section_id,
+                    schedule_date: today,
+                    start_time: schedule.start_time,
+                    end_time: schedule.end_time
+                });
+                
+                if (createSessionResponse.data.success) {
+                    const markedCount = createSessionResponse.data.marked_absent_count || 0;
+                    
+                    // Send notification about auto-session creation
+                    this.sendNotification({
+                        type: 'session_auto_created',
+                        title: '⚠️ Attendance Auto-Recorded',
+                        message: `${schedule.subject_name} ended without a session. Created session and marked ${markedCount} students absent.`,
+                        schedule: schedule,
+                        priority: 'warning'
+                    });
+                    
+                    console.log(`✅ Auto-created session and marked ${markedCount} students as absent for ${schedule.subject_name}`);
+                    
+                    // Mark as processed to prevent duplicate attempts
+                    this.processedScheduleEnds.add(scheduleEndKey);
+                } else {
+                    throw new Error(createSessionResponse.data.message || 'Failed to create auto-session');
+                }
             }
+            
+            // Mark as processed even if we found an active session (to prevent repeated checks)
+            this.processedScheduleEnds.add(scheduleEndKey);
         } catch (error) {
             console.error('❌ Error handling schedule end:', error);
             

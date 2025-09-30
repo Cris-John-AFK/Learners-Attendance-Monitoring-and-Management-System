@@ -26,6 +26,7 @@ class ScheduleNotificationService
                 ->where('ss.is_active', true)
                 ->select([
                     'ss.id',
+                    'ss.teacher_id',
                     'ss.start_time',
                     'ss.end_time',
                     'ss.day',
@@ -107,11 +108,13 @@ class ScheduleNotificationService
         $date = $date ?: Carbon::now()->format('Y-m-d');
 
         try {
-            return DB::table('attendance_sessions')
+            $session = DB::table('attendance_sessions')
                 ->where('schedule_id', $scheduleId)
                 ->where('session_date', $date)
-                ->where('session_status', 'active')
+                ->where('status', 'active')
                 ->first();
+
+            return $session;
         } catch (\Exception $e) {
             Log::error('Error getting active session: ' . $e->getMessage());
             return null;
@@ -199,12 +202,16 @@ class ScheduleNotificationService
             }
 
             // Mark all students without attendance as absent
+            // Get the teacher_id from the session
+            $teacherId = $session->teacher_id;
+            
             $attendanceRecords = [];
             foreach ($studentsWithoutAttendance as $student) {
                 $attendanceRecords[] = [
-                    'session_id' => $sessionId,
+                    'attendance_session_id' => $sessionId,
                     'student_id' => $student->student_id,
                     'attendance_status_id' => $absentStatus->id,
+                    'marked_by_teacher_id' => $teacherId,
                     'marked_at' => Carbon::now(),
                     'remarks' => 'Auto-marked absent after scheduled class time',
                     'created_at' => Carbon::now(),
@@ -347,6 +354,93 @@ class ScheduleNotificationService
                 'warning_type' => 'error',
                 'message' => 'Unable to validate session timing',
                 'can_proceed' => true
+            ];
+        }
+    }
+
+    /**
+     * Auto-create session and mark all students absent
+     */
+    public function autoCreateSessionAndMarkAbsent($scheduleId, $teacherId, $sectionId, $subjectId, $scheduleDate, $startTime, $endTime)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Create attendance session with required fields
+            $currentTime = Carbon::now()->format('H:i:s');
+            $sessionId = DB::table('attendance_sessions')->insertGetId([
+                'teacher_id' => $teacherId,
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId,
+                'session_date' => $scheduleDate,
+                'session_start_time' => $startTime,
+                'session_end_time' => $endTime,
+                'session_type' => 'regular',
+                'status' => 'active',
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now()
+            ]);
+
+            Log::info("Auto-created session {$sessionId} for schedule {$scheduleId}");
+
+            // Get all students in the section
+            $students = DB::table('student_section as ss')
+                ->join('student_details as sd', 'ss.student_id', '=', 'sd.id')
+                ->where('ss.section_id', $sectionId)
+                ->where('ss.is_active', true)
+                ->where('sd.is_active', true)
+                ->select('ss.student_id')
+                ->get();
+
+            // Get "Absent" status ID
+            $absentStatus = DB::table('attendance_statuses')
+                ->where('code', 'A')
+                ->where('is_active', true)
+                ->first();
+
+            if (!$absentStatus) {
+                throw new \Exception("Absent status not found");
+            }
+
+            // Mark all students as absent
+            $attendanceRecords = [];
+            foreach ($students as $student) {
+                $attendanceRecords[] = [
+                    'attendance_session_id' => $sessionId,
+                    'student_id' => $student->student_id,
+                    'attendance_status_id' => $absentStatus->id,
+                    'marked_by_teacher_id' => $teacherId,
+                    'marked_at' => Carbon::now(),
+                    'remarks' => 'Auto-marked absent - no attendance session was created for scheduled class',
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now()
+                ];
+            }
+
+            if (!empty($attendanceRecords)) {
+                DB::table('attendance_records')->insert($attendanceRecords);
+            }
+
+            DB::commit();
+
+            Log::info("Auto-marked {count} students as absent for auto-created session {sessionId}", [
+                'count' => count($attendanceRecords),
+                'sessionId' => $sessionId
+            ]);
+
+            return [
+                'success' => true,
+                'session_id' => $sessionId,
+                'marked_absent_count' => count($attendanceRecords)
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error auto-creating session and marking absent: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
             ];
         }
     }

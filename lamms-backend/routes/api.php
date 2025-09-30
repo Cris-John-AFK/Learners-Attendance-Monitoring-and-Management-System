@@ -272,6 +272,7 @@ Route::prefix('schedule-notifications')->group(function () {
     Route::get('/auto-absence/needed', [App\Http\Controllers\API\ScheduleNotificationController::class, 'getSchedulesNeedingAutoAbsence']);
     Route::post('/auto-absence/process', [App\Http\Controllers\API\ScheduleNotificationController::class, 'processAutoAbsence']);
     Route::post('/auto-absence/session/{sessionId}', [App\Http\Controllers\API\ScheduleNotificationController::class, 'markAutoAbsence']);
+    Route::post('/auto-create-session', [App\Http\Controllers\API\ScheduleNotificationController::class, 'autoCreateSession']);
 });
 
 // Student Management routes for seating arrangements and student operations

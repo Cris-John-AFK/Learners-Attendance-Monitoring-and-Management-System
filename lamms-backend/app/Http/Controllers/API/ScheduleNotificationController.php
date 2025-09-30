@@ -226,4 +226,63 @@ class ScheduleNotificationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Auto-create session and mark all students absent
+     */
+    public function autoCreateSession(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'schedule_id' => 'required',
+                'teacher_id' => 'required|exists:teachers,id',
+                'section_id' => 'required|exists:sections,id',
+                'subject_id' => 'required|exists:subjects,id',
+                'schedule_date' => 'required|date',
+                'start_time' => 'required',
+                'end_time' => 'required'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $result = $this->scheduleNotificationService->autoCreateSessionAndMarkAbsent(
+                $request->schedule_id,
+                $request->teacher_id,
+                $request->section_id,
+                $request->subject_id,
+                $request->schedule_date,
+                $request->start_time,
+                $request->end_time
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Session auto-created. {$result['marked_absent_count']} students marked absent",
+                    'session_id' => $result['session_id'],
+                    'marked_absent_count' => $result['marked_absent_count']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to auto-create session',
+                    'error' => $result['error']
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error auto-creating session: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error auto-creating session',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
