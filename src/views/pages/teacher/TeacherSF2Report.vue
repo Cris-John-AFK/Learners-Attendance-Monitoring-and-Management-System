@@ -412,7 +412,7 @@ onMounted(() => {
                             <th :colspan="reportData.days_in_month.length" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold">
                                 <div class="text-xs">(1st row for date, 2nd row for Day: M,T,W,TH,F) for the present (✓), (✗) for absent, and (L) for late</div>
                             </th>
-                            <th colspan="2" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="border-left: 2px solid #000">
+                            <th colspan="2" rowspan="2" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="border-left: 2px solid #000; vertical-align: middle">
                                 <div class="text-xs">Total for the<br />Month</div>
                             </th>
                             <th rowspan="3" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="width: 150px; vertical-align: middle; border-right: 2px solid #000">
@@ -442,7 +442,7 @@ onMounted(() => {
                             >
                                 {{ getDayOfWeek(day.date) }}
                             </th>
-                            <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000">ABSENT</th>
+                            <th class="border-2 border-gray-900 bg-gray-50 text-center text-xs font-bold" style="width: 40px; padding: 2px 6px 2px 2px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 1px solid #000; border-right: 1px solid #000">ABSENT</th>
                             <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000">TARDY</th>
                         </tr>
                     </thead>
