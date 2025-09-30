@@ -95,6 +95,31 @@ const combinedDailyTotals = computed(() => {
     return totals;
 });
 
+// Calculate total present for male students across all days
+const maleTotalPresent = computed(() => {
+    if (!reportData.value?.days_in_month) return 0;
+    let total = 0;
+    reportData.value.days_in_month.forEach((day) => {
+        total += maleDailyTotals.value[day.date]?.present || 0;
+    });
+    return total;
+});
+
+// Calculate total present for female students across all days
+const femaleTotalPresent = computed(() => {
+    if (!reportData.value?.days_in_month) return 0;
+    let total = 0;
+    reportData.value.days_in_month.forEach((day) => {
+        total += femaleDailyTotals.value[day.date]?.present || 0;
+    });
+    return total;
+});
+
+// Calculate total present for all students across all days
+const combinedTotalPresent = computed(() => {
+    return maleTotalPresent.value + femaleTotalPresent.value;
+});
+
 // Load SF2 report data
 const loadReportData = async () => {
     loading.value = true;
@@ -455,9 +480,9 @@ onMounted(() => {
                             >
                                 {{ maleDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.male.total_absent || 0 }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">0</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">{{ maleTotalPresent }}</td>
                         </tr>
 
                         <!-- Female Students Section -->
@@ -492,9 +517,9 @@ onMounted(() => {
                             >
                                 {{ femaleDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.female.total_absent || 0 }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">0</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">{{ femaleTotalPresent }}</td>
                         </tr>
 
                         <!-- Combined Total Row -->
@@ -509,9 +534,9 @@ onMounted(() => {
                             >
                                 {{ combinedDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.total.total_absent || 0 }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">{{ (reportData.summary.male.total_absent || 0) + (reportData.summary.female.total_absent || 0) }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">{{ combinedTotalPresent }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -694,7 +719,7 @@ onMounted(() => {
                 <!-- Signatures Section - Horizontal Layout -->
                 <div class="flex items-start justify-between">
                     <!-- Left: Prepared by -->
-                    <div style="width: 25%;">
+                    <div style="width: 25%">
                         <div class="flex items-baseline gap-2 mb-1">
                             <span>Prepared by:</span>
                             <span class="font-medium">{{ reportData.section.teacher?.name || 'Maria Santos' }}</span>
@@ -702,9 +727,9 @@ onMounted(() => {
                         <div class="border-b border-gray-800 w-64 mb-1"></div>
                         <p class="text-xs italic">(Signature of Teacher over Printed Name)</p>
                     </div>
-                    
+
                     <!-- Right: Attested by -->
-                    <div style="width: 25%; padding-right: 2rem;">
+                    <div style="width: 25%; padding-right: 2rem">
                         <div class="flex items-baseline gap-2 mb-1">
                             <span>Attested by:</span>
                             <span class="font-medium">Principal Name</span>
