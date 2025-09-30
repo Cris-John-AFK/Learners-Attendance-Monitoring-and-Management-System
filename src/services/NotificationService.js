@@ -5,8 +5,11 @@ class NotificationService {
         this.currentTeacherId = null;
         this.teacherAssignments = null;
         this.baseURL = 'http://localhost:8000/api';
+        this.refreshInterval = null;
         // Load notifications asynchronously
         this.loadNotifications().catch(console.error);
+        // Start auto-refresh every 30 seconds (optimized for performance)
+        this.startAutoRefresh();
     }
 
     /**
@@ -174,81 +177,34 @@ class NotificationService {
 
             // Check if notification belongs to this teacher
             const metadata = notification.metadata || {};
-            
-            console.log('Filtering notification:', {
-                id: notification.id,
-                type: notification.type,
-                title: notification.title,
-                metadata: metadata,
-                currentTeacherId: this.currentTeacherId,
-                metadataTeacherId: metadata.teacherId,
-                metadataUserId: metadata.userId
-            });
-            
-            // Check if notification belongs to current teacher (multiple ways to check)
             const teacherIdMatch = metadata.teacherId === this.currentTeacherId;
             const userIdMatch = metadata.userId === this.currentTeacherId;
             const directTeacherIdMatch = notification.teacher_id === this.currentTeacherId;
             
-            console.log('Teacher ID checks:', {
-                teacherIdMatch,
-                userIdMatch,
-                directTeacherIdMatch,
-                currentTeacherId: this.currentTeacherId,
-                metadataTeacherId: metadata.teacherId,
-                metadataUserId: metadata.userId,
-                notificationTeacherId: notification.teacher_id,
-                notificationType: notification.type,
-                notificationTitle: notification.title
-            });
-            
             // Special handling for schedule notifications - bypass all other checks
             if (notification.type === 'schedule') {
-                console.log('🔍 Schedule notification detailed check:', {
-                    teacherIdMatch,
-                    userIdMatch,
-                    directTeacherIdMatch,
-                    metadataTeacherId: metadata.teacherId,
-                    metadataUserId: metadata.userId,
-                    notificationTeacherId: notification.teacher_id,
-                    currentTeacherId: this.currentTeacherId,
-                    metadataTeacherIdType: typeof metadata.teacherId,
-                    currentTeacherIdType: typeof this.currentTeacherId
-                });
-                
-                if (directTeacherIdMatch || teacherIdMatch || userIdMatch) {
-                    console.log('✅ Schedule notification belongs to teacher - bypassing assignment check');
-                    return true;
-                } else {
-                    console.log('❌ Schedule notification does not belong to teacher');
-                    return false;
-                }
+                return directTeacherIdMatch || teacherIdMatch || userIdMatch;
             }
             
-            // First priority: Direct teacher ID matches (for all notifications)
+            // First priority: Direct teacher ID matches
             if (teacherIdMatch || userIdMatch || directTeacherIdMatch) {
-                console.log('Notification belongs to teacher via direct ID match');
                 return true;
             }
             
             // If notification has explicit teacher ID mismatch, filter out
             if (metadata.teacherId && !teacherIdMatch && !userIdMatch) {
-                console.log('Notification filtered out: teacher ID mismatch');
                 return false;
             }
 
             // Secondary: If notification has subject/section info, check if teacher is assigned
             if (metadata.subjectId && metadata.sectionId) {
-                const isAssigned = this.teacherAssignments.some(assignment => 
+                return this.teacherAssignments.some(assignment => 
                     assignment.subject_id === metadata.subjectId && 
                     assignment.section_id === metadata.sectionId
                 );
-                console.log('Assignment check result:', isAssigned);
-                return isAssigned;
             }
 
             // Default: show notification if no specific filtering rules apply
-            console.log('No specific filtering rules apply, showing notification');
             return true;
         });
     }
@@ -567,6 +523,35 @@ class NotificationService {
         
         // Notify listeners immediately
         this.notifyListeners();
+    }
+
+    /**
+     * Start auto-refresh for notifications
+     * Optimized: Only refreshes if teacher is set and page is visible
+     */
+    startAutoRefresh() {
+        // Clear any existing interval
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+        }
+
+        // Refresh every 30 seconds (balanced for performance)
+        this.refreshInterval = setInterval(() => {
+            // Only refresh if teacher is set and page is visible
+            if (this.currentTeacherId && !document.hidden) {
+                this.loadNotifications().catch(console.error);
+            }
+        }, 30000); // 30 seconds
+    }
+
+    /**
+     * Stop auto-refresh (cleanup)
+     */
+    stopAutoRefresh() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+        }
     }
 }
 

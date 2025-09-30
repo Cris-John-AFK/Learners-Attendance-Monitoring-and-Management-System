@@ -312,8 +312,14 @@ class AttendanceSessionController extends Controller
                 Log::info("Session {$session->id} completed successfully with transaction lock");
             });
 
+            // Refresh session to get updated data
+            $session = $session->fresh();
+            
             // Generate session summary for the modal
-            $summary = $this->generateSessionSummary($session->fresh());
+            $summary = $this->generateSessionSummary($session);
+            
+            // Create notification for session completion (async, non-blocking)
+            $this->createSessionCompletionNotification($session, $summary);
 
             return response()->json([
                 'message' => 'Session completed successfully',
@@ -1081,6 +1087,48 @@ class AttendanceSessionController extends Controller
                 'message' => 'Failed to auto-mark absent students',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Create notification when session is completed
+     * Optimized for performance - runs after session completion
+     */
+    private function createSessionCompletionNotification($session, $summary)
+    {
+        try {
+            // Get subject name for notification
+            $subject = DB::table('subjects')->where('id', $session->subject_id)->first();
+            $subjectName = $subject ? $subject->name : 'Unknown Subject';
+            
+            // Create compact notification message
+            $message = "{$subjectName} - {$summary['present_count']} present, {$summary['absent_count']} absent";
+            
+            // Insert notification with indexed columns
+            DB::table('notifications')->insert([
+                'type' => 'session_completed',
+                'teacher_id' => $session->teacher_id,
+                'title' => 'Attendance Session Completed',
+                'message' => $message,
+                'metadata' => json_encode([
+                    'session_id' => $session->id,
+                    'subject_id' => $session->subject_id,
+                    'subject_name' => $subjectName,
+                    'section_id' => $session->section_id,
+                    'present_count' => $summary['present_count'],
+                    'absent_count' => $summary['absent_count'],
+                    'late_count' => $summary['late_count'],
+                    'total_students' => $summary['total_students']
+                ]),
+                'is_read' => false,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+            
+            Log::info("Notification created for completed session {$session->id}");
+        } catch (\Exception $e) {
+            // Don't fail session completion if notification fails
+            Log::error("Failed to create notification for session {$session->id}: " . $e->getMessage());
         }
     }
 

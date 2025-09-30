@@ -332,14 +332,12 @@ onMounted(async () => {
         });
         await loadAttendanceData();
         // Prepare chart data which includes setting up chart options
-        prepareChartData();
+        await prepareChartData();
 
-        // Batch load all dashboard data efficiently
+        // Batch load remaining dashboard data efficiently
         await Promise.all([
             loadSmartAnalytics(),
-            loadCriticalStudents(),
-            loadAttendanceData(),
-            prepareChartData()
+            loadCriticalStudents()
         ]);
 
         // Set up auto-refresh to catch new student enrollments (reduced frequency)
@@ -1061,8 +1059,10 @@ function onChartViewChange() {
 
 // Watch for subject changes and reload data
 watch(selectedSubject, async (newSubject, oldSubject) => {
-    if (newSubject && newSubject.id !== oldSubject?.id) {
-        console.log('Subject changed to:', newSubject);
+    // Skip initial mount trigger
+    if (!oldSubject || !newSubject || newSubject.id === oldSubject.id) {
+        return;
+    }
         
         // Clear any cached attendance data for both old and new subjects
         // Clear cache for both view types to ensure fresh data
@@ -1082,17 +1082,15 @@ watch(selectedSubject, async (newSubject, oldSubject) => {
             console.log(`🗑️ Clearing ${vType} cache:`, cacheKey);
         });
 
-        // Reload attendance data
-        await loadAttendanceData();
-        prepareChartData();
-    }
+    // Reload attendance data
+    await loadAttendanceData();
+    await prepareChartData();
 });
 
 // Watch for view type changes
 watch(viewType, async () => {
-    console.log('View type changed to:', viewType.value);
     await loadAttendanceData();
-    prepareChartData();
+    await prepareChartData();
 });
 
 // Filter students by name

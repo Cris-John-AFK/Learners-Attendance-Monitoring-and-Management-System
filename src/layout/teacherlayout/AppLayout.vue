@@ -75,4 +75,25 @@ const isOutsideClicked = (event) => {
 
 <style lang="scss">
 @import '@/assets/layout/layout.scss';
+
+/* Print styles - hide navigation for QR code printing */
+@media print {
+    .layout-topbar,
+    .layout-sidebar,
+    .layout-mask,
+    .app-footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    .layout-main-container {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    .layout-main {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+}
 </style>
