@@ -1,19 +1,33 @@
 <template>
-    <div class="student-qrcodes-page p-4">
-        <div class="header mb-4">
-            <h1 class="text-2xl font-bold">Student QR Codes</h1>
-            <p class="text-gray-600">QR codes for your assigned students - Use these for attendance tracking</p>
+    <div class="student-qrcodes-page">
+        <!-- Modern Header with Animation -->
+        <div class="page-header">
+            <div class="header-content">
+                <h1 class="page-title">Student QR Codes</h1>
+                <p class="page-subtitle">QR codes for your assigned students - Use these for attendance tracking</p>
+            </div>
         </div>
 
-        <div class="flex justify-between items-center mb-4">
-            <div class="flex gap-2">
-                <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" />
-                <Button label="Generate New QR Codes" icon="pi pi-refresh" @click="regenerateQRCodes" class="p-button-outlined" />
-            </div>
-            <div class="search-container">
-                <span class="p-input-icon-left w-full">
-                    <i class="pi pi-search" />
-                    <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
+        <!-- Modern Action Bar -->
+        <div class="action-bar">
+            <Button 
+                label="Print All QR Codes" 
+                icon="pi pi-print" 
+                @click="printQRCodes"
+                class="print-button"
+            />
+            
+            <div class="search-wrapper">
+                <span class="search-icon">
+                    <i class="pi pi-search"></i>
+                </span>
+                <InputText 
+                    v-model="searchQuery" 
+                    placeholder="Search students by name or ID..." 
+                    class="search-input"
+                />
+                <span v-if="searchQuery" class="clear-search" @click="searchQuery = ''">
+                    <i class="pi pi-times"></i>
                 </span>
             </div>
         </div>
@@ -24,9 +38,14 @@
             <span class="ml-3">Loading student data...</span>
         </div>
 
-        <!-- QR code grid -->
-        <div v-else class="qrcode-grid">
-            <div v-for="student in filteredStudents" :key="student.id" class="qrcode-item p-3 print-page">
+        <!-- Modern QR code grid with animations -->
+        <transition-group v-else name="card-list" tag="div" class="qrcode-grid">
+            <div 
+                v-for="(student, index) in filteredStudents" 
+                :key="student.id" 
+                class="qrcode-item print-page"
+                :style="{ animationDelay: `${index * 0.05}s` }"
+            >
                 <StudentQRCode 
                     :studentId="student.id" 
                     :studentName="student.full_name || student.name || `${student.first_name} ${student.last_name}` || `Student ${student.id}`"
@@ -34,12 +53,16 @@
                     :grade="student.grade_level || 'N/A'"
                 />
             </div>
-        </div>
+        </transition-group>
 
-        <!-- No results message -->
-        <div v-if="!loading && filteredStudents.length === 0" class="text-center py-8 text-gray-500">
-            <i class="pi pi-search text-4xl mb-3"></i>
-            <p>No students match your search criteria</p>
+        <!-- Modern No results message -->
+        <div v-if="!loading && filteredStudents.length === 0" class="no-results">
+            <div class="no-results-icon">
+                <i class="pi pi-search"></i>
+            </div>
+            <h3>No students found</h3>
+            <p>No students match your search "{{ searchQuery }}"</p>
+            <Button label="Clear Search" icon="pi pi-times" @click="searchQuery = ''" class="p-button-text" />
         </div>
     </div>
 </template>
@@ -191,21 +214,246 @@ const regenerateQRCodes = async () => {
 </script>
 
 <style scoped>
+/* Modern Page Layout */
+.student-qrcodes-page {
+    padding: 2rem;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+}
+
+/* Animated Header */
+.page-header {
+    margin-bottom: 2rem;
+    animation: slideDown 0.6s ease-out;
+}
+
+.header-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.page-subtitle {
+    color: #64748b;
+    margin: 0;
+    font-size: 1rem;
+}
+
+/* Modern Action Bar */
+.action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    animation: slideDown 0.6s ease-out 0.1s backwards;
+}
+
+.print-button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+}
+
+.print-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4) !important;
+}
+
+/* Modern Search */
+.search-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    pointer-events: none;
+    transition: color 0.3s ease;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.75rem 3rem 0.75rem 3rem !important;
+    border: 2px solid #e2e8f0 !important;
+    border-radius: 50px !important;
+    font-size: 0.95rem !important;
+    transition: all 0.3s ease !important;
+    background: #f8fafc !important;
+}
+
+.search-input:focus {
+    border-color: #667eea !important;
+    background: white !important;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15) !important;
+}
+
+.search-input:focus ~ .search-icon {
+    color: #667eea;
+}
+
+.clear-search {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0.25rem;
+    transition: all 0.3s ease;
+}
+
+.clear-search:hover {
+    color: #ef4444;
+    transform: translateY(-50%) scale(1.2);
+}
+
+/* Modern Grid with Stagger Animation */
 .qrcode-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2rem;
+    padding: 1rem 0;
 }
 
 .qrcode-item {
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    transition: transform 0.2s;
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeInUp 0.6s ease-out backwards;
 }
 
 .qrcode-item:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 12px 35px rgba(102, 126, 234, 0.2);
+}
+
+/* No Results */
+.no-results {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    animation: fadeIn 0.6s ease-out;
+}
+
+.no-results-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.no-results-icon i {
+    font-size: 2.5rem;
+    color: white;
+}
+
+.no-results h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+}
+
+.no-results p {
+    color: #64748b;
+    margin: 0 0 1.5rem 0;
+}
+
+/* Animations */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* Card List Transitions */
+.card-list-enter-active {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-list-leave-active {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-list-enter-from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+}
+
+.card-list-leave-to {
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+.card-list-move {
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Print Styles - One QR code per page */
@@ -216,80 +464,41 @@ const regenerateQRCodes = async () => {
         size: auto;
     }
 
-    /* Hide EVERYTHING except our content */
-    body > *:not(.student-qrcodes-page) {
-        display: none !important;
-    }
-
-    /* Hide all UI elements and navigation */
-    .header,
-    .flex,
-    .search-container,
-    .p-button,
+    /* Hide all UI elements */
+    .page-header,
+    .action-bar,
+    .search-wrapper,
+    .print-button,
     button,
     nav,
     .layout-topbar,
     .layout-sidebar,
     .layout-menu,
-    .layout-main-container,
     header,
     [class*="topbar"],
-    [class*="sidebar"],
-    [class*="menu"],
-    [class*="navigation"],
-    [class*="nav"] {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        overflow: hidden !important;
-    }
-    
-    /* Hide parent layout elements */
-    .layout-wrapper > *:not(.layout-main),
-    .layout-main > *:not(.student-qrcodes-page),
-    #app > *:not(.student-qrcodes-page) {
+    [class*="sidebar"] {
         display: none !important;
     }
 
-    /* Reset page layout */
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-
+    /* Reset page to white */
     html, body {
         margin: 0 !important;
         padding: 0 !important;
-        height: 100%;
-        overflow: visible !important;
-    }
-
-    /* Force remove all wrappers and containers */
-    body * {
-        visibility: hidden !important;
-    }
-
-    .student-qrcodes-page,
-    .student-qrcodes-page *,
-    .print-page,
-    .print-page * {
-        visibility: visible !important;
+        background: white !important;
     }
 
     .student-qrcodes-page {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
         padding: 0 !important;
         margin: 0 !important;
-        background: white;
+        background: white !important;
+        min-height: auto !important;
     }
 
     /* One card per page layout */
     .qrcode-grid {
         display: block !important;
+        padding: 0 !important;
+        gap: 0 !important;
     }
 
     /* Each QR code takes full page */
@@ -301,6 +510,12 @@ const regenerateQRCodes = async () => {
         justify-content: center !important;
         min-height: 100vh !important;
         width: 100% !important;
+        background: white !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        animation: none !important;
     }
 
     /* Last item doesn't need break after */
