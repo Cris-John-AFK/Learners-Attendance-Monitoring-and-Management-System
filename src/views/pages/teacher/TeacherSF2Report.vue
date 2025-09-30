@@ -232,10 +232,10 @@ const getDayOfWeekClass = (dateString) => {
 
     // Weekend styling (Saturday = 6, Sunday = 0)
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-        return 'bg-red-100 text-red-700 font-bold';
+        return 'bg-gray-200';
     }
     // Weekday styling
-    return 'bg-blue-100 text-blue-700';
+    return 'bg-white';
 };
 
 // Get column border class for visual separation
@@ -373,140 +373,113 @@ onMounted(() => {
 
             <!-- Main Attendance Table -->
             <div class="attendance-table-container mb-8">
-                <table class="w-full border-collapse border border-gray-800 text-xs">
+                <table class="w-full border-collapse border-2 border-gray-900 text-xs">
                     <!-- Table Header -->
                     <thead>
+                        <!-- Row 1: Main Headers -->
                         <tr>
-                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-center w-8">
-                                <div class="text-xs font-bold">No.</div>
+                            <th rowspan="3" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="width: 30px; vertical-align: middle; border-left: 2px solid #000">
+                                <div class="text-xs">No.</div>
                             </th>
-                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-left w-56">
-                                <div class="text-xs font-bold">NAME</div>
-                                <div class="text-xs font-normal">(Last Name, First Name, Middle Name)</div>
+                            <th rowspan="3" class="border-2 border-gray-900 p-2 bg-gray-50 text-left font-bold" style="width: 200px; vertical-align: middle; border-right: 2px solid #000">
+                                <div class="text-xs leading-tight">LEARNER'S NAME<br />(Last Name, First Name, Middle Name)</div>
                             </th>
-                            <th colspan="31" class="border border-gray-800 p-2 bg-gray-100 text-center">
-                                <div class="text-xs font-bold">Days of the month (Put check mark (✓) for each day present, (✗) for absent, and (L) for late)</div>
+                            <th :colspan="reportData.days_in_month.length" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold">
+                                <div class="text-xs">(1st row for date, 2nd row for Day: M,T,W,TH,F) for the present (✓), (✗) for absent, and (L) for late</div>
                             </th>
-                            <th colspan="3" class="border border-gray-800 p-2 bg-gray-100 text-center">
-                                <div class="text-xs font-bold">Total for the Month</div>
+                            <th colspan="2" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="border-left: 2px solid #000">
+                                <div class="text-xs">Total for the<br />Month</div>
                             </th>
-                            <th rowspan="4" class="border border-gray-800 p-2 bg-gray-100 text-center w-40">
-                                <div class="text-xs font-bold">REMARKS</div>
-                                <div class="text-xs font-normal leading-tight mt-1">
-                                    (If DROPPED OUT, state reason, please refer to legend number 2.<br />
-                                    If TRANSFERRED IN/OUT, write the name of School.)
-                                </div>
+                            <th rowspan="3" class="border-2 border-gray-900 p-1 bg-gray-50 text-center font-bold" style="width: 150px; vertical-align: middle; border-right: 2px solid #000">
+                                <div class="text-xs leading-tight">REMARKS (If DROPPED OUT, state reason, please refer to legend number 2. If TRANSFERRED IN/OUT, write the name of School.)</div>
                             </th>
                         </tr>
+                        <!-- Row 2: Day Numbers -->
                         <tr>
-                            <!-- Day numbers -->
-                            <th v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 bg-gray-100 text-center w-6" :class="getColumnBorderClass(day.date)">
-                                <div class="text-xs font-bold">{{ day.day }}</div>
-                            </th>
-                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
-                                <div class="text-xs font-bold">ABSENT</div>
-                            </th>
-                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
-                                <div class="text-xs font-bold">PRESENT</div>
-                            </th>
-                            <th class="border border-gray-800 p-1 bg-gray-100 text-center w-12">
-                                <div class="text-xs font-bold">TARDY</div>
+                            <th v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 bg-gray-50 text-center font-bold" :style="{ width: '22px', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
+                                <div class="text-xs">{{ day.day }}</div>
                             </th>
                         </tr>
+                        <!-- Row 3: Day of Week and Column Headers -->
                         <tr>
                             <!-- Day of week labels -->
-                            <th v-for="day in reportData.days_in_month" :key="`dow-${day.date}`" class="border border-gray-800 p-1 bg-gray-50 text-center w-6 text-xs" :class="[getDayOfWeekClass(day.date), getColumnBorderClass(day.date)]">
+                            <th
+                                v-for="day in reportData.days_in_month"
+                                :key="`dow-${day.date}`"
+                                class="border-2 border-gray-900 p-0.5 text-center text-xs font-bold"
+                                :class="getDayOfWeekClass(day.date)"
+                                :style="{ height: '24px', borderTop: '2px solid #000', borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }"
+                            >
                                 {{ getDayOfWeek(day.date) }}
                             </th>
-                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">A</th>
-                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">P</th>
-                            <th class="border border-gray-800 p-1 bg-gray-50 text-center text-xs">T</th>
+                            <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000">ABSENT</th>
+                            <th class="border-2 border-gray-900 p-0.5 bg-gray-50 text-center text-xs font-bold" style="width: 40px; border-top: 2px solid #000; border-bottom: 2px solid #000">TARDY</th>
                         </tr>
                     </thead>
 
                     <!-- Male Students Section -->
                     <tbody>
                         <tr>
-                            <td colspan="37" class="border border-gray-800 p-2 bg-blue-100 font-bold text-center">MALE</td>
+                            <td :colspan="reportData.days_in_month.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">MALE</td>
                         </tr>
-                        <tr v-for="(student, index) in maleStudents" :key="student.id">
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ index + 1 }}</td>
-                            <td class="border border-gray-800 p-2 font-medium text-left">{{ student.name }}</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 text-center" :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
+                        <tr v-for="(student, index) in maleStudents" :key="student.id" style="height: 20px">
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
+                            <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 text-center text-xs" :class="getAttendanceColor(student.attendance_data[day.date])" :style="{ borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_present || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">0</td>
-                            <td class="border border-gray-800 p-1 text-center text-xs">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
                         </tr>
                         <!-- Male Daily Totals Row -->
-                        <tr class="bg-blue-50">
-                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center">MALE | TOTAL Per Day</td>
-                            <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
-                                class="border border-gray-800 p-1 text-center font-bold"
-                                :class="[maleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
-                            >
+                        <tr class="bg-gray-50" style="height: 20px">
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">MALE | TOTAL Per Day</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 text-center font-bold text-xs" :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
                                 {{ maleDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.male.total_absent || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.male.total_present || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">0</td>
-                            <td class="border border-gray-800 p-1 text-center">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.male.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
                         </tr>
 
                         <!-- Female Students Section -->
                         <tr>
-                            <td colspan="37" class="border border-gray-800 p-2 bg-pink-100 font-bold text-center">FEMALE</td>
+                            <td :colspan="reportData.days_in_month.length + 4" class="border-2 border-gray-900 p-1 bg-gray-100 font-bold text-left text-xs" style="height: 22px">FEMALE</td>
                         </tr>
-                        <tr v-for="(student, index) in femaleStudents" :key="student.id">
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ maleStudents.length + index + 1 }}</td>
-                            <td class="border border-gray-800 p-2 font-medium text-left">{{ student.name }}</td>
-                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-800 p-1 text-center" :class="[getAttendanceColor(student.attendance_data[day.date]), getColumnBorderClass(day.date)]">
+                        <tr v-for="(student, index) in femaleStudents" :key="student.id" style="height: 20px">
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
+                            <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 text-center text-xs" :class="getAttendanceColor(student.attendance_data[day.date])" :style="{ borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
                                 {{ getAttendanceMark(student.attendance_data[day.date]) }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_absent || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">{{ student.total_present || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-medium">0</td>
-                            <td class="border border-gray-800 p-1 text-center text-xs">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
                         </tr>
                         <!-- Female Daily Totals Row -->
-                        <tr class="bg-pink-50">
-                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center">FEMALE | TOTAL Per Day</td>
-                            <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
-                                class="border border-gray-800 p-1 text-center font-bold"
-                                :class="[femaleDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
-                            >
+                        <tr class="bg-gray-50" style="height: 20px">
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">FEMALE | TOTAL Per Day</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 text-center font-bold text-xs" :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
                                 {{ femaleDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.female.total_absent || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.female.total_present || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">0</td>
-                            <td class="border border-gray-800 p-1 text-center">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.female.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
                         </tr>
 
                         <!-- Combined Total Row -->
-                        <tr class="bg-yellow-100">
-                            <td class="border border-gray-800 p-1 text-center font-bold">-</td>
-                            <td class="border border-gray-800 p-2 font-bold text-center">Combined TOTAL PER DAY</td>
-                            <td
-                                v-for="day in reportData.days_in_month"
-                                :key="day.date"
-                                class="border border-gray-800 p-1 text-center font-bold"
-                                :class="[combinedDailyTotals[day.date]?.present > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800', getColumnBorderClass(day.date)]"
-                            >
+                        <tr class="bg-gray-50" style="height: 20px">
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
+                            <td class="border border-gray-900 p-1 font-bold text-left text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">Combined TOTAL PER DAY</td>
+                            <td v-for="day in reportData.days_in_month" :key="day.date" class="border border-gray-900 p-0.5 text-center font-bold text-xs" :style="{ borderBottom: '2px solid #000', borderLeft: getDayOfWeek(day.date) === 'M' ? '2px solid #000' : '' }">
                                 {{ combinedDailyTotals[day.date]?.present || 0 }}
                             </td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_absent || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.total_present || 0 }}</td>
-                            <td class="border border-gray-800 p-1 text-center font-bold">0</td>
-                            <td class="border border-gray-800 p-1 text-center">-</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000">{{ reportData.summary.total.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000">{{ (reportData.summary.male.total_absent || 0) + (reportData.summary.female.total_absent || 0) }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-bottom: 2px solid #000; border-right: 2px solid #000">-</td>
                         </tr>
                     </tbody>
                 </table>
@@ -730,8 +703,8 @@ onMounted(() => {
 }
 
 .sf2-report-card {
-    font-family: 'Times New Roman', serif;
-    line-height: 1.4;
+    font-family: 'Arial', 'Calibri', sans-serif;
+    line-height: 1.2;
 }
 
 .attendance-table-container {
@@ -740,16 +713,54 @@ onMounted(() => {
 
 .attendance-table-container table {
     min-width: 1200px;
+    table-layout: fixed;
+}
+
+.attendance-table-container th,
+.attendance-table-container td {
+    border: 1px solid #000;
+    padding: 2px 4px;
+    line-height: 1.2;
+}
+
+/* Compact row styling */
+.attendance-table-container tbody tr {
+    height: 20px;
+}
+
+/* Header row styling */
+.attendance-table-container thead th {
+    background-color: #f3f4f6;
+    font-weight: 600;
+}
+
+/* Day of week cells - simple white background */
+.attendance-table-container thead tr:last-child th {
+    background-color: #ffffff !important;
+}
+
+/* Section header rows (MALE, FEMALE) */
+.attendance-table-container tbody tr td[colspan] {
+    background-color: #e5e7eb;
+    font-weight: bold;
+    text-align: left;
 }
 
 /* Weekend column styling */
 .weekend-column {
-    border-left: 3px solid #dc2626 !important;
+    border-left: 2px solid #4b5563 !important;
 }
 
 /* Week separator */
 .week-separator {
-    border-left: 2px solid #374151 !important;
+    border-left: 2px solid #9ca3af !important;
+}
+
+/* Remove colorful backgrounds from attendance cells */
+.text-green-600,
+.text-red-600,
+.text-yellow-600 {
+    color: inherit !important;
 }
 
 /* Print Styles */
@@ -772,7 +783,12 @@ onMounted(() => {
     }
 
     .attendance-table-container table {
-        font-size: 10px;
+        font-size: 9px;
+    }
+
+    .attendance-table-container th,
+    .attendance-table-container td {
+        padding: 1px 2px;
     }
 
     body {

@@ -29,23 +29,36 @@ class AttendanceSessionController extends Controller
                 'subject_id' => $subjectId
             ]);
             
+            // Validate required parameters
+            if (empty($sectionId) || $sectionId === '' || $sectionId === 'null') {
+                Log::warning("Invalid section_id provided", ['section_id' => $sectionId]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Section ID is required',
+                    'students' => [],
+                    'count' => 0
+                ], 400);
+            }
+            
             // Get all active students in the section
             $students = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
                 ->join('sections as s', 'ss.section_id', '=', 's.id')
                 ->where('ss.section_id', $sectionId)
-                ->where('ss.is_active', true)
-                ->where('ss.status', 'enrolled')
-                ->where('sd.current_status', 'active')
+                ->where(function($query) {
+                    $query->where('ss.is_active', true)
+                          ->orWhereNull('ss.is_active');
+                })
                 ->select([
                     'sd.id',
                     'sd.firstName as first_name',
                     'sd.lastName as last_name',
                     'sd.middleName as middle_name',
                     'sd.lrn',
-                    'sd.qr_code',
+                    'sd.qr_code_path as qr_code',
                     'sd.gender',
                     'sd.age',
+                    'sd.status',
                     's.name as section_name'
                 ])
                 ->orderBy('sd.lastName')
@@ -72,7 +85,8 @@ class AttendanceSessionController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching students: ' . $e->getMessage()
+                'message' => 'Error fetching students: ' . $e->getMessage(),
+                'error_details' => $e->getMessage()
             ], 500);
         }
     }
