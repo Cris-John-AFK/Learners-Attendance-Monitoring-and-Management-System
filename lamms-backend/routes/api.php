@@ -18,6 +18,7 @@ use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\AttendanceAnalyticsController;
 use App\Http\Controllers\API\GuardhouseController;
 use App\Http\Controllers\API\StudentStatusController;
+use App\Http\Controllers\API\UnifiedAuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,21 @@ Route::get('/health-check', function() {
         'message' => 'API is working!',
         'timestamp' => now()->toDateTimeString()
     ]);
+});
+
+// ========================================
+// UNIFIED AUTHENTICATION ROUTES
+// ========================================
+Route::prefix('auth')->group(function () {
+    // Public routes (no authentication required)
+    Route::post('/login', [UnifiedAuthController::class, 'login']);
+    
+    // Protected routes (require authentication)
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureSingleSession::class])->group(function () {
+        Route::post('/logout', [UnifiedAuthController::class, 'logout']);
+        Route::get('/me', [UnifiedAuthController::class, 'me']);
+        Route::get('/check-session', [UnifiedAuthController::class, 'checkSession']);
+    });
 });
 
 // Student routes

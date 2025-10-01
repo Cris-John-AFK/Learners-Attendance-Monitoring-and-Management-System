@@ -1,5 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
+import AuthService from '@/services/AuthService';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -10,13 +11,28 @@ const isProfileOpen = ref(false);
 const isNotificationOpen = ref(false);
 const notificationCount = ref(3); // Example notification count
 
-const logout = () => {
-    // Clear user session data
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('user');
+const logout = async () => {
+    try {
+        console.log(' Admin logging out...');
 
-    // Redirect to homepage
-    router.push('/');
+        // Use unified AuthService to properly logout
+        await AuthService.logout();
+
+        console.log('Logout successful, clearing session data');
+
+        // Clear browser history to prevent back navigation
+        window.history.pushState(null, '', window.location.href);
+        window.history.replaceState(null, '', '/');
+
+        // Redirect to root login page
+        router.replace('/');
+    } catch (error) {
+        console.error('Logout error:', error);
+        // Even if logout fails, clear local data and redirect
+        AuthService.clearAuthData();
+        window.history.replaceState(null, '', '/');
+        router.replace('/');
+    }
 };
 </script>
 

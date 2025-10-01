@@ -1,20 +1,19 @@
 <script setup>
-import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
-import TeacherAuthService from '@/services/TeacherAuthService';
 import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
+import NotificationService from '@/services/NotificationService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import ProgressSpinner from 'primevue/progressspinner';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import NotificationService from '@/services/NotificationService';
 
 const router = useRouter();
 const toast = useToast();
@@ -29,6 +28,7 @@ const selectedSession = ref(null);
 const sessionStudents = ref([]);
 const selectedStudents = ref([]);
 const bulkStatus = ref('Present');
+const selectedMonth = ref(null); // For month filter
 
 // Attendance Reason Dialog states
 const showReasonDialog = ref(false);
@@ -43,10 +43,42 @@ const statusOptions = [
     { label: 'Excused', value: 'Excused' }
 ];
 
-// Group sessions by date
+// Month filter options
+const monthOptions = computed(() => {
+    const months = [];
+    const currentDate = new Date();
+    
+    // Add "All Months" option
+    months.push({ label: 'All Months', value: null });
+    
+    // Generate last 12 months
+    for (let i = 0; i < 12; i++) {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        months.push({ label: monthYear, value: value });
+    }
+    
+    return months;
+});
+
+// Filtered sessions by selected month
+const filteredSessions = computed(() => {
+    if (!selectedMonth.value) {
+        return sessions.value;
+    }
+    
+    return sessions.value.filter(session => {
+        const sessionDate = new Date(session.session_date);
+        const sessionMonth = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
+        return sessionMonth === selectedMonth.value;
+    });
+});
+
+// Group sessions by date (using filtered sessions)
 const sessionsByDate = computed(() => {
     const grouped = {};
-    sessions.value.forEach((session) => {
+    filteredSessions.value.forEach((session) => {
         const date = session.session_date;
         if (!grouped[date]) {
             grouped[date] = [];
@@ -93,21 +125,21 @@ const loadAttendanceSessions = async () => {
 
     loading.value = true;
     const startTime = Date.now();
-    
+
     try {
         console.log('Loading attendance sessions for teacher:', teacherId.value);
         const response = await TeacherAttendanceService.getTeacherAttendanceSessions(teacherId.value);
         console.log('API Response:', response);
         console.log('Sessions received:', response.sessions?.length || 0);
-        
+
         // Calculate remaining time to show loading (minimum 600ms)
         const elapsedTime = Date.now() - startTime;
         const minLoadingTime = 600;
         const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-        
+
         // Wait for minimum loading time to ensure smooth animation
-        await new Promise(resolve => setTimeout(resolve, remainingTime));
-        
+        await new Promise((resolve) => setTimeout(resolve, remainingTime));
+
         sessions.value = response.sessions || [];
         console.log('Sessions stored in reactive variable:', sessions.value.length);
     } catch (error) {
@@ -128,14 +160,14 @@ const loadSessionDetails = async (session) => {
     loading.value = true;
     try {
         const response = await TeacherAttendanceService.getSessionAttendanceDetails(session.id);
-        
+
         // Map students with reason data from attendance_reason relationship
-        sessionStudents.value = (response.students || []).map(student => ({
+        sessionStudents.value = (response.students || []).map((student) => ({
             ...student,
             reason_name: student.attendance_reason?.reason_name || null,
             reason_notes: student.reason_notes || null
         }));
-        
+
         selectedSession.value = session;
         showSessionDetail.value = true;
         selectedStudents.value = [];
@@ -197,17 +229,11 @@ const updateStudentStatus = async (studentId, newStatus) => {
 // Handle reason dialog confirmation
 const onReasonConfirmed = async (reasonData) => {
     if (!pendingStatusChange.value) return;
-    
+
     const { studentId, newStatus, studentName } = pendingStatusChange.value;
-    
+
     try {
-        await TeacherAttendanceService.updateStudentAttendance(
-            selectedSession.value.id, 
-            studentId, 
-            newStatus,
-            reasonData.reason_id,
-            reasonData.reason_notes
-        );
+        await TeacherAttendanceService.updateStudentAttendance(selectedSession.value.id, studentId, newStatus, reasonData.reason_id, reasonData.reason_notes);
 
         // Update local data with reason
         const student = sessionStudents.value.find((s) => s.id === studentId);
@@ -238,7 +264,7 @@ const onReasonConfirmed = async (reasonData) => {
             life: 3000
         });
     }
-    
+
     // Clear pending
     pendingStatusChange.value = null;
 };
@@ -256,15 +282,29 @@ const bulkUpdateStatus = async () => {
     }
 
     try {
-        const promises = selectedStudents.value.map((studentId) => TeacherAttendanceService.updateStudentAttendance(selectedSession.value.id, studentId, bulkStatus.value));
+        // Extract student IDs from the selected student objects
+        const promises = selectedStudents.value.map((student) =>
+            TeacherAttendanceService.updateStudentAttendance(
+                selectedSession.value.id,
+                student.id, // Extract the id from the student object
+                bulkStatus.value
+            )
+        );
 
         await Promise.all(promises);
 
         // Update local data
-        selectedStudents.value.forEach((studentId) => {
-            const student = sessionStudents.value.find((s) => s.id === studentId);
+        selectedStudents.value.forEach((selectedStudent) => {
+            const student = sessionStudents.value.find((s) => s.id === selectedStudent.id);
             if (student) {
                 student.status = bulkStatus.value;
+                // Clear reason for Present/Absent bulk updates
+                if (bulkStatus.value === 'Present' || bulkStatus.value === 'Absent') {
+                    student.reason_id = null;
+                    student.reason_notes = null;
+                    student.reason_name = null;
+                    student.attendance_reason = null;
+                }
             }
         });
 
@@ -358,10 +398,8 @@ let unsubscribeNotifications = null;
 const handleNotificationUpdate = (notifications) => {
     console.log('Notification update received:', notifications.length, 'notifications');
     // Check if there's a new session_completed notification
-    const latestSessionCompleted = notifications.find(n => 
-        n.type === 'session_completed' && !n.read
-    );
-    
+    const latestSessionCompleted = notifications.find((n) => n.type === 'session_completed' && !n.read);
+
     if (latestSessionCompleted) {
         console.log('Found new session_completed notification, refreshing sessions...');
         // Refresh sessions when a new one is completed
@@ -400,7 +438,20 @@ onUnmounted(() => {
                 <h2 class="text-2xl font-bold text-gray-800 mb-2">Attendance Sessions</h2>
                 <p class="text-gray-600">View and edit your attendance sessions</p>
             </div>
-            <Button icon="pi pi-refresh" label="Refresh" @click="loadAttendanceSessions" :loading="loading" class="p-button-outlined" />
+            
+            <!-- Month Filter -->
+            <div class="flex items-center gap-3">
+                <label class="text-sm font-medium text-gray-700">Filter by Month:</label>
+                <Dropdown 
+                    v-model="selectedMonth" 
+                    :options="monthOptions" 
+                    optionLabel="label" 
+                    optionValue="value" 
+                    placeholder="All Months"
+                    class="w-64"
+                    showClear
+                />
+            </div>
         </div>
 
         <!-- Smooth Minimal Loading -->
@@ -409,12 +460,20 @@ onUnmounted(() => {
                 <div class="loading-content">
                     <!-- Simple Spinner -->
                     <div class="simple-spinner"></div>
-                    
+
                     <!-- Text -->
                     <p class="loading-text">Loading sessions...</p>
                 </div>
             </div>
         </transition>
+
+        <!-- Sessions Count -->
+        <div v-if="!loading && sessions.length > 0" class="mb-4 text-sm text-gray-600">
+            Showing <span class="font-semibold text-gray-800">{{ filteredSessions.length }}</span> of <span class="font-semibold text-gray-800">{{ sessions.length }}</span> sessions
+            <span v-if="selectedMonth" class="ml-2 text-blue-600">
+                (Filtered by {{ monthOptions.find(m => m.value === selectedMonth)?.label }})
+            </span>
+        </div>
 
         <!-- Sessions by Date -->
         <div v-if="!loading || sessions.length > 0" class="space-y-6">
@@ -539,11 +598,7 @@ onUnmounted(() => {
 
                     <Column field="status" header="Current Status" sortable>
                         <template #body="{ data }">
-                            <Tag 
-                                :value="data.status" 
-                                :severity="getStatusSeverity(data.status)" 
-                                :class="['text-sm', data.status === 'Late' ? 'late-status-badge' : '']" 
-                            />
+                            <Tag :value="data.status" :severity="getStatusSeverity(data.status)" :class="['text-sm', data.status === 'Late' ? 'late-status-badge' : '']" />
                         </template>
                     </Column>
 
@@ -551,9 +606,7 @@ onUnmounted(() => {
                         <template #body="{ data }">
                             <span v-if="data.reason_name" class="text-sm">
                                 {{ data.reason_name }}
-                                <span v-if="data.reason_notes" class="text-gray-500 text-xs block mt-1">
-                                    Note: {{ data.reason_notes }}
-                                </span>
+                                <span v-if="data.reason_notes" class="text-gray-500 text-xs block mt-1"> Note: {{ data.reason_notes }} </span>
                             </span>
                             <span v-else class="text-gray-400 text-sm italic">No reason</span>
                         </template>
@@ -569,12 +622,7 @@ onUnmounted(() => {
         </Dialog>
 
         <!-- Attendance Reason Dialog -->
-        <AttendanceReasonDialog
-            v-model="showReasonDialog"
-            :status-type="reasonDialogType"
-            :student-name="pendingStatusChange?.studentName"
-            @confirm="onReasonConfirmed"
-        />
+        <AttendanceReasonDialog v-model="showReasonDialog" :status-type="reasonDialogType" :student-name="pendingStatusChange?.studentName" @confirm="onReasonConfirmed" />
     </div>
 </template>
 
@@ -630,7 +678,9 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .loading-text {

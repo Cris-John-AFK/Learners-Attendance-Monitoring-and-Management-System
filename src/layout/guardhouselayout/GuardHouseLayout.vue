@@ -2,6 +2,7 @@
 import { useLayout } from '@/layout/composables/layout';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import GuardhouseService from '@/services/GuardhouseService';
+import AuthService from '@/services/AuthService';
 import axios from 'axios';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -743,13 +744,28 @@ const submitGuestForm = () => {
     visitorType.value = 'learners';
 };
 
-const logout = () => {
-    // Clear user session data
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('user');
+const logout = async () => {
+    try {
+        console.log('🚪 Guardhouse logging out...');
+        
+        // Use unified AuthService to properly logout
+        await AuthService.logout();
 
-    // Redirect to homepage
-    router.push('/');
+        console.log('✅ Logout successful, clearing session data');
+
+        // Clear browser history to prevent back navigation
+        window.history.pushState(null, '', window.location.href);
+        window.history.replaceState(null, '', '/');
+
+        // Redirect to root login page
+        router.replace('/');
+    } catch (error) {
+        console.error('❌ Logout error:', error);
+        // Even if logout fails, clear local data and redirect
+        AuthService.clearAuthData();
+        window.history.replaceState(null, '', '/');
+        router.replace('/');
+    }
 };
 </script>
 

@@ -11,6 +11,7 @@ import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import TeacherAuthService from '@/services/TeacherAuthService';
+import AuthService from '@/services/AuthService';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -116,6 +117,7 @@ const router = createRouter({
         {
             path: '/admin',
             component: AdminLayout,
+            meta: { requiresAuth: true },
             children: [
                 {
                     path: '/admin',
@@ -211,6 +213,7 @@ const router = createRouter({
         {
             path: '/guardhouse',
             component: GuardHouseLayout,
+            meta: { requiresAuth: true },
             children: [
                 {
                     path: '/guardhouse',
@@ -278,28 +281,111 @@ const router = createRouter({
     ]
 });
 
-// Route guard for teacher authentication
-router.beforeEach((to, from, next) => {
+// Enhanced route guard with session validation
+router.beforeEach(async (to, from, next) => {
     // Check if route requires authentication
     if (to.matched.some(record => record.meta.requiresAuth)) {
         try {
-            // Check if teacher is authenticated (synchronous method)
-            const isAuthenticated = TeacherAuthService.isAuthenticated();
+            // Check if user is authenticated (unified auth)
+            const isAuthenticated = AuthService.isAuthenticated();
             
             if (!isAuthenticated) {
-                console.log('Teacher not authenticated, redirecting to login');
-                // Redirect to general login (homepage) if not authenticated
+                console.log('User not authenticated, redirecting to login');
+                // Clear any stale data
+                AuthService.clearAuthData();
+                // Redirect to root login page
                 next('/');
-            } else {
-                console.log('Teacher authenticated, allowing access');
-                next();
+                return;
             }
+
+            // Validate session with backend
+            const sessionCheck = await AuthService.checkSession();
+            
+            if (!sessionCheck.valid) {
+                console.warn('Session invalid or expired:', sessionCheck.message);
+                // Clear auth data and redirect to root login page
+                AuthService.clearAuthData();
+                next('/');
+                return;
+            }
+
+            // Check if user has the correct role for the route
+            const userRole = AuthService.getUserRole();
+            const routePath = to.path;
+
+            // Role-based route protection
+            if (routePath.startsWith('/teacher') && userRole !== 'teacher') {
+                console.warn('Access denied: Teacher role required');
+                next('/');
+                return;
+            }
+
+            if (routePath.startsWith('/admin') && userRole !== 'admin') {
+                console.warn('Access denied: Admin role required');
+                next('/');
+                return;
+            }
+
+            if (routePath.startsWith('/guardhouse') && userRole !== 'guardhouse') {
+                console.warn('Access denied: Guardhouse role required');
+                next('/');
+                return;
+            }
+
+            console.log('User authenticated and authorized, allowing access');
+            next();
         } catch (error) {
             console.error('Authentication check failed:', error);
+            AuthService.clearAuthData();
             next('/');
         }
     } else {
-        next();
+        // For non-protected routes, check if user is already logged in
+        // and redirect to their dashboard
+        if (to.path === '/login' && AuthService.isAuthenticated()) {
+            const role = AuthService.getUserRole();
+            if (role === 'teacher') {
+                next('/teacher');
+            } else if (role === 'admin') {
+                next('/admin');
+            } else if (role === 'guardhouse') {
+                next('/guardhouse');
+            } else {
+                next();
+            }
+        } else {
+            next();
+        }
+    }
+});
+
+// Prevent back/forward navigation to protected pages after logout
+router.afterEach((to, from) => {
+    // If navigating to a protected route without authentication, replace history
+    if (to.matched.some(record => record.meta.requiresAuth) && !AuthService.isAuthenticated()) {
+        // Force replace the history entry to prevent back button
+        window.history.replaceState({}, '', '/');
+    }
+});
+
+// Disable browser history navigation for authenticated pages
+window.addEventListener('popstate', function(event) {
+    const currentPath = window.location.pathname;
+    const isProtected = currentPath.startsWith('/teacher') || 
+                       currentPath.startsWith('/admin') || 
+                       currentPath.startsWith('/guardhouse');
+    
+    // If user navigated back from a protected page to root
+    if (currentPath === '/' && isProtected === false && AuthService.isAuthenticated()) {
+        // Clear the forward history by pushing current state
+        window.history.pushState(null, '', '/');
+    }
+    
+    // If trying to access protected page without authentication
+    if (isProtected && !AuthService.isAuthenticated()) {
+        event.preventDefault();
+        window.history.replaceState(null, '', '/');
+        window.location.href = '/';
     }
 });
 
