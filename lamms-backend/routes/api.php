@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AttendanceSessionController;
+use App\Http\Controllers\API\AttendanceReasonController;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\SectionController;
 use App\Http\Controllers\API\TeacherController;
@@ -179,6 +180,10 @@ Route::get('/attendance/statistics', [AttendanceController::class, 'getAttendanc
 Route::prefix('attendance')->group(function () {
     // Get attendance statuses
     Route::get('/statuses', [AttendanceController::class, 'getAttendanceStatuses']);
+    
+    // Attendance reasons routes
+    Route::get('/reasons', [AttendanceReasonController::class, 'index']);
+    Route::get('/reasons/{type}', [AttendanceReasonController::class, 'getByType']);
     
     // Get attendance for specific section, subject and date
     Route::get('/section/{sectionId}/subject/{subjectId}', [AttendanceController::class, 'getAttendance']);

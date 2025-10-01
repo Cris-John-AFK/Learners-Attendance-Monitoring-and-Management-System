@@ -21,6 +21,8 @@ class AttendanceRecord extends Model
         'arrival_time',
         'departure_time',
         'remarks',
+        'reason_id',
+        'reason_notes',
         'marking_method',
         'marked_from_ip',
         'location_data',
@@ -33,7 +35,6 @@ class AttendanceRecord extends Model
     protected $casts = [
         'marked_at' => 'datetime',
         'arrival_time' => 'datetime:H:i:s',
-        'departure_time' => 'datetime:H:i:s',
         'location_data' => 'array',
         'is_verified' => 'boolean',
         'verified_at' => 'datetime'
@@ -53,6 +54,11 @@ class AttendanceRecord extends Model
     public function attendanceStatus(): BelongsTo
     {
         return $this->belongsTo(AttendanceStatus::class);
+    }
+
+    public function attendanceReason(): BelongsTo
+    {
+        return $this->belongsTo(AttendanceReason::class, 'reason_id');
     }
 
     public function markedByTeacher(): BelongsTo

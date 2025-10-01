@@ -1,6 +1,7 @@
 <script setup>
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import TeacherAuthService from '@/services/TeacherAuthService';
+import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Column from 'primevue/column';
@@ -28,6 +29,11 @@ const selectedSession = ref(null);
 const sessionStudents = ref([]);
 const selectedStudents = ref([]);
 const bulkStatus = ref('Present');
+
+// Attendance Reason Dialog states
+const showReasonDialog = ref(false);
+const reasonDialogType = ref('late');
+const pendingStatusChange = ref(null);
 
 // Status options for dropdowns
 const statusOptions = [
@@ -122,7 +128,14 @@ const loadSessionDetails = async (session) => {
     loading.value = true;
     try {
         const response = await TeacherAttendanceService.getSessionAttendanceDetails(session.id);
-        sessionStudents.value = response.students || [];
+        
+        // Map students with reason data from attendance_reason relationship
+        sessionStudents.value = (response.students || []).map(student => ({
+            ...student,
+            reason_name: student.attendance_reason?.reason_name || null,
+            reason_notes: student.reason_notes || null
+        }));
+        
         selectedSession.value = session;
         showSessionDetail.value = true;
         selectedStudents.value = [];
@@ -141,6 +154,20 @@ const loadSessionDetails = async (session) => {
 
 // Update student attendance status
 const updateStudentStatus = async (studentId, newStatus) => {
+    // Show reason dialog for Late or Excused status
+    if (newStatus === 'Late' || newStatus === 'Excused') {
+        const student = sessionStudents.value.find((s) => s.id === studentId);
+        pendingStatusChange.value = {
+            studentId,
+            studentName: student?.name || `${student?.first_name} ${student?.last_name}`,
+            newStatus
+        };
+        reasonDialogType.value = newStatus.toLowerCase();
+        showReasonDialog.value = true;
+        return;
+    }
+
+    // For other statuses, update directly
     try {
         await TeacherAttendanceService.updateStudentAttendance(selectedSession.value.id, studentId, newStatus);
 
@@ -165,6 +192,55 @@ const updateStudentStatus = async (studentId, newStatus) => {
             life: 3000
         });
     }
+};
+
+// Handle reason dialog confirmation
+const onReasonConfirmed = async (reasonData) => {
+    if (!pendingStatusChange.value) return;
+    
+    const { studentId, newStatus, studentName } = pendingStatusChange.value;
+    
+    try {
+        await TeacherAttendanceService.updateStudentAttendance(
+            selectedSession.value.id, 
+            studentId, 
+            newStatus,
+            reasonData.reason_id,
+            reasonData.reason_notes
+        );
+
+        // Update local data with reason
+        const student = sessionStudents.value.find((s) => s.id === studentId);
+        if (student) {
+            student.status = newStatus;
+            student.reason_id = reasonData.reason_id;
+            student.reason_notes = reasonData.reason_notes;
+            student.reason_name = reasonData.reason_name;
+            student.attendance_reason = {
+                id: reasonData.reason_id,
+                reason_name: reasonData.reason_name,
+                status: 'active'
+            };
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: 'Updated',
+            detail: `${studentName} marked as ${newStatus} - ${reasonData.reason_name}`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error updating attendance with reason:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update attendance status',
+            life: 3000
+        });
+    }
+    
+    // Clear pending
+    pendingStatusChange.value = null;
 };
 
 // Bulk update selected students
@@ -463,7 +539,23 @@ onUnmounted(() => {
 
                     <Column field="status" header="Current Status" sortable>
                         <template #body="{ data }">
-                            <Tag :value="data.status" :severity="getStatusSeverity(data.status)" class="text-sm" />
+                            <Tag 
+                                :value="data.status" 
+                                :severity="getStatusSeverity(data.status)" 
+                                :class="['text-sm', data.status === 'Late' ? 'late-status-badge' : '']" 
+                            />
+                        </template>
+                    </Column>
+
+                    <Column header="Reason" style="min-width: 200px">
+                        <template #body="{ data }">
+                            <span v-if="data.reason_name" class="text-sm">
+                                {{ data.reason_name }}
+                                <span v-if="data.reason_notes" class="text-gray-500 text-xs block mt-1">
+                                    Note: {{ data.reason_notes }}
+                                </span>
+                            </span>
+                            <span v-else class="text-gray-400 text-sm italic">No reason</span>
                         </template>
                     </Column>
 
@@ -475,6 +567,14 @@ onUnmounted(() => {
                 </DataTable>
             </div>
         </Dialog>
+
+        <!-- Attendance Reason Dialog -->
+        <AttendanceReasonDialog
+            v-model="showReasonDialog"
+            :status-type="reasonDialogType"
+            :student-name="pendingStatusChange?.studentName"
+            @confirm="onReasonConfirmed"
+        />
     </div>
 </template>
 
@@ -537,6 +637,12 @@ onUnmounted(() => {
     color: #64748b;
     font-size: 1rem;
     margin: 0;
+}
+
+/* Late Status Badge - Force Yellow Color */
+.late-status-badge {
+    background-color: #f59e0b !important;
+    color: white !important;
 }
 
 /* Smooth Transitions */

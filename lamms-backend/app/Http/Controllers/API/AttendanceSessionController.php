@@ -119,7 +119,13 @@ class AttendanceSessionController extends Controller
     public function getActiveSessionsForTeacher($teacherId)
     {
         try {
-            $sessions = AttendanceSession::with(['section', 'subject', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+            $sessions = AttendanceSession::with([
+                'section', 
+                'subject', 
+                'attendanceRecords.student', 
+                'attendanceRecords.attendanceStatus',
+                'attendanceRecords.attendanceReason'
+            ])
                 ->where('teacher_id', $teacherId)
                 ->active()
                 ->forDate(now()->toDateString())
@@ -146,7 +152,9 @@ class AttendanceSessionController extends Controller
             'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
             'attendance.*.arrival_time' => 'nullable|date_format:H:i:s',
             'attendance.*.remarks' => 'nullable|string|max:500',
-            'attendance.*.marking_method' => 'nullable|in:manual,qr_scan,auto,bulk'
+            'attendance.*.marking_method' => 'nullable|in:manual,qr_scan,auto,bulk',
+            'attendance.*.reason_id' => 'nullable|exists:attendance_reasons,id',
+            'attendance.*.reason_notes' => 'nullable|string|max:500'
         ]);
 
         if ($validator->fails()) {
@@ -164,6 +172,13 @@ class AttendanceSessionController extends Controller
 
             DB::transaction(function () use ($request, $session, &$savedRecords) {
                 foreach ($request->attendance as $attendanceData) {
+                    Log::info('💾 Saving attendance record', [
+                        'student_id' => $attendanceData['student_id'],
+                        'status_id' => $attendanceData['attendance_status_id'],
+                        'reason_id' => $attendanceData['reason_id'] ?? null,
+                        'reason_notes' => $attendanceData['reason_notes'] ?? null
+                    ]);
+                    
                     $record = AttendanceRecord::updateOrCreate(
                         [
                             'attendance_session_id' => $session->id,
@@ -176,11 +191,19 @@ class AttendanceSessionController extends Controller
                             'arrival_time' => $attendanceData['arrival_time'] ?? null,
                             'remarks' => $attendanceData['remarks'] ?? null,
                             'marking_method' => $attendanceData['marking_method'] ?? 'manual',
-                            'marked_from_ip' => request()->ip()
+                            'marked_from_ip' => request()->ip(),
+                            'reason_id' => $attendanceData['reason_id'] ?? null,
+                            'reason_notes' => $attendanceData['reason_notes'] ?? null
                         ]
                     );
 
-                    $savedRecords[] = $record->load(['student', 'attendanceStatus']);
+                    Log::info('✅ Saved record', [
+                        'record_id' => $record->id,
+                        'reason_id_saved' => $record->reason_id,
+                        'reason_notes_saved' => $record->reason_notes
+                    ]);
+
+                    $savedRecords[] = $record->load(['student', 'attendanceStatus', 'attendanceReason']);
                 }
             });
 
@@ -884,7 +907,7 @@ class AttendanceSessionController extends Controller
         try {
             $session = AttendanceSession::with(['section', 'subject'])->findOrFail($sessionId);
             
-            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus'])
+            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus', 'attendanceReason'])
                 ->where('attendance_session_id', $sessionId)
                 ->get();
 
@@ -893,7 +916,14 @@ class AttendanceSessionController extends Controller
                     'id' => $record->student->id,
                     'student_id' => $record->student->student_id,
                     'name' => $record->student->firstName . ' ' . $record->student->lastName,
-                    'status' => $record->attendanceStatus->name ?? 'Present'
+                    'status' => $record->attendanceStatus->name ?? 'Present',
+                    'reason_id' => $record->reason_id,
+                    'reason_notes' => $record->reason_notes,
+                    'attendance_reason' => $record->attendanceReason ? [
+                        'id' => $record->attendanceReason->id,
+                        'reason_name' => $record->attendanceReason->reason_name,
+                        'status' => $record->attendanceReason->status
+                    ] : null
                 ];
             });
 
@@ -926,7 +956,9 @@ class AttendanceSessionController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'status' => 'required|string|in:Present,Absent,Late,Excused'
+                'status' => 'required|string|in:Present,Absent,Late,Excused',
+                'reason_id' => 'nullable|exists:attendance_reasons,id',
+                'reason_notes' => 'nullable|string|max:500'
             ]);
 
             if ($validator->fails()) {
@@ -955,6 +987,8 @@ class AttendanceSessionController extends Controller
             if ($attendanceRecord) {
                 $attendanceRecord->update([
                     'attendance_status_id' => $statusId,
+                    'reason_id' => $request->reason_id ?? null,
+                    'reason_notes' => $request->reason_notes ?? null,
                     'updated_at' => now()
                 ]);
             } else {
@@ -963,10 +997,19 @@ class AttendanceSessionController extends Controller
                     'attendance_session_id' => $sessionId,
                     'student_id' => $studentId,
                     'attendance_status_id' => $statusId,
+                    'reason_id' => $request->reason_id ?? null,
+                    'reason_notes' => $request->reason_notes ?? null,
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
             }
+
+            Log::info('✅ Updated attendance record', [
+                'student_id' => $studentId,
+                'status' => $request->status,
+                'reason_id' => $request->reason_id,
+                'reason_notes' => $request->reason_notes
+            ]);
 
             return response()->json([
                 'success' => true,

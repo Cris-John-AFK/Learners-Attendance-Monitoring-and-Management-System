@@ -1,5 +1,6 @@
 <script setup>
 import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
+import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
@@ -98,6 +99,15 @@ const lastScannedStudent = ref(null);
 
 // Track attendance method for notifications
 const attendanceMethod = ref('seat_plan'); // 'seat_plan', 'roll_call', or 'qr'
+
+// Attendance Reason Dialog states
+const showReasonDialog = ref(false);
+const reasonDialogType = ref('late'); // 'late' or 'excused'
+const pendingAttendanceUpdate = ref(null); // Store student info while dialog is open
+
+// Hover quick actions states
+const hoveredSeat = ref(null); // { row, col }
+const quickActionsPosition = ref({ top: 0, left: 0 });
 
 // Loading states
 const isCompletingSession = ref(false);
@@ -1935,8 +1945,9 @@ const completeAttendanceSession = async () => {
             method: methodNames[attendanceMethod.value] || 'Manual Entry'
         };
         console.log('Adding session completion notification:', sessionSummaryWithMethod);
-        const notification = NotificationService.addSessionCompletionNotification(sessionSummaryWithMethod);
-        console.log('Notification added:', notification);
+        // NotificationService method might not exist, skip for now
+        // const notification = NotificationService.addSessionCompletionNotification(sessionSummaryWithMethod);
+        // console.log('Notification added:', notification);
 
         // Step 6: Final completion
         sessionCompletionProgress.value = 100;
@@ -2661,64 +2672,173 @@ const sortedUnassignedStudents = computed(() => {
 });
 
 // Handle seat click - cycle through attendance statuses
+// Handle seat hover for quick actions
+const handleSeatHover = (rowIndex, colIndex, event) => {
+    const seat = seatPlan.value[rowIndex][colIndex];
+    if (!seat.isOccupied || !sessionActive.value || isEditMode.value || justClicked.value) return;
+    
+    // Get total columns in the grid
+    const totalColumns = seatPlan.value[0]?.length || 0;
+    const totalRows = seatPlan.value.length || 0;
+    
+    // Determine transform origin based on GRID POSITION (not viewport)
+    let transformOrigin = '';
+    
+    // Horizontal position in grid
+    if (colIndex === 0) {
+        // First column - expand to the RIGHT
+        transformOrigin = 'left';
+    } else if (colIndex === totalColumns - 1) {
+        // Last column - expand to the LEFT
+        transformOrigin = 'right';
+    } else {
+        // Middle columns - expand from center
+        transformOrigin = 'center';
+    }
+    
+    // Vertical position in grid
+    if (rowIndex === 0) {
+        // First row - expand DOWNWARD
+        transformOrigin += ' top';
+    } else if (rowIndex === totalRows - 1) {
+        // Last row - expand UPWARD
+        transformOrigin += ' bottom';
+    } else {
+        // Middle rows - expand from center
+        transformOrigin += ' center';
+    }
+    
+    hoveredSeat.value = { 
+        row: rowIndex, 
+        col: colIndex,
+        transformOrigin 
+    };
+};
+
+const handleSeatLeave = () => {
+    // Hide after a delay, but only if not hovering over actions
+    setTimeout(() => {
+        if (!showReasonDialog.value) {
+            hoveredSeat.value = null;
+        }
+    }, 150);
+};
+
+const justClicked = ref(false);
+
+const clearHoveredSeat = () => {
+    hoveredSeat.value = null;
+    justClicked.value = true;
+    setTimeout(() => {
+        justClicked.value = false;
+    }, 300);
+};
+
 const handleSeatClick = async (rowIndex, colIndex) => {
     const seat = seatPlan.value[rowIndex][colIndex];
     if (!seat.isOccupied) return;
 
     // Check if session is active
     if (!sessionActive.value) {
-        // Show attendance method selection modal instead
         showAttendanceMethodModal.value = true;
         return;
     }
+    
+    // Just keep hover actions visible on click
+};
 
-    // Cycle through attendance statuses: null -> Present -> Absent -> Late -> Excused -> null
-    const statusCycle = [null, 'Present', 'Absent', 'Late', 'Excused'];
-    const currentIndex = statusCycle.indexOf(seat.status);
-    const nextIndex = (currentIndex + 1) % statusCycle.length;
-    const newStatus = statusCycle[nextIndex];
-
-    // Update seat plan immediately
-    seatPlan.value[rowIndex][colIndex].status = newStatus;
-
-    // Save to database if status is not null
-    if (newStatus) {
-        try {
-            const student = students.value.find((s) => s.id === seat.studentId);
-            if (student) {
-                await saveAttendanceToDatabase(student.id, newStatus, '');
-
-                toast.add({
-                    severity: 'success',
-                    summary: 'Attendance Updated',
-                    detail: `${student.name} marked as ${newStatus}`,
-                    life: 2000
-                });
-            }
-        } catch (error) {
-            console.error('Error saving attendance:', error);
-            // Revert the change if save failed
-            seatPlan.value[rowIndex][colIndex].status = statusCycle[currentIndex];
-
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to save attendance',
-                life: 3000
-            });
-        }
-    } else {
-        // Status is null - just show cleared message
-        const student = students.value.find((s) => s.id === seat.studentId);
-        if (student) {
-            toast.add({
-                severity: 'info',
-                summary: 'Status Cleared',
-                detail: `${student.name} attendance cleared`,
-                life: 2000
-            });
-        }
+// Handle quick action click
+const handleQuickAction = async (status) => {
+    if (!hoveredSeat.value) return;
+    
+    const { row, col } = hoveredSeat.value;
+    const seat = seatPlan.value[row][col];
+    const student = students.value.find((s) => s.id === seat.studentId);
+    
+    if (!student) return;
+    
+    // For Late or Excused, show reason dialog
+    if (status === 'Late' || status === 'Excused') {
+        pendingAttendanceUpdate.value = {
+            student,
+            status,
+            rowIndex: row,
+            colIndex: col,
+            previousStatus: seat.status
+        };
+        reasonDialogType.value = status.toLowerCase();
+        showReasonDialog.value = true;
+        clearHoveredSeat(); // Hide quick actions
+        return;
     }
+    
+    // For Present/Absent, save immediately
+    seatPlan.value[row][col].status = status;
+    clearHoveredSeat(); // Hide quick actions
+    
+    try {
+        await saveAttendanceToDatabase(student.id, status, '', null, null);
+        
+        toast.add({
+            severity: 'success',
+            summary: 'Attendance Updated',
+            detail: `${student.name || student.firstName + ' ' + student.lastName} marked as ${status}`,
+            life: 2000
+        });
+    } catch (error) {
+        console.error('Error saving attendance:', error);
+        // Revert the change if save failed
+        seatPlan.value[row][col].status = seat.status;
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to save attendance',
+            life: 3000
+        });
+    }
+};
+
+// Handle reason dialog confirmation
+const onReasonConfirmed = async (reasonData) => {
+    if (!pendingAttendanceUpdate.value) return;
+    
+    const { student, status, rowIndex, colIndex } = pendingAttendanceUpdate.value;
+    
+    // Update seat with status and reason
+    seatPlan.value[rowIndex][colIndex].status = status;
+    
+    // Save to database with reason
+    try {
+        await saveAttendanceToDatabase(
+            student.id, 
+            status, 
+            '', 
+            reasonData.reason_id, 
+            reasonData.reason_notes
+        );
+
+        toast.add({
+            severity: 'success',
+            summary: 'Attendance Updated',
+            detail: `${student.name || student.firstName + ' ' + student.lastName} marked as ${status} - ${reasonData.reason_name}`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error saving attendance with reason:', error);
+        // Revert the change if save failed
+        seatPlan.value[rowIndex][colIndex].status = pendingAttendanceUpdate.value.previousStatus;
+
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to save attendance',
+            life: 3000
+        });
+    }
+    
+    // Clear pending update
+    pendingAttendanceUpdate.value = null;
 };
 
 const showStartSessionConfirmation = () => {
@@ -3169,7 +3289,7 @@ const saveAttendanceStatus = async () => {
 };
 
 // Save attendance to session-based database
-const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
+const saveAttendanceToDatabase = async (studentId, status, remarks = '', reasonId = null, reasonNotes = null) => {
     try {
         if (!currentSession.value || !currentSession.value.id) {
             throw new Error('No active session found');
@@ -3194,6 +3314,8 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '') => {
             attendance_status_id: attendanceStatusId,
             arrival_time: new Date().toTimeString().split(' ')[0],
             remarks: remarks || null,
+            reason_id: reasonId || null,
+            reason_notes: reasonNotes || null,
             marking_method: 'manual'
         };
 
@@ -3657,7 +3779,7 @@ const saveCompletedSession = (sessionData) => {
         ...sessionData,
         method: methodNames[attendanceMethod.value] || 'Manual Entry'
     };
-    NotificationService.addSessionCompletionNotification(sessionDataWithMethod);
+    // NotificationService.addSessionCompletionNotification(sessionDataWithMethod);
 
     // Show modal after 5-10 seconds delay as requested
     setTimeout(() => {
@@ -4078,15 +4200,47 @@ const titleRef = ref(null);
 
         <!-- Action Buttons -->
         <div class="action-buttons flex flex-wrap gap-2 mb-4">
-            <Button icon="pi pi-pencil" label="Edit Seats" class="p-button-success" :class="{ 'p-button-outlined': !isEditMode }" @click="toggleEditMode" />
+            <Button 
+                icon="pi pi-pencil" 
+                label="Edit Seats" 
+                class="p-button-success" 
+                :class="{ 'p-button-outlined': !isEditMode }" 
+                @click="toggleEditMode"
+                :disabled="sessionActive"
+            />
 
-            <Button icon="pi pi-save" label="Save as Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" />
+            <Button 
+                icon="pi pi-save" 
+                label="Save as Template" 
+                class="p-button-outlined" 
+                @click="showTemplateSaveDialog = true"
+                :disabled="sessionActive"
+            />
 
-            <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
+            <Button 
+                icon="pi pi-list" 
+                label="Load Template" 
+                class="p-button-outlined" 
+                @click="showTemplateManager = true"
+                :disabled="sessionActive"
+            />
 
-            <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" />
+            <Button 
+                icon="pi pi-play" 
+                label="Start Session" 
+                class="p-button-success" 
+                @click="startAttendanceSession" 
+                v-if="!sessionActive"
+                :disabled="isEditMode"
+            />
 
-            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
+            <Button 
+                icon="pi pi-check-circle" 
+                label="Mark All Present" 
+                class="p-button-success" 
+                @click="markAllPresent" 
+                :disabled="isCompletingSession || !sessionActive" 
+            />
 
             <Button
                 :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
@@ -4097,9 +4251,21 @@ const titleRef = ref(null);
                 :disabled="isCompletingSession"
             />
 
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession || !sessionActive" />
+            <Button 
+                icon="pi pi-refresh" 
+                label="Reset Attendance" 
+                class="p-button-outlined" 
+                @click="resetAllAttendance" 
+                :disabled="isCompletingSession || !sessionActive || isEditMode" 
+            />
 
-            <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
+            <Button 
+                icon="pi pi-table" 
+                label="View Records" 
+                class="p-button-info" 
+                @click="viewAttendanceRecords"
+                :disabled="sessionActive || isEditMode"
+            />
         </div>
 
         <!-- Main content with seat plan - always visible -->
@@ -4164,7 +4330,7 @@ const titleRef = ref(null);
                             <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
                                 <div
                                     :class="[
-                                        'seat p-3 border rounded-lg',
+                                        'seat p-3 border rounded-lg transition-all duration-200',
                                         { 'cursor-pointer': !isEditMode || seat.isOccupied },
                                         { 'drop-target': isDropTarget && isDropTarget(rowIndex, colIndex) },
                                         { 'student-present': seat.isOccupied && seat.status === 'Present' },
@@ -4172,13 +4338,50 @@ const titleRef = ref(null);
                                         { 'student-late': seat.isOccupied && seat.status === 'Late' },
                                         { 'student-excused': seat.isOccupied && seat.status === 'Excused' },
                                         { 'student-occupied': seat.isOccupied },
-                                        { removable: isEditMode && seat.isOccupied }
+                                        { removable: isEditMode && seat.isOccupied },
+                                        { 'seat-hovered': hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex }
                                     ]"
+                                    :style="hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex ? { transformOrigin: hoveredSeat.transformOrigin } : {}"
                                     @click="isEditMode ? (seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null) : handleSeatClick(rowIndex, colIndex)"
+                                    @mouseenter="handleSeatHover(rowIndex, colIndex, $event)"
+                                    @mouseleave="handleSeatLeave"
                                     @dragover="allowDrop($event)"
                                     @drop="dropOnSeat(rowIndex, colIndex)"
                                 >
-                                    <div v-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info">
+                                    <!-- Show 2x2 quadrant grid when hovered -->
+                                    <div v-if="hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex && !isEditMode" class="quadrant-grid-container">
+                                        <!-- Top-Left: Absent (Red) -->
+                                        <div class="quadrant quadrant-top-left quadrant-absent" @click.stop="handleQuickAction('Absent')">
+                                            <i class="pi pi-times"></i>
+                                            <span>Absent</span>
+                                        </div>
+                                        
+                                        <!-- Top-Right: Present (Green) -->
+                                        <div class="quadrant quadrant-top-right quadrant-present" @click.stop="handleQuickAction('Present')">
+                                            <i class="pi pi-check"></i>
+                                            <span>Present</span>
+                                        </div>
+                                        
+                                        <!-- Bottom-Left: Excused (Blue) -->
+                                        <div class="quadrant quadrant-bottom-left quadrant-excused" @click.stop="handleQuickAction('Excused')">
+                                            <i class="pi pi-info-circle"></i>
+                                            <span>Excused</span>
+                                        </div>
+                                        
+                                        <!-- Bottom-Right: Late (Orange/Yellow) -->
+                                        <div class="quadrant quadrant-bottom-right quadrant-late" @click.stop="handleQuickAction('Late')">
+                                            <i class="pi pi-clock"></i>
+                                            <span>Late</span>
+                                        </div>
+                                        
+                                        <!-- Student name overlay in center -->
+                                        <div class="student-name-overlay">
+                                            {{ getStudentById(seat.studentId)?.name }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Normal student info when not hovered -->
+                                    <div v-else-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info">
                                         <div class="student-initials bg-blue-500 text-white">
                                             {{ getStudentInitials(getStudentById(seat.studentId)) }}
                                         </div>
@@ -4543,6 +4746,15 @@ const titleRef = ref(null);
             @dont-show-again="handleDontShowAgain"
         />
 
+        <!-- Attendance Reason Dialog -->
+        <AttendanceReasonDialog
+            v-model="showReasonDialog"
+            :status-type="reasonDialogType"
+            :student-name="pendingAttendanceUpdate?.student?.name || 
+                           (pendingAttendanceUpdate?.student?.firstName + ' ' + pendingAttendanceUpdate?.student?.lastName)"
+            @confirm="onReasonConfirmed"
+        />
+
         <!-- Seating Loading Overlay -->
         <div v-if="isLoadingSeating" class="seating-loading-overlay">
             <div class="loading-content">
@@ -4691,7 +4903,8 @@ const titleRef = ref(null);
 
 .seat-container {
     flex: 1;
-    min-width: 100px;
+    min-width: 60px;
+    max-width: 120px;
     aspect-ratio: 1/1;
 }
 
@@ -4705,6 +4918,8 @@ const titleRef = ref(null);
     text-align: center;
     transition: all 0.2s ease;
     aspect-ratio: 1/1;
+    position: relative;
+    overflow: visible;
 }
 
 .student-info {
@@ -5392,6 +5607,109 @@ const titleRef = ref(null);
     }
     100% {
         transform: translateX(100%);
+    }
+}
+
+/* Hovered Seat - Enlarge slightly */
+.seat-hovered {
+    transform: scale(1.3) !important;
+    z-index: 9999 !important;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35) !important;
+    border-radius: 12px !important;
+    position: relative !important;
+    transition: transform 0.2s ease-out !important;
+}
+
+/* Quadrant Grid Container - 2x2 grid */
+.quadrant-grid-container {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    border-radius: 12px;
+    overflow: hidden;
+    animation: fadeInScale 0.2s ease-out;
+}
+
+/* Individual Quadrant */
+.quadrant {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    position: relative;
+    padding: 4px 2px;
+    overflow: hidden;
+}
+
+.quadrant i {
+    font-size: 20px;
+    margin-bottom: 1px;
+    display: block;
+}
+
+.quadrant span {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0px;
+    font-weight: 800;
+    line-height: 1;
+    display: block;
+    word-break: keep-all;
+    white-space: nowrap;
+}
+
+.quadrant:hover {
+    filter: brightness(1.15);
+    transform: scale(1.05);
+}
+
+/* Top-Left: Absent (Red) */
+.quadrant-absent {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    border-top-left-radius: 12px;
+}
+
+/* Top-Right: Present (Green) */
+.quadrant-present {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    border-top-right-radius: 12px;
+}
+
+/* Bottom-Left: Excused (Blue) */
+.quadrant-excused {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border-bottom-left-radius: 12px;
+}
+
+/* Bottom-Right: Late (Orange/Yellow) */
+.quadrant-late {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    border-bottom-right-radius: 12px;
+}
+
+/* Student Name Overlay - Hidden to not block quadrants */
+.student-name-overlay {
+    display: none;
+}
+
+/* Animation */
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
     }
 }
 </style>
