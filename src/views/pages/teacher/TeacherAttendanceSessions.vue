@@ -86,11 +86,22 @@ const loadAttendanceSessions = async () => {
     }
 
     loading.value = true;
+    const startTime = Date.now();
+    
     try {
         console.log('Loading attendance sessions for teacher:', teacherId.value);
         const response = await TeacherAttendanceService.getTeacherAttendanceSessions(teacherId.value);
         console.log('API Response:', response);
         console.log('Sessions received:', response.sessions?.length || 0);
+        
+        // Calculate remaining time to show loading (minimum 600ms)
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 600;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        // Wait for minimum loading time to ensure smooth animation
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+        
         sessions.value = response.sessions || [];
         console.log('Sessions stored in reactive variable:', sessions.value.length);
     } catch (error) {
@@ -316,14 +327,21 @@ onUnmounted(() => {
             <Button icon="pi pi-refresh" label="Refresh" @click="loadAttendanceSessions" :loading="loading" class="p-button-outlined" />
         </div>
 
-        <!-- Loading State -->
-        <div v-if="loading && sessions.length === 0" class="flex justify-center items-center py-8">
-            <ProgressSpinner />
-            <span class="ml-3 text-gray-600">Loading attendance sessions...</span>
-        </div>
+        <!-- Smooth Minimal Loading -->
+        <transition name="fade-slide">
+            <div v-if="loading && sessions.length === 0" class="loading-container">
+                <div class="loading-content">
+                    <!-- Simple Spinner -->
+                    <div class="simple-spinner"></div>
+                    
+                    <!-- Text -->
+                    <p class="loading-text">Loading sessions...</p>
+                </div>
+            </div>
+        </transition>
 
         <!-- Sessions by Date -->
-        <div v-else class="space-y-6">
+        <div v-if="!loading || sessions.length > 0" class="space-y-6">
             <div v-for="(dateSessions, date) in sessionsByDate" :key="date" class="date-group">
                 <h3 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">
                     {{ formatDate(date) }}
@@ -484,5 +502,59 @@ onUnmounted(() => {
 .p-dialog .p-dialog-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+}
+
+/* Smooth Minimal Loading */
+.loading-container {
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.simple-spinner {
+    width: 50px;
+    height: 50px;
+    margin: 0 auto 1.5rem;
+    border: 3px solid #e5e7eb;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: #64748b;
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* Smooth Transitions */
+.fade-slide-enter-active {
+    transition: all 0.4s ease-out;
+}
+
+.fade-slide-leave-active {
+    transition: all 0.3s ease-in;
+}
+
+.fade-slide-enter-from {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.fade-slide-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
 }
 </style>

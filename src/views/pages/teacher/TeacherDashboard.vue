@@ -25,8 +25,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import TeacherAuthService from '@/services/TeacherAuthService';
 
 // Import our new smart analytics services
-import SmartAnalyticsService from '@/services/SmartAnalyticsService';
 import CacheService from '@/services/CacheService';
+import SmartAnalyticsService from '@/services/SmartAnalyticsService';
 // Sticky notes service removed
 
 // Import new components
@@ -183,18 +183,17 @@ const initializeTeacherData = async () => {
                 id: teacherData.teacher.id,
                 name: teacherData.teacher.full_name || `${teacherData.teacher.first_name} ${teacherData.teacher.last_name}`,
                 email: teacherData.user.email,
-                section: teacherData.assignments.find(a => a.section_name)?.section_name || 
-                        'No section assigned',
+                section: teacherData.assignments.find((a) => a.section_name)?.section_name || 'No section assigned',
                 assignedGrades: []
             };
 
             // Get unique subjects from assignments with correct section IDs
             const assignments = TeacherAuthService.getAssignments();
             const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
-            
-            availableSubjects.value = uniqueSubjects.map(subject => {
+
+            availableSubjects.value = uniqueSubjects.map((subject) => {
                 // Find the assignment for this subject to get the correct section ID
-                const assignment = assignments.find(a => a.subject_id === subject.id);
+                const assignment = assignments.find((a) => a.subject_id === subject.id);
                 return {
                     id: subject.id,
                     name: subject.name,
@@ -224,7 +223,7 @@ onMounted(async () => {
     try {
         // Initialize authentication and load teacher data
         await initializeTeacherData();
-        
+
         // If no teacher data loaded, use fallback
         if (!currentTeacher.value) {
             // Use Maria Santos as the default teacher (ID: 3)
@@ -335,10 +334,7 @@ onMounted(async () => {
         await prepareChartData();
 
         // Batch load remaining dashboard data efficiently
-        await Promise.all([
-            loadSmartAnalytics(),
-            loadCriticalStudents()
-        ]);
+        await Promise.all([loadSmartAnalytics(), loadCriticalStudents()]);
 
         // Set up auto-refresh to catch new student enrollments (reduced frequency)
         refreshInterval = setInterval(refreshDashboardData, 30000); // Refresh every 30 seconds
@@ -464,7 +460,7 @@ async function loadAttendanceData() {
     if (!selectedSubject.value || !currentTeacher.value) return;
 
     console.log('Loading attendance data for subject:', selectedSubject.value);
-    
+
     try {
         const sectionId = selectedSubject.value.sectionId;
         const params = {
@@ -478,16 +474,16 @@ async function loadAttendanceData() {
             ...params,
             viewType: viewType.value
         });
-        
+
         // Try to get from cache first
         const cachedData = CacheService.get(cacheKey);
         if (cachedData) {
             console.log('📦 Using cached attendance data');
             attendanceSummary.value = cachedData.summary;
-            
+
             // Update studentsWithAbsenceIssues from cached data
             if (cachedData.summary.students) {
-                studentsWithAbsenceIssues.value = cachedData.summary.students.map(student => ({
+                studentsWithAbsenceIssues.value = cachedData.summary.students.map((student) => ({
                     id: student.student_id,
                     name: student.name,
                     gradeLevel: student.grade_name || 'Unknown Grade',
@@ -506,16 +502,12 @@ async function loadAttendanceData() {
 
         // Batch API calls for better performance
         const [studentsResponse, summaryResponse] = await Promise.all([
-            TeacherAttendanceService.getStudentsForTeacherSubject(
-                params.teacherId,
-                params.sectionId, 
-                params.subjectId
-            ),
+            TeacherAttendanceService.getStudentsForTeacherSubject(params.teacherId, params.sectionId, params.subjectId),
             AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
                 period: 'week',
-                viewType: 'all_students',  // Make it general, not subject-specific
-                subjectId: null            // No subject filtering
-            }).then(result => {
+                viewType: 'all_students', // Make it general, not subject-specific
+                subjectId: null // No subject filtering
+            }).then((result) => {
                 console.log('🔍 Attendance Summary API called with:', {
                     teacherId: currentTeacher.value.id,
                     period: 'week',
@@ -538,11 +530,11 @@ async function loadAttendanceData() {
 
             // Cache the result for 2 minutes
             CacheService.set(cacheKey, { summary }, 2 * 60 * 1000);
-            
+
             attendanceSummary.value = summary;
-            
+
             // Update studentsWithAbsenceIssues for the template
-            studentsWithAbsenceIssues.value = summaryResponse.data.students.map(student => ({
+            studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
                 id: student.student_id,
                 name: student.name,
                 gradeLevel: student.grade_name || 'Unknown Grade',
@@ -553,7 +545,7 @@ async function loadAttendanceData() {
                 totalPresent: student.total_present,
                 totalLate: student.total_late
             }));
-            
+
             console.log('✅ Attendance data loaded and cached');
         }
     } catch (error) {
@@ -759,7 +751,7 @@ async function prepareChartData() {
                 viewType: viewType.value,
                 subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
             };
-            
+
             console.log('🔍 Calling getAttendanceTrends with:', JSON.stringify(trendsParams, null, 2));
 
             const trendsResult = await AttendanceSummaryService.getAttendanceTrends(currentTeacher.value.id, {
@@ -767,7 +759,7 @@ async function prepareChartData() {
                 viewType: viewType.value,
                 subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
             });
-            
+
             console.log('📊 Full trends response:', trendsResult);
 
             if (trendsResult && trendsResult.success && trendsResult.data) {
@@ -977,30 +969,28 @@ async function prepareCalendarData(student) {
     try {
         // Get all attendance records for this student in this subject
         const response = await StudentAttendanceService.getSubjectAttendanceRecords([student.id], selectedSubject.value.id, currentMonth.value, currentYear.value);
-        
+
         console.log('Attendance records response:', response);
-        
+
         const records = response.records || [];
-        
+
         console.log('Current month/year for calendar:', currentMonth.value, currentYear.value);
         console.log('Individual records:', records);
 
         // Find absent days for the absence history section
-        absentDays.value = records
-            .filter((record) => record.status === 'ABSENT')
-            .map((record) => new Date(record.date));
+        absentDays.value = records.filter((record) => record.status === 'ABSENT').map((record) => new Date(record.date));
 
         // Create a map of dates to attendance status for calendar display
         const attendanceMap = {};
-        records.forEach(record => {
+        records.forEach((record) => {
             const date = new Date(record.date);
             const day = date.getDate();
             const month = date.getMonth(); // 0-based month
             const year = date.getFullYear();
-            
+
             console.log(`Record: ${record.date} -> Day: ${day}, Month: ${month}, Year: ${year}, Status: ${record.status}`);
             console.log(`Calendar showing: Month: ${currentMonth.value}, Year: ${currentYear.value}`);
-            
+
             // Only map records that match the current calendar month/year
             if (month === currentMonth.value && year === currentYear.value) {
                 attendanceMap[day] = record.status;
@@ -1012,9 +1002,9 @@ async function prepareCalendarData(student) {
 
         console.log('Final attendance map for calendar:', attendanceMap);
         console.log('Calendar data before mapping:', calendarData.value);
-        
+
         // Update calendar data with attendance status
-        calendarData.value = calendarData.value.map(calDay => {
+        calendarData.value = calendarData.value.map((calDay) => {
             const status = attendanceMap[calDay.day] || null;
             const updatedDay = {
                 ...calDay,
@@ -1024,9 +1014,8 @@ async function prepareCalendarData(student) {
             console.log(`Day ${calDay.day}: status = ${status}`, updatedDay);
             return updatedDay;
         });
-        
-        console.log('Calendar data after mapping:', calendarData.value);
 
+        console.log('Calendar data after mapping:', calendarData.value);
     } catch (error) {
         console.error('Error loading attendance records:', error);
         absentDays.value = []; // Fallback to empty array
@@ -1063,24 +1052,24 @@ watch(selectedSubject, async (newSubject, oldSubject) => {
     if (!oldSubject || !newSubject || newSubject.id === oldSubject.id) {
         return;
     }
-        
-        // Clear any cached attendance data for both old and new subjects
-        // Clear cache for both view types to ensure fresh data
-        const cacheParams = {
-            teacherId: currentTeacher.value.id,
-            sectionId: selectedSubject.value.sectionId,
-            subjectId: selectedSubject.value.id
-        };
 
-        // Clear cache for both subject and all_students views
-        ['subject', 'all_students'].forEach(vType => {
-            const cacheKey = CacheService.generateKey('attendance_data', {
-                ...cacheParams,
-                viewType: vType
-            });
-            CacheService.delete(cacheKey);
-            console.log(`🗑️ Clearing ${vType} cache:`, cacheKey);
+    // Clear any cached attendance data for both old and new subjects
+    // Clear cache for both view types to ensure fresh data
+    const cacheParams = {
+        teacherId: currentTeacher.value.id,
+        sectionId: selectedSubject.value.sectionId,
+        subjectId: selectedSubject.value.id
+    };
+
+    // Clear cache for both subject and all_students views
+    ['subject', 'all_students'].forEach((vType) => {
+        const cacheKey = CacheService.generateKey('attendance_data', {
+            ...cacheParams,
+            viewType: vType
         });
+        CacheService.delete(cacheKey);
+        console.log(`🗑️ Clearing ${vType} cache:`, cacheKey);
+    });
 
     // Reload attendance data
     await loadAttendanceData();
@@ -1170,12 +1159,12 @@ function ensureStudentAttendanceService() {
 async function loadSmartAnalytics() {
     try {
         if (!currentTeacher.value?.id) return;
-        
+
         const response = await SmartAnalyticsService.getTeacherStudentAnalytics(currentTeacher.value.id);
         if (response.success) {
             smartAnalytics.value = response.data;
             studentsWithSmartAnalytics.value = response.data.students || [];
-            
+
             // Update existing attendance summary with smart analytics
             if (attendanceSummary.value) {
                 attendanceSummary.value.criticalStudents = response.data.summary?.critical_cases || 0;
@@ -1190,7 +1179,7 @@ async function loadSmartAnalytics() {
 async function loadCriticalStudents() {
     try {
         if (!currentTeacher.value?.id) return;
-        
+
         const response = await SmartAnalyticsService.getCriticalAbsenteeism(currentTeacher.value.id);
         if (response.success) {
             criticalStudents.value = response.data.students || [];
@@ -1206,16 +1195,16 @@ async function loadCriticalStudents() {
 async function showStudentProfile(student) {
     try {
         selectedStudent.value = student;
-        
+
         // Load smart analytics for this student
         const analyticsResponse = await SmartAnalyticsService.getStudentAnalytics(student.id);
         if (analyticsResponse.success) {
             selectedStudent.value.smartAnalytics = analyticsResponse.data;
         }
-        
+
         // Load calendar attendance data for this student
         await prepareCalendarData(student);
-        
+
         studentProfileVisible.value = true;
     } catch (error) {
         console.error('Error loading student analytics:', error);
@@ -1259,7 +1248,6 @@ async function showStudentProfile(student) {
 
                     <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end items-center">
                         <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-3xl" @change="onSubjectChange" />
-                        
                     </div>
                 </div>
             </div>
@@ -1269,7 +1257,6 @@ async function showStudentProfile(student) {
                 <div class="lg:col-span-1">
                     <ScheduleStatusWidget />
                 </div>
-                
             </div>
 
             <!-- Attendance Stats Summary Cards -->
@@ -1297,9 +1284,10 @@ async function showStudentProfile(student) {
                                     <div
                                         class="h-2 rounded-full transition-all duration-500"
                                         :class="{
-                                            'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                            'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
-                                            'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 70
+                                            'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                            'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                            'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                            'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
                                         }"
                                         :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
                                     ></div>
@@ -1307,12 +1295,13 @@ async function showStudentProfile(student) {
                                 <span
                                     class="text-xs px-2 py-1 rounded-full font-medium"
                                     :class="{
-                                        'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                        'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 70,
-                                        'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 70
+                                        'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                        'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                        'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                        'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
                                     }"
                                 >
-                                    {{ (attendanceSummary?.averageAttendance || 0) >= 85 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 70 ? 'Fair' : 'Low' }}
+                                    {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
                                 </span>
                             </div>
                         </div>
@@ -1407,11 +1396,8 @@ async function showStudentProfile(student) {
             <div class="bg-white rounded-xl shadow-sm p-5">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                     <h2 class="text-lg font-semibold flex items-center">
-                        <i class="pi pi-list text-blue-600 mr-2"></i>
+                        <i class="mr-2"></i>
                         Student Attendance
-                        <span v-if="selectedSubject" class="text-sm font-normal text-gray-500 block sm:inline sm:ml-2">
-                            {{ selectedSubject.name }}
-                        </span>
                     </h2>
 
                     <div class="flex flex-col sm:flex-row gap-3 mt-2 sm:mt-0">
@@ -1614,7 +1600,7 @@ async function showStudentProfile(student) {
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="calendar-view mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
                     <div class="calendar-header grid grid-cols-7 gap-1 mb-2">
                         <div v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-center font-medium text-gray-600 text-xs">
@@ -1646,16 +1632,18 @@ async function showStudentProfile(student) {
                             <!-- Debug info -->
                             <span v-if="calDay.status" class="absolute top-0 left-0 text-xs text-blue-600">{{ calDay.status.charAt(0) }}</span>
                             <!-- Status indicator dot -->
-                            <div v-if="calDay.status" class="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+                            <div
+                                v-if="calDay.status"
+                                class="absolute -top-1 -right-1 w-2 h-2 rounded-full"
                                 :class="{
                                     'bg-red-500': calDay.status === 'ABSENT',
                                     'bg-yellow-500': calDay.status === 'LATE',
                                     'bg-green-500': calDay.status === 'PRESENT'
-                                }">
-                            </div>
+                                }"
+                            ></div>
                         </div>
                     </div>
-                    
+
                     <!-- Calendar summary -->
                     <div v-if="absentDays.length > 0" class="mt-4 pt-4 border-t border-gray-200">
                         <div class="text-sm text-gray-600 text-center">
@@ -1681,7 +1669,6 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
             </div>
-
         </Dialog>
 
         <!-- Debug Data -->
@@ -1703,39 +1690,24 @@ async function showStudentProfile(student) {
         </div>
     </div>
 
-
     <!-- Critical Students Alert Dialog -->
-    <Dialog v-model:visible="showCriticalAlert" 
-            header="🚨 Critical Attendance Cases"
-            :style="{ width: '600px' }"
-            :modal="true">
+    <Dialog v-model:visible="showCriticalAlert" header="🚨 Critical Attendance Cases" :style="{ width: '600px' }" :modal="true">
         <div v-if="criticalStudents.length > 0" class="space-y-4">
-            <p class="text-gray-700 mb-4">
-                The following students have exceeded the 18-absence limit and require immediate attention:
-            </p>
-            
-            <div v-for="student in criticalStudents" :key="student.id" 
-                 class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p class="text-gray-700 mb-4">The following students have exceeded the 18-absence limit and require immediate attention:</p>
+
+            <div v-for="student in criticalStudents" :key="student.id" class="bg-red-50 border border-red-200 rounded-lg p-4">
                 <div class="flex items-center justify-between">
                     <div>
                         <h4 class="font-medium text-red-900">{{ student.name }}</h4>
-                        <p class="text-sm text-red-700">
-                            Total Absences: {{ student.total_absences }} | 
-                            Attendance Rate: {{ student.attendance_percentage }}%
-                        </p>
+                        <p class="text-sm text-red-700">Total Absences: {{ student.total_absences }} | Attendance Rate: {{ student.attendance_percentage }}%</p>
                     </div>
-                    <Button @click="showStudentProfile(student)" 
-                            label="View Details" 
-                            icon="pi pi-eye" 
-                            class="p-button-sm p-button-outlined" />
+                    <Button @click="showStudentProfile(student)" label="View Details" icon="pi pi-eye" class="p-button-sm p-button-outlined" />
                 </div>
             </div>
         </div>
-        
+
         <template #footer>
-            <Button @click="showCriticalAlert = false" 
-                    label="Close" 
-                    class="p-button-text" />
+            <Button @click="showCriticalAlert = false" label="Close" class="p-button-text" />
         </template>
     </Dialog>
 </template>

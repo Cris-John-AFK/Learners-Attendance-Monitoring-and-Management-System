@@ -12,70 +12,7 @@ import { useRouter } from 'vue-router';
 const { toggleMenu } = useLayout();
 const router = useRouter();
 
-const isCalendarOpen = ref(false); // Modal control
-
-// DepEd School Calendar Activities
-const activities = ref([
-    // DepEd National Holidays 2024-2025
-    { description: 'Ninoy Aquino Day', dates: '2024-08-21', color: 'red' },
-    { description: 'National Heroes Day', dates: '2024-08-26', color: 'red' },
-    { description: 'All Saints Day', dates: '2024-11-01', color: 'red' },
-    { description: 'Bonifacio Day', dates: '2024-11-30', color: 'red' },
-    { description: 'Christmas Day', dates: '2024-12-25', color: 'red' },
-    { description: 'Rizal Day', dates: '2024-12-30', color: 'red' },
-    { description: 'New Year\'s Day', dates: '2025-01-01', color: 'red' },
-    { description: 'Araw ng Kagitingan', dates: '2025-04-09', color: 'red' },
-    { description: 'Maundy Thursday', dates: '2025-04-17', color: 'red' },
-    { description: 'Good Friday', dates: '2025-04-18', color: 'red' },
-    { description: 'Labor Day', dates: '2025-05-01', color: 'red' },
-    { description: 'Independence Day', dates: '2025-06-12', color: 'red' },
-    
-    // School Events (can be customized by teachers/admin)
-    { description: 'School Year Start', dates: '2024-08-26', color: 'green' },
-    { description: 'First Quarter End', dates: '2024-10-31', color: 'blue' },
-    { description: 'Second Quarter End', dates: '2025-01-24', color: 'blue' },
-    { description: 'Third Quarter End', dates: '2025-04-04', color: 'blue' },
-    { description: 'School Year End', dates: '2025-05-30', color: 'green' }
-]);
-
-const attributes = computed(() => {
-    // Extract holiday dates
-    const holidayDates = activities.value.map((event) => event.dates);
-
-    // Generate DepEd school days (Mon-Fri during school year, excluding holidays)
-    const schoolDays = [];
-    
-    // DepEd School Year 2024-2025: August 26, 2024 to May 30, 2025
-    let currentDate = new Date('2024-08-26'); // School year start
-    const endDate = new Date('2025-05-30'); // School year end
-
-    while (currentDate <= endDate) {
-        const isoDate = currentDate.toISOString().split('T')[0]; // Format YYYY-MM-DD
-
-        // If it's Mon-Fri and NOT a holiday, add it as a school day
-        if ([1, 2, 3, 4, 5].includes(currentDate.getDay()) && !holidayDates.includes(isoDate)) {
-            schoolDays.push(isoDate);
-        }
-
-        // Move to the next day
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return [
-        // Mark no-class days (holidays)
-        ...activities.value.map((event) => ({
-            dates: event.dates,
-            dot: { color: event.color },
-            popover: { label: event.description }
-        })),
-        // Mark DepEd school days
-        {
-            dates: schoolDays, // Only includes valid Mon-Fri school days, excluding holidays
-            highlight: { color: 'green', fillMode: 'light' },
-            popover: { label: 'School Day (Classes)' }
-        }
-    ];
-});
+// Calendar removed for performance
 
 const isProfileOpen = ref(false); // Controls dropdown visibility
 
@@ -309,13 +246,6 @@ onUnmounted(() => {
             </div>
 
             <div class="layout-topbar-actions">
-                <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
-                    <i class="pi pi-calendar"></i>
-                    <span>Calendar</span>
-                </button>
-
-                <!-- Sticky notes removed -->
-
                 <!-- Notification Bell -->
                 <NotificationBell :notifications="notifications" @notification-clicked="handleNotificationClick" @mark-all-read="handleMarkAllRead" @remove-notification="handleRemoveNotification" />
 
@@ -338,9 +268,6 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <Dialog v-model:visible="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px', maxWidth: '90vw' }">
-            <VCalendar is-expanded :attributes="attributes" first-day-of-week="1" theme-styling="rounded border shadow-lg bg-white" />
-        </Dialog>
 
         <!-- Log Out Confirmation Modal -->
         <Dialog v-model="isLogoutSuccess" header="Success" :modal="true" :style="{ width: '250px' }">
