@@ -409,6 +409,7 @@ Route::prefix('guardhouse')->group(function () {
 Route::prefix('analytics')->group(function () {
     // Student Analytics
     Route::get('/student/{studentId}', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getStudentAnalytics']);
+    Route::get('/student/{studentId}/weekly', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getStudentWeeklyAttendance']);
     Route::post('/student/{studentId}/refresh', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'refreshStudentAnalytics']);
     Route::get('/student/{studentId}/patterns', [App\Http\Controllers\API\SmartAttendanceAnalyticsController::class, 'getAttendancePatterns']);
     

@@ -39,6 +39,8 @@ const attendanceSummary = ref(null);
 const studentsWithAbsenceIssues = ref([]);
 const selectedStudent = ref(null);
 const studentProfileVisible = ref(false);
+const profileSubjectFilter = ref(null); // Subject filter for student profile
+const profileAvailableSubjects = ref([]); // Available subjects for the profile filter
 const loading = ref(true);
 const subjectLoading = ref(false);
 const chartOptions = ref({});
@@ -986,13 +988,30 @@ function formatDateShort(date) {
 // Open student profile with attendance history
 async function openStudentProfile(student) {
     selectedStudent.value = student;
+    profileSubjectFilter.value = null; // Reset filter
+    
+    // Load available subjects for this teacher
+    profileAvailableSubjects.value = availableSubjects.value || [];
+    
     await prepareCalendarData(student);
     studentProfileVisible.value = true;
 }
 
+// Handler for subject filter change in profile dialog
+async function onProfileSubjectChange() {
+    console.log('📚 Profile subject filter changed to:', profileSubjectFilter.value);
+    if (selectedStudent.value) {
+        await prepareCalendarData(selectedStudent.value);
+    }
+}
+
 // Prepare calendar data for the student profile using StudentAttendanceService
 async function prepareCalendarData(student) {
-    if (!selectedSubject.value || !student) return;
+    if (!student) return;
+    
+    // Use profileSubjectFilter if set, otherwise use selectedSubject
+    const subjectToUse = profileSubjectFilter.value || selectedSubject.value?.id;
+    if (!subjectToUse) return;
 
     // Generate calendar data for current month first
     const daysInMonth = new Date(currentYear.value, currentMonth.value + 1, 0).getDate();
@@ -1006,8 +1025,8 @@ async function prepareCalendarData(student) {
     }));
 
     try {
-        // Get all attendance records for this student in this subject
-        const response = await StudentAttendanceService.getSubjectAttendanceRecords([student.id], selectedSubject.value.id, currentMonth.value, currentYear.value);
+        // Get all attendance records for this student in the selected subject (filtered!)
+        const response = await StudentAttendanceService.getSubjectAttendanceRecords([student.id], subjectToUse, currentMonth.value, currentYear.value);
 
         console.log('Attendance records response:', response);
 
@@ -1503,7 +1522,7 @@ async function showStudentProfile(student) {
 
                 <!-- Enhanced Attendance Insights Card -->
                 <div class="col-span-12 lg:col-span-4">
-                    <AttendanceInsights :students="attendanceSummary?.students || []" :selectedSubject="null" />
+                    <AttendanceInsights :students="attendanceSummary?.students || []" :selectedSubject="null" :currentTeacher="currentTeacher" />
                 </div>
             </div>
 
@@ -1698,12 +1717,30 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
 
-                <div class="flex justify-between items-center mb-3">
+                <div class="flex justify-between items-center mb-4">
                     <div>
-                        <h4 class="font-medium">Attendance Calendar: {{ selectedSubject?.name }}</h4>
+                        <h4 class="font-medium">Attendance Calendar</h4>
                         <p class="text-sm text-gray-600">{{ new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}</p>
                     </div>
-                    <div class="flex items-center space-x-4 text-xs">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <label for="profile-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
+                            <Dropdown 
+                                id="profile-subject-filter"
+                                v-model="profileSubjectFilter" 
+                                :options="profileAvailableSubjects"
+                                optionLabel="name"
+                                optionValue="id"
+                                placeholder="All Subjects"
+                                @change="onProfileSubjectChange"
+                                showClear
+                                style="min-width: 150px;"
+                            />
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4 text-xs mb-3">
                         <div class="flex items-center space-x-1">
                             <div class="w-3 h-3 bg-red-100 border border-red-200 rounded-full"></div>
                             <span class="text-gray-600">Absent</span>
@@ -1720,7 +1757,6 @@ async function showStudentProfile(student) {
                             <div class="w-3 h-3 bg-green-100 border border-green-200 rounded-full"></div>
                             <span class="text-gray-600">Present</span>
                         </div>
-                    </div>
                 </div>
 
                 <div class="calendar-view mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">

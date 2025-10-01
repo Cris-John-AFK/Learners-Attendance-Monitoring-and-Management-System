@@ -171,10 +171,47 @@
             <div class="progress-content">
                 <!-- Weekly Attendance Chart -->
                 <div class="progress-section">
-                    <h5><i class="pi pi-chart-bar"></i> Weekly Attendance Overview</h5>
+                    <div class="section-header-with-picker">
+                        <h5><i class="pi pi-chart-bar"></i> Weekly Attendance Overview</h5>
+                        <div class="filters-container">
+                            <div class="filter-group">
+                                <label for="subject-filter" style="margin-right: 8px; font-weight: 500;">Subject:</label>
+                                <Dropdown 
+                                    id="subject-filter"
+                                    v-model="selectedSubjectFilter" 
+                                    :options="availableSubjects"
+                                    optionLabel="name"
+                                    optionValue="id"
+                                    placeholder="All Subjects"
+                                    @change="onSubjectFilterChange"
+                                    showClear
+                                    style="min-width: 180px;"
+                                />
+                            </div>
+                            <div class="filter-group">
+                                <label for="month-picker" style="margin-right: 8px; font-weight: 500;">Month:</label>
+                                <Calendar 
+                                    id="month-picker"
+                                    v-model="selectedMonth" 
+                                    view="month" 
+                                    dateFormat="MM yy"
+                                    @date-select="onMonthChange"
+                                    :maxDate="new Date()"
+                                    showIcon
+                                    placeholder="Select month"
+                                />
+                            </div>
+                        </div>
+                    </div>
                     <div class="weekly-grid">
                         <div v-for="week in progressData.weeklyAttendance" :key="week.week" class="week-card">
-                            <div class="week-header">{{ week.week }}</div>
+                            <div class="week-header">
+                                {{ week.week }}
+                                <div class="week-meta" v-if="week.total_days || week.total_subjects">
+                                    <span class="meta-badge">{{ week.total_days }} days</span>
+                                    <span class="meta-badge" v-if="week.total_subjects > 1">{{ week.total_subjects }} subjects</span>
+                                </div>
+                            </div>
                             <div class="attendance-stats">
                                 <div class="stat-item present">
                                     <span class="stat-label">Present:</span>
@@ -189,6 +226,20 @@
                                     <span class="stat-value">{{ week.late }}</span>
                                 </div>
                             </div>
+                            
+                            <!-- Subject Breakdown Tooltip -->
+                            <div v-if="week.subject_breakdown && Object.keys(week.subject_breakdown).length > 0" class="subject-breakdown-info">
+                                <small class="breakdown-label">📚 By Subject:</small>
+                                <div class="subject-list">
+                                    <div v-for="(stats, subjectKey) in week.subject_breakdown" :key="subjectKey" class="subject-item">
+                                        <strong>{{ stats.subject_name || subjectKey }}:</strong> 
+                                        <span class="text-green-600">{{ stats.present }}P</span>
+                                        <span class="text-red-600">{{ stats.absent }}A</span>
+                                        <span class="text-yellow-600" v-if="stats.late > 0">{{ stats.late }}L</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div class="percentage-bar">
                                 <div class="percentage-fill" :style="{ width: week.percentage + '%' }"></div>
                                 <span class="percentage-text">{{ week.percentage }}%</span>
@@ -239,6 +290,7 @@ import SmartAnalyticsService from '@/services/SmartAnalyticsService';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
 import { computed, ref } from 'vue';
@@ -249,6 +301,10 @@ const props = defineProps({
         default: () => []
     },
     selectedSubject: {
+        type: Object,
+        default: null
+    },
+    currentTeacher: {
         type: Object,
         default: null
     }
@@ -266,6 +322,9 @@ const newPlan = ref({
 
 const showProgressDialog = ref(false);
 const selectedStudentForProgress = ref(null);
+const selectedMonth = ref(new Date()); // Default to current month
+const selectedSubjectFilter = ref(null); // Default to all subjects
+const availableSubjects = ref([]);
 const progressData = ref({
     weeklyAttendance: [],
     monthlyTrends: [],
@@ -502,13 +561,29 @@ function referToCounselor(student) {
 
 function trackProgress(student) {
     selectedStudentForProgress.value = student;
+    selectedMonth.value = new Date(); // Reset to current month when opening dialog
+    selectedSubjectFilter.value = null; // Reset subject filter to show all subjects
+    availableSubjects.value = []; // Clear subjects list (will be populated when data loads)
     showProgressDialog.value = true;
     loadProgressData(student);
 }
 
+function onMonthChange() {
+    console.log('📅 Month changed to:', selectedMonth.value);
+    if (selectedStudentForProgress.value) {
+        loadProgressData(selectedStudentForProgress.value);
+    }
+}
+
+function onSubjectFilterChange() {
+    console.log('📚 Subject filter changed to:', selectedSubjectFilter.value);
+    if (selectedStudentForProgress.value) {
+        loadProgressData(selectedStudentForProgress.value);
+    }
+}
+
 async function loadProgressData(student) {
     try {
-        // Debug: Check student object structure
         console.log('Loading progress data for student:', student);
         console.log('Student ID:', student.id);
         console.log('Available student keys:', Object.keys(student));
@@ -518,144 +593,184 @@ async function loadProgressData(student) {
 
         if (!studentId) {
             console.error('No valid student ID found in student object:', student);
-            console.error('Trying to use a fallback student ID from the first available student...');
-
-            // Try to use a known working student ID as fallback for testing
-            const fallbackStudentId = 12; // We know this works from the API test
-            console.warn(`Using fallback student ID: ${fallbackStudentId} for testing purposes`);
-
-            // Fetch real smart analytics data from the API using fallback ID
-            const response = await SmartAnalyticsService.getStudentAnalytics(fallbackStudentId);
-
-            if (response.success && response.data) {
-                const analytics = response.data;
-
-                // Map real analytics data to progress dialog format
-                progressData.value = {
-                    weeklyAttendance: analytics.weekly_attendance || [],
-                    monthlyTrends: analytics.monthly_trends || [],
-                    improvements: analytics.positive_improvements || ['No specific improvements detected yet'],
-                    concerns: analytics.areas_of_concern || ['No significant concerns identified'],
-                    nextSteps: analytics.recommended_actions?.map((action) => `${action.action} (${action.urgency} priority - ${action.timeline})`) || ['Continue monitoring attendance patterns']
-                };
-                return; // Exit early since we got data
-            } else {
-                throw new Error('Invalid student ID and fallback failed');
-            }
+            progressData.value = {
+                weeklyAttendance: [],
+                monthlyTrends: [],
+                improvements: ['Unable to load data - no student ID found'],
+                concerns: ['Missing student identification'],
+                nextSteps: ['Please contact support']
+            };
+            return;
         }
 
-        console.log('Using student ID:', studentId);
+        console.log('🔥 Fetching REAL weekly attendance from database for student:', studentId);
+        console.log('📅 Selected month:', selectedMonth.value);
+        console.log('📚 Selected subject filter:', selectedSubjectFilter.value);
+        console.log('👤 Teacher ID:', props.currentTeacher?.id);
 
-        // Fetch real smart analytics data from the API
-        const response = await SmartAnalyticsService.getStudentAnalytics(studentId);
+        // Fetch REAL weekly attendance records from database for selected month, subject, AND teacher!
+        const weeklyResponse = await SmartAnalyticsService.getStudentWeeklyAttendance(
+            studentId, 
+            selectedMonth.value,
+            selectedSubjectFilter.value,
+            props.currentTeacher?.id  // CRITICAL: Only show this teacher's sessions!
+        );
 
-        console.log('Analytics API Response:', response);
+        console.log('📊 Real Weekly Attendance Response:', weeklyResponse);
 
-        if (response.success && response.data) {
-            const analytics = response.data;
-            console.log('Analytics data structure:', analytics);
+        if (weeklyResponse.success && weeklyResponse.data) {
+            const weeklyAttendance = weeklyResponse.data.weekly_attendance;
+            console.log('✅ Loaded real weekly attendance:', weeklyAttendance);
+            
+            // Load available subjects from the breakdown (with real database IDs)
+            // BUT only show subjects that belong to the current teacher (from props)
+            const subjectsMap = new Map();
+            
+            // If we have a selected subject from props, use only that
+            if (props.selectedSubject && props.selectedSubject.id) {
+                subjectsMap.set(props.selectedSubject.id, {
+                    id: props.selectedSubject.id,
+                    name: props.selectedSubject.name
+                });
+            }
+            
+            // Also collect subjects from the breakdown, but they should match teacher's subjects
+            weeklyAttendance.forEach(week => {
+                if (week.subject_breakdown) {
+                    Object.values(week.subject_breakdown).forEach(subjectData => {
+                        if (subjectData.subject_id && subjectData.subject_name) {
+                            subjectsMap.set(subjectData.subject_id, {
+                                id: subjectData.subject_id,
+                                name: subjectData.subject_name
+                            });
+                        }
+                    });
+                }
+            });
+            
+            availableSubjects.value = Array.from(subjectsMap.values());
+            console.log('📚 Available subjects for current teacher:', availableSubjects.value);
 
-            // Create realistic weekly attendance based on student's actual data
-            const totalAbsences = student.total_absences || analytics.analytics?.total_absences_this_year || 0;
-            const recentAbsences = student.recent_absences || analytics.analytics?.recent_absences || 0;
+            // Format weekly data for display
+            const weeklyData = weeklyAttendance.map(week => ({
+                week: week.week,
+                present: week.present,
+                absent: week.absent,
+                late: week.late,
+                percentage: week.percentage,
+                total_days: week.total_days,
+                total_subjects: week.total_subjects,
+                subject_breakdown: week.subject_breakdown
+            }));
+
+            // Calculate metrics from real data (prioritize absences!)
+            const totalAbsences = weeklyData.reduce((sum, week) => sum + week.absent, 0);
+            const recentAbsences = weeklyData.slice(-2).reduce((sum, week) => sum + week.absent, 0); // Last 2 weeks
             const consecutiveAbsences = student.consecutive_absences || 0;
 
-            // Generate realistic weekly attendance data based on actual student metrics
-            const weeklyData = [];
+            console.log('📈 Real attendance metrics:', {
+                totalAbsences,
+                recentAbsences,
+                consecutiveAbsences,
+                weeklyData
+            });
 
-            // Calculate date ranges for the last 4 weeks
-            const today = new Date();
-            const weekRanges = [];
-
-            for (let i = 3; i >= 0; i--) {
-                const weekEnd = new Date(today);
-                weekEnd.setDate(today.getDate() - i * 7);
-                const weekStart = new Date(weekEnd);
-                weekStart.setDate(weekEnd.getDate() - 6);
-
-                weekRanges.push({
-                    start: weekStart,
-                    end: weekEnd,
-                    label: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                });
-            }
-
-            // Calculate realistic distribution of absences across weeks
-            let remainingAbsences = totalAbsences;
-
-            for (let i = 0; i < 4; i++) {
-                let weekAbsences = 0;
-
-                // Smart distribution: put consecutive absences in week 3 if they exist
-                if (i === 2 && consecutiveAbsences >= 3) {
-                    weekAbsences = Math.min(3, consecutiveAbsences, remainingAbsences);
-                } else if (remainingAbsences > 0) {
-                    // Distribute remaining absences across other weeks
-                    weekAbsences = Math.min(2, Math.floor(remainingAbsences / (4 - i)));
-                }
-
-                remainingAbsences -= weekAbsences;
-                const weekPresent = Math.max(0, 5 - weekAbsences);
-                const weekLate = i === 3 && weekAbsences === 0 ? 1 : 0; // Add late only if no absences
-
-                weeklyData.push({
-                    week: weekRanges[i].label,
-                    dateRange: `${weekRanges[i].start.toISOString().split('T')[0]} to ${weekRanges[i].end.toISOString().split('T')[0]}`,
-                    present: weekPresent,
-                    absent: weekAbsences,
-                    late: weekLate,
-                    percentage: weekPresent > 0 ? Math.round((weekPresent / (weekPresent + weekAbsences + weekLate)) * 100) : 0
-                });
-            }
-
-            const improvements = [];
-            const concerns = [];
-            const nextSteps = [];
-
-            if (totalAbsences === 0) {
-                improvements.push('Perfect attendance record maintained');
-                improvements.push('Consistent daily participation');
-                nextSteps.push('Continue current attendance pattern');
-            } else if (totalAbsences <= 2) {
-                improvements.push('Generally good attendance pattern');
-                improvements.push('Minimal disruption to learning');
-                nextSteps.push('Monitor for any emerging patterns');
-            } else {
-                if (recentAbsences > 0) {
-                    concerns.push(`${recentAbsences} recent absences noted`);
-                }
-                if (consecutiveAbsences >= 3) {
-                    concerns.push(`${consecutiveAbsences} consecutive days absent - requires attention`);
-                    nextSteps.push('Schedule immediate parent conference');
-                    nextSteps.push('Develop attendance improvement plan');
+            // 🤖 FETCH SMART ANALYTICS from AI-like analysis!
+            console.log('🧠 Fetching Smart Analytics insights...');
+            let improvements = [];
+            let concerns = [];
+            let nextSteps = [];
+            
+            try {
+                const smartAnalytics = await SmartAnalyticsService.getStudentAnalytics(studentId);
+                console.log('🤖 Smart Analytics Response:', smartAnalytics);
+                
+                if (smartAnalytics.success && smartAnalytics.data && smartAnalytics.data.recommendations) {
+                    const recs = smartAnalytics.data.recommendations;
+                    
+                    // Use AI-generated insights from the recommendations!
+                    improvements = (recs.positive_improvements || []).map(imp => {
+                        return `${imp.icon || '✅'} ${imp.message}`;
+                    });
+                    
+                    concerns = (recs.areas_of_concern || []).map(concern => {
+                        return `${concern.icon || '⚠️'} ${concern.title}: ${concern.message}`;
+                    });
+                    
+                    // Format recommended next steps with urgency
+                    nextSteps = (recs.recommended_next_steps || []).map(action => {
+                        const urgencyEmoji = {
+                            'critical': '🚨',
+                            'high': '⚠️',
+                            'medium': '📌',
+                            'low': '💡'
+                        }[action.urgency] || '📋';
+                        
+                        return `${urgencyEmoji} ${action.action} (${action.timeline})`;
+                    });
+                    
+                    console.log('✅ Using Smart Analytics insights!', { improvements, concerns, nextSteps });
                 } else {
-                    nextSteps.push('Monitor attendance patterns closely');
-                    nextSteps.push('Provide additional academic support if needed');
+                    throw new Error('Smart analytics not available');
+                }
+            } catch (error) {
+                console.warn('⚠️ Smart analytics failed, using basic fallback:', error);
+                
+                // Fallback to basic logic if smart analytics fails
+                if (totalAbsences === 0) {
+                    improvements.push('Perfect attendance record maintained');
+                    nextSteps.push('Continue current attendance pattern');
+                } else if (totalAbsences <= 2) {
+                    improvements.push('Generally good attendance pattern');
+                    nextSteps.push('Monitor for any emerging patterns');
+                } else {
+                    if (recentAbsences > 0) concerns.push(`${recentAbsences} recent absences noted`);
+                    if (consecutiveAbsences >= 3) {
+                        concerns.push(`${consecutiveAbsences} consecutive days absent`);
+                        nextSteps.push('Schedule immediate parent conference');
+                    } else {
+                        nextSteps.push('Monitor attendance patterns closely');
+                    }
                 }
             }
 
+            // Ensure we always have content - but make it smart!
             if (improvements.length === 0) {
-                improvements.push('Working on improving attendance consistency');
+                if (totalAbsences === 0 && weeklyData.length > 0) {
+                    improvements.push('✅ Excellent attendance record maintained');
+                } else if (weeklyData.length === 0) {
+                    improvements.push('📋 No attendance data available for analysis');
+                } else {
+                    improvements.push('🔄 Working on improving attendance consistency');
+                }
             }
+            
             if (concerns.length === 0) {
-                concerns.push('No significant concerns at this time');
+                if (weeklyData.length === 0) {
+                    concerns.push('📊 Insufficient data - waiting for attendance records');
+                } else {
+                    concerns.push('✅ No significant concerns at this time');
+                }
             }
+            
             if (nextSteps.length === 0) {
-                nextSteps.push('Continue regular monitoring');
+                if (weeklyData.length === 0) {
+                    nextSteps.push('📝 Begin recording attendance once classes start');
+                } else {
+                    nextSteps.push('👀 Continue regular monitoring');
+                }
             }
 
             // Map real analytics data to progress dialog format
             progressData.value = {
-                weeklyAttendance: weeklyData,
-                monthlyTrends: analytics.monthly_trends || [
-                    { month: 'January', attendance: 85 },
-                    { month: 'February', attendance: Math.max(60, 100 - totalAbsences * 10) },
-                    { month: 'March', attendance: Math.max(50, 100 - recentAbsences * 15) }
-                ],
+                weeklyAttendance: weeklyData, // REAL DATA from database!
+                monthlyTrends: [],
                 improvements: improvements,
                 concerns: concerns,
                 nextSteps: nextSteps
             };
+            
+            console.log('✅ Progress data loaded with REAL weekly attendance!', progressData.value);
         } else {
             // Fallback to empty state if no analytics available
             progressData.value = {
@@ -668,38 +783,13 @@ async function loadProgressData(student) {
         }
     } catch (error) {
         console.error('Error loading student analytics:', error);
-
-        // Provide meaningful mock data based on student info when API fails
-        const studentName = student.first_name || student.firstName || 'Student';
-
-        // Generate date ranges for fallback data
-        const today = new Date();
-        const fallbackWeekRanges = [];
-
-        for (let i = 3; i >= 0; i--) {
-            const weekEnd = new Date(today);
-            weekEnd.setDate(today.getDate() - i * 7);
-            const weekStart = new Date(weekEnd);
-            weekStart.setDate(weekEnd.getDate() - 6);
-
-            fallbackWeekRanges.push(`${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`);
-        }
-
+        
         progressData.value = {
-            weeklyAttendance: [
-                { week: fallbackWeekRanges[0], present: 4, absent: 1, late: 0, percentage: 80 },
-                { week: fallbackWeekRanges[1], present: 5, absent: 0, late: 0, percentage: 100 },
-                { week: fallbackWeekRanges[2], present: 3, absent: 2, late: 0, percentage: 60 },
-                { week: fallbackWeekRanges[3], present: 4, absent: 0, late: 1, percentage: 80 }
-            ],
-            monthlyTrends: [
-                { month: 'January', attendance: 85 },
-                { month: 'February', attendance: 78 },
-                { month: 'March', attendance: 82 }
-            ],
-            improvements: [`${studentName} has shown consistent morning arrival`, 'Attendance improved in recent weeks', 'Active participation in class activities'],
-            concerns: ['Some absences noted in Week 3', 'Monitor for attendance patterns', 'Follow up on missed assignments'],
-            nextSteps: ['Continue monitoring attendance patterns', 'Schedule parent meeting if needed', 'Provide additional support for missed work', 'Implement peer buddy system']
+            weeklyAttendance: [],
+            monthlyTrends: [],
+            improvements: ['Error loading data'],
+            concerns: ['Unable to retrieve attendance information'],
+            nextSteps: ['Please try again or contact support']
         };
     }
 }
@@ -1619,8 +1709,30 @@ function viewStudentProfile(student) {
     background: #f8f9fa;
 }
 
+.section-header-with-picker {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.filters-container {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .progress-section h5 {
-    margin: 0 0 1rem 0;
+    margin: 0;
     color: #495057;
     font-weight: 600;
     display: flex;
@@ -1639,17 +1751,64 @@ function viewStudentProfile(student) {
     border: 1px solid #dee2e6;
     border-radius: 6px;
     padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.week-header {
+.week-meta {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.meta-badge {
+    background: #e9ecef;
+    color: #495057;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.subject-breakdown-info {
+    margin-top: 12px;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #6366f1;
+}
+
+.breakdown-label {
+    display: block;
     font-weight: 600;
     color: #495057;
-    margin-bottom: 0.5rem;
-    text-align: center;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
 }
 
-.attendance-stats {
-    margin-bottom: 1rem;
+.subject-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.subject-item {
+    font-size: 0.85rem;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.subject-item strong {
+    color: #495057;
+    min-width: 80px;
+}
+
+.subject-item span {
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 500;
+    font-size: 0.75rem;
 }
 
 .stat-item {

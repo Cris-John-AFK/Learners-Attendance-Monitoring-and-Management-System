@@ -83,11 +83,35 @@ class AttendanceAnalyticsService
     }
 
     /**
-     * Detect positive improvements in attendance
+     * Detect positive improvements in attendance (SMART - checks data first!)
      */
     private function detectPositiveImprovements(int $studentId, AttendanceAnalyticsCache $analytics): array
     {
         $improvements = [];
+        
+        // Check if student has enough data to assess
+        if (!$this->hasAttendanceData($studentId)) {
+            $improvements[] = [
+                'type' => 'info',
+                'icon' => '📋',
+                'message' => "Student enrolled - attendance tracking will begin",
+                'evidence' => "No attendance sessions recorded yet"
+            ];
+            return $improvements;
+        }
+        
+        $totalSessions = $this->getTotalSessionsLast30Days($studentId);
+        
+        // If very limited data, show softer message
+        if ($totalSessions < 5) {
+            $improvements[] = [
+                'type' => 'info',
+                'icon' => '🔄',
+                'message' => "Building attendance history - {$totalSessions} sessions recorded",
+                'evidence' => "Need at least 10 sessions for reliable analysis"
+            ];
+            return $improvements;
+        }
 
         // Compare with previous month
         $previousMonth = AttendanceAnalyticsCache::where('student_id', $studentId)
@@ -157,11 +181,27 @@ class AttendanceAnalyticsService
     }
 
     /**
-     * Detect areas of concern
+     * Detect areas of concern (SMART - checks if data exists first!)
      */
     private function detectAreasOfConcern(AttendanceAnalyticsCache $analytics): array
     {
         $concerns = [];
+        
+        // First, check if student has ANY attendance data
+        $hasAttendanceData = $this->hasAttendanceData($analytics->student_id);
+        
+        if (!$hasAttendanceData) {
+            // Student has NO attendance records yet - different message!
+            $concerns[] = [
+                'urgency' => 'low',
+                'icon' => '📋',
+                'title' => 'No Attendance Data Yet',
+                'message' => "No attendance sessions recorded for this student",
+                'evidence' => "This student may be newly enrolled or not yet assigned to classes",
+                'impact' => 'Begin tracking once classes start'
+            ];
+            return $concerns; // Don't show other warnings if no data
+        }
 
         // CRITICAL: 18+ absence limit exceeded
         if ($analytics->exceeds_18_absence_limit) {
@@ -175,20 +215,36 @@ class AttendanceAnalyticsService
             ];
         }
 
-        // HIGH: Low attendance percentage
-        if ($analytics->attendance_percentage_last_30_days < 80) {
-            $urgency = $analytics->attendance_percentage_last_30_days < 70 ? 'critical' : 'high';
+        // HIGH: Low attendance percentage (ONLY if they have significant sessions!)
+        $totalSessions = $this->getTotalSessionsLast30Days($analytics->student_id);
+        $presentCount = $this->getPresentCount($analytics->student_id);
+        
+        // Calculate REAL percentage from actual data, not cached value
+        $realPercentage = $totalSessions > 0 ? round(($presentCount / $totalSessions) * 100, 1) : 0;
+        
+        if ($totalSessions >= 10 && $realPercentage < 80) {
+            $urgency = $realPercentage < 70 ? 'critical' : 'high';
             $concerns[] = [
                 'urgency' => $urgency,
                 'icon' => '📉',
                 'title' => 'Low Attendance Rate',
-                'message' => "Only {$analytics->formatted_attendance_percentage} attendance in last 30 days",
-                'evidence' => "Below 80% attendance threshold (school policy requirement)",
+                'message' => "Only {$realPercentage}% attendance in last 30 days",
+                'evidence' => "Present for {$presentCount} out of {$totalSessions} sessions",
                 'impact' => 'Missing significant instructional time affecting academic performance'
+            ];
+        } elseif ($totalSessions >= 5 && $totalSessions < 10 && $realPercentage < 80 && $realPercentage > 0) {
+            // Limited data - softer warning (but only if SOME data exists)
+            $concerns[] = [
+                'urgency' => 'low',
+                'icon' => '📊',
+                'title' => 'Limited Data - Early Concern',
+                'message' => "Low attendance in {$totalSessions} recorded sessions ({$realPercentage}%)",
+                'evidence' => "Need more data to establish clear pattern",
+                'impact' => 'Monitor closely as more sessions are recorded'
             ];
         }
 
-        // MEDIUM-HIGH: Frequent tardiness
+        // MEDIUM-HIGH: Frequent tardiness (only if significant)
         if ($analytics->total_tardies_last_30_days >= 5) {
             $urgency = $analytics->total_tardies_last_30_days >= 8 ? 'high' : 'medium';
             $concerns[] = [
@@ -479,6 +535,46 @@ class AttendanceAnalyticsService
             'students' => $analytics,
             'generated_at' => now()->format('Y-m-d H:i:s')
         ];
+    }
+
+    /**
+     * Check if student has ANY attendance data
+     */
+    private function hasAttendanceData(int $studentId): bool
+    {
+        return DB::table('attendance_records')
+            ->where('student_id', $studentId)
+            ->exists();
+    }
+    
+    /**
+     * Get total sessions in last 30 days for a student
+     */
+    private function getTotalSessionsLast30Days(int $studentId): int
+    {
+        $startDate = now()->subDays(30)->toDateString();
+        
+        return DB::table('attendance_records as ar')
+            ->join('attendance_sessions as ase', 'ar.attendance_session_id', '=', 'ase.id')
+            ->where('ar.student_id', $studentId)
+            ->where('ase.session_date', '>=', $startDate)
+            ->count();
+    }
+    
+    /**
+     * Get present count in last 30 days
+     */
+    private function getPresentCount(int $studentId): int
+    {
+        $startDate = now()->subDays(30)->toDateString();
+        
+        return DB::table('attendance_records as ar')
+            ->join('attendance_sessions as ase', 'ar.attendance_session_id', '=', 'ase.id')
+            ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+            ->where('ar.student_id', $studentId)
+            ->where('ase.session_date', '>=', $startDate)
+            ->where('ast.code', 'P')
+            ->count();
     }
 
     /**

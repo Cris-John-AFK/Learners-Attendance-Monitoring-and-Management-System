@@ -69,6 +69,35 @@ class SmartAnalyticsService {
     }
 
     /**
+     * Get REAL weekly attendance data from database records
+     * @param {number} studentId - Student ID
+     * @param {Date} month - Month to fetch data for (optional, defaults to last 4 weeks)
+     * @param {number} subjectId - Subject ID to filter by (optional, defaults to all subjects)
+     * @param {number} teacherId - Teacher ID to filter by (optional, defaults to all teachers)
+     */
+    async getStudentWeeklyAttendance(studentId, month = null, subjectId = null, teacherId = null) {
+        try {
+            const params = {};
+            if (month) {
+                params.year = month.getFullYear();
+                params.month = month.getMonth() + 1; // JavaScript months are 0-indexed
+            }
+            if (subjectId) {
+                params.subject_id = subjectId;
+            }
+            if (teacherId) {
+                params.teacher_id = teacherId;
+            }
+            
+            const response = await this.api.get(`/analytics/student/${studentId}/weekly`, { params });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching weekly attendance:', error);
+            throw this.handleError(error);
+        }
+    }
+
+    /**
      * Get attendance patterns and trends for a student
      */
     async getAttendancePatterns(studentId, days = 30) {

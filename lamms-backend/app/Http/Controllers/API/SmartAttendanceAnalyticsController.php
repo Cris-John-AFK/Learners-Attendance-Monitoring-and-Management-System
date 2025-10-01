@@ -458,41 +458,238 @@ class SmartAttendanceAnalyticsController extends Controller
     }
 
     /**
-     * Get weekly attendance trends
+     * Get real weekly attendance data for a student (public API endpoint)
+     * 
+     * @param int $studentId
+     * @param Request $request
+     * @return JsonResponse
      */
-    private function getWeeklyTrends(int $studentId, int $days): array
+    public function getStudentWeeklyAttendance(int $studentId, Request $request): JsonResponse
     {
-        $startDate = now()->subDays($days);
-        
-        $attendance = \App\Models\Attendance::where('student_id', $studentId)
-            ->where('date', '>=', $startDate)
-            ->orderBy('date')
-            ->get();
-
-        $weeklyData = [];
-        $currentWeek = null;
-        $weekData = ['present' => 0, 'absent' => 0, 'late' => 0, 'excused' => 0];
-
-        foreach ($attendance as $record) {
-            $week = $record->date->format('Y-W');
+        try {
+            $month = $request->query('month'); // Format: YYYY-MM
+            $year = $request->query('year');
+            $subjectId = $request->query('subject_id'); // Filter by subject
+            $teacherId = $request->query('teacher_id'); // Filter by teacher (IMPORTANT!)
             
-            if ($currentWeek !== $week) {
-                if ($currentWeek !== null) {
-                    $weeklyData[$currentWeek] = $weekData;
-                }
-                $currentWeek = $week;
-                $weekData = ['present' => 0, 'absent' => 0, 'late' => 0, 'excused' => 0];
+            Log::info("Fetching real weekly attendance for student ID: {$studentId}", [
+                'month' => $month,
+                'year' => $year,
+                'subject_id' => $subjectId,
+                'teacher_id' => $teacherId
+            ]);
+
+            // Verify student exists
+            $student = Student::find($studentId);
+            if (!$student) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student not found'
+                ], 404);
             }
+
+            // Calculate date range based on month/year or default to last 4 weeks
+            if ($month && $year) {
+                $startDate = \Carbon\Carbon::createFromDate($year, $month, 1)->startOfMonth();
+                $endDate = \Carbon\Carbon::createFromDate($year, $month, 1)->endOfMonth();
+            } else {
+                $endDate = now();
+                $startDate = now()->subDays(28);
+            }
+
+            // Get weekly attendance data for the specified period (filtered by teacher!)
+            $weeklyAttendance = $this->calculateRealWeeklyAttendanceForPeriod($studentId, $startDate, $endDate, $subjectId, $teacherId);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'student_id' => $studentId,
+                    'weekly_attendance' => $weeklyAttendance,
+                    'weeks_analyzed' => count($weeklyAttendance)
+                ],
+                'message' => 'Weekly attendance data retrieved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error fetching weekly attendance: " . $e->getMessage());
             
-            $status = $record->status === 'excused' ? 'excused' : $record->status;
-            $weekData[$status]++;
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve weekly attendance',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Calculate real weekly attendance for a specific date period
+     */
+    private function calculateRealWeeklyAttendanceForPeriod(int $studentId, $startDate, $endDate, $subjectId = null, $teacherId = null): array
+    {
+        
+        Log::info("Querying attendance records for student {$studentId} from {$startDate->toDateString()} to {$endDate->toDateString()}");
+
+        // Get REAL attendance records from database (with subject info and optional filter)
+        $query = DB::table('attendance_records as ar')
+            ->join('attendance_sessions as ase', 'ar.attendance_session_id', '=', 'ase.id')
+            ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+            ->leftJoin('subjects as subj', 'ase.subject_id', '=', 'subj.id')
+            ->where('ar.student_id', $studentId)
+            ->where('ase.session_date', '>=', $startDate->toDateString())
+            ->where('ase.session_date', '<=', $endDate->toDateString());
+        
+        // Apply subject filter if provided
+        if ($subjectId) {
+            $query->where('ase.subject_id', $subjectId);
+            Log::info("Filtering attendance by subject ID: {$subjectId}");
         }
         
-        if ($currentWeek !== null) {
-            $weeklyData[$currentWeek] = $weekData;
+        // Apply teacher filter if provided (CRITICAL - only show THIS teacher's sessions!)
+        if ($teacherId) {
+            $query->where('ase.teacher_id', $teacherId);
+            Log::info("Filtering attendance by teacher ID: {$teacherId}");
+        }
+        
+        $attendanceRecords = $query->select(
+                'ase.session_date',
+                'ast.code as status_code',
+                'ast.name as status_name',
+                'ase.subject_id',
+                'subj.name as subject_name'
+            )
+            ->orderBy('ase.session_date')
+            ->get();
+
+        Log::info("Found {$attendanceRecords->count()} attendance records");
+
+        // Group by week and count statuses
+        $weeklyData = [];
+        $weekRanges = $this->generateWeekRanges($startDate, $endDate);
+
+        foreach ($weekRanges as $weekKey => $weekInfo) {
+            $weekRecords = $attendanceRecords->filter(function ($record) use ($weekInfo) {
+                $recordDate = \Carbon\Carbon::parse($record->session_date);
+                return $recordDate->between($weekInfo['start'], $weekInfo['end']);
+            });
+
+            $present = 0;
+            $absent = 0;
+            $late = 0;
+            $excused = 0;
+            $subjectBreakdown = [];
+            $uniqueDays = [];
+
+            foreach ($weekRecords as $record) {
+                // Track unique days
+                $day = $record->session_date;
+                if (!isset($uniqueDays[$day])) {
+                    $uniqueDays[$day] = [];
+                }
+                
+                // Track subjects with their IDs
+                $subject = $record->subject_name ?? 'Unknown Subject';
+                $subjectKey = $record->subject_id . ':' . $subject; // Store with subject_id
+                
+                if (!isset($subjectBreakdown[$subjectKey])) {
+                    $subjectBreakdown[$subjectKey] = [
+                        'subject_id' => $record->subject_id,
+                        'subject_name' => $subject,
+                        'present' => 0,
+                        'absent' => 0,
+                        'late' => 0,
+                        'excused' => 0
+                    ];
+                }
+
+                switch ($record->status_code) {
+                    case 'P':
+                        $present++;
+                        $subjectBreakdown[$subjectKey]['present']++;
+                        break;
+                    case 'A':
+                        $absent++;
+                        $subjectBreakdown[$subjectKey]['absent']++;
+                        break;
+                    case 'L':
+                        $late++;
+                        $subjectBreakdown[$subjectKey]['late']++;
+                        break;
+                    case 'E':
+                        $excused++;
+                        $subjectBreakdown[$subjectKey]['excused']++;
+                        break;
+                }
+                
+                $uniqueDays[$day][] = $subject;
+            }
+
+            $total = $present + $absent + $late + $excused;
+            $percentage = $total > 0 ? round(($present / $total) * 100) : 0;
+            $totalDays = count($uniqueDays);
+            $totalSubjects = count($subjectBreakdown);
+
+            $weeklyData[] = [
+                'week' => $weekInfo['label'],
+                'start_date' => $weekInfo['start']->toDateString(),
+                'end_date' => $weekInfo['end']->toDateString(),
+                'present' => $present,
+                'absent' => $absent,
+                'late' => $late,
+                'excused' => $excused,
+                'total_records' => $total,
+                'total_days' => $totalDays,
+                'total_subjects' => $totalSubjects,
+                'subject_breakdown' => $subjectBreakdown,
+                'percentage' => $percentage
+            ];
         }
 
         return $weeklyData;
+    }
+
+    /**
+     * Generate week ranges for the given period (includes partial weeks at month boundaries)
+     */
+    private function generateWeekRanges($startDate, $endDate): array
+    {
+        $weeks = [];
+        
+        // Find the first Monday on or before startDate
+        $firstMonday = $startDate->copy()->startOfWeek();
+        
+        // Find the last Sunday on or after endDate
+        $lastSunday = $endDate->copy()->endOfWeek();
+        
+        $currentWeekStart = $firstMonday->copy();
+
+        while ($currentWeekStart->lte($lastSunday)) {
+            $weekStart = $currentWeekStart->copy();
+            $weekEnd = $currentWeekStart->copy()->endOfWeek();
+
+            // Only include weeks that have at least one day in the target period
+            if ($weekEnd->gte($startDate) && $weekStart->lte($endDate)) {
+                $weekKey = $weekStart->format('Y-W');
+                $weeks[$weekKey] = [
+                    'start' => $weekStart,
+                    'end' => $weekEnd,
+                    'label' => $weekStart->format('M j') . ' - ' . $weekEnd->format('M j')
+                ];
+            }
+
+            $currentWeekStart->addWeek();
+        }
+
+        return $weeks;
+    }
+
+    /**
+     * Get weekly attendance trends (for internal use)
+     */
+    private function getWeeklyTrends(int $studentId, int $days): array
+    {
+        $endDate = now();
+        $startDate = now()->subDays($days);
+        return $this->calculateRealWeeklyAttendanceForPeriod($studentId, $startDate, $endDate);
     }
 
     /**
