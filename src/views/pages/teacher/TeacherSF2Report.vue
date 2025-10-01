@@ -285,6 +285,20 @@ const getAttendanceMark = (status) => {
     }
 };
 
+// Get attendance mark color class based on the mark symbol
+const getAttendanceColorClass = (mark) => {
+    switch (mark) {
+        case '✓':
+            return 'attendance-present';
+        case '✗':
+            return 'attendance-absent';
+        case 'L':
+            return 'attendance-late';
+        default:
+            return '';
+    }
+};
+
 // Get attendance mark color
 const getAttendanceColor = (status) => {
     switch (status) {
@@ -521,8 +535,11 @@ onMounted(() => {
                             <td
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`student-${student.id}-day-${idx}`"
-                                class="border border-gray-900 p-0.5 text-center text-xs"
-                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                class="border border-gray-900 p-0.5 text-center text-xs font-semibold"
+                                :class="[
+                                    col.isEmpty ? 'bg-gray-100' : '',
+                                    getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date]))
+                                ]"
                                 :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}
@@ -559,8 +576,11 @@ onMounted(() => {
                             <td
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`student-${student.id}-day-${idx}`"
-                                class="border border-gray-900 p-0.5 text-center text-xs"
-                                :class="col.isEmpty ? 'bg-gray-100' : ''"
+                                class="border border-gray-900 p-0.5 text-center text-xs font-semibold"
+                                :class="[
+                                    col.isEmpty ? 'bg-gray-100' : '',
+                                    getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date]))
+                                ]"
                                 :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}
@@ -849,6 +869,22 @@ onMounted(() => {
     line-height: 1.2;
 }
 
+/* Attendance mark color coding */
+.attendance-present {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+}
+
+.attendance-absent {
+    background-color: #fee2e2 !important;
+    color: #991b1b !important;
+}
+
+.attendance-late {
+    background-color: #fef3c7 !important;
+    color: #92400e !important;
+}
+
 /* Compact row styling */
 .attendance-table-container tbody tr {
     height: 20px;
@@ -894,6 +930,14 @@ onMounted(() => {
     /* Hide no-print elements */
     .no-print {
         display: none !important;
+    }
+
+    /* Remove colors in print - keep it plain */
+    .attendance-present,
+    .attendance-absent,
+    .attendance-late {
+        background-color: white !important;
+        color: black !important;
     }
 
     /* Page setup - Multiple pages allowed */
@@ -1023,5 +1067,12 @@ onMounted(() => {
     .attendance-table-container table {
         font-size: 10px;
     }
+}
+
+/* Override empty cell styling - keep gray background for empty columns */
+.bg-gray-100.attendance-present,
+.bg-gray-100.attendance-absent,
+.bg-gray-100.attendance-late {
+    background-color: #f3f4f6 !important;
 }
 </style>
