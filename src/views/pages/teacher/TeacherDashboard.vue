@@ -171,10 +171,14 @@ let refreshInterval;
 // Initialize authentication and load teacher data
 const initializeTeacherData = async () => {
     try {
+        // Wait a bit for auth data to be fully saved (race condition fix)
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Check if teacher is authenticated
         if (!TeacherAuthService.isAuthenticated()) {
-            // Redirect to login if not authenticated
-            window.location.href = '/teacher-login';
+            // Redirect to unified login if not authenticated
+            console.log('⚠️ Teacher not authenticated, redirecting to login');
+            window.location.href = '/';
             return;
         }
 

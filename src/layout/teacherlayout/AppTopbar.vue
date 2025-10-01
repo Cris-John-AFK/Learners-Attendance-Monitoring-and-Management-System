@@ -192,6 +192,30 @@ const logout = async () => {
         await AuthService.logout();
 
         console.log('✅ Logout successful, clearing session data');
+        
+        // 🧹 CLEAR TEACHER-SPECIFIC CACHES - CRITICAL FOR MULTI-USER SUPPORT
+        console.log('🧹 Clearing teacher caches and data...');
+        
+        // Clear ONLY cache data, NOT auth tokens (specific keys only)
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            // Remove ONLY cache and notification data, NOT auth tokens
+            if (key && (
+                key.startsWith('attendance_') || 
+                key.startsWith('cache_') ||
+                key.startsWith('lamms_notifications') ||
+                key === 'teacher_data' // Clear old teacher data
+            )) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // Clear sessionStorage completely
+        sessionStorage.clear();
+        
+        console.log(`✅ Cleared ${keysToRemove.length} cache items`);
 
         // Show success message
         isLogoutSuccess.value = true;
@@ -206,8 +230,20 @@ const logout = async () => {
         }, 1500);
     } catch (error) {
         console.error('❌ Logout error:', error);
-        // Even if logout fails, clear local data and redirect
+        // Even if logout fails, clear teacher data and redirect
         AuthService.clearAuthData();
+        
+        // Clear cache data only
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('attendance_') || key.startsWith('cache_') || key.startsWith('lamms_notifications') || key === 'teacher_data')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        sessionStorage.clear();
+        
         window.history.replaceState(null, '', '/');
         router.replace('/');
     }
@@ -215,17 +251,37 @@ const logout = async () => {
 
 // Subscribe to notifications
 onMounted(async () => {
+    // Wait a bit for auth data to be fully loaded (race condition fix)
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
     // Initialize teacher for notifications using unified AuthService
     const profile = AuthService.getProfile();
-    if (profile && profile.id) {
-        console.log('Initializing notifications for teacher:', profile.id);
-        await NotificationService.setCurrentTeacher(profile.id);
+    console.log('🔍 Profile from AuthService:', profile);
+    
+    // Get teacher ID from profile (could be profile.id or nested)
+    let teacherId = null;
+    if (profile) {
+        teacherId = profile.id || profile.teacher_id;
+        console.log('✅ Teacher ID found:', teacherId);
+    } else {
+        console.warn('⚠️ No profile found, trying teacher_data');
+        // Fallback to teacher_data
+        const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+        teacherId = teacherData.teacher?.id || teacherData.teacher?.teacher_id;
+        console.log('Fallback teacher ID:', teacherId);
     }
-
-    // Force refresh notifications on mount
-    NotificationService.loadNotifications();
-    notifications.value = NotificationService.getNotifications();
-    console.log('Initial notifications loaded:', notifications.value.length);
+    
+    if (teacherId) {
+        console.log('Initializing notifications for teacher:', teacherId);
+        await NotificationService.setCurrentTeacher(teacherId);
+        
+        // Force refresh notifications on mount
+        NotificationService.loadNotifications();
+        notifications.value = NotificationService.getNotifications();
+        console.log('Initial notifications loaded:', notifications.value.length);
+    } else {
+        console.error('❌ Could not find teacher ID!');
+    }
 
     unsubscribeNotifications = NotificationService.subscribe((updatedNotifications) => {
         console.log('Notifications updated:', updatedNotifications);

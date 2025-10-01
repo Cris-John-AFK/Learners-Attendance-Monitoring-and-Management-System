@@ -134,11 +134,15 @@ class AuthService {
         
         // Store role-specific data for backward compatibility
         if (user.role === 'teacher') {
-            localStorage.setItem('teacher_data', JSON.stringify({
+            // Also fetch teacher assignments for complete data
+            const teacherData = {
                 token,
                 teacher: profile,
-                user
-            }));
+                user,
+                assignments: profile.assignments || [],
+                loginTime: new Date().toISOString()
+            };
+            localStorage.setItem('teacher_data', JSON.stringify(teacherData));
         } else if (user.role === 'admin') {
             localStorage.setItem('admin_data', JSON.stringify({
                 token,

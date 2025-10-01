@@ -133,19 +133,33 @@ class TeacherAuthService {
     }
 
     /**
-     * Get stored token for current tab
+     * Get stored token (check both unified auth and tab-specific)
      */
     getToken() {
+        // First check unified auth token
+        const unifiedToken = localStorage.getItem('auth_token');
+        if (unifiedToken) {
+            return unifiedToken;
+        }
+        
+        // Fallback to tab-specific token
         const tabId = TeacherAuthService.getTabId();
         const tokenKey = `teacher_token_${tabId}`;
         return localStorage.getItem(tokenKey);
     }
 
     /**
-     * Get stored teacher data for current tab
+     * Get stored teacher data (check both unified auth and tab-specific)
      */
     getTeacherData() {
         try {
+            // First check unified auth data
+            const unifiedData = localStorage.getItem('teacher_data');
+            if (unifiedData) {
+                return JSON.parse(unifiedData);
+            }
+            
+            // Fallback to tab-specific data
             const tabId = TeacherAuthService.getTabId();
             const teacherKey = `teacher_data_${tabId}`;
             const data = localStorage.getItem(teacherKey);

@@ -94,7 +94,7 @@ const initializeTeacherData = async () => {
         // Check if teacher is authenticated
         if (!TeacherAuthService.isAuthenticated()) {
             console.warn('Teacher not authenticated, redirecting to login');
-            router.push('/teacher-login');
+            router.push('/');
             return false;
         }
 
@@ -106,12 +106,12 @@ const initializeTeacherData = async () => {
             return true;
         } else {
             console.error('No teacher data found in authentication');
-            router.push('/teacher-login');
+            router.push('/');
             return false;
         }
     } catch (error) {
         console.error('Error initializing teacher data:', error);
-        router.push('/teacher-login');
+        router.push('/');
         return false;
     }
 };

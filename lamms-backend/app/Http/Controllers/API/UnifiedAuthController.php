@@ -64,7 +64,8 @@ class UnifiedAuthController extends Controller
             $profile = null;
             switch ($user->role) {
                 case 'teacher':
-                    $profile = $user->teacher;
+                    // Load teacher with assignments for complete data
+                    $profile = $user->teacher()->with(['assignments.section', 'assignments.subject'])->first();
                     break;
                 case 'admin':
                     $profile = $user->admin;
