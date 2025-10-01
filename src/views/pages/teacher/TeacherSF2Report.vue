@@ -778,27 +778,52 @@ onMounted(() => {
                         <tr v-for="(student, index) in maleStudents" :key="student.id" style="height: 20px">
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
                             <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
-                            <td
-                                v-for="(col, idx) in fixedWeekdayColumns"
-                                :key="`student-${student.id}-day-${idx}`"
-                                class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
-                                    !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
-                                    !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
-                                ]"
-                                :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
-                                @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
-                            >
-                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
-                                <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
-                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
+                            <!-- Holiday merged cell - only show for first student -->
+                            <template v-for="(col, idx) in fixedWeekdayColumns" :key="`male-${student.id}-day-${idx}`">
+                                <td
+                                    v-if="dayAnnotations[col.date] && index === 0"
+                                    :rowspan="maleStudents.length"
+                                    class="border border-gray-900 bg-gray-200"
+                                    :style="{ 
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                        padding: '4px 0',
+                                        verticalAlign: 'middle',
+                                        textAlign: 'center',
+                                        height: `${maleStudents.length * 20}px`
+                                    }"
+                                >
+                                    <div :style="{ 
+                                        writingMode: 'vertical-rl', 
+                                        textOrientation: 'upright', 
+                                        fontSize: Math.min(14, Math.max(8, (maleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
+                                        color: '#991b1b', 
+                                        fontWeight: 'bold', 
+                                        letterSpacing: '-1px',
+                                        lineHeight: '1',
+                                        whiteSpace: 'nowrap',
+                                        margin: '0 auto',
+                                        display: 'inline-block'
+                                    }">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
-                                </div>
-                            </td>
+                                </td>
+                                <!-- Regular attendance cells -->
+                                <td
+                                    v-if="!dayAnnotations[col.date]"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    :class="[
+                                        col.isEmpty ? 'bg-gray-100' : '',
+                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
+                                        !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                    ]"
+                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
+                                    @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
+                                    :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                >
+                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                </td>
+                            </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
@@ -811,10 +836,10 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`male-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-200' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : maleDailyTotals[col.date]?.present || 0 }}
+                                {{ col.isEmpty || dayAnnotations[col.date] ? '' : maleDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -828,27 +853,52 @@ onMounted(() => {
                         <tr v-for="(student, index) in femaleStudents" :key="student.id" style="height: 20px">
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ index + 1 }}</td>
                             <td class="border border-gray-900 px-2 py-0.5 text-left text-xs" style="border-right: 2px solid #000">{{ student.name }}</td>
-                            <td
-                                v-for="(col, idx) in fixedWeekdayColumns"
-                                :key="`student-${student.id}-day-${idx}`"
-                                class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
-                                    !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
-                                    !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
-                                ]"
-                                :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
-                                @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
-                            >
-                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
-                                <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
-                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
+                            <!-- Holiday merged cell - only show for first student -->
+                            <template v-for="(col, idx) in fixedWeekdayColumns" :key="`female-${student.id}-day-${idx}`">
+                                <td
+                                    v-if="dayAnnotations[col.date] && index === 0"
+                                    :rowspan="femaleStudents.length"
+                                    class="border border-gray-900 bg-gray-200"
+                                    :style="{ 
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                        padding: '4px 0',
+                                        verticalAlign: 'middle',
+                                        textAlign: 'center',
+                                        height: `${femaleStudents.length * 20}px`
+                                    }"
+                                >
+                                    <div :style="{ 
+                                        writingMode: 'vertical-rl', 
+                                        textOrientation: 'upright', 
+                                        fontSize: Math.min(14, Math.max(8, (femaleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
+                                        color: '#991b1b', 
+                                        fontWeight: 'bold', 
+                                        letterSpacing: '-1px',
+                                        lineHeight: '1',
+                                        whiteSpace: 'nowrap',
+                                        margin: '0 auto',
+                                        display: 'inline-block'
+                                    }">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
-                                </div>
-                            </td>
+                                </td>
+                                <!-- Regular attendance cells -->
+                                <td
+                                    v-if="!dayAnnotations[col.date]"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    :class="[
+                                        col.isEmpty ? 'bg-gray-100' : '',
+                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
+                                        !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                    ]"
+                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
+                                    @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
+                                    :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                >
+                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                </td>
+                            </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
@@ -861,10 +911,10 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`female-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-200' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : femaleDailyTotals[col.date]?.present || 0 }}
+                                {{ col.isEmpty || dayAnnotations[col.date] ? '' : femaleDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>
@@ -879,10 +929,10 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`combined-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-200' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
-                                {{ col.isEmpty ? '' : combinedDailyTotals[col.date]?.present || 0 }}
+                                {{ col.isEmpty || dayAnnotations[col.date] ? '' : combinedDailyTotals[col.date]?.present || 0 }}
                             </td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000; border-left: 2px solid #000"></td>
                             <td class="border border-gray-900 p-0.5 text-center font-bold text-xs" style="border-bottom: 2px solid #000"></td>

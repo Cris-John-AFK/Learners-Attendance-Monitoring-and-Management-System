@@ -40,6 +40,13 @@ class AttendanceSessionController extends Controller
                 ], 400);
             }
             
+            // First, get the section name
+            $sectionName = DB::table('sections')
+                ->where('id', $sectionId)
+                ->value('name');
+
+            Log::info("Section name retrieved", ['section_id' => $sectionId, 'section_name' => $sectionName]);
+
             // Get all active students in the section
             $students = DB::table('student_details as sd')
                 ->leftJoin('student_section as ss', function($join) use ($sectionId) {
@@ -47,21 +54,10 @@ class AttendanceSessionController extends Controller
                          ->where('ss.section_id', '=', $sectionId);
                 })
                 ->leftJoin('sections as s', 'ss.section_id', '=', 's.id')
-                ->where(function($query) use ($sectionId) {
+                ->where(function($query) use ($sectionId, $sectionName) {
                     // Get students either through pivot table or direct section field
                     $query->where('ss.section_id', $sectionId)
-                          ->orWhere('sd.section', DB::raw("(SELECT name FROM sections WHERE id = {$sectionId})"));
-                })
-                ->where(function($query) {
-                    // Only active students
-                    $query->where('ss.is_active', true)
-                          ->orWhereNull('ss.is_active');
-                })
-                ->where(function($query) {
-                    // Exclude dropped out and transferred out students
-                    $query->whereNull('sd.enrollment_status')
-                          ->orWhere('sd.enrollment_status', 'active')
-                          ->orWhere('sd.enrollment_status', 'transferred_in');
+                          ->orWhere('sd.section', $sectionName);
                 })
                 ->select([
                     'sd.id',
