@@ -8,7 +8,6 @@ import { useToast } from 'primevue/usetoast';
 const { toggleMenu } = useLayout();
 const router = useRouter();
 const toast = useToast();
-const isCalendarOpen = ref(false);
 const isProfileOpen = ref(false);
 const isNotificationOpen = ref(false);
 const notificationCount = ref(0);
@@ -100,6 +99,11 @@ const goToCollectedReports = () => {
     router.push('/admin-collected-reports');
 };
 
+// Navigate to school calendar
+const openSchoolCalendar = () => {
+    router.push('/admin-school-calendar');
+};
+
 // Handle notification click
 const handleNotificationClick = () => {
     isNotificationOpen.value = !isNotificationOpen.value;
@@ -151,7 +155,7 @@ onUnmounted(() => {
             </div>
 
             <div class="layout-topbar-actions">
-                <button type="button" class="layout-topbar-action" @click="isCalendarOpen = true">
+                <button type="button" class="layout-topbar-action" @click="openSchoolCalendar">
                     <i class="pi pi-calendar"></i>
                     <span>Calendar</span>
                 </button>
@@ -216,10 +220,6 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <!-- Calendar Modal -->
-        <Dialog v-model="isCalendarOpen" header="School Activities Calendar" :modal="true" :style="{ width: '290px' }">
-            <VCalendar :attributes="attributes" />
-        </Dialog>
     </div>
 </template>
 

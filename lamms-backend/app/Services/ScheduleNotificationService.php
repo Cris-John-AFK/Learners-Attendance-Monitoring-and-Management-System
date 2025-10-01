@@ -364,6 +364,16 @@ class ScheduleNotificationService
     public function autoCreateSessionAndMarkAbsent($scheduleId, $teacherId, $sectionId, $subjectId, $scheduleDate, $startTime, $endTime)
     {
         try {
+            // ✅ FIRST: Check if it's a school day (holiday/no-classes check)
+            if (!\App\Models\SchoolCalendarEvent::isSchoolDay(Carbon::parse($scheduleDate), $sectionId)) {
+                Log::info("⛔ Skipping auto-absence for schedule {$scheduleId} on {$scheduleDate} - NO CLASSES (holiday/calendar event)");
+                return [
+                    'success' => true,
+                    'message' => 'No classes scheduled for this date',
+                    'reason' => 'calendar_event'
+                ];
+            }
+            
             DB::beginTransaction();
 
             // Check if session already exists for this specific schedule (matching times)

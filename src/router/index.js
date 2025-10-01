@@ -162,6 +162,11 @@ const router = createRouter({
                     component: () => import('@/views/pages/Admin/Admin-CollectedReports.vue')
                 },
                 {
+                    path: '/admin-school-calendar',
+                    name: 'admin-school-calendar',
+                    component: () => import('@/views/pages/Admin/SchoolCalendar.vue')
+                },
+                {
                     path: '/admin-subject',
                     name: 'admin-subject',
                     component: () => import('@/views/pages/Admin/Admin-Subject.vue')
@@ -313,15 +318,18 @@ router.beforeEach(async (to, from, next) => {
             const userRole = AuthService.getUserRole();
             const routePath = to.path;
 
+            // Debug logging
+            console.log('🔐 Route guard check:', { userRole, routePath, isAuthenticated: AuthService.isAuthenticated() });
+
             // Role-based route protection
             if (routePath.startsWith('/teacher') && userRole !== 'teacher') {
-                console.warn('Access denied: Teacher role required');
+                console.warn('Access denied: Teacher role required, got:', userRole);
                 next('/');
                 return;
             }
 
             if (routePath.startsWith('/admin') && userRole !== 'admin') {
-                console.warn('Access denied: Admin role required');
+                console.warn('Access denied: Admin role required, got:', userRole);
                 next('/');
                 return;
             }

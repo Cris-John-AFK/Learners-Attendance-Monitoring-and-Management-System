@@ -47,6 +47,16 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+// ========================================
+// SCHOOL CALENDAR ROUTES (Admin)
+// ========================================
+Route::prefix('calendar')->group(function () {
+    Route::get('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'index']);
+    Route::post('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'store']);
+    Route::put('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'update']);
+    Route::delete('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'destroy']);
+});
+
 // Student routes
 Route::apiResource('students', StudentController::class);
 Route::get('students/grade/{gradeLevel}', [StudentController::class, 'byGrade']);

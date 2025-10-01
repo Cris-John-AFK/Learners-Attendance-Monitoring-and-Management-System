@@ -47,6 +47,14 @@ Route::get('test-sf2', function() {
 Route::get('admin/reports/sf2/download/{sectionId}', [SF2ReportController::class, 'download'])->name('sf2.download');
 Route::get('admin/reports/sf2/download/{sectionId}/{month}', [SF2ReportController::class, 'downloadByMonth'])->name('sf2.download.month');
 
+// School Calendar routes (Admin)
+Route::prefix('calendar')->group(function () {
+    Route::get('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'index']);
+    Route::post('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'store']);
+    Route::put('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'update']);
+    Route::delete('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'destroy']);
+});
+
 // Teacher Authentication routes
 Route::prefix('teacher')->group(function () {
     Route::post('login', [TeacherAuthController::class, 'login']);
