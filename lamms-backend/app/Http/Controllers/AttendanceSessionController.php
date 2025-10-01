@@ -23,7 +23,7 @@ class AttendanceSessionController extends Controller
             $sectionId = $request->query('section_id');
             $subjectId = $request->query('subject_id');
             
-            Log::info("🎯🎯🎯 NEW CODE - AttendanceSessionController - FILTERING DROPPED STUDENTS", [
+            Log::info("AttendanceSessionController - Getting students", [
                 'teacher_id' => $teacherId,
                 'section_id' => $sectionId,
                 'subject_id' => $subjectId
@@ -40,20 +40,24 @@ class AttendanceSessionController extends Controller
                 ], 400);
             }
             
-            // Get all active students in the section, excluding dropped/transferred out
+            // First, get the section name
+            $sectionName = DB::table('sections')
+                ->where('id', $sectionId)
+                ->value('name');
+
+            Log::info("Section name retrieved", ['section_id' => $sectionId, 'section_name' => $sectionName]);
+
+            // Get all active students in the section
             $students = DB::table('student_details as sd')
-                ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
-                ->join('sections as s', 'ss.section_id', '=', 's.id')
-                ->where('ss.section_id', $sectionId)
-                ->where(function($query) {
-                    $query->where('ss.is_active', true)
-                          ->orWhereNull('ss.is_active');
+                ->leftJoin('student_section as ss', function($join) use ($sectionId) {
+                    $join->on('sd.id', '=', 'ss.student_id')
+                         ->where('ss.section_id', '=', $sectionId);
                 })
-                ->where(function($query) {
-                    // Exclude dropped out and transferred out students
-                    $query->whereNull('sd.enrollment_status')
-                          ->orWhere('sd.enrollment_status', 'active')
-                          ->orWhere('sd.enrollment_status', 'transferred_in');
+                ->leftJoin('sections as s', 'ss.section_id', '=', 's.id')
+                ->where(function($query) use ($sectionId, $sectionName) {
+                    // Get students either through pivot table or direct section field
+                    $query->where('ss.section_id', $sectionId)
+                          ->orWhere('sd.section', $sectionName);
                 })
                 ->select([
                     'sd.id',
@@ -65,14 +69,16 @@ class AttendanceSessionController extends Controller
                     'sd.gender',
                     'sd.age',
                     'sd.status',
-                    's.name as section_name'
+                    DB::raw("COALESCE(s.name, sd.section) as section_name")
                 ])
+                ->distinct()
                 ->orderBy('sd.lastName')
                 ->orderBy('sd.firstName')
                 ->get();
 
-            Log::info("🔥 FILTERED - Found {$students->count()} students for section {$sectionId}", [
-                'student_ids' => $students->pluck('id')->toArray()
+            Log::info("Found students for section", [
+                'section_id' => $sectionId,
+                'student_count' => $students->count()
             ]);
 
             return response()->json([
@@ -84,17 +90,19 @@ class AttendanceSessionController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error in getStudentsForTeacherSubject: ' . $e->getMessage(), [
+            Log::error('Error in getStudentsForTeacherSubject', [
                 'teacher_id' => $teacherId ?? null,
                 'section_id' => $sectionId ?? null,
                 'subject_id' => $subjectId ?? null,
+                'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
             
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching students: ' . $e->getMessage(),
-                'error_details' => $e->getMessage()
+                'students' => [],
+                'count' => 0
             ], 500);
         }
     }

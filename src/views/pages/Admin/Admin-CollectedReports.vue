@@ -23,10 +23,6 @@
                         <p class="debug-info" style="color: white; font-size: 0.9rem; margin-top: 0.5rem">Debug: Notification Count = {{ newSubmissionsCount }}, Reports = {{ submittedReports.length }}</p>
                     </div>
                     <div class="header-actions">
-                        <div class="notification-icon-container">
-                            <Button icon="pi pi-bell" class="p-button-text p-button-rounded notification-btn" @click="scrollToSubmittedReports" v-tooltip.bottom="'New Submissions'" />
-                            <span v-if="newSubmissionsCount > 0" class="notification-badge">{{ newSubmissionsCount }}</span>
-                        </div>
                         <Button label="Generate Report" icon="pi pi-plus" class="p-button-success" @click="showGenerateDialog = true" />
                         <Button label="Export All" icon="pi pi-download" class="p-button-outlined" @click="exportAllReports" />
                         <Button label="Test Notification" icon="pi pi-bell" class="p-button-warning p-button-outlined" @click="receiveNewSubmission" />
@@ -3030,10 +3026,16 @@ const loadSubmittedReports = async () => {
                         life: 5000
                     });
                 });
+                
+                // Trigger refresh of AdminTopbar notifications
+                window.dispatchEvent(new Event('refreshNotifications'));
             }
 
             // Update last checked time
             lastCheckedTime.value = new Date();
+            
+            // Also trigger refresh if count changed (for manual reloads)
+            window.dispatchEvent(new Event('refreshNotifications'));
         }
     } catch (error) {
         console.error('Error loading submitted reports:', error);
@@ -3074,6 +3076,9 @@ const receiveNewSubmission = () => {
         detail: 'A teacher has submitted a new SF2 report',
         life: 5000
     });
+    
+    // Trigger refresh of AdminTopbar notifications
+    window.dispatchEvent(new Event('refreshNotifications'));
 };
 
 // Submitted reports actions
@@ -3150,6 +3155,9 @@ const approveReport = async (report) => {
             // Update notification count
             const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
             newSubmissionsCount.value = submittedCount;
+            
+            // Trigger refresh of AdminTopbar notifications
+            window.dispatchEvent(new Event('refreshNotifications'));
 
             toast.add({
                 severity: 'success',
@@ -3196,6 +3204,9 @@ const rejectReport = async (report) => {
             // Update notification count
             const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
             newSubmissionsCount.value = submittedCount;
+            
+            // Trigger refresh of AdminTopbar notifications
+            window.dispatchEvent(new Event('refreshNotifications'));
 
             toast.add({
                 severity: 'warn',

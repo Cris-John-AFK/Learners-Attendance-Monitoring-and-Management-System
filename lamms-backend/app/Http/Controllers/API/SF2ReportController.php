@@ -1359,18 +1359,25 @@ class SF2ReportController extends Controller
             // Get section with teacher information
             $section = Section::with(['teacher'])->findOrFail($sectionId);
             
+            // Get currently authenticated teacher
+            $authenticatedTeacher = auth('teacher')->user();
+            $submittedByTeacherId = $authenticatedTeacher ? $authenticatedTeacher->id : $section->teacher_id;
+            
+            Log::info("SF2 Submission - Teacher Info", [
+                'section_id' => $sectionId,
+                'section_name' => $section->name,
+                'section_teacher_id' => $section->teacher_id,
+                'section_teacher_name' => $section->teacher ? $section->teacher->first_name . ' ' . $section->teacher->last_name : 'N/A',
+                'authenticated_teacher_id' => $authenticatedTeacher ? $authenticatedTeacher->id : null,
+                'authenticated_teacher_name' => $authenticatedTeacher ? $authenticatedTeacher->first_name . ' ' . $authenticatedTeacher->last_name : 'N/A',
+                'submitted_by_will_be' => $submittedByTeacherId
+            ]);
+            
             // Check if already submitted for this section and month
             $existingSubmission = \DB::table('submitted_sf2_reports')
                 ->where('section_id', $sectionId)
                 ->where('month', $month)
                 ->first();
-            
-            if ($existingSubmission) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Report already submitted for this section and month'
-                ], 409);
-            }
             
             // Get the actual SF2 report data to store
             $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
@@ -1379,43 +1386,73 @@ class SF2ReportController extends Controller
                 'section_id' => $sectionId,
                 'month' => $month,
                 'students_count' => count($sf2Data['students']),
-                'teacher_id' => $section->teacher_id
+                'teacher_id' => $submittedByTeacherId,
+                'is_resubmission' => $existingSubmission ? true : false
             ]);
             
-            // Create submission record with actual SF2 data
-            $submissionId = \DB::table('submitted_sf2_reports')->insertGetId([
-                'section_id' => $sectionId,
-                'section_name' => $section->name,
-                'grade_level' => $section->grade_level ?? 'Kinder',
-                'month' => $month,
-                'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
-                'report_type' => 'SF2',
-                'status' => 'submitted',
-                'submitted_by' => $section->teacher_id ?? 1,
-                'submitted_at' => now(),
-                'sf2_data' => json_encode($sf2Data), // Store the actual SF2 data as JSON
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-            
-            Log::info("SF2 report submitted successfully with real data", [
-                'submission_id' => $submissionId,
-                'section_id' => $sectionId,
-                'month' => $month,
-                'teacher_id' => $section->teacher_id,
-                'data_size' => strlen(json_encode($sf2Data))
-            ]);
+            if ($existingSubmission) {
+                // Update existing submission (allow resubmission)
+                \DB::table('submitted_sf2_reports')
+                    ->where('id', $existingSubmission->id)
+                    ->update([
+                        'status' => 'submitted', // Reset to submitted status
+                        'submitted_at' => now(), // Update submission time
+                        'sf2_data' => json_encode($sf2Data), // Update with latest data
+                        'updated_at' => now(),
+                        'reviewed_at' => null, // Clear review timestamp
+                        'reviewed_by' => null, // Clear reviewer
+                        'admin_notes' => null // Clear admin notes
+                    ]);
+                
+                $submissionId = $existingSubmission->id;
+                $isResubmission = true;
+                
+                Log::info("SF2 report resubmitted successfully", [
+                    'submission_id' => $submissionId,
+                    'section_id' => $sectionId,
+                    'month' => $month
+                ]);
+            } else {
+                // Create new submission record
+                $submissionId = \DB::table('submitted_sf2_reports')->insertGetId([
+                    'section_id' => $sectionId,
+                    'section_name' => $section->name,
+                    'grade_level' => $section->grade_level ?? 'Kinder',
+                    'month' => $month,
+                    'month_name' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                    'report_type' => 'SF2',
+                    'status' => 'submitted',
+                    'submitted_by' => $submittedByTeacherId, // Use authenticated teacher ID
+                    'submitted_at' => now(),
+                    'sf2_data' => json_encode($sf2Data),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                $isResubmission = false;
+                
+                Log::info("SF2 report submitted successfully with real data", [
+                    'submission_id' => $submissionId,
+                    'section_id' => $sectionId,
+                    'month' => $month,
+                    'teacher_id' => $section->teacher_id,
+                    'data_size' => strlen(json_encode($sf2Data))
+                ]);
+            }
             
             return response()->json([
                 'success' => true,
-                'message' => 'SF2 report submitted successfully to admin',
+                'message' => $isResubmission 
+                    ? 'SF2 report resubmitted successfully to admin' 
+                    : 'SF2 report submitted successfully to admin',
                 'data' => [
                     'submission_id' => $submissionId,
                     'section_name' => $section->name,
                     'month' => Carbon::createFromFormat('Y-m', $month)->format('F Y'),
                     'status' => 'submitted',
                     'submitted_at' => now()->toISOString(),
-                    'students_count' => count($sf2Data['students'])
+                    'students_count' => count($sf2Data['students']),
+                    'is_resubmission' => $isResubmission
                 ]
             ]);
             
@@ -1541,6 +1578,17 @@ class SF2ReportController extends Controller
 
             // Transform the data for frontend
             $transformedReports = $reports->map(function ($report) {
+                $teacherName = trim(($report->teacher_first_name ?? '') . ' ' . ($report->teacher_last_name ?? ''));
+                
+                // Log for debugging
+                Log::info("Teacher name for submission", [
+                    'submission_id' => $report->id,
+                    'submitted_by' => $report->submitted_by,
+                    'teacher_first_name' => $report->teacher_first_name,
+                    'teacher_last_name' => $report->teacher_last_name,
+                    'teacher_name' => $teacherName
+                ]);
+                
                 return [
                     'id' => $report->id,
                     'section_id' => $report->section_id,
@@ -1550,7 +1598,8 @@ class SF2ReportController extends Controller
                     'month_name' => $report->month_name,
                     'report_type' => $report->report_type,
                     'status' => $report->status,
-                    'teacher_name' => $report->teacher_first_name . ' ' . $report->teacher_last_name,
+                    'teacher_name' => !empty($teacherName) ? $teacherName : 'Unknown Teacher',
+                    'submitted_by' => $report->submitted_by,
                     'submitted_at' => $report->submitted_at,
                     'reviewed_at' => $report->reviewed_at,
                     'admin_notes' => $report->admin_notes,
