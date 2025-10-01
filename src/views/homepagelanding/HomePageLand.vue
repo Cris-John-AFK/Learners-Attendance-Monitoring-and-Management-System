@@ -72,7 +72,6 @@
 </template>
 
 <script setup>
-import api from '@/config/axios';
 import AuthService from '@/services/AuthService';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -124,7 +123,7 @@ const handleLogin = async () => {
 
         if (result.success) {
             console.log('✅ Login successful! Role:', result.role);
-            
+
             // Redirect based on user role
             switch (result.role) {
                 case 'teacher':

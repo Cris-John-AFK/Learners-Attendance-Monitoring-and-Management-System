@@ -342,7 +342,14 @@ class AttendanceSessionController extends Controller
             $summary = $this->generateSessionSummary($session);
             
             // Create notification for session completion (async, non-blocking)
-            $this->createSessionCompletionNotification($session, $summary);
+            Log::info("About to create notification for session {$session->id}");
+            try {
+                $this->createSessionCompletionNotification($session, $summary);
+                Log::info("Notification creation completed for session {$session->id}");
+            } catch (\Exception $notifError) {
+                Log::error("Failed to create notification: " . $notifError->getMessage());
+                // Don't fail the session completion if notification fails
+            }
 
             return response()->json([
                 'message' => 'Session completed successfully',
@@ -1140,38 +1147,46 @@ class AttendanceSessionController extends Controller
     private function createSessionCompletionNotification($session, $summary)
     {
         try {
-            // Get subject name for notification
-            $subject = DB::table('subjects')->where('id', $session->subject_id)->first();
-            $subjectName = $subject ? $subject->name : 'Unknown Subject';
+            // Extract statistics from summary (they're nested under 'statistics' key)
+            $stats = $summary['statistics'] ?? [];
+            $subjectName = $summary['subject_name'] ?? 'Unknown Subject';
             
             // Create compact notification message
-            $message = "{$subjectName} - {$summary['present_count']} present, {$summary['absent_count']} absent";
+            $presentCount = $stats['present'] ?? 0;
+            $absentCount = $stats['absent'] ?? 0;
+            $lateCount = $stats['late'] ?? 0;
             
-            // Insert notification with indexed columns
+            $message = "{$subjectName} - {$presentCount} present, {$absentCount} absent";
+            
+            // Insert notification using indexed user_id column
             DB::table('notifications')->insert([
                 'type' => 'session_completed',
-                'teacher_id' => $session->teacher_id,
+                'user_id' => $session->teacher_id, // Using user_id which has index
                 'title' => 'Attendance Session Completed',
                 'message' => $message,
-                'metadata' => json_encode([
+                'data' => json_encode([
                     'session_id' => $session->id,
                     'subject_id' => $session->subject_id,
                     'subject_name' => $subjectName,
                     'section_id' => $session->section_id,
-                    'present_count' => $summary['present_count'],
-                    'absent_count' => $summary['absent_count'],
-                    'late_count' => $summary['late_count'],
-                    'total_students' => $summary['total_students']
+                    'present_count' => $presentCount,
+                    'absent_count' => $absentCount,
+                    'late_count' => $lateCount,
+                    'excused_count' => $stats['excused'] ?? 0,
+                    'total_students' => $stats['total_students'] ?? 0,
+                    'teacher_id' => $session->teacher_id
                 ]),
+                'priority' => 'medium',
                 'is_read' => false,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
-            Log::info("Notification created for completed session {$session->id}");
+            Log::info("Notification created for completed session {$session->id} - {$message}");
         } catch (\Exception $e) {
             // Don't fail session completion if notification fails
             Log::error("Failed to create notification for session {$session->id}: " . $e->getMessage());
+            Log::error("Summary structure: " . json_encode($summary));
         }
     }
 

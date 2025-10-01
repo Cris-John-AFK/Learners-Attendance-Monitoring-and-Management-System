@@ -1965,6 +1965,14 @@ const completeAttendanceSession = async () => {
         setupMidnightTimer();
         setupAutoHideTimer();
 
+        // Force immediate notification reload to show new notification
+        try {
+            await NotificationService.loadNotifications();
+            console.log('✅ Notifications reloaded after session completion');
+        } catch (notifError) {
+            console.error('Failed to reload notifications:', notifError);
+        }
+
         toast.add({
             severity: 'success',
             summary: 'Session Completed',
@@ -1991,34 +1999,102 @@ const completeAttendanceSession = async () => {
     }
 };
 
-const markAllPresent = () => {
-    if (confirm('Are you sure you want to mark all students as present?')) {
-        // Mark all occupied seats as present
+const markAllPresent = async () => {
+    console.log('Mark All Present clicked');
+    
+    if (!confirm('Are you sure you want to mark all students as present?')) {
+        console.log('User cancelled');
+        return;
+    }
+
+    console.log('Checking session status - Active:', sessionActive.value, 'Session:', currentSession.value);
+    
+    if (!sessionActive.value || !currentSession.value) {
+        toast.add({
+            severity: 'error',
+            summary: 'No Active Session',
+            detail: 'Please start a session first',
+            life: 3000
+        });
+        return;
+    }
+
+    try {
+        console.log('Starting mark all present process');
+        let markedCount = 0;
+        const attendanceData = [];
+
+        // Collect all students to mark as present
         seatPlan.value.forEach((row) => {
             row.forEach((seat) => {
                 if (seat.isOccupied && seat.studentId) {
+                    // Update visual status
                     seat.status = 1; // Present status
-
-                    // Update attendance records
-                    const recordKey = `${seat.studentId}-${currentDate.value}`;
-                    attendanceRecords.value[recordKey] = {
-                        studentId: seat.studentId,
-                        date: currentDate.value,
-                        status: 1,
-                        timestamp: new Date().toISOString()
-                    };
+                    
+                    // Add to batch
+                    attendanceData.push({
+                        student_id: seat.studentId,
+                        attendance_status_id: 1, // Present
+                        arrival_time: new Date().toTimeString().split(' ')[0],
+                        remarks: null,
+                        reason_id: null,
+                        marking_method: 'manual' // Valid value: manual, seat_plan, qr_code, facial_recognition
+                    });
                 }
             });
         });
 
-        // Save to localStorage
-        localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
+        console.log('Collected attendance data for', attendanceData.length, 'students');
+        console.log('Attendance data:', attendanceData);
+
+        // Save all attendance records in one API call
+        if (attendanceData.length > 0) {
+            console.log('Calling API to mark attendance for session:', currentSession.value.id);
+            await AttendanceSessionService.markSessionAttendance(currentSession.value.id, attendanceData);
+            markedCount = attendanceData.length;
+            console.log('Successfully marked', markedCount, 'students');
+            
+            // Force visual update - ensure all seats show green status
+            const updatedSeats = [];
+            seatPlan.value.forEach((row, rowIndex) => {
+                row.forEach((seat, colIndex) => {
+                    if (seat.isOccupied && seat.studentId) {
+                        seat.status = 1; // Set to green/present
+                        console.log(`Setting seat [${rowIndex}][${colIndex}] student ${seat.studentId} to status 1 (green)`);
+                        updatedSeats.push({rowIndex, colIndex, studentId: seat.studentId});
+                    }
+                });
+            });
+            
+            console.log('Updated', updatedSeats.length, 'seats with green status');
+            console.log('Updated seats:', updatedSeats);
+            
+            // Force Vue reactivity with nextTick
+            await nextTick();
+            console.log('Vue DOM updated via nextTick');
+        }
 
         toast.add({
             severity: 'success',
             summary: 'All Present',
-            detail: 'All students have been marked as present',
+            detail: `${markedCount} students marked as present`,
             life: 3000
+        });
+    } catch (error) {
+        console.error('Error marking all present:', error);
+        console.error('Error response:', error.response?.data);
+        console.error('Validation errors:', JSON.stringify(error.response?.data?.errors, null, 2));
+        console.error('Sent data:', attendanceData);
+        
+        const errorMsg = error.response?.data?.message || 
+                        JSON.stringify(error.response?.data?.errors) || 
+                        'Failed to mark all students as present';
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Validation Error',
+            detail: errorMsg,
+            life: 10000
         });
     }
 };
@@ -2432,8 +2508,9 @@ onMounted(async () => {
 watch(sessionActive, (newValue, oldValue) => {
     console.log('Session active changed:', oldValue, '->', newValue);
     if (!newValue && oldValue) {
-        // Session just became inactive, clear all student statuses
-        clearStudentStatuses();
+        // Session just became inactive - DO NOT clear statuses to keep visual feedback
+        // clearStudentStatuses();  // Commented out to preserve green status after completion
+        console.log('Session became inactive - keeping visual statuses visible');
     } else if (newValue && !oldValue) {
         // Session just became active, clear any cached statuses to start fresh
         console.log('Session became active - clearing cached statuses for fresh start');
@@ -4381,9 +4458,23 @@ const titleRef = ref(null);
                                     </div>
 
                                     <!-- Normal student info when not hovered -->
-                                    <div v-else-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info">
+                                    <div v-else-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info relative">
                                         <div class="student-initials bg-blue-500 text-white">
                                             {{ getStudentInitials(getStudentById(seat.studentId)) }}
+                                        </div>
+                                        <!-- Status indicator badge -->
+                                        <div v-if="seat.status" class="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" :class="{
+                                            'bg-green-500': seat.status === 1 || seat.status === 'Present',
+                                            'bg-red-500': seat.status === 2 || seat.status === 'Absent',
+                                            'bg-yellow-500': seat.status === 3 || seat.status === 'Late',
+                                            'bg-blue-400': seat.status === 4 || seat.status === 'Excused'
+                                        }">
+                                            <i class="pi text-white text-xs" :class="{
+                                                'pi-check': seat.status === 1 || seat.status === 'Present',
+                                                'pi-times': seat.status === 2 || seat.status === 'Absent',
+                                                'pi-clock': seat.status === 3 || seat.status === 'Late',
+                                                'pi-info-circle': seat.status === 4 || seat.status === 'Excused'
+                                            }"></i>
                                         </div>
                                         <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
                                         <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ seat.studentId }}</div>
