@@ -366,22 +366,50 @@ class ScheduleNotificationService
         try {
             DB::beginTransaction();
 
-            // Create attendance session with required fields
-            $currentTime = Carbon::now()->format('H:i:s');
-            $sessionId = DB::table('attendance_sessions')->insertGetId([
-                'teacher_id' => $teacherId,
-                'section_id' => $sectionId,
-                'subject_id' => $subjectId,
-                'session_date' => $scheduleDate,
-                'session_start_time' => $startTime,
-                'session_end_time' => $endTime,
-                'session_type' => 'regular',
-                'status' => 'active',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now()
-            ]);
+            // Check if session already exists for this specific schedule (matching times)
+            $existingSession = DB::table('attendance_sessions')
+                ->where('teacher_id', $teacherId)
+                ->where('section_id', $sectionId)
+                ->where('subject_id', $subjectId)
+                ->where('session_date', $scheduleDate)
+                ->where('session_start_time', $startTime)
+                ->where('session_end_time', $endTime)
+                ->whereIn('status', ['active', 'completed'])
+                ->first();
 
-            Log::info("Auto-created session {$sessionId} for schedule {$scheduleId}");
+            if ($existingSession) {
+                // Session exists for this specific schedule - we'll mark only unmarked students as absent
+                Log::info("Session already exists (ID: {$existingSession->id}, status: {$existingSession->status}) for schedule {$scheduleId} at {$startTime}-{$endTime}, will mark unmarked students as absent");
+                $sessionId = $existingSession->id;
+                
+                // Update session status to completed if still active
+                if ($existingSession->status === 'active') {
+                    DB::table('attendance_sessions')
+                        ->where('id', $sessionId)
+                        ->update([
+                            'status' => 'completed',
+                            'updated_at' => Carbon::now()
+                        ]);
+                    Log::info("Updated session {$sessionId} status to completed");
+                }
+            } else {
+                // No session exists - create one
+                $currentTime = Carbon::now()->format('H:i:s');
+                $sessionId = DB::table('attendance_sessions')->insertGetId([
+                    'teacher_id' => $teacherId,
+                    'section_id' => $sectionId,
+                    'subject_id' => $subjectId,
+                    'session_date' => $scheduleDate,
+                    'session_start_time' => $startTime,
+                    'session_end_time' => $endTime,
+                    'session_type' => 'regular',
+                    'status' => 'completed', // Mark as completed since schedule already ended
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now()
+                ]);
+
+                Log::info("Auto-created session {$sessionId} for schedule {$scheduleId}");
+            }
 
             // Get all students in the section
             $students = DB::table('student_section as ss')
@@ -391,6 +419,37 @@ class ScheduleNotificationService
                 ->where('sd.is_active', true)
                 ->select('ss.student_id')
                 ->get();
+
+            Log::info("Total students in section {$sectionId}: " . count($students));
+
+            // Get students who already have attendance records for this session
+            $existingAttendance = DB::table('attendance_records')
+                ->where('attendance_session_id', $sessionId)
+                ->pluck('student_id')
+                ->toArray();
+
+            Log::info("Students with existing attendance for session {$sessionId}: " . count($existingAttendance), [
+                'student_ids' => $existingAttendance
+            ]);
+
+            // Filter out students who already have attendance
+            $studentsNeedingAttendance = $students->filter(function($student) use ($existingAttendance) {
+                return !in_array($student->student_id, $existingAttendance);
+            });
+
+            Log::info("Students needing attendance: " . count($studentsNeedingAttendance));
+
+            if ($studentsNeedingAttendance->isEmpty()) {
+                Log::info("All students already have attendance for session {$sessionId}, no auto-marking needed");
+                DB::commit();
+                return [
+                    'success' => true,
+                    'session_id' => $sessionId,
+                    'marked_absent_count' => 0,
+                    'all_marked' => true,
+                    'message' => 'All students already marked by teacher'
+                ];
+            }
 
             // Get "Absent" status ID
             $absentStatus = DB::table('attendance_statuses')
@@ -402,9 +461,9 @@ class ScheduleNotificationService
                 throw new \Exception("Absent status not found");
             }
 
-            // Mark all students as absent
+            // Mark only students without attendance as absent
             $attendanceRecords = [];
-            foreach ($students as $student) {
+            foreach ($studentsNeedingAttendance as $student) {
                 $attendanceRecords[] = [
                     'attendance_session_id' => $sessionId,
                     'student_id' => $student->student_id,

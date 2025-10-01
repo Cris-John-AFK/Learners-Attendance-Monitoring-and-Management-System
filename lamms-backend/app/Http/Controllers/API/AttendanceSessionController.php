@@ -317,13 +317,17 @@ class AttendanceSessionController extends Controller
             }
 
             // Use database transaction for data integrity and prevent duplicate completions
-            DB::transaction(function () use ($session) {
+            $autoMarkedCount = 0;
+            DB::transaction(function () use ($session, &$autoMarkedCount) {
                 // Double-check status within transaction to prevent race conditions
                 $currentSession = AttendanceSession::lockForUpdate()->find($session->id);
                 
                 if ($currentSession->status !== 'active') {
                     throw new \Exception("Session status changed during completion. Current status: {$currentSession->status}");
                 }
+                
+                // Auto-mark unmarked students as absent before completing
+                $autoMarkedCount = $this->autoMarkUnmarkedStudentsAsAbsent($currentSession);
                 
                 // Update session with completion data
                 $currentSession->update([
@@ -332,7 +336,7 @@ class AttendanceSessionController extends Controller
                     'completed_at' => now()
                 ]);
                 
-                Log::info("Session {$session->id} completed successfully with transaction lock");
+                Log::info("Session {$session->id} completed successfully with transaction lock. Auto-marked {$autoMarkedCount} students as absent.");
             });
 
             // Refresh session to get updated data
@@ -1187,6 +1191,70 @@ class AttendanceSessionController extends Controller
             // Don't fail session completion if notification fails
             Log::error("Failed to create notification for session {$session->id}: " . $e->getMessage());
             Log::error("Summary structure: " . json_encode($summary));
+        }
+    }
+
+    /**
+     * Auto-mark unmarked students as absent when completing session
+     */
+    private function autoMarkUnmarkedStudentsAsAbsent($session)
+    {
+        try {
+            // Get all active students in the section
+            $allStudents = DB::table('student_section as ss')
+                ->join('student_details as sd', 'ss.student_id', '=', 'sd.id')
+                ->where('ss.section_id', $session->section_id)
+                ->where('ss.is_active', true)
+                ->where('sd.is_active', true)
+                ->pluck('ss.student_id');
+
+            // Get students who already have attendance
+            $markedStudents = DB::table('attendance_records')
+                ->where('attendance_session_id', $session->id)
+                ->pluck('student_id');
+
+            // Find unmarked students
+            $unmarkedStudents = $allStudents->diff($markedStudents);
+
+            if ($unmarkedStudents->isEmpty()) {
+                Log::info("No unmarked students for session {$session->id}");
+                return 0;
+            }
+
+            // Get Absent status ID
+            $absentStatus = DB::table('attendance_statuses')
+                ->where('code', 'A')
+                ->where('is_active', true)
+                ->first();
+
+            if (!$absentStatus) {
+                Log::error("Absent status not found in database");
+                return 0;
+            }
+
+            // Create attendance records for unmarked students
+            $records = [];
+            foreach ($unmarkedStudents as $studentId) {
+                $records[] = [
+                    'attendance_session_id' => $session->id,
+                    'student_id' => $studentId,
+                    'attendance_status_id' => $absentStatus->id,
+                    'marked_by_teacher_id' => $session->teacher_id,
+                    'marked_at' => now(),
+                    'remarks' => 'Auto-marked absent when session completed',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
+            }
+
+            DB::table('attendance_records')->insert($records);
+            
+            Log::info("Auto-marked {$unmarkedStudents->count()} students as absent for session {$session->id}");
+            return $unmarkedStudents->count();
+
+        } catch (\Exception $e) {
+            Log::error("Error auto-marking absent students for session {$session->id}: " . $e->getMessage());
+            return 0;
         }
     }
 

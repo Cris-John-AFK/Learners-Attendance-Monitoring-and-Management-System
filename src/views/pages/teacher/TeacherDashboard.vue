@@ -1323,15 +1323,15 @@ async function showStudentProfile(student) {
                 </div>
             </div>
 
-            <!-- Schedule Status Widget -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div class="lg:col-span-1">
+            <!-- Schedule Status Widget & Stats Cards Combined -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
+                <!-- Schedule Widget -->
+                <div class="lg:col-span-3">
                     <ScheduleStatusWidget />
                 </div>
-            </div>
-
-            <!-- Attendance Stats Summary Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                
+                <!-- Attendance Stats Cards -->
+                <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
                     <div class="mr-4 bg-blue-100 p-3 rounded-lg">
                         <i class="pi pi-users text-blue-600 text-xl"></i>
@@ -1342,40 +1342,41 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                    <div class="mr-4 bg-green-100 p-3 rounded-lg">
-                        <i class="pi pi-check-circle text-green-600 text-xl"></i>
-                    </div>
-                    <div class="flex-1">
-                        <div class="text-sm text-gray-500 mb-2 font-medium">Average Attendance</div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</span>
-                            <div class="flex items-center">
-                                <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                                    <div
-                                        class="h-2 rounded-full transition-all duration-500"
-                                        :class="{
-                                            'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                            'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                            'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                            'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
-                                        }"
-                                        :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
-                                    ></div>
-                                </div>
-                                <span
-                                    class="text-xs px-2 py-1 rounded-full font-medium"
-                                    :class="{
-                                        'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                        'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                        'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                        'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
-                                    }"
-                                >
-                                    {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
-                                </span>
-                            </div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
+                    <div class="flex items-center mb-3">
+                        <div class="mr-4 bg-green-100 p-3 rounded-lg">
+                            <i class="pi pi-check-circle text-green-600 text-xl"></i>
                         </div>
+                        <div class="flex-1">
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                            <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
+                        </div>
+                    </div>
+                    <!-- Progress bar at bottom -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
+                            <div
+                                class="h-2.5 rounded-full transition-all duration-500"
+                                :class="{
+                                    'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                    'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                    'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                    'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
+                                }"
+                                :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
+                            ></div>
+                        </div>
+                        <span
+                            class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
+                            :class="{
+                                'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
+                            }"
+                        >
+                            {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
+                        </span>
                     </div>
                 </div>
 
@@ -1397,6 +1398,7 @@ async function showStudentProfile(student) {
                         <div class="text-sm text-gray-500 mb-1 font-medium">🚨 18+ Absences (Smart Detection)</div>
                         <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
                     </div>
+                </div>
                 </div>
             </div>
 

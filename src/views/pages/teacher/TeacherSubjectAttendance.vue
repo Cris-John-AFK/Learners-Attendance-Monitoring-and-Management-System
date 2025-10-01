@@ -1965,10 +1965,12 @@ const completeAttendanceSession = async () => {
         setupMidnightTimer();
         setupAutoHideTimer();
 
-        // Force immediate notification reload to show new notification
+        // Force notification reload after a brief delay to ensure backend has created it
         try {
+            // Small delay to ensure notification is created in database first
+            await new Promise(resolve => setTimeout(resolve, 500));
             await NotificationService.loadNotifications();
-            console.log('✅ Notifications reloaded after session completion');
+            console.log('✅ Notifications reloaded after session completion - should show new notification');
         } catch (notifError) {
             console.error('Failed to reload notifications:', notifError);
         }

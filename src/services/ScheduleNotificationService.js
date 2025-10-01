@@ -7,6 +7,7 @@ class ScheduleNotificationService {
         this.schedules = [];
         this.currentSchedule = null;
         this.currentSchedules = []; // Initialize current schedules array
+        this.notifications = []; // Initialize notifications array for duplicate checking
         this.notificationService = NotificationService;
         this.checkInterval = null;
         this.notifiedSchedules = new Set(); // Track schedules we've already notified about
@@ -38,10 +39,10 @@ class ScheduleNotificationService {
             // Start checking for schedules
             await this.checkSchedules();
             
-            // Set up periodic checking (every 30 seconds)
+            // Set up periodic checking (every 10 seconds for faster auto-recording)
             this.checkInterval = setInterval(() => {
                 this.checkSchedules();
-            }, 30000);
+            }, 10000);
             
             console.log('✅ Schedule Notification Service initialized');
         } catch (error) {
@@ -219,17 +220,25 @@ class ScheduleNotificationService {
                 
                 if (createSessionResponse.data.success) {
                     const markedCount = createSessionResponse.data.marked_absent_count || 0;
+                    const allMarked = createSessionResponse.data.all_marked || false;
                     
-                    // Send notification about auto-session creation
-                    this.sendNotification({
-                        type: 'session_auto_created',
-                        title: '⚠️ Attendance Auto-Recorded',
-                        message: `${schedule.subject_name} ended without a session. Created session and marked ${markedCount} students absent.`,
-                        schedule: schedule,
-                        priority: 'warning'
-                    });
-                    
-                    console.log(`✅ Auto-created session and marked ${markedCount} students as absent for ${schedule.subject_name}`);
+                    // Send notification based on what happened
+                    if (markedCount > 0) {
+                        this.sendNotification({
+                            type: 'session_auto_created',
+                            title: '⚠️ Attendance Auto-Recorded',
+                            message: `${schedule.subject_name} ended. Auto-marked ${markedCount} unmarked student${markedCount > 1 ? 's' : ''} as absent.`,
+                            schedule: schedule,
+                            priority: 'warning'
+                        });
+                        console.log(`✅ Auto-marked ${markedCount} students as absent for ${schedule.subject_name}`);
+                    } else if (allMarked) {
+                        // All students already marked - no notification needed, just log
+                        console.log(`✅ ${schedule.subject_name} ended - all students already marked by teacher`);
+                    } else {
+                        // Session created but no students
+                        console.log(`✅ Session auto-completed for ${schedule.subject_name}`);
+                    }
                     
                     // Mark as processed to prevent duplicate attempts
                     this.processedScheduleEnds.add(scheduleEndKey);
@@ -339,6 +348,11 @@ class ScheduleNotificationService {
             
             console.log('📬 Sending schedule notification to AppTopbar:', notificationData);
             console.log('✅ Teacher ID being set:', teacherData.id);
+            
+            // Save notification to database via API
+            this.saveNotificationToDatabase(notificationData);
+            
+            // Also add to in-memory for immediate display
             NotificationService.addNotification(notificationData);
         } else {
             console.warn('⚠️ No teacher data found or missing ID, cannot send notification to AppTopbar');
@@ -354,6 +368,26 @@ class ScheduleNotificationService {
         this.notifyListeners(this.currentSchedules, notification);
         
         console.log('🔔 Notification sent:', notification.title);
+    }
+
+    /**
+     * Save notification to database via API
+     */
+    async saveNotificationToDatabase(notificationData) {
+        try {
+            const response = await axios.post('/api/notifications', {
+                user_id: notificationData.teacher_id,
+                type: notificationData.type,
+                title: notificationData.title,
+                message: notificationData.message,
+                data: notificationData.metadata,
+                priority: notificationData.priority || 'medium'
+            });
+            
+            console.log('💾 Notification saved to database:', response.data);
+        } catch (error) {
+            console.error('❌ Failed to save notification to database:', error);
+        }
     }
 
     /**
