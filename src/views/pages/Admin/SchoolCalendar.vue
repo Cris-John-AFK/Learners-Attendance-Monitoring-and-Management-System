@@ -220,9 +220,12 @@ async function loadEvents() {
     loading.value = true;
     try {
         const response = await api.get('/api/calendar/events');
+        console.log('📥 Load events response:', response.data);
+        console.log('📊 Events array:', response.data.events);
         events.value = response.data.events;
+        console.log('✅ Events loaded, count:', events.value.length);
     } catch (error) {
-        console.error('Error loading events:', error);
+        console.error('❌ Error loading events:', error);
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load calendar events', life: 3000 });
     } finally {
         loading.value = false;

@@ -53,6 +53,8 @@
                 >
                     <div class="notification-icon">
                         <i class="pi pi-check-circle" v-if="notification.type === 'session_completed'"></i>
+                        <i class="pi pi-calendar" v-else-if="notification.type === 'calendar_event'"></i>
+                        <i class="pi pi-clock" v-else-if="notification.type === 'schedule_notification'"></i>
                         <i class="pi pi-info-circle" v-else></i>
                     </div>
                     

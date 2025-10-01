@@ -5,7 +5,33 @@
             <span class="text-sm font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded">Live</span>
         </div>
 
-        <div class="bg-white rounded-lg p-4 border-l-4 border-primary">
+        <!-- Show calendar event if there is one -->
+        <div v-if="calendarEvent" class="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 border-l-4 border-green-500">
+            <div class="flex items-center mb-3">
+                <i class="pi pi-calendar text-green-600 mr-2 text-2xl"></i>
+                <span class="text-lg font-semibold text-green-800">{{ calendarEvent.icon }} {{ calendarEvent.event_title }}</span>
+            </div>
+
+            <div class="mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm font-medium bg-green-100 text-green-800 px-2 py-1 rounded">{{ formatEventType(calendarEvent.event_type) }}</span>
+                </div>
+                <p class="text-gray-700 font-medium">
+                    <i class="pi pi-info-circle mr-2 text-green-600"></i>
+                    No attendance required today
+                </p>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-green-200">
+                <p class="text-sm text-gray-600">
+                    <i class="pi pi-check-circle text-green-600 mr-1"></i>
+                    Enjoy your day off!
+                </p>
+            </div>
+        </div>
+
+        <!-- Show regular class schedule if no calendar event -->
+        <div v-else class="bg-white rounded-lg p-4 border-l-4 border-primary">
             <div class="flex items-center mb-3">
                 <i class="pi pi-clock text-primary mr-2"></i>
                 <span class="text-lg font-semibold">{{ currentTime }}</span>
@@ -35,10 +61,13 @@
 </template>
 
 <script>
+import api from '@/config/axios';
+
 export default {
     data() {
         return {
             currentTime: '',
+            calendarEvent: null,
             nextClass: {
                 subject: 'Mathematics',
                 grade: '3',
@@ -52,6 +81,7 @@ export default {
     mounted() {
         this.updateTime();
         setInterval(this.updateTime, 1000);
+        this.checkCalendarEvent();
     },
     methods: {
         updateTime() {
@@ -61,6 +91,49 @@ export default {
                 minute: '2-digit',
                 hour12: true
             });
+        },
+        async checkCalendarEvent() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const response = await api.get('/api/calendar/events');
+                
+                if (response.data.success && response.data.events) {
+                    // Find event for today
+                    const todayEvent = response.data.events.find(event => {
+                        const startDate = event.start_date.split('T')[0];
+                        const endDate = event.end_date.split('T')[0];
+                        return today >= startDate && today <= endDate && event.is_active;
+                    });
+                    
+                    if (todayEvent) {
+                        this.calendarEvent = {
+                            event_title: todayEvent.title,
+                            event_type: todayEvent.event_type,
+                            affects_attendance: todayEvent.affects_attendance,
+                            icon: this.getEventIcon(todayEvent.event_type)
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking calendar event:', error);
+            }
+        },
+        getEventIcon(eventType) {
+            const icons = {
+                'holiday': '🎄',
+                'half_day': '⏰',
+                'early_dismissal': '🏠',
+                'no_classes': '📋',
+                'school_event': '🎉',
+                'teacher_training': '👨‍🏫',
+                'exam_day': '📝'
+            };
+            return icons[eventType] || '📅';
+        },
+        formatEventType(eventType) {
+            return eventType.split('_').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
         }
     }
 };

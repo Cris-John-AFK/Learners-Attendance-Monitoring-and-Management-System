@@ -21,6 +21,22 @@
             </div>
         </div>
 
+        <!-- Calendar Event Today -->
+        <div v-else-if="calendarEvent" class="calendar-event-schedule">
+            <div class="status-header">
+                <i class="pi pi-calendar text-white-600"></i>
+                <span class="status-title">Today's Event</span>
+            </div>
+
+            <div class="schedule-details">
+                <h4 class="subject-name">{{ calendarEvent.icon }} {{ calendarEvent.event_title }}</h4>
+                <p class="section-name">{{ formatEventType(calendarEvent.event_type) }}</p>
+                <div class="time-range event-badge">
+                    <i class="pi pi-info-circle mr-1"></i> No attendance required
+                </div>
+            </div>
+        </div>
+
         <!-- Next Schedule -->
         <div v-else-if="currentStatus.nextSchedule" class="next-schedule">
             <div class="status-header">
@@ -55,6 +71,7 @@
 
 <script setup>
 import ScheduleNotificationService from '@/services/ScheduleNotificationService';
+import api from '@/config/axios';
 import Button from 'primevue/button';
 import { useToast } from 'primevue/usetoast';
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -71,6 +88,8 @@ const currentStatus = ref({
     timeRemaining: 0,
     timeToNext: null
 });
+
+const calendarEvent = ref(null);
 
 // Methods
 const updateStatus = (data) => {
@@ -180,8 +199,57 @@ const clearNotification = (notificationId) => {
     ScheduleNotificationService.clearNotification(notificationId);
 };
 
+const checkCalendarEvent = async () => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const response = await api.get('/api/calendar/events');
+        
+        if (response.data.success && response.data.events) {
+            // Find event for today
+            const todayEvent = response.data.events.find(event => {
+                const startDate = event.start_date.split('T')[0];
+                const endDate = event.end_date.split('T')[0];
+                return today >= startDate && today <= endDate && event.is_active;
+            });
+            
+            if (todayEvent) {
+                calendarEvent.value = {
+                    event_title: todayEvent.title,
+                    event_type: todayEvent.event_type,
+                    affects_attendance: todayEvent.affects_attendance,
+                    icon: getEventIcon(todayEvent.event_type)
+                };
+            }
+        }
+    } catch (error) {
+        console.error('Error checking calendar event:', error);
+    }
+};
+
+const getEventIcon = (eventType) => {
+    const icons = {
+        'holiday': '🎄',
+        'half_day': '⏰',
+        'early_dismissal': '🏠',
+        'no_classes': '📋',
+        'school_event': '🎉',
+        'teacher_training': '👨‍🏫',
+        'exam_day': '📝'
+    };
+    return icons[eventType] || '📅';
+};
+
+const formatEventType = (eventType) => {
+    return eventType.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+};
+
 // Lifecycle
 onMounted(() => {
+    // Check for calendar events first
+    checkCalendarEvent();
+    
     // Initialize schedule notification service
     ScheduleNotificationService.initialize();
 
@@ -219,6 +287,16 @@ onUnmounted(() => {
     color: white;
     border-radius: 4px;
     padding: 0.5rem;
+}
+
+.calendar-event-schedule {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 0;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    position: relative;
 }
 
 .next-schedule {

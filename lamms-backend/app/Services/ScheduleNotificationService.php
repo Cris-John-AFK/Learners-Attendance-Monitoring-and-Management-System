@@ -9,6 +9,52 @@ use Carbon\Carbon;
 class ScheduleNotificationService
 {
     /**
+     * Get calendar event for a specific date
+     */
+    public function getCalendarEventForDate($date)
+    {
+        try {
+            $event = DB::table('school_calendar_events')
+                ->where('is_active', true)
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->first();
+            
+            if ($event) {
+                return [
+                    'has_event' => true,
+                    'event_type' => $event->event_type,
+                    'event_title' => $event->title,
+                    'affects_attendance' => $event->affects_attendance,
+                    'icon' => $this->getEventIcon($event->event_type)
+                ];
+            }
+            
+            return ['has_event' => false];
+        } catch (\Exception $e) {
+            Log::error('Error checking calendar event: ' . $e->getMessage());
+            return ['has_event' => false];
+        }
+    }
+    
+    /**
+     * Get icon for event type
+     */
+    private function getEventIcon($eventType)
+    {
+        return match($eventType) {
+            'holiday' => '🎄',
+            'half_day' => '⏰',
+            'early_dismissal' => '🏠',
+            'no_classes' => '📋',
+            'school_event' => '🎉',
+            'teacher_training' => '👨‍🏫',
+            'exam_day' => '📝',
+            default => '📅'
+        };
+    }
+    
+    /**
      * Get upcoming schedules for a teacher that need notifications
      */
     public function getUpcomingSchedules($teacherId, $date = null)
@@ -16,6 +62,9 @@ class ScheduleNotificationService
         $date = $date ?: Carbon::now()->format('Y-m-d');
         $currentTime = Carbon::now();
         $dayOfWeek = Carbon::parse($date)->format('l'); // Monday, Tuesday, etc.
+        
+        // Check for calendar events on this date
+        $calendarEvent = $this->getCalendarEventForDate($date);
 
         try {
             $schedules = DB::table('subject_schedules as ss')
@@ -38,8 +87,8 @@ class ScheduleNotificationService
                 ->orderBy('ss.start_time')
                 ->get();
 
-            // Add timing information for each schedule
-            return $schedules->map(function ($schedule) use ($date, $currentTime) {
+            // Add timing information AND calendar event info for each schedule
+            return $schedules->map(function ($schedule) use ($date, $currentTime, $calendarEvent) {
                 $scheduleStart = Carbon::parse($date . ' ' . $schedule->start_time);
                 $scheduleEnd = Carbon::parse($date . ' ' . $schedule->end_time);
                 
@@ -56,7 +105,8 @@ class ScheduleNotificationService
                     'minutes_to_start' => $minutesToStart,
                     'minutes_to_end' => $minutesToEnd,
                     'status' => $status,
-                    'notification_type' => $this->getNotificationType($minutesToStart, $minutesToEnd, $status)
+                    'notification_type' => $this->getNotificationType($minutesToStart, $minutesToEnd, $status),
+                    'calendar_event' => $calendarEvent  // ✅ Include calendar event info!
                 ]);
             });
         } catch (\Exception $e) {

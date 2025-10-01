@@ -88,42 +88,59 @@ class ScheduleNotificationService {
     processScheduleNotifications(schedules) {
         schedules.forEach(schedule => {
             const scheduleKey = `${schedule.id}_${schedule.status}`;
-            
             // Clear existing timer for this schedule
             if (this.timers.has(scheduleKey)) {
                 clearTimeout(this.timers.get(scheduleKey));
             }
 
-            switch (schedule.notification_type) {
-                case 'starting_soon':
-                    this.sendNotification({
-                        type: 'starting_soon',
-                        title: '📚 Class Starting Soon',
-                        message: `${schedule.subject_name} in ${schedule.section_name} starts in ${Math.abs(schedule.minutes_to_start)} minutes`,
-                        schedule: schedule,
-                        priority: 'high'
-                    });
-                    break;
+            const scheduleStartKey = `${schedule.id}_${schedule.status}_starting_soon`;
+            const scheduleEndKey = `${schedule.id}_${schedule.status}_ending_soon`;
 
-                case 'ending_soon':
-                    this.sendNotification({
-                        type: 'ending_soon',
-                        title: '⏰ Class Ending Soon',
-                        message: `${schedule.subject_name} ends in ${Math.abs(schedule.minutes_to_end)} minutes. Students without attendance will be marked absent.`,
-                        schedule: schedule,
-                        priority: 'warning'
-                    });
-                    break;
-
-                case 'ended':
-                    // Automatically mark absent students when schedule ends
-                    this.handleScheduleEnd(schedule);
-                    break;
-
-                case 'in_progress':
-                    // Check if there's an active session
-                    this.checkActiveSession(schedule);
-                    break;
+            // Handle different notification types
+            if (schedule.notification_type === 'starting_soon' && !this.processedScheduleStarts.has(scheduleStartKey)) {
+                this.processedScheduleStarts.add(scheduleStartKey);
+                
+                // Build message with calendar event info if available
+                let message = `${schedule.subject_name} in ${schedule.section_name} starts in ${Math.abs(schedule.minutes_to_start)} minutes`;
+                if (schedule.calendar_event?.has_event) {
+                    const event = schedule.calendar_event;
+                    message += `\n${event.icon} ${event.event_title} (${event.event_type})`;
+                    if (event.affects_attendance) {
+                        message += ' - No attendance required';
+                    }
+                }
+                
+                this.sendNotification({
+                    type: 'starting_soon',
+                    title: '📚 Class Starting Soon',
+                    message: message,
+                    schedule: schedule,
+                    priority: 'high'
+                });
+            } else if (schedule.notification_type === 'ending_soon' && !this.processedScheduleEnds.has(scheduleEndKey)) {
+                this.processedScheduleEnds.add(scheduleEndKey);
+                
+                // Build message with calendar event info if available
+                let message = `${schedule.subject_name} ends in ${Math.abs(schedule.minutes_to_end)} minutes.`;
+                if (schedule.calendar_event?.has_event && schedule.calendar_event.affects_attendance) {
+                    message += ` ${schedule.calendar_event.icon} ${schedule.calendar_event.event_title} - attendance not required`;
+                } else {
+                    message += ' Students without attendance will be marked absent.';
+                }
+                
+                this.sendNotification({
+                    type: 'ending_soon',
+                    title: '⏰ Class Ending Soon',
+                    message: message,
+                    schedule: schedule,
+                    priority: 'warning'
+                });
+            } else if (schedule.notification_type === 'in_progress') {
+                // Check if there's an active session
+                this.checkActiveSession(schedule);
+            } else if (schedule.notification_type === 'ended') {
+                // Handle schedule end
+                this.handleScheduleEnd(schedule);
             }
         });
     }
@@ -172,6 +189,13 @@ class ScheduleNotificationService {
             }
             
             console.log('🏁 Schedule ended, checking for auto-absent marking:', schedule.subject_name);
+            
+            // 🎯 CHECK FOR CALENDAR EVENT - Skip auto-marking if there's an event affecting attendance
+            if (schedule.calendar_event?.has_event && schedule.calendar_event.affects_attendance) {
+                console.log(`🎄 Holiday/Event detected: ${schedule.calendar_event.event_title} - Skipping auto-absent marking`);
+                this.processedScheduleEnds.add(scheduleEndKey);
+                return; // Don't mark students absent on holidays!
+            }
             
             // Check if there's an active session for this schedule
             const sessionResponse = await axios.get(`/api/schedule-notifications/schedule/${schedule.id}/active-session`);

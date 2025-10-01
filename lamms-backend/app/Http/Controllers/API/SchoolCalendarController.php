@@ -78,6 +78,8 @@ class SchoolCalendarController extends Controller
             
             DB::beginTransaction();
             
+            Log::info("Creating calendar event with data:", $request->all());
+            
             $event = SchoolCalendarEvent::create([
                 'title' => $request->title,
                 'description' => $request->description,
@@ -93,12 +95,26 @@ class SchoolCalendarController extends Controller
                 'created_by' => $request->user()->id ?? null
             ]);
             
-            // 🔔 NOTIFY ALL TEACHERS about this calendar event!
-            $this->notifyTeachersAboutEvent($event);
+            Log::info("Event created with ID: {$event->id}");
             
+            // Commit FIRST to ensure event is saved
             DB::commit();
             
-            Log::info("Calendar event created: {$event->title} ({$event->event_type}) from {$event->start_date} to {$event->end_date}");
+            Log::info("Transaction committed successfully");
+            
+            // 🔔 NOTIFY ALL TEACHERS about this calendar event (after commit!)
+            try {
+                $this->notifyTeachersAboutEvent($event);
+                Log::info("Notifications sent successfully");
+            } catch (\Exception $notifError) {
+                Log::error("Notification failed but event was saved: " . $notifError->getMessage());
+            }
+            
+            Log::info("Calendar event committed: {$event->title} ({$event->event_type}) from {$event->start_date} to {$event->end_date}");
+            
+            // Verify it's actually in the database
+            $verification = SchoolCalendarEvent::find($event->id);
+            Log::info("Verification - Event exists in DB: " . ($verification ? "YES" : "NO"));
             
             return response()->json([
                 'success' => true,
@@ -190,22 +206,25 @@ class SchoolCalendarController extends Controller
      */
     private function notifyTeachersAboutEvent(SchoolCalendarEvent $event, string $action = 'created')
     {
+        Log::info("🔔 notifyTeachersAboutEvent called", ['event_id' => $event->id, 'event_title' => $event->title, 'action' => $action]);
+        
         try {
-            // Get all active teachers
-            $teachers = Teacher::where('status', 'active')->get();
+            // Get all teachers (no status column in teachers table)
+            $teachers = Teacher::all();
+            Log::info("Found teachers for notification", ['count' => $teachers->count()]);
+            
+            $notificationCount = 0;
             
             foreach ($teachers as $teacher) {
-                if (!$teacher->user_id) continue;
-                
                 // Create notification title and message
                 $icon = $this->getEventIcon($event->event_type);
                 $title = $action === 'created' ? '📅 New Calendar Event' : '📅 Calendar Event Updated';
                 
                 $message = $this->formatEventMessage($event);
                 
-                // Store notification in database
+                // Store notification in database using teacher ID directly
                 DB::table('notifications')->insert([
-                    'user_id' => $teacher->user_id,
+                    'user_id' => $teacher->id, // Use teacher ID directly!
                     'type' => 'calendar_event',
                     'title' => $title,
                     'message' => $message,
@@ -215,18 +234,23 @@ class SchoolCalendarController extends Controller
                         'start_date' => $event->start_date->format('Y-m-d'),
                         'end_date' => $event->end_date->format('Y-m-d'),
                         'affects_attendance' => $event->affects_attendance,
-                        'action' => $action
+                        'action' => $action,
+                        'teacher_id' => $teacher->id
                     ]),
+                    'priority' => $event->affects_attendance ? 'high' : 'normal',
                     'is_read' => false,
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
+                
+                $notificationCount++;
             }
             
-            Log::info("Notified {$teachers->count()} teachers about calendar event: {$event->title}");
+            Log::info("Notified {$notificationCount} teachers about calendar event: {$event->title}");
             
         } catch (\Exception $e) {
             Log::error('Error notifying teachers about event: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
     
