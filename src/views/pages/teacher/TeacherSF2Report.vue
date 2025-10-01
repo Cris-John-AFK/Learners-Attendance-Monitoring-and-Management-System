@@ -3,7 +3,6 @@ import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
@@ -228,7 +227,7 @@ const loadReportData = async () => {
 // Toggle Edit SF2 mode
 const editSF2 = () => {
     isEditMode.value = !isEditMode.value;
-    
+
     if (isEditMode.value) {
         toast.add({
             severity: 'success',
@@ -428,7 +427,7 @@ const openEditDialog = (student, date, day) => {
         });
         return;
     }
-    
+
     editingCell.value = {
         student: student,
         date: date,
@@ -442,10 +441,10 @@ const openEditDialog = (student, date, day) => {
 // Save attendance edit
 const saveAttendanceEdit = () => {
     if (!editingCell.value) return;
-    
+
     const { student, date } = editingCell.value;
     const inputValue = editAttendanceValue.value.trim();
-    
+
     // Convert text input to status
     let status = null;
     if (inputValue === '✓' || inputValue.toLowerCase() === 'p' || inputValue.toLowerCase() === 'present') {
@@ -461,27 +460,27 @@ const saveAttendanceEdit = () => {
     } else if (inputValue === '' || inputValue === '-') {
         status = null;
     }
-    
+
     // Update the attendance data for this student
     if (!student.attendance_data) {
         student.attendance_data = {};
     }
     student.attendance_data[date] = status;
-    
+
     // TODO: Send update to backend API
     // await axios.put(`/api/teacher/reports/sf2/update-attendance`, {
     //     student_id: student.id,
     //     date: date,
     //     status: status
     // });
-    
+
     toast.add({
         severity: 'success',
         summary: 'Updated',
         detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to "${getAttendanceMark(status)}"`,
         life: 3000
     });
-    
+
     closeEditDialog();
 };
 
@@ -503,7 +502,7 @@ const openDayAnnotationDialog = (date, day) => {
         });
         return;
     }
-    
+
     editingDay.value = { date, day };
     dayAnnotationValue.value = dayAnnotations.value[date] || '';
     showDayAnnotationDialog.value = true;
@@ -512,10 +511,10 @@ const openDayAnnotationDialog = (date, day) => {
 // Save day annotation
 const saveDayAnnotation = () => {
     if (!editingDay.value) return;
-    
+
     const { date, day } = editingDay.value;
     const annotation = dayAnnotationValue.value.trim();
-    
+
     if (annotation) {
         dayAnnotations.value[date] = annotation;
         toast.add({
@@ -534,14 +533,14 @@ const saveDayAnnotation = () => {
             life: 3000
         });
     }
-    
+
     // TODO: Send to backend API
     // await axios.put(`/api/teacher/reports/sf2/annotate-day`, {
     //     section_id: sectionId,
     //     date: date,
     //     annotation: annotation
     // });
-    
+
     closeDayAnnotationDialog();
 };
 
@@ -574,12 +573,7 @@ onMounted(() => {
                     <label class="text-sm font-medium">Month:</label>
                     <Calendar v-model="selectedMonth" view="month" dateFormat="MM yy" @date-select="onMonthChange" class="w-32" />
                 </div>
-                <Button 
-                    icon="pi pi-pencil" 
-                    :label="isEditMode ? 'Exit Edit Mode' : 'Edit (SF2)'" 
-                    :class="isEditMode ? 'p-button-warning' : 'p-button-info'" 
-                    @click="editSF2" 
-                />
+                <Button icon="pi pi-pencil" :label="isEditMode ? 'Exit Edit Mode' : 'Edit (SF2)'" :class="isEditMode ? 'p-button-warning' : 'p-button-info'" @click="editSF2" />
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
                 <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
                 <Button icon="pi pi-send" label="Submit to Admin" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
@@ -693,13 +687,10 @@ onMounted(() => {
                                 v-for="(col, index) in fixedWeekdayColumns"
                                 :key="`day-${index}`"
                                 class="border border-gray-900 p-0.5 bg-gray-50 text-center font-bold relative"
-                                :class="[
-                                    !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-200' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : ''
-                                ]"
+                                :class="[!col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-200' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
                                 :style="{ width: '22px', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                                 @click="!col.isEmpty && openDayAnnotationDialog(col.date, col.day)"
-                                :title="!col.isEmpty && isEditMode ? 'Click to annotate day (Holiday, Event, etc.)' : (dayAnnotations[col.date] || '')"
+                                :title="!col.isEmpty && isEditMode ? 'Click to annotate day (Holiday, Event, etc.)' : dayAnnotations[col.date] || ''"
                             >
                                 <div class="text-xs" :class="dayAnnotations[col.date] ? 'text-red-700 font-bold' : ''">{{ col.day }}</div>
                             </th>
@@ -711,10 +702,7 @@ onMounted(() => {
                                 v-for="(col, index) in fixedWeekdayColumns"
                                 :key="`dow-${index}`"
                                 class="border-2 border-gray-900 p-0.5 text-center text-xs font-bold"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : (dayAnnotations[col.date] ? 'bg-gray-300' : 'bg-white'),
-                                    dayAnnotations[col.date] ? 'text-red-700' : ''
-                                ]"
+                                :class="[col.isEmpty ? 'bg-gray-100' : dayAnnotations[col.date] ? 'bg-gray-300' : 'bg-white', dayAnnotations[col.date] ? 'text-red-700' : '']"
                                 :style="{ height: '24px', borderTop: '2px solid #000', borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.dayName }}
@@ -725,7 +713,10 @@ onMounted(() => {
                             >
                                 ABSENT
                             </th>
-                            <th class="border-2 border-gray-900 bg-gray-50 text-center font-bold" style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000">
+                            <th
+                                class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
+                                style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000"
+                            >
                                 TARDY
                             </th>
                         </tr>
@@ -751,11 +742,11 @@ onMounted(() => {
                                 ]"
                                 :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                                 @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : (!col.isEmpty ? 'Enable Edit Mode first' : '')"
+                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                             >
                                 <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}</span>
                                 <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
-                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px;">
+                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </div>
@@ -772,10 +763,7 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`male-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : ''
-                                ]"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.isEmpty ? '' : maleDailyTotals[col.date]?.present || 0 }}
@@ -804,11 +792,11 @@ onMounted(() => {
                                 ]"
                                 :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                                 @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : (!col.isEmpty ? 'Enable Edit Mode first' : '')"
+                                :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                             >
                                 <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}</span>
                                 <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
-                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px;">
+                                    <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </div>
@@ -825,10 +813,7 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`female-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : ''
-                                ]"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.isEmpty ? '' : femaleDailyTotals[col.date]?.present || 0 }}
@@ -846,10 +831,7 @@ onMounted(() => {
                                 v-for="(col, idx) in fixedWeekdayColumns"
                                 :key="`combined-total-${idx}`"
                                 class="border border-gray-900 p-0.5 text-center font-bold text-xs"
-                                :class="[
-                                    col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : ''
-                                ]"
+                                :class="[col.isEmpty ? 'bg-gray-100' : '', dayAnnotations[col.date] ? 'bg-gray-300' : '']"
                                 :style="{ borderBottom: '2px solid #000', borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
                             >
                                 {{ col.isEmpty ? '' : combinedDailyTotals[col.date]?.present || 0 }}
@@ -1079,7 +1061,9 @@ onMounted(() => {
                 <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p class="text-base font-bold text-gray-800">{{ editingCell.student.name }}</p>
                     <p class="text-sm text-gray-600 mt-1">Day {{ editingCell.day }} - {{ reportData.month_name }} {{ reportData.school_info.school_year }}</p>
-                    <p class="text-xs text-gray-500 mt-2 bg-white px-2 py-1 rounded inline-block">Current: <span class="font-semibold">{{ editingCell.currentValue || '-' }}</span></p>
+                    <p class="text-xs text-gray-500 mt-2 bg-white px-2 py-1 rounded inline-block">
+                        Current: <span class="font-semibold">{{ editingCell.currentValue || '-' }}</span>
+                    </p>
                 </div>
 
                 <div class="flex flex-col gap-3">
@@ -1136,12 +1120,12 @@ onMounted(() => {
                         autofocus
                         maxlength="20"
                     />
-                    
+
                     <!-- Preview of vertical text -->
                     <div class="bg-gray-100 p-4 rounded-lg text-center">
                         <p class="text-xs font-medium text-gray-600 mb-2">Preview (Vertical Display):</p>
                         <div class="flex justify-center items-center h-32 bg-white rounded border-2 border-dashed border-gray-300">
-                            <div v-if="dayAnnotationValue" style="writing-mode: vertical-rl; text-orientation: upright; font-size: 14px; color: #b91c1c; font-weight: bold; letter-spacing: -2px;">
+                            <div v-if="dayAnnotationValue" style="writing-mode: vertical-rl; text-orientation: upright; font-size: 14px; color: #b91c1c; font-weight: bold; letter-spacing: -2px">
                                 {{ dayAnnotationValue }}
                             </div>
                             <p v-else class="text-gray-400 text-xs">Type to see preview</p>
@@ -1159,7 +1143,7 @@ onMounted(() => {
                             <button @click="dayAnnotationValue = ''" class="bg-red-50 hover:bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200">Clear</button>
                         </div>
                     </div>
-                    
+
                     <p class="text-xs text-gray-500 italic">Text will display vertically in the day column. Press Enter to save or leave empty to remove.</p>
                 </div>
             </div>
@@ -1228,6 +1212,32 @@ onMounted(() => {
     color: #7e22ce !important;
 }
 
+/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction */
+.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #9ca3af calc(50% - 0.4px), #9ca3af calc(50% + 0.4px), transparent calc(50% + 0.4px));
+}
+
+/* Keep diagonal slash even with color backgrounds */
+.attendance-table-container tbody td.relative.attendance-present:not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #10b981 calc(50% - 0.4px), #10b981 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #d1fae5, #d1fae5) !important;
+}
+
+.attendance-table-container tbody td.relative.attendance-absent:not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #ef4444 calc(50% - 0.4px), #ef4444 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #fee2e2, #fee2e2) !important;
+}
+
+.attendance-table-container tbody td.relative.attendance-late:not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #f59e0b calc(50% - 0.4px), #f59e0b calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #fef3c7, #fef3c7) !important;
+}
+
+.attendance-table-container tbody td.relative.attendance-excused:not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #3b82f6 calc(50% - 0.4px), #3b82f6 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #dbeafe, #dbeafe) !important;
+}
+
+.attendance-table-container tbody td.relative.attendance-dropout:not(.bg-gray-100) {
+    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #a855f7 calc(50% - 0.4px), #a855f7 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #f3e8ff, #f3e8ff) !important;
+}
+
 /* Compact row styling */
 .attendance-table-container tbody tr {
     height: 20px;
@@ -1283,6 +1293,19 @@ onMounted(() => {
     .attendance-dropout {
         background-color: white !important;
         color: black !important;
+    }
+
+    /* Keep diagonal slash in print - only cells with day numbers - Backslash \ direction */
+    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100) {
+        background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #333 calc(50% - 0.4px), #333 calc(50% + 0.4px), transparent calc(50% + 0.4px)) !important;
+    }
+
+    .attendance-table-container tbody td.relative.attendance-present:not(.bg-gray-100),
+    .attendance-table-container tbody td.relative.attendance-absent:not(.bg-gray-100),
+    .attendance-table-container tbody td.relative.attendance-late:not(.bg-gray-100),
+    .attendance-table-container tbody td.relative.attendance-excused:not(.bg-gray-100),
+    .attendance-table-container tbody td.relative.attendance-dropout:not(.bg-gray-100) {
+        background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #333 calc(50% - 0.4px), #333 calc(50% + 0.4px), transparent calc(50% + 0.4px)) !important;
     }
 
     /* Page setup - Multiple pages allowed */

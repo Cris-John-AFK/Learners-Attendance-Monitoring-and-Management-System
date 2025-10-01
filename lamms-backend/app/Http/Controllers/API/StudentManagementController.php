@@ -19,27 +19,53 @@ class StudentManagementController extends Controller
      */
     public function getStudentsBySection($sectionId, Request $request)
     {
-        $request->validate([
-            'teacher_id' => 'required|integer|exists:teachers,id'
-        ]);
-
         try {
+            Log::info("Getting students for section", [
+                'section_id' => $sectionId,
+                'teacher_id' => $request->query('teacher_id')
+            ]);
+
+            // Get teacher_id from query parameters
+            $teacherId = $request->query('teacher_id');
+            
+            if (!$teacherId) {
+                return response()->json([
+                    'error' => 'Teacher ID is required',
+                    'students' => [],
+                    'section_id' => $sectionId,
+                    'total_count' => 0
+                ], 400);
+            }
+
             // Verify teacher has access to this section
             $teacherAssignment = DB::table('teacher_section_subject')
-                ->where('teacher_id', $request->teacher_id)
+                ->where('teacher_id', $teacherId)
                 ->where('section_id', $sectionId)
                 ->where('is_active', true)
                 ->first();
 
             if (!$teacherAssignment) {
+                Log::warning("Teacher does not have access to section", [
+                    'teacher_id' => $teacherId,
+                    'section_id' => $sectionId
+                ]);
+                
                 return response()->json([
-                    'error' => 'Unauthorized access to this section'
+                    'error' => 'Unauthorized access to this section',
+                    'students' => [],
+                    'section_id' => $sectionId,
+                    'total_count' => 0
                 ], 403);
             }
 
             // Get students assigned to this section through the pivot table
             $section = Section::findOrFail($sectionId);
             $students = $section->activeStudents()->get();
+
+            Log::info("Found students for section", [
+                'section_id' => $sectionId,
+                'student_count' => $students->count()
+            ]);
 
             return response()->json([
                 'students' => $students->map(function($student) {
@@ -48,9 +74,12 @@ class StudentManagementController extends Controller
                         'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
                         'firstName' => $student->firstName,
                         'lastName' => $student->lastName,
+                        'middleName' => $student->middleName,
                         'studentId' => $student->studentId ?? $student->student_id,
+                        'lrn' => $student->lrn,
                         'email' => $student->email,
-                        'qrCode' => $student->qr_code,
+                        'gender' => $student->gender,
+                        'qrCode' => $student->qr_code_path ?? $student->qr_code,
                         'status' => $student->status ?? 'active',
                         'enrollmentDate' => $student->created_at ? $student->created_at->format('Y-m-d') : null
                     ];
@@ -60,9 +89,18 @@ class StudentManagementController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error("Error loading students for section", [
+                'section_id' => $sectionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'error' => 'Failed to load students',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
+                'students' => [],
+                'section_id' => $sectionId,
+                'total_count' => 0
             ], 500);
         }
     }
