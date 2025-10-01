@@ -98,12 +98,18 @@ const fixedWeekdayColumns = computed(() => {
     return columns;
 });
 
-// Calculate daily totals for male students
+// Calculate daily totals for male students - only count past/current dates
 const maleDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month || !maleStudents.value.length) return {};
 
     const totals = {};
     reportData.value.days_in_month.forEach((day) => {
+        // For future dates, return 0 totals
+        if (isFutureDate(day.date)) {
+            totals[day.date] = { present: 0, absent: 0, late: 0, excused: 0, dropout: 0, total: 0 };
+            return;
+        }
+
         let present = 0,
             absent = 0,
             late = 0,
@@ -125,12 +131,18 @@ const maleDailyTotals = computed(() => {
     return totals;
 });
 
-// Calculate daily totals for female students
+// Calculate daily totals for female students - only count past/current dates
 const femaleDailyTotals = computed(() => {
     if (!reportData.value?.days_in_month || !femaleStudents.value.length) return {};
 
     const totals = {};
     reportData.value.days_in_month.forEach((day) => {
+        // For future dates, return 0 totals
+        if (isFutureDate(day.date)) {
+            totals[day.date] = { present: 0, absent: 0, late: 0, excused: 0, dropout: 0, total: 0 };
+            return;
+        }
+
         let present = 0,
             absent = 0,
             late = 0,
@@ -315,11 +327,26 @@ const submitToAdmin = async () => {
     }
 };
 
-// Get attendance mark for display
-const getAttendanceMark = (status) => {
+// Check if a date is in the future
+const isFutureDate = (dateString) => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    date.setHours(0, 0, 0, 0); // Reset hours to compare dates only
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date > today; // October 2+ = true, October 1 = false
+};
+
+// Get attendance mark for display - hide marks for future dates
+const getAttendanceMark = (status, dateString = null) => {
+    // If date is in the future, return empty (will show slash only)
+    if (dateString && isFutureDate(dateString)) {
+        return '';
+    }
+    
     switch (status) {
         case 'present':
-            return '✓';
+            return ''; // Blank for present (only green background)
         case 'absent':
             return '✗';
         case 'late':
@@ -334,8 +361,14 @@ const getAttendanceMark = (status) => {
 };
 
 // Get attendance mark color class based on the mark symbol
-const getAttendanceColorClass = (mark) => {
+const getAttendanceColorClass = (mark, dateString = null) => {
+    // If date is in the future, no special class (will show default slash)
+    if (dateString && isFutureDate(dateString)) {
+        return '';
+    }
+    
     switch (mark) {
+        case '': // Blank means present
         case '✓':
             return 'attendance-present';
         case '✗':
@@ -367,6 +400,21 @@ const getAttendanceColor = (status) => {
         default:
             return 'text-gray-400';
     }
+};
+
+// Calculate total absent days for a student - only count past/current dates
+const calculateAbsentCount = (student) => {
+    if (!student.attendance_data) return 0;
+
+    let absentCount = 0;
+    Object.entries(student.attendance_data).forEach(([date, status]) => {
+        // Only count absences for dates that have already occurred (not future dates)
+        if (status === 'absent' && !isFutureDate(date)) {
+            absentCount++;
+        }
+    });
+
+    return absentCount;
 };
 
 // Get day of week abbreviation
@@ -432,9 +480,9 @@ const openEditDialog = (student, date, day) => {
         student: student,
         date: date,
         day: day,
-        currentValue: getAttendanceMark(student.attendance_data?.[date])
+        currentValue: getAttendanceMark(student.attendance_data?.[date], date)
     };
-    editAttendanceValue.value = getAttendanceMark(student.attendance_data?.[date]) || '';
+    editAttendanceValue.value = getAttendanceMark(student.attendance_data?.[date], date) || '';
     showEditDialog.value = true;
 };
 
@@ -709,13 +757,13 @@ onMounted(() => {
                             </th>
                             <th
                                 class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
-                                style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 2px solid #000"
+                                style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 2px solid #000"
                             >
                                 ABSENT
-                            </th>
+                            </th>   
                             <th
                                 class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
-                                style="width: 60px; padding: 1px 1px; font-size: 9px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000"
+                                style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000"
                             >
                                 TARDY
                             </th>
@@ -736,7 +784,7 @@ onMounted(() => {
                                 class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
                                 :class="[
                                     col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date])),
+                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                     !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                     !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                 ]"
@@ -744,14 +792,14 @@ onMounted(() => {
                                 @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                 :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                             >
-                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}</span>
+                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
                                     <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </div>
                             </td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
                         </tr>
@@ -786,7 +834,7 @@ onMounted(() => {
                                 class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
                                 :class="[
                                     col.isEmpty ? 'bg-gray-100' : '',
-                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date])),
+                                    dayAnnotations[col.date] ? 'bg-gray-300' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                     !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                     !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                 ]"
@@ -794,14 +842,14 @@ onMounted(() => {
                                 @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                 :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                             >
-                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date]) }}</span>
+                                <span v-if="!dayAnnotations[col.date]">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 <div v-if="dayAnnotations[col.date] && index === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none" :style="{ height: `${maleStudents.length * 20}px`, zIndex: 10 }">
                                     <div style="writing-mode: vertical-rl; text-orientation: upright; font-size: 12px; color: #991b1b; font-weight: bold; letter-spacing: -1px">
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </div>
                             </td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ student.total_absent || 0 }}</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
                         </tr>
@@ -902,7 +950,7 @@ onMounted(() => {
                 <div class="border border-gray-800 p-3">
                     <h3 class="font-bold text-center mb-2">CODES FOR CHECKING ATTENDANCE</h3>
                     <div class="space-y-1 text-xs">
-                        <p><strong>Mark Present:</strong> (✓) Absent: Tardy (half shaded) Upper (L) for Late, Lower (E) for Excused</p>
+                        <p>(blank) - Present; (x) - Absent; Tardy (half shaded = Upper for Late Comer, Lower for Cutting Classes)</p>
                         <p><strong>REASONS/CAUSES OF DROP OUTS</strong></p>
                         <p><strong>Domestic Related Factors</strong></p>
                         <p>a.1 Had to take care of siblings</p>
@@ -1212,18 +1260,19 @@ onMounted(() => {
     color: #7e22ce !important;
 }
 
-/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction */
-.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100) {
+/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction - EXCLUDE absent cells */
+.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-absent) {
     background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #9ca3af calc(50% - 0.4px), #9ca3af calc(50% + 0.4px), transparent calc(50% + 0.4px));
 }
 
 /* Keep diagonal slash even with color backgrounds */
 .attendance-table-container tbody td.relative.attendance-present:not(.bg-gray-100) {
-    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #10b981 calc(50% - 0.4px), #10b981 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #d1fae5, #d1fae5) !important;
+    background-image: none !important; /* No slash for present - plain green background */
+    background-color: #d1fae5 !important;
 }
 
 .attendance-table-container tbody td.relative.attendance-absent:not(.bg-gray-100) {
-    background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #ef4444 calc(50% - 0.4px), #ef4444 calc(50% + 0.4px), transparent calc(50% + 0.4px)), linear-gradient(to bottom, #fee2e2, #fee2e2) !important;
+    background-color: #fee2e2 !important;
 }
 
 .attendance-table-container tbody td.relative.attendance-late:not(.bg-gray-100) {
@@ -1295,13 +1344,22 @@ onMounted(() => {
         color: black !important;
     }
 
-    /* Keep diagonal slash in print - only cells with day numbers - Backslash \ direction */
-    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100) {
+    /* Keep diagonal slash in print - EXCLUDE present and absent cells from slash */
+    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-present):not(.attendance-absent) {
         background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #333 calc(50% - 0.4px), #333 calc(50% + 0.4px), transparent calc(50% + 0.4px)) !important;
     }
 
-    .attendance-table-container tbody td.relative.attendance-present:not(.bg-gray-100),
-    .attendance-table-container tbody td.relative.attendance-absent:not(.bg-gray-100),
+    /* No slash for present cells in print - plain white background */
+    .attendance-table-container tbody td.relative.attendance-present:not(.bg-gray-100) {
+        background-image: none !important;
+        background-color: white !important;
+    }
+
+    .attendance-table-container tbody td.relative.attendance-absent:not(.bg-gray-100) {
+        background-image: none !important;
+        background-color: white !important;
+    }
+
     .attendance-table-container tbody td.relative.attendance-late:not(.bg-gray-100),
     .attendance-table-container tbody td.relative.attendance-excused:not(.bg-gray-100),
     .attendance-table-container tbody td.relative.attendance-dropout:not(.bg-gray-100) {
