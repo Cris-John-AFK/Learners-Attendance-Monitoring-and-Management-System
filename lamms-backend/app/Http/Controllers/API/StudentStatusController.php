@@ -55,46 +55,62 @@ class StudentStatusController extends Controller
             // Check if teacher is section adviser (is_primary = true)
             $isSectionAdviser = $assignments->where('is_primary', true)->isNotEmpty();
             Log::info('Is section adviser:', ['value' => $isSectionAdviser]);
-
             $students = collect();
 
             if ($viewType === 'section') {
                 // Get students from teacher's primary section (if section adviser)
                 $primaryAssignments = $assignments->where('is_primary', true);
-                $sectionNames = $primaryAssignments->map(function($assignment) {
-                    return $assignment->section ? $assignment->section->name : null;
-                })->filter()->unique();
-
-                Log::info('Section view - Primary section names:', ['names' => $sectionNames->toArray()]);
-
-                if ($sectionNames->isNotEmpty()) {
-                    $students = Student::whereIn('section', $sectionNames)->get();
+                $sectionIds = $primaryAssignments->pluck('section_id')->unique();
+                
+                Log::info('Section view - Primary section IDs:', ['ids' => $sectionIds->toArray()]);
+                
+                if ($sectionIds->isNotEmpty()) {
+                    // Use the student_section junction table relationship
+                    // NOTE: Include ALL students (including dropped out) for status management
+                    $students = Student::whereHas('sections', function($query) use ($sectionIds) {
+                        $query->whereIn('section_id', $sectionIds);
+                    })->get();
                     Log::info('Students found:', ['count' => $students->count()]);
                 }
             } elseif ($viewType === 'subject') {
                 // Get students from teacher's assigned subjects
-                $sectionNames = $assignments->map(function($assignment) {
-                    return $assignment->section ? $assignment->section->name : null;
-                })->filter()->unique();
-
-                $students = Student::whereIn('section', $sectionNames)->get();
+                $sectionIds = $assignments->pluck('section_id')->unique();
+                
+                $students = Student::whereHas('sections', function($query) use ($sectionIds) {
+                    $query->whereIn('section_id', $sectionIds);
+                })->get();
             } else { // all
                 // Get all students from all teacher's sections
-                $sectionNames = $assignments->map(function($assignment) {
-                    return $assignment->section ? $assignment->section->name : null;
-                })->filter()->unique();
-
-                $students = Student::whereIn('section', $sectionNames)->get();
+                $sectionIds = $assignments->pluck('section_id')->unique();
+                
+                $students = Student::whereHas('sections', function($query) use ($sectionIds) {
+                    $query->whereIn('section_id', $sectionIds);
+                })->get();
             }
 
+            // Load section and grade relationships
+            $students->load(['sections.curriculumGrade.grade']);
+            
             // Format student data with status information
             $formattedStudents = $students->map(function ($student) {
+                // Get section name from relationship
+                $section = $student->sections->first();
+                $sectionName = $section ? $section->name : null;
+                
+                // Get grade name from relationship
+                $gradeName = null;
+                if ($section && $section->curriculumGrade && $section->curriculumGrade->grade) {
+                    $gradeName = $section->curriculumGrade->grade->name;
+                } else {
+                    $gradeName = $student->gradeLevel; // Fallback to code
+                }
+                
                 return [
                     'id' => $student->id,
                     'student_id' => $student->studentId,
                     'name' => $student->name ?? ($student->firstName . ' ' . $student->lastName),
-                    'grade_level' => $student->gradeLevel,
-                    'section' => $student->section,
+                    'grade_level' => $gradeName,
+                    'section' => $sectionName,
                     'enrollment_status' => $student->enrollment_status ?? 'active',
                     'dropout_reason' => $student->dropout_reason,
                     'dropout_reason_category' => $student->dropout_reason_category,
@@ -122,7 +138,7 @@ class StudentStatusController extends Controller
     /**
      * Update student enrollment status
      */
-    public function updateStudentStatus(Request $request, $studentId)
+    public function updateStudentStatus(Request $request, $teacherId, $studentId)
     {
         try {
             $validator = Validator::make($request->all(), [
@@ -151,11 +167,16 @@ class StudentStatusController extends Controller
             }
 
             // Check if teacher is section adviser (is_primary)
+            // Load student's sections from junction table
+            $student->load('sections');
+            $studentSectionIds = $student->sections->pluck('id')->toArray();
+            
             $teacher = Teacher::with('assignments.section')->find($request->teacher_id);
             $isSectionAdviser = $teacher->assignments()
                 ->where('is_primary', true)
-                ->filter(function($assignment) use ($student) {
-                    return $assignment->section && $assignment->section->name === $student->section;
+                ->get()
+                ->filter(function($assignment) use ($studentSectionIds) {
+                    return in_array($assignment->section_id, $studentSectionIds);
                 })
                 ->isNotEmpty();
 
@@ -207,6 +228,14 @@ class StudentStatusController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error updating student status:', [
+                'student_id' => $studentId,
+                'teacher_id' => $teacherId,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Error updating student status: ' . $e->getMessage()
@@ -217,7 +246,7 @@ class StudentStatusController extends Controller
     /**
      * Get status history for a student
      */
-    public function getStudentStatusHistory($studentId)
+    public function getStudentStatusHistory($teacherId, $studentId)
     {
         try {
             $history = StudentStatusHistory::where('student_id', $studentId)
@@ -246,6 +275,12 @@ class StudentStatusController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error('Error fetching status history:', [
+                'student_id' => $studentId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching status history: ' . $e->getMessage()

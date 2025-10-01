@@ -23,7 +23,7 @@ class AttendanceSessionController extends Controller
             $sectionId = $request->query('section_id');
             $subjectId = $request->query('subject_id');
             
-            Log::info("Getting students for teacher subject", [
+            Log::info("🎯🎯🎯 NEW CODE - AttendanceSessionController - FILTERING DROPPED STUDENTS", [
                 'teacher_id' => $teacherId,
                 'section_id' => $sectionId,
                 'subject_id' => $subjectId
@@ -40,7 +40,7 @@ class AttendanceSessionController extends Controller
                 ], 400);
             }
             
-            // Get all active students in the section
+            // Get all active students in the section, excluding dropped/transferred out
             $students = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
                 ->join('sections as s', 'ss.section_id', '=', 's.id')
@@ -48,6 +48,12 @@ class AttendanceSessionController extends Controller
                 ->where(function($query) {
                     $query->where('ss.is_active', true)
                           ->orWhereNull('ss.is_active');
+                })
+                ->where(function($query) {
+                    // Exclude dropped out and transferred out students
+                    $query->whereNull('sd.enrollment_status')
+                          ->orWhere('sd.enrollment_status', 'active')
+                          ->orWhere('sd.enrollment_status', 'transferred_in');
                 })
                 ->select([
                     'sd.id',
@@ -65,7 +71,9 @@ class AttendanceSessionController extends Controller
                 ->orderBy('sd.firstName')
                 ->get();
 
-            Log::info("Found {$students->count()} students for section {$sectionId}");
+            Log::info("🔥 FILTERED - Found {$students->count()} students for section {$sectionId}", [
+                'student_ids' => $students->pluck('id')->toArray()
+            ]);
 
             return response()->json([
                 'success' => true,

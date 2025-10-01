@@ -178,6 +178,11 @@ class Section extends Model
                     ->withPivot('school_year', 'is_active')
                     ->wherePivot('is_active', true)
                     ->where('student_details.status', 'Enrolled') // Only enrolled students
+                    ->where(function($query) {
+                        $query->whereNull('student_details.enrollment_status')
+                              ->orWhere('student_details.enrollment_status', 'active')
+                              ->orWhere('student_details.enrollment_status', 'transferred_in');
+                    })
                     ->withTimestamps();
     }
 
