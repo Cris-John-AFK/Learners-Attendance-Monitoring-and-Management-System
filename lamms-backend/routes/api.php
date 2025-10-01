@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AttendanceSessionController;
+use App\Http\Controllers\API\AttendanceReasonController;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\SectionController;
 use App\Http\Controllers\API\TeacherController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\AttendanceAnalyticsController;
 use App\Http\Controllers\API\GuardhouseController;
 use App\Http\Controllers\API\StudentStatusController;
+use App\Http\Controllers\API\UnifiedAuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +30,21 @@ Route::get('/health-check', function() {
         'message' => 'API is working!',
         'timestamp' => now()->toDateTimeString()
     ]);
+});
+
+// ========================================
+// UNIFIED AUTHENTICATION ROUTES
+// ========================================
+Route::prefix('auth')->group(function () {
+    // Public routes (no authentication required)
+    Route::post('/login', [UnifiedAuthController::class, 'login']);
+    
+    // Protected routes (require authentication)
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureSingleSession::class])->group(function () {
+        Route::post('/logout', [UnifiedAuthController::class, 'logout']);
+        Route::get('/me', [UnifiedAuthController::class, 'me']);
+        Route::get('/check-session', [UnifiedAuthController::class, 'checkSession']);
+    });
 });
 
 // Student routes
@@ -179,6 +196,10 @@ Route::get('/attendance/statistics', [AttendanceController::class, 'getAttendanc
 Route::prefix('attendance')->group(function () {
     // Get attendance statuses
     Route::get('/statuses', [AttendanceController::class, 'getAttendanceStatuses']);
+    
+    // Attendance reasons routes
+    Route::get('/reasons', [AttendanceReasonController::class, 'index']);
+    Route::get('/reasons/{type}', [AttendanceReasonController::class, 'getByType']);
     
     // Get attendance for specific section, subject and date
     Route::get('/section/{sectionId}/subject/{subjectId}', [AttendanceController::class, 'getAttendance']);

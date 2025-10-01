@@ -1,6 +1,7 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { ref, onMounted, onUnmounted } from 'vue';
+import AuthService from '@/services/AuthService';
 import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 
@@ -14,13 +15,28 @@ const notificationCount = ref(0);
 const submittedReports = ref([]);
 const pollingInterval = ref(null);
 
-const logout = () => {
-    // Clear user session data
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('user');
+const logout = async () => {
+    try {
+        console.log(' Admin logging out...');
 
-    // Redirect to homepage
-    router.push('/');
+        // Use unified AuthService to properly logout
+        await AuthService.logout();
+
+        console.log('Logout successful, clearing session data');
+
+        // Clear browser history to prevent back navigation
+        window.history.pushState(null, '', window.location.href);
+        window.history.replaceState(null, '', '/');
+
+        // Redirect to root login page
+        router.replace('/');
+    } catch (error) {
+        console.error('Logout error:', error);
+        // Even if logout fails, clear local data and redirect
+        AuthService.clearAuthData();
+        window.history.replaceState(null, '', '/');
+        router.replace('/');
+    }
 };
 
 // Load SF2 submitted reports

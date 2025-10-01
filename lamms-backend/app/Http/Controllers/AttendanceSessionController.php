@@ -180,7 +180,9 @@ class AttendanceSessionController extends Controller
             'attendance' => 'required|array',
             'attendance.*.student_id' => 'required|exists:student_details,id',
             'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
-            'attendance.*.remarks' => 'nullable|string|max:255'
+            'attendance.*.remarks' => 'nullable|string|max:255',
+            'attendance.*.reason_id' => 'nullable|exists:attendance_reasons,id',
+            'attendance.*.reason_notes' => 'nullable|string|max:500'
         ]);
 
         if ($validator->fails()) {
@@ -200,6 +202,8 @@ class AttendanceSessionController extends Controller
                     'student_id' => $record['student_id'],
                     'attendance_status_id' => $record['attendance_status_id'],
                     'remarks' => $record['remarks'] ?? null,
+                    'reason_id' => $record['reason_id'] ?? null,
+                    'reason_notes' => $record['reason_notes'] ?? null,
                     'marked_by' => $session->teacher_id,
                     'marked_at' => now(),
                     'created_at' => now(),
@@ -211,7 +215,7 @@ class AttendanceSessionController extends Controller
             AttendanceRecord::upsert(
                 $attendanceData,
                 ['session_id', 'student_id'], // Unique keys
-                ['attendance_status_id', 'remarks', 'marked_at', 'updated_at'] // Update these fields
+                ['attendance_status_id', 'remarks', 'reason_id', 'reason_notes', 'marked_at', 'updated_at'] // Update these fields
             );
 
             return response()->json([

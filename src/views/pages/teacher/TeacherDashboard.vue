@@ -217,6 +217,29 @@ const initializeTeacherData = async () => {
     }
 };
 
+// Calendar day click handler
+const showDayDetailsDialog = ref(false);
+const selectedDayDetails = ref(null);
+
+function handleCalendarDayClick(calDay) {
+    if (!calDay.status) {
+        // No attendance data for this day
+        return;
+    }
+
+    // Create detailed info for the clicked day
+    selectedDayDetails.value = {
+        day: calDay.day,
+        month: currentMonth.value + 1,
+        year: currentYear.value,
+        status: calDay.status,
+        date: new Date(currentYear.value, currentMonth.value, calDay.day),
+        studentName: selectedStudent.value?.name || 'Unknown Student'
+    };
+
+    showDayDetailsDialog.value = true;
+}
+
 // Load teacher data and subjects
 onMounted(async () => {
     loading.value = true;
@@ -811,97 +834,110 @@ async function prepareChartData() {
             };
         }
 
-        // Prepare datasets for each status with real data and enhanced styling
+        // Prepare datasets for line chart with smooth curves
         attendanceChartData.value = {
             labels: labels,
             datasets: [
                 {
                     label: 'Present',
-                    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderColor: '#10b981',
-                    borderWidth: 0,
-                    borderRadius: 8,
-                    borderSkipped: false,
+                    borderWidth: 3,
                     data: attendanceData.present,
-                    hoverBackgroundColor: 'rgba(16, 185, 129, 1)',
-                    barThickness: 'flex'
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#10b981',
+                    pointHoverBorderColor: '#fff'
                 },
                 {
                     label: 'Absent',
-                    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
                     borderColor: '#ef4444',
-                    borderWidth: 0,
-                    borderRadius: 8,
-                    borderSkipped: false,
+                    borderWidth: 3,
                     data: attendanceData.absent,
-                    hoverBackgroundColor: 'rgba(239, 68, 68, 1)',
-                    barThickness: 'flex'
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#ef4444',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#ef4444',
+                    pointHoverBorderColor: '#fff'
                 },
                 {
                     label: 'Late',
-                    backgroundColor: 'rgba(245, 158, 11, 0.9)',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
                     borderColor: '#f59e0b',
-                    borderWidth: 0,
-                    borderRadius: 8,
-                    borderSkipped: false,
+                    borderWidth: 3,
                     data: attendanceData.late,
-                    hoverBackgroundColor: 'rgba(245, 158, 11, 1)',
-                    barThickness: 'flex'
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#f59e0b',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#f59e0b',
+                    pointHoverBorderColor: '#fff'
                 }
             ]
         };
 
         console.log('Chart data prepared:', attendanceChartData.value);
 
-        // Chart options with enhanced styling for modern look
+        // Chart options optimized for line chart
         chartOptions.value = {
-            plugins: {
-                legend: {
-                    position: 'top',
-                    align: 'center',
-                    labels: {
-                        font: {
-                            family: 'Inter, sans-serif',
-                            size: 12,
-                            weight: 500
-                        },
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        padding: 20
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    titleColor: '#333',
-                    titleFont: {
-                        family: 'Inter, sans-serif',
-                        size: 13,
-                        weight: 600
-                    },
-                    bodyColor: '#555',
-                    bodyFont: {
-                        family: 'Inter, sans-serif',
-                        size: 12
-                    },
-                    borderColor: '#e1e1e1',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    padding: 12,
-                    boxPadding: 4
-                }
-            },
             responsive: true,
             maintainAspectRatio: false,
-            barPercentage: 1.0,
-            categoryPercentage: 1.0,
-            animation: {
-                duration: 1000,
-                easing: 'easeOutQuart'
+            layout: {
+                padding: {
+                    left: 10,
+                    right: 20,
+                    top: 10,
+                    bottom: 10
+                }
+            },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false // Hide default legend since we have custom one
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: {
+                        size: 13,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 12
+                    },
+                    callbacks: {
+                        label: function (context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            label += context.parsed.y + ' students';
+                            return label;
+                        }
+                    }
+                }
             },
             scales: {
                 x: {
                     grid: {
-                        display: false,
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.05)',
                         drawBorder: false
                     },
                     ticks: {
@@ -909,10 +945,15 @@ async function prepareChartData() {
                             family: 'Inter, sans-serif',
                             size: 11
                         },
-                        color: '#666'
+                        color: '#666',
+                        maxRotation: 0,
+                        minRotation: 0,
+                        autoSkip: true,
+                        autoSkipPadding: 10
                     }
                 },
                 y: {
+                    beginAtZero: true,
                     grid: {
                         color: 'rgba(0, 0, 0, 0.05)',
                         drawBorder: false
@@ -923,10 +964,8 @@ async function prepareChartData() {
                             size: 11
                         },
                         color: '#666',
-                        padding: 8
-                    },
-                    border: {
-                        dash: [4, 4]
+                        padding: 10,
+                        stepSize: 2
                     }
                 }
             }
@@ -977,10 +1016,27 @@ async function prepareCalendarData(student) {
         console.log('Current month/year for calendar:', currentMonth.value, currentYear.value);
         console.log('Individual records:', records);
 
-        // Find absent days for the absence history section
-        absentDays.value = records.filter((record) => record.status === 'ABSENT').map((record) => new Date(record.date));
+        // Find absent days for the absence history section (include both ABSENT and EXCUSED with status)
+        absentDays.value = records
+            .filter((record) => record.status === 'ABSENT' || record.status === 'EXCUSED')
+            .map((record) => ({
+                date: new Date(record.date),
+                status: record.status,
+                time: record.time || 'N/A',
+                recordId: record.id
+            }));
+        
+        console.log('📋 Absence History Records:', absentDays.value);
 
         // Create a map of dates to attendance status for calendar display
+        // Use priority: ABSENT > EXCUSED > LATE > PRESENT
+        const statusPriority = {
+            'ABSENT': 4,
+            'EXCUSED': 3,
+            'LATE': 2,
+            'PRESENT': 1
+        };
+        
         const attendanceMap = {};
         records.forEach((record) => {
             const date = new Date(record.date);
@@ -993,8 +1049,17 @@ async function prepareCalendarData(student) {
 
             // Only map records that match the current calendar month/year
             if (month === currentMonth.value && year === currentYear.value) {
-                attendanceMap[day] = record.status;
-                console.log(`✅ Mapped day ${day} to status ${record.status}`);
+                // Use priority - only update if new status has higher priority
+                const currentStatus = attendanceMap[day];
+                const currentPriority = statusPriority[currentStatus] || 0;
+                const newPriority = statusPriority[record.status] || 0;
+                
+                if (newPriority > currentPriority) {
+                    attendanceMap[day] = record.status;
+                    console.log(`✅ Updated day ${day} to status ${record.status} (priority ${newPriority} > ${currentPriority})`);
+                } else {
+                    console.log(`⏭️ Kept day ${day} as ${currentStatus} (priority ${currentPriority} >= ${newPriority})`);
+                }
             } else {
                 console.log(`❌ Skipped - record is for ${month}/${year}, calendar shows ${currentMonth.value}/${currentYear.value}`);
             }
@@ -1085,10 +1150,20 @@ watch(viewType, async () => {
 // Filter students by name
 const searchQuery = ref('');
 const filteredStudents = computed(() => {
-    if (!searchQuery.value.trim()) return studentsWithAbsenceIssues.value;
+    let students = studentsWithAbsenceIssues.value;
 
-    const query = searchQuery.value.toLowerCase();
-    return studentsWithAbsenceIssues.value.filter((student) => student.name.toLowerCase().includes(query));
+    // Filter by "show only issues" checkbox
+    if (showOnlyAbsenceIssues.value) {
+        students = students.filter((student) => student.severity !== 'normal');
+    }
+
+    // Filter by search query
+    if (searchQuery.value.trim()) {
+        const query = searchQuery.value.toLowerCase();
+        students = students.filter((student) => student.name.toLowerCase().includes(query));
+    }
+
+    return students;
 });
 
 // Get severity icon for student absence
@@ -1245,22 +1320,18 @@ async function showStudentProfile(student) {
                         </p>
                         <p class="text-blue-200 font-medium text-sm mt-1">Section: {{ currentTeacher?.section || 'Malikhain (Grade 3)' }}</p>
                     </div>
-
-                    <div class="col-span-12 sm:col-span-5 flex flex-col sm:flex-row gap-2 justify-end items-center">
-                        <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Select Subject" class="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-3xl" @change="onSubjectChange" />
-                    </div>
                 </div>
             </div>
 
-            <!-- Schedule Status Widget -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div class="lg:col-span-1">
+            <!-- Schedule Status Widget & Stats Cards Combined -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
+                <!-- Schedule Widget -->
+                <div class="lg:col-span-3">
                     <ScheduleStatusWidget />
                 </div>
-            </div>
-
-            <!-- Attendance Stats Summary Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                
+                <!-- Attendance Stats Cards -->
+                <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
                     <div class="mr-4 bg-blue-100 p-3 rounded-lg">
                         <i class="pi pi-users text-blue-600 text-xl"></i>
@@ -1271,40 +1342,41 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                    <div class="mr-4 bg-green-100 p-3 rounded-lg">
-                        <i class="pi pi-check-circle text-green-600 text-xl"></i>
-                    </div>
-                    <div class="flex-1">
-                        <div class="text-sm text-gray-500 mb-2 font-medium">Average Attendance</div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</span>
-                            <div class="flex items-center">
-                                <div class="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                                    <div
-                                        class="h-2 rounded-full transition-all duration-500"
-                                        :class="{
-                                            'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                            'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                            'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                            'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
-                                        }"
-                                        :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
-                                    ></div>
-                                </div>
-                                <span
-                                    class="text-xs px-2 py-1 rounded-full font-medium"
-                                    :class="{
-                                        'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                        'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                        'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                        'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
-                                    }"
-                                >
-                                    {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
-                                </span>
-                            </div>
+                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
+                    <div class="flex items-center mb-3">
+                        <div class="mr-4 bg-green-100 p-3 rounded-lg">
+                            <i class="pi pi-check-circle text-green-600 text-xl"></i>
                         </div>
+                        <div class="flex-1">
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                            <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
+                        </div>
+                    </div>
+                    <!-- Progress bar at bottom -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
+                            <div
+                                class="h-2.5 rounded-full transition-all duration-500"
+                                :class="{
+                                    'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                    'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                    'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                    'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
+                                }"
+                                :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
+                            ></div>
+                        </div>
+                        <span
+                            class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
+                            :class="{
+                                'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
+                            }"
+                        >
+                            {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
+                        </span>
                     </div>
                 </div>
 
@@ -1327,32 +1399,56 @@ async function showStudentProfile(student) {
                         <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
                     </div>
                 </div>
+                </div>
             </div>
 
             <!-- Attendance Chart & Alerts -->
             <div class="grid grid-cols-12 gap-6 mb-6">
                 <!-- Attendance Trends Chart -->
                 <div class="col-span-12 lg:col-span-8">
-                    <div class="bg-white rounded-xl shadow-sm p-5">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                            <h2 class="text-lg font-semibold">Attendance Trends</h2>
-                            <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                                <!-- View Type Toggle -->
-                                <div class="flex items-center gap-2">
-                                    <label class="text-sm font-medium text-gray-600">View:</label>
-                                    <SelectButton v-model="viewType" :options="viewTypeOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onViewTypeChange" />
-                                </div>
-                                <!-- Time Period Toggle -->
-                                <div class="flex items-center gap-2">
-                                    <label class="text-sm font-medium text-gray-600">Period:</label>
-                                    <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartViewChange" />
-                                </div>
+                    <div class="bg-white rounded-xl shadow-sm p-6">
+                        <div class="mb-4">
+                            <h2 class="text-lg font-semibold mb-4">Attendance Trends</h2>
+
+                            <!-- View Type Tabs -->
+                            <div class="flex gap-2 mb-4 border-b">
+                                <button
+                                    v-for="option in viewTypeOptions"
+                                    :key="option.value"
+                                    @click="
+                                        viewType = option.value;
+                                        onViewTypeChange();
+                                    "
+                                    :class="['px-4 py-2 text-sm font-medium transition-all duration-200', viewType === option.value ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']"
+                                >
+                                    {{ option.label }}
+                                </button>
+                            </div>
+
+                            <!-- Subject Selector (only for Subject-Specific view) -->
+                            <div v-if="viewType === 'subject'" class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <label class="block text-sm font-medium text-gray-700 mb-2"> <i class="pi pi-book mr-2"></i>Select Subject: </label>
+                                <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" class="w-full" @change="onSubjectChange">
+                                    <template #value="slotProps">
+                                        <div v-if="slotProps.value" class="flex items-center">
+                                            <i class="pi pi-book mr-2 text-blue-600"></i>
+                                            <span class="font-medium">{{ slotProps.value.name }}</span>
+                                        </div>
+                                        <span v-else>{{ slotProps.placeholder }}</span>
+                                    </template>
+                                </Dropdown>
+                            </div>
+
+                            <!-- Period Filter -->
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm font-medium text-gray-600">Period:</label>
+                                <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartViewChange" />
                             </div>
                         </div>
 
-                        <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                        <div v-if="viewType === 'subject' && !selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
                             <i class="pi pi-chart-bar text-4xl mb-3 text-gray-300"></i>
-                            <p class="font-normal">Please select a subject to view attendance trends</p>
+                            <p class="font-normal">Please select a subject above to view attendance trends</p>
                         </div>
 
                         <div v-else-if="!attendanceChartData" class="flex flex-col items-center justify-center py-12">
@@ -1360,8 +1456,27 @@ async function showStudentProfile(student) {
                             <p class="mt-3 text-gray-500 font-normal">Loading chart data...</p>
                         </div>
 
-                        <div v-else class="chart-container">
-                            <Chart type="bar" :data="attendanceChartData" :options="chartOptions" :key="`chart-${selectedSubject?.id}-${chartView}`" style="height: 300px" class="stylish-chart" />
+                        <div v-else>
+                            <!-- Chart Legend -->
+                            <div class="flex justify-center gap-6 mb-4 pb-2">
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 rounded bg-green-500 mr-2"></div>
+                                    <span class="text-sm font-medium text-gray-700">Present</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 rounded bg-red-500 mr-2"></div>
+                                    <span class="text-sm font-medium text-gray-700">Absent</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 rounded bg-yellow-500 mr-2"></div>
+                                    <span class="text-sm font-medium text-gray-700">Late</span>
+                                </div>
+                            </div>
+
+                            <!-- Chart Container -->
+                            <div class="chart-container" style="height: 400px; padding-bottom: 20px">
+                                <Chart type="line" :data="attendanceChartData" :options="chartOptions" :key="`chart-${viewType}-${selectedSubject?.id || 'all'}-${chartView}`" style="height: 100%; width: 100%" class="stylish-chart" />
+                            </div>
                         </div>
 
                         <!-- Fallback for chart rendering issues -->
@@ -1406,9 +1521,12 @@ async function showStudentProfile(student) {
                             <InputText v-model="searchQuery" placeholder="Search students..." class="w-full rounded-lg" />
                         </div>
 
-                        <div class="flex items-center bg-gray-50 p-2 rounded-lg">
+                        <div class="flex items-center p-2 rounded-lg transition-colors duration-200 cursor-pointer" :class="showOnlyAbsenceIssues ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'">
                             <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
-                            <label for="showIssues" class="ml-2 text-sm font-medium">Show only students with issues</label>
+                            <label for="showIssues" class="ml-2 text-sm font-medium cursor-pointer">
+                                Show only students with issues
+                                <span v-if="showOnlyAbsenceIssues" class="ml-2 text-blue-600">(Active)</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -1591,6 +1709,10 @@ async function showStudentProfile(student) {
                             <span class="text-gray-600">Absent</span>
                         </div>
                         <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 bg-blue-100 border border-blue-200 rounded-full"></div>
+                            <span class="text-gray-600">Excused</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
                             <div class="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded-full"></div>
                             <span class="text-gray-600">Late</span>
                         </div>
@@ -1619,6 +1741,7 @@ async function showStudentProfile(student) {
                             class="calendar-day h-10 w-10 flex items-center justify-center rounded-full transition-all cursor-pointer relative"
                             :class="{
                                 'bg-red-100 text-red-800 border border-red-200 font-semibold': calDay.status === 'ABSENT',
+                                'bg-blue-100 text-blue-800 border border-blue-200 font-semibold': calDay.status === 'EXCUSED',
                                 'bg-yellow-100 text-yellow-800 border border-yellow-200 font-semibold': calDay.status === 'LATE',
                                 'bg-green-100 text-green-800 border border-green-200': calDay.status === 'PRESENT',
                                 'hover:bg-gray-100': !calDay.status,
@@ -1627,6 +1750,7 @@ async function showStudentProfile(student) {
                             :title="calDay.status ? `${calDay.status} on ${calDay.day}/${currentMonth + 1}/${currentYear}` : ''"
                             :data-status="calDay.status"
                             :data-day="calDay.day"
+                            @click="handleCalendarDayClick(calDay)"
                         >
                             {{ calDay.day }}
                             <!-- Debug info -->
@@ -1637,6 +1761,7 @@ async function showStudentProfile(student) {
                                 class="absolute -top-1 -right-1 w-2 h-2 rounded-full"
                                 :class="{
                                     'bg-red-500': calDay.status === 'ABSENT',
+                                    'bg-blue-500': calDay.status === 'EXCUSED',
                                     'bg-yellow-500': calDay.status === 'LATE',
                                     'bg-green-500': calDay.status === 'PRESENT'
                                 }"
@@ -1655,18 +1780,134 @@ async function showStudentProfile(student) {
                 <h4 class="font-medium mb-3">Absence History</h4>
                 <div class="absence-history">
                     <div v-if="absentDays.length > 0" class="space-y-3">
-                        <div v-for="(day, index) in absentDays" :key="index" class="p-3 border-l-4 border-red-500 bg-red-50 rounded-r-lg flex justify-between items-center">
+                        <div 
+                            v-for="day in absentDays" 
+                            :key="day.recordId || Math.random()" 
+                            class="p-3 border-l-4 rounded-r-lg flex justify-between items-center"
+                            :class="{
+                                'border-red-500 bg-red-50': day.status === 'ABSENT',
+                                'border-blue-500 bg-blue-50': day.status === 'EXCUSED'
+                            }"
+                        >
                             <div class="flex items-center">
-                                <i class="pi pi-calendar-times text-red-500 mr-2"></i>
-                                <span class="font-medium">{{ formatDate(day) }}</span>
+                                <i 
+                                    class="mr-2"
+                                    :class="{
+                                        'pi pi-times-circle text-red-500': day.status === 'ABSENT',
+                                        'pi pi-info-circle text-blue-500': day.status === 'EXCUSED'
+                                    }"
+                                ></i>
+                                <div>
+                                    <span class="font-medium">{{ formatDate(day.date) }}</span>
+                                    <span v-if="day.time && day.time !== 'N/A'" class="text-xs text-gray-500 ml-2">({{ day.time }})</span>
+                                </div>
                             </div>
-                            <span class="text-gray-500 text-sm px-2 py-1 bg-white rounded-full">Unexcused</span>
+                            <span 
+                                class="text-sm px-2 py-1 bg-white rounded-full font-medium"
+                                :class="{
+                                    'text-red-600': day.status === 'ABSENT',
+                                    'text-blue-600': day.status === 'EXCUSED'
+                                }"
+                            >
+                                {{ day.status === 'EXCUSED' ? 'Excused' : 'Unexcused' }}
+                            </span>
                         </div>
                     </div>
                     <div v-else class="flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-500 italic">
                         <i class="pi pi-check-circle text-green-500 mr-2"></i>
                         No absence records found for this student in this subject.
                     </div>
+                </div>
+            </div>
+        </Dialog>
+
+        <!-- Calendar Day Details Dialog -->
+        <Dialog v-model:visible="showDayDetailsDialog" :style="{ width: '450px' }" :modal="true">
+            <template #header>
+                <div class="flex items-center space-x-2">
+                    <i class="pi pi-calendar text-blue-600"></i>
+                    <span class="font-semibold">Attendance Details</span>
+                </div>
+            </template>
+
+            <div v-if="selectedDayDetails" class="space-y-4">
+                <!-- Date Info -->
+                <div class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                    <div class="text-center">
+                        <p class="text-sm text-gray-600 mb-1">Date</p>
+                        <p class="text-2xl font-bold text-gray-800">
+                            {{ selectedDayDetails.date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Student Info -->
+                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Avatar icon="pi pi-user" class="bg-blue-500 text-white" shape="circle" />
+                    <div>
+                        <p class="text-sm text-gray-600">Student</p>
+                        <p class="font-semibold text-gray-800">{{ selectedDayDetails.studentName }}</p>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <div
+                    class="p-4 rounded-lg border-2"
+                    :class="{
+                        'bg-red-50 border-red-300': selectedDayDetails.status === 'ABSENT',
+                        'bg-blue-50 border-blue-300': selectedDayDetails.status === 'EXCUSED',
+                        'bg-yellow-50 border-yellow-300': selectedDayDetails.status === 'LATE',
+                        'bg-green-50 border-green-300': selectedDayDetails.status === 'PRESENT'
+                    }"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <i
+                                class="text-3xl"
+                                :class="{
+                                    'pi pi-times-circle text-red-600': selectedDayDetails.status === 'ABSENT',
+                                    'pi pi-info-circle text-blue-600': selectedDayDetails.status === 'EXCUSED',
+                                    'pi pi-clock text-yellow-600': selectedDayDetails.status === 'LATE',
+                                    'pi pi-check-circle text-green-600': selectedDayDetails.status === 'PRESENT'
+                                }"
+                            ></i>
+                            <div>
+                                <p
+                                    class="text-sm font-medium"
+                                    :class="{
+                                        'text-red-700': selectedDayDetails.status === 'ABSENT',
+                                        'text-blue-700': selectedDayDetails.status === 'EXCUSED',
+                                        'text-yellow-700': selectedDayDetails.status === 'LATE',
+                                        'text-green-700': selectedDayDetails.status === 'PRESENT'
+                                    }"
+                                >
+                                    Status
+                                </p>
+                                <p
+                                    class="text-xl font-bold"
+                                    :class="{
+                                        'text-red-800': selectedDayDetails.status === 'ABSENT',
+                                        'text-blue-800': selectedDayDetails.status === 'EXCUSED',
+                                        'text-yellow-800': selectedDayDetails.status === 'LATE',
+                                        'text-green-800': selectedDayDetails.status === 'PRESENT'
+                                    }"
+                                >
+                                    {{ selectedDayDetails.status }}
+                                </p>
+                            </div>
+                        </div>
+                        <Tag :value="selectedDayDetails.status" :severity="
+                            selectedDayDetails.status === 'ABSENT' ? 'danger' : 
+                            selectedDayDetails.status === 'EXCUSED' ? 'info' :
+                            selectedDayDetails.status === 'LATE' ? 'warning' : 'success'
+                        " />
+                    </div>
+                </div>
+
+                <!-- Subject Info -->
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <p class="text-sm text-gray-600">Subject</p>
+                    <p class="font-semibold text-gray-800">{{ selectedSubject?.name || 'All Subjects' }}</p>
                 </div>
             </div>
         </Dialog>

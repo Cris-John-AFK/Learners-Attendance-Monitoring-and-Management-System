@@ -56,12 +56,7 @@
                 </div>
                 <div class="risk-group-content" v-show="expandedGroups.critical">
                     <div class="compact-student-cards">
-                        <div 
-                            v-for="student in groupedStudents.critical" 
-                            :key="student.student_id || student.id"
-                            class="compact-student-card critical"
-                            @click="viewStudentProfile(student)"
-                        >
+                        <div v-for="student in groupedStudents.critical" :key="student.student_id || student.id" class="compact-student-card critical" @click="viewStudentProfile(student)">
                             <div class="student-compact-header">
                                 <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
                                 <div class="risk-badge critical">
@@ -89,12 +84,7 @@
                 </div>
                 <div class="risk-group-content" v-show="expandedGroups.high">
                     <div class="compact-student-cards">
-                        <div 
-                            v-for="student in groupedStudents.high" 
-                            :key="student.student_id || student.id"
-                            class="compact-student-card high"
-                            @click="viewStudentProfile(student)"
-                        >
+                        <div v-for="student in groupedStudents.high" :key="student.student_id || student.id" class="compact-student-card high" @click="viewStudentProfile(student)">
                             <div class="student-compact-header">
                                 <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
                                 <div class="risk-badge high">
@@ -122,12 +112,7 @@
                 </div>
                 <div class="risk-group-content" v-show="expandedGroups.medium">
                     <div class="compact-student-cards">
-                        <div 
-                            v-for="student in groupedStudents.medium" 
-                            :key="student.student_id || student.id"
-                            class="compact-student-card medium"
-                            @click="viewStudentProfile(student)"
-                        >
+                        <div v-for="student in groupedStudents.medium" :key="student.student_id || student.id" class="compact-student-card medium" @click="viewStudentProfile(student)">
                             <div class="student-compact-header">
                                 <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
                                 <div class="risk-badge medium">
@@ -245,10 +230,6 @@
                     </ul>
                 </div>
             </div>
-            <template #footer>
-                <Button label="Print Report" icon="pi pi-print" text @click="printAttendanceReport" />
-                <Button label="Close" icon="pi pi-times" @click="showProgressDialog = false" />
-            </template>
         </Dialog>
     </div>
 </template>
@@ -298,7 +279,7 @@ function getRiskLevel(student) {
     const totalAbsences = student.total_absences || 0;
     const recentAbsences = student.recent_absences || 0;
     const consecutiveAbsences = student.consecutive_absences || 0;
-    
+
     if (totalAbsences >= 5 || recentAbsences >= 5 || consecutiveAbsences >= 5) return 'critical';
     if (totalAbsences >= 3 || recentAbsences >= 3 || consecutiveAbsences >= 3) return 'high';
     if (totalAbsences >= 1 || recentAbsences >= 1 || consecutiveAbsences >= 1) return 'medium';
@@ -360,13 +341,13 @@ const studentsNeedingAttention = computed(() => {
     if (!props.students || !Array.isArray(props.students)) {
         return [];
     }
-    
+
     const filtered = props.students
         .filter((student) => {
             const totalAbsences = student.total_absences || 0;
             const recentAbsences = student.recent_absences || 0;
             const consecutiveAbsences = student.consecutive_absences || 0;
-            
+
             // More inclusive filtering - anyone with any absences needs attention
             return totalAbsences >= 1 || recentAbsences >= 1 || consecutiveAbsences >= 1;
         })
@@ -378,7 +359,7 @@ const studentsNeedingAttention = computed(() => {
             consecutive_absences: student.consecutive_absences || calculateConsecutiveAbsences(student)
         }))
         .sort((a, b) => (b.recent_absences || 0) - (a.recent_absences || 0));
-    
+
     return filtered;
 });
 
@@ -1207,14 +1188,14 @@ const expandedGroups = ref({ critical: true, high: false, medium: false });
 // Grouped students computed property
 const groupedStudents = computed(() => {
     const groups = { critical: [], high: [], medium: [] };
-    
+
     if (!studentsNeedingAttention.value || !Array.isArray(studentsNeedingAttention.value)) {
         return groups;
     }
-    
+
     studentsNeedingAttention.value.forEach((student) => {
         const riskLevel = getRiskLevel(student);
-        
+
         if (riskLevel === 'critical') {
             groups.critical.push(student);
         } else if (riskLevel === 'high') {
@@ -1223,7 +1204,7 @@ const groupedStudents = computed(() => {
             groups.medium.push(student);
         }
     });
-    
+
     return groups;
 });
 
@@ -1300,7 +1281,6 @@ function viewStudentProfile(student) {
     // Show detailed student profile - opens the progress dialog
     trackProgress(student);
 }
-
 </script>
 
 <style scoped>
@@ -1871,7 +1851,6 @@ function viewStudentProfile(student) {
     border-radius: 4px;
     white-space: nowrap;
 }
-
 
 .improvement-item,
 .concern-item,

@@ -24,7 +24,7 @@
         <!-- Next Schedule -->
         <div v-else-if="currentStatus.nextSchedule" class="next-schedule">
             <div class="status-header">
-                <i class="pi pi-calendar text-blue-600"></i>
+                <i class="pi pi-calendar text-white-600"></i>
                 <span class="status-title">Next Class</span>
                 <div class="countdown-timer" :class="getCountdownClass(currentStatus.timeToNext)">{{ formatTime(currentStatus.timeToNext) }} until start</div>
             </div>
@@ -38,7 +38,7 @@
             </div>
 
             <div class="schedule-actions" v-if="currentStatus.timeToNext <= 15">
-                <Button label="Prepare Session" icon="pi pi-cog" size="small" class="p-button-outlined" @click="prepareSession(currentStatus.nextSchedule)" />
+                <Button label="Prepare Session" icon="pi pi-cog" size="small" class="p-button-warning" @click="prepareSession(currentStatus.nextSchedule)" />
             </div>
         </div>
 
@@ -137,7 +137,7 @@ const getNotificationClass = (priority) => {
 
 const startAttendanceSession = (schedule) => {
     console.log('🎯 Starting attendance session for current schedule:', schedule);
-    
+
     // Navigate to subject attendance page for the current active schedule
     router.push({
         name: 'subject-attendance',
@@ -153,6 +153,8 @@ const startAttendanceSession = (schedule) => {
 };
 
 const prepareSession = (schedule) => {
+    console.log('🎯 Preparing attendance session for upcoming schedule:', schedule);
+
     toast.add({
         severity: 'info',
         summary: 'Session Preparation',
@@ -160,14 +162,16 @@ const prepareSession = (schedule) => {
         life: 3000
     });
 
-    // Navigate to session preparation or attendance interface
+    // Navigate to subject attendance page (same as "Take Attendance" but without autoStart)
     router.push({
-        name: 'teacher-attendance-sessions',
+        name: 'subject-attendance',
+        params: {
+            subjectId: schedule.subject_id || schedule.subject?.id
+        },
         query: {
-            prepare: 'true',
-            scheduleId: schedule.id,
             sectionId: schedule.section_id,
-            subjectId: schedule.subject_id
+            scheduleId: schedule.id,
+            prepare: 'true' // Indicates this is preparation mode
         }
     });
 };
@@ -204,8 +208,10 @@ onUnmounted(() => {
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     border: 1px solid #e5e7eb;
-    max-height: 140px;
+    height: fit-content;
     max-width: 280px;
+    position: relative;
+    z-index: 1;
 }
 
 .current-schedule.active {
@@ -218,9 +224,11 @@ onUnmounted(() => {
 .next-schedule {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
-    border-radius: 4px;
-    padding: 0.5rem;
-    margin-bottom: 0.25rem;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 0;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    position: relative;
 }
 
 .no-schedule {
@@ -277,28 +285,56 @@ onUnmounted(() => {
 }
 
 .subject-name {
-    font-weight: 600;
-    font-size: 0.875rem;
-    margin: 0 0 0.125rem 0;
-    color: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 0 0 0.25rem 0;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .section-name {
-    font-size: 0.75rem;
-    opacity: 0.9;
+    font-size: 0.875rem;
+    opacity: 1;
     margin: 0 0 0.25rem 0;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
 }
 
 .time-range {
-    font-size: 0.75rem;
-    font-weight: 500;
-    opacity: 0.9;
+    font-size: 0.875rem;
+    font-weight: 600;
+    opacity: 1;
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 0.25rem;
 }
 
 .schedule-actions {
     display: flex;
-    gap: 0.25rem;
-    margin-top: 0.25rem;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.schedule-actions :deep(.p-button) {
+    background: white !important;
+    color: #3b82f6 !important;
+    border: 2px solid white !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.2s ease !important;
+}
+
+.schedule-actions :deep(.p-button:hover) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.schedule-actions :deep(.p-button .pi) {
+    color: #3b82f6 !important;
 }
 
 .no-schedule-message {

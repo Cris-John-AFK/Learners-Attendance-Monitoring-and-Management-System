@@ -72,8 +72,7 @@
 </template>
 
 <script setup>
-import api from '@/config/axios';
-import TeacherAuthService from '@/services/TeacherAuthService';
+import AuthService from '@/services/AuthService';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -115,68 +114,37 @@ const handleLogin = async () => {
             return;
         }
 
-        // Check if this is a teacher login attempt first
-        if (username.value.includes('.')) {
-            try {
-                console.log('🔐 Attempting teacher login via TeacherAuthService');
-                
-                // Use the new TeacherAuthService for authentication
-                const result = await TeacherAuthService.login(username.value, password.value);
+        console.log('🔐 Attempting unified login for:', username.value);
 
-                console.log('📡 TeacherAuthService login result:', result);
+        // Use unified AuthService for all user types
+        const result = await AuthService.login(username.value, password.value);
 
-                if (result.success) {
-                    console.log('✅ Teacher login successful, redirecting to dashboard');
-                    // Redirect to teacher dashboard
+        console.log('📡 Login result:', result);
+
+        if (result.success) {
+            console.log('✅ Login successful! Role:', result.role);
+
+            // Redirect based on user role
+            switch (result.role) {
+                case 'teacher':
                     router.push('/teacher');
+                    break;
+                case 'admin':
+                    router.push('/admin');
+                    break;
+                case 'guardhouse':
+                    router.push('/guardhouse');
+                    break;
+                default:
+                    errorMessage.value = 'Unknown user role. Please contact administrator.';
                     return;
-                } else {
-                    console.log('❌ Teacher login failed:', result.message);
-                    errorMessage.value = result.message || 'Login failed. Please check your credentials.';
-                    return;
-                }
-            } catch (apiError) {
-                console.error('🚨 Teacher login error:', apiError);
-                errorMessage.value = 'Login failed. Please check your credentials and try again.';
-                return;
             }
+        } else {
+            console.log('❌ Login failed:', result.message);
+            errorMessage.value = result.message || 'Login failed. Please check your credentials.';
         }
-
-        // Hardcoded authentication for different user types
-        const validCredentials = {
-            admin: { password: 'admin', dashboard: '/admin' },
-            teacher: { password: 'teacher', dashboard: '/teacher' },
-            guardian: { password: 'guardian', dashboard: '/guest' },
-            gate: { password: 'gate', dashboard: '/guardhouse' }
-        };
-
-        const userType = username.value.toLowerCase();
-
-        if (!validCredentials[userType]) {
-            errorMessage.value = 'Invalid username. Please use: admin, teacher, guardian, gate, or teacher credentials (e.g., maria.santos)';
-            return;
-        }
-
-        if (password.value !== validCredentials[userType].password) {
-            errorMessage.value = 'Invalid password. Password should match the username.';
-            return;
-        }
-
-        // Store user info
-        const storage = rememberMe.value ? localStorage : sessionStorage;
-        storage.setItem(
-            'user',
-            JSON.stringify({
-                username: username.value,
-                type: userType,
-                authenticated: true
-            })
-        );
-
-        // Redirect to appropriate dashboard
-        router.push(validCredentials[userType].dashboard);
     } catch (error) {
-        console.error('Login error:', error);
+        console.error('🚨 Login error:', error);
         errorMessage.value = 'An error occurred during login. Please try again.';
     } finally {
         isLoading.value = false;

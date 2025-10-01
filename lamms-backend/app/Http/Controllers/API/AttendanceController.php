@@ -405,7 +405,9 @@ class AttendanceController extends Controller
             'attendance' => 'required|array',
             'attendance.*.student_id' => 'required|exists:student_details,id',
             'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
-            'attendance.*.remarks' => 'nullable|string|max:255'
+            'attendance.*.remarks' => 'nullable|string|max:255',
+            'attendance.*.reason_id' => 'nullable|exists:attendance_reasons,id',
+            'attendance.*.reason_notes' => 'nullable|string|max:500'
         ]);
 
         if ($validator->fails()) {
@@ -446,6 +448,8 @@ class AttendanceController extends Controller
                         'attendance_status_id' => $attendance['attendance_status_id'],
                         'time_in' => now(),
                         'remarks' => $attendance['remarks'] ?? null,
+                        'reason_id' => $attendance['reason_id'] ?? null,
+                        'reason_notes' => $attendance['reason_notes'] ?? null,
                         'marked_at' => now()
                     ]
                 );
@@ -476,7 +480,9 @@ class AttendanceController extends Controller
             'teacher_id' => 'required|exists:teachers,id',
             'attendance_status_id' => 'required|exists:attendance_statuses,id',
             'date' => 'required|date',
-            'remarks' => 'nullable|string|max:255'
+            'remarks' => 'nullable|string|max:255',
+            'reason_id' => 'nullable|exists:attendance_reasons,id',
+            'reason_notes' => 'nullable|string|max:500'
         ]);
 
         if ($validator->fails()) {
@@ -508,6 +514,8 @@ class AttendanceController extends Controller
                     'attendance_status_id' => $request->attendance_status_id,
                     'time_in' => now(),
                     'remarks' => $request->remarks,
+                    'reason_id' => $request->reason_id,
+                    'reason_notes' => $request->reason_notes,
                     'marked_at' => now()
                 ]
             );

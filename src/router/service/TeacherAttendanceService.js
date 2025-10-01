@@ -183,10 +183,12 @@ export const TeacherAttendanceService = {
     /**
      * Update student attendance status in a session
      */
-    async updateStudentAttendance(sessionId, studentId, status) {
+    async updateStudentAttendance(sessionId, studentId, status, reasonId = null, reasonNotes = null) {
         try {
             const response = await api.put(`/api/attendance-sessions/${sessionId}/students/${studentId}`, {
-                status: status
+                status: status,
+                reason_id: reasonId,
+                reason_notes: reasonNotes
             });
             return response.data;
         } catch (error) {

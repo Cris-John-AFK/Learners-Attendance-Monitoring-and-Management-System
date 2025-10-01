@@ -3,7 +3,7 @@ import NotificationBell from '@/components/NotificationBell.vue';
 import { useLayout } from '@/layout/composables/layout';
 import AttendanceSessionService from '@/services/AttendanceSessionService';
 import NotificationService from '@/services/NotificationService';
-import TeacherAuthService from '@/services/TeacherAuthService';
+import AuthService from '@/services/AuthService';
 import Dialog from 'primevue/dialog';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -186,32 +186,40 @@ const handleRemoveNotification = (notificationId) => {
 
 const logout = async () => {
     try {
-        // Use TeacherAuthService to properly logout
-        await TeacherAuthService.logout();
+        console.log('🚪 Logging out...');
+        
+        // Use unified AuthService to properly logout
+        await AuthService.logout();
+
+        console.log('✅ Logout successful, clearing session data');
 
         // Show success message
         isLogoutSuccess.value = true;
 
-        // Redirect to general login page after a short delay
+        // Clear browser history to prevent back navigation
+        window.history.pushState(null, '', window.location.href);
+        window.history.replaceState(null, '', '/');
+
+        // Redirect to root login page after a short delay
         setTimeout(() => {
-            router.push('/');
+            router.replace('/');
         }, 1500);
     } catch (error) {
-        console.error('Logout error:', error);
+        console.error('❌ Logout error:', error);
         // Even if logout fails, clear local data and redirect
-        localStorage.removeItem('teacher_token');
-        localStorage.removeItem('teacher_data');
-        router.push('/');
+        AuthService.clearAuthData();
+        window.history.replaceState(null, '', '/');
+        router.replace('/');
     }
 };
 
 // Subscribe to notifications
 onMounted(async () => {
-    // Initialize teacher for notifications
-    const teacherData = TeacherAuthService.getTeacherData();
-    if (teacherData && teacherData.teacher && teacherData.teacher.id) {
-        console.log('Initializing notifications for teacher:', teacherData.teacher.id);
-        await NotificationService.setCurrentTeacher(teacherData.teacher.id);
+    // Initialize teacher for notifications using unified AuthService
+    const profile = AuthService.getProfile();
+    if (profile && profile.id) {
+        console.log('Initializing notifications for teacher:', profile.id);
+        await NotificationService.setCurrentTeacher(profile.id);
     }
 
     // Force refresh notifications on mount

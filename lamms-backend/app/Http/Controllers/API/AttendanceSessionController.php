@@ -119,7 +119,13 @@ class AttendanceSessionController extends Controller
     public function getActiveSessionsForTeacher($teacherId)
     {
         try {
-            $sessions = AttendanceSession::with(['section', 'subject', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus'])
+            $sessions = AttendanceSession::with([
+                'section', 
+                'subject', 
+                'attendanceRecords.student', 
+                'attendanceRecords.attendanceStatus',
+                'attendanceRecords.attendanceReason'
+            ])
                 ->where('teacher_id', $teacherId)
                 ->active()
                 ->forDate(now()->toDateString())
@@ -146,7 +152,9 @@ class AttendanceSessionController extends Controller
             'attendance.*.attendance_status_id' => 'required|exists:attendance_statuses,id',
             'attendance.*.arrival_time' => 'nullable|date_format:H:i:s',
             'attendance.*.remarks' => 'nullable|string|max:500',
-            'attendance.*.marking_method' => 'nullable|in:manual,qr_scan,auto,bulk'
+            'attendance.*.marking_method' => 'nullable|in:manual,qr_scan,auto,bulk',
+            'attendance.*.reason_id' => 'nullable|exists:attendance_reasons,id',
+            'attendance.*.reason_notes' => 'nullable|string|max:500'
         ]);
 
         if ($validator->fails()) {
@@ -164,6 +172,13 @@ class AttendanceSessionController extends Controller
 
             DB::transaction(function () use ($request, $session, &$savedRecords) {
                 foreach ($request->attendance as $attendanceData) {
+                    Log::info('💾 Saving attendance record', [
+                        'student_id' => $attendanceData['student_id'],
+                        'status_id' => $attendanceData['attendance_status_id'],
+                        'reason_id' => $attendanceData['reason_id'] ?? null,
+                        'reason_notes' => $attendanceData['reason_notes'] ?? null
+                    ]);
+                    
                     $record = AttendanceRecord::updateOrCreate(
                         [
                             'attendance_session_id' => $session->id,
@@ -176,11 +191,19 @@ class AttendanceSessionController extends Controller
                             'arrival_time' => $attendanceData['arrival_time'] ?? null,
                             'remarks' => $attendanceData['remarks'] ?? null,
                             'marking_method' => $attendanceData['marking_method'] ?? 'manual',
-                            'marked_from_ip' => request()->ip()
+                            'marked_from_ip' => request()->ip(),
+                            'reason_id' => $attendanceData['reason_id'] ?? null,
+                            'reason_notes' => $attendanceData['reason_notes'] ?? null
                         ]
                     );
 
-                    $savedRecords[] = $record->load(['student', 'attendanceStatus']);
+                    Log::info('✅ Saved record', [
+                        'record_id' => $record->id,
+                        'reason_id_saved' => $record->reason_id,
+                        'reason_notes_saved' => $record->reason_notes
+                    ]);
+
+                    $savedRecords[] = $record->load(['student', 'attendanceStatus', 'attendanceReason']);
                 }
             });
 
@@ -294,13 +317,17 @@ class AttendanceSessionController extends Controller
             }
 
             // Use database transaction for data integrity and prevent duplicate completions
-            DB::transaction(function () use ($session) {
+            $autoMarkedCount = 0;
+            DB::transaction(function () use ($session, &$autoMarkedCount) {
                 // Double-check status within transaction to prevent race conditions
                 $currentSession = AttendanceSession::lockForUpdate()->find($session->id);
                 
                 if ($currentSession->status !== 'active') {
                     throw new \Exception("Session status changed during completion. Current status: {$currentSession->status}");
                 }
+                
+                // Auto-mark unmarked students as absent before completing
+                $autoMarkedCount = $this->autoMarkUnmarkedStudentsAsAbsent($currentSession);
                 
                 // Update session with completion data
                 $currentSession->update([
@@ -309,7 +336,7 @@ class AttendanceSessionController extends Controller
                     'completed_at' => now()
                 ]);
                 
-                Log::info("Session {$session->id} completed successfully with transaction lock");
+                Log::info("Session {$session->id} completed successfully with transaction lock. Auto-marked {$autoMarkedCount} students as absent.");
             });
 
             // Refresh session to get updated data
@@ -319,7 +346,14 @@ class AttendanceSessionController extends Controller
             $summary = $this->generateSessionSummary($session);
             
             // Create notification for session completion (async, non-blocking)
-            $this->createSessionCompletionNotification($session, $summary);
+            Log::info("About to create notification for session {$session->id}");
+            try {
+                $this->createSessionCompletionNotification($session, $summary);
+                Log::info("Notification creation completed for session {$session->id}");
+            } catch (\Exception $notifError) {
+                Log::error("Failed to create notification: " . $notifError->getMessage());
+                // Don't fail the session completion if notification fails
+            }
 
             return response()->json([
                 'message' => 'Session completed successfully',
@@ -884,7 +918,7 @@ class AttendanceSessionController extends Controller
         try {
             $session = AttendanceSession::with(['section', 'subject'])->findOrFail($sessionId);
             
-            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus'])
+            $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus', 'attendanceReason'])
                 ->where('attendance_session_id', $sessionId)
                 ->get();
 
@@ -893,7 +927,14 @@ class AttendanceSessionController extends Controller
                     'id' => $record->student->id,
                     'student_id' => $record->student->student_id,
                     'name' => $record->student->firstName . ' ' . $record->student->lastName,
-                    'status' => $record->attendanceStatus->name ?? 'Present'
+                    'status' => $record->attendanceStatus->name ?? 'Present',
+                    'reason_id' => $record->reason_id,
+                    'reason_notes' => $record->reason_notes,
+                    'attendance_reason' => $record->attendanceReason ? [
+                        'id' => $record->attendanceReason->id,
+                        'reason_name' => $record->attendanceReason->reason_name,
+                        'status' => $record->attendanceReason->status
+                    ] : null
                 ];
             });
 
@@ -926,7 +967,9 @@ class AttendanceSessionController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'status' => 'required|string|in:Present,Absent,Late,Excused'
+                'status' => 'required|string|in:Present,Absent,Late,Excused',
+                'reason_id' => 'nullable|exists:attendance_reasons,id',
+                'reason_notes' => 'nullable|string|max:500'
             ]);
 
             if ($validator->fails()) {
@@ -955,6 +998,8 @@ class AttendanceSessionController extends Controller
             if ($attendanceRecord) {
                 $attendanceRecord->update([
                     'attendance_status_id' => $statusId,
+                    'reason_id' => $request->reason_id ?? null,
+                    'reason_notes' => $request->reason_notes ?? null,
                     'updated_at' => now()
                 ]);
             } else {
@@ -963,10 +1008,19 @@ class AttendanceSessionController extends Controller
                     'attendance_session_id' => $sessionId,
                     'student_id' => $studentId,
                     'attendance_status_id' => $statusId,
+                    'reason_id' => $request->reason_id ?? null,
+                    'reason_notes' => $request->reason_notes ?? null,
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
             }
+
+            Log::info('✅ Updated attendance record', [
+                'student_id' => $studentId,
+                'status' => $request->status,
+                'reason_id' => $request->reason_id,
+                'reason_notes' => $request->reason_notes
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -1097,38 +1151,110 @@ class AttendanceSessionController extends Controller
     private function createSessionCompletionNotification($session, $summary)
     {
         try {
-            // Get subject name for notification
-            $subject = DB::table('subjects')->where('id', $session->subject_id)->first();
-            $subjectName = $subject ? $subject->name : 'Unknown Subject';
+            // Extract statistics from summary (they're nested under 'statistics' key)
+            $stats = $summary['statistics'] ?? [];
+            $subjectName = $summary['subject_name'] ?? 'Unknown Subject';
             
             // Create compact notification message
-            $message = "{$subjectName} - {$summary['present_count']} present, {$summary['absent_count']} absent";
+            $presentCount = $stats['present'] ?? 0;
+            $absentCount = $stats['absent'] ?? 0;
+            $lateCount = $stats['late'] ?? 0;
             
-            // Insert notification with indexed columns
+            $message = "{$subjectName} - {$presentCount} present, {$absentCount} absent";
+            
+            // Insert notification using indexed user_id column
             DB::table('notifications')->insert([
                 'type' => 'session_completed',
-                'teacher_id' => $session->teacher_id,
+                'user_id' => $session->teacher_id, // Using user_id which has index
                 'title' => 'Attendance Session Completed',
                 'message' => $message,
-                'metadata' => json_encode([
+                'data' => json_encode([
                     'session_id' => $session->id,
                     'subject_id' => $session->subject_id,
                     'subject_name' => $subjectName,
                     'section_id' => $session->section_id,
-                    'present_count' => $summary['present_count'],
-                    'absent_count' => $summary['absent_count'],
-                    'late_count' => $summary['late_count'],
-                    'total_students' => $summary['total_students']
+                    'present_count' => $presentCount,
+                    'absent_count' => $absentCount,
+                    'late_count' => $lateCount,
+                    'excused_count' => $stats['excused'] ?? 0,
+                    'total_students' => $stats['total_students'] ?? 0,
+                    'teacher_id' => $session->teacher_id
                 ]),
+                'priority' => 'medium',
                 'is_read' => false,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
-            Log::info("Notification created for completed session {$session->id}");
+            Log::info("Notification created for completed session {$session->id} - {$message}");
         } catch (\Exception $e) {
             // Don't fail session completion if notification fails
             Log::error("Failed to create notification for session {$session->id}: " . $e->getMessage());
+            Log::error("Summary structure: " . json_encode($summary));
+        }
+    }
+
+    /**
+     * Auto-mark unmarked students as absent when completing session
+     */
+    private function autoMarkUnmarkedStudentsAsAbsent($session)
+    {
+        try {
+            // Get all active students in the section
+            $allStudents = DB::table('student_section as ss')
+                ->join('student_details as sd', 'ss.student_id', '=', 'sd.id')
+                ->where('ss.section_id', $session->section_id)
+                ->where('ss.is_active', true)
+                ->where('sd.is_active', true)
+                ->pluck('ss.student_id');
+
+            // Get students who already have attendance
+            $markedStudents = DB::table('attendance_records')
+                ->where('attendance_session_id', $session->id)
+                ->pluck('student_id');
+
+            // Find unmarked students
+            $unmarkedStudents = $allStudents->diff($markedStudents);
+
+            if ($unmarkedStudents->isEmpty()) {
+                Log::info("No unmarked students for session {$session->id}");
+                return 0;
+            }
+
+            // Get Absent status ID
+            $absentStatus = DB::table('attendance_statuses')
+                ->where('code', 'A')
+                ->where('is_active', true)
+                ->first();
+
+            if (!$absentStatus) {
+                Log::error("Absent status not found in database");
+                return 0;
+            }
+
+            // Create attendance records for unmarked students
+            $records = [];
+            foreach ($unmarkedStudents as $studentId) {
+                $records[] = [
+                    'attendance_session_id' => $session->id,
+                    'student_id' => $studentId,
+                    'attendance_status_id' => $absentStatus->id,
+                    'marked_by_teacher_id' => $session->teacher_id,
+                    'marked_at' => now(),
+                    'remarks' => 'Auto-marked absent when session completed',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
+            }
+
+            DB::table('attendance_records')->insert($records);
+            
+            Log::info("Auto-marked {$unmarkedStudents->count()} students as absent for session {$session->id}");
+            return $unmarkedStudents->count();
+
+        } catch (\Exception $e) {
+            Log::error("Error auto-marking absent students for session {$session->id}: " . $e->getMessage());
+            return 0;
         }
     }
 
