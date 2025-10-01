@@ -45,8 +45,13 @@ const model = ref([
         separator: true
     },
     {
-        label: 'Tools',
+        label: 'Student Management',
         items: [
+            {
+                label: 'Learner Status',
+                icon: 'pi pi-fw pi-users',
+                to: '/teacher/learner-status'
+            },
             {
                 label: 'Student QR Codes',
                 icon: 'pi pi-fw pi-qrcode',

@@ -16,6 +16,7 @@ use App\Http\Controllers\API\QRCodeController;
 use App\Http\Controllers\API\TeacherAuthController;
 use App\Http\Controllers\API\AttendanceAnalyticsController;
 use App\Http\Controllers\API\GuardhouseController;
+use App\Http\Controllers\API\StudentStatusController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -416,6 +417,13 @@ Route::prefix('teacher')->group(function () {
         Route::get('/', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'getStudents']);
         Route::post('/{studentId}/change-status', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'changeStudentStatus']);
         Route::get('/status-options', [App\Http\Controllers\API\TeacherStudentManagementController::class, 'getStatusOptions']);
+    });
+    
+    // Learner Status Management Routes
+    Route::prefix('{teacherId}/learner-status')->group(function () {
+        Route::get('/students', [StudentStatusController::class, 'getStudentsForTeacher']);
+        Route::put('/students/{studentId}/status', [StudentStatusController::class, 'updateStudentStatus']);
+        Route::get('/students/{studentId}/history', [StudentStatusController::class, 'getStudentStatusHistory']);
     });
 });
 

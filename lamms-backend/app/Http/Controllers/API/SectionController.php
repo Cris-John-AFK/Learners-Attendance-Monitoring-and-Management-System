@@ -200,6 +200,23 @@ class SectionController extends Controller
 
             Log::info("Save result: " . ($saved ? 'success' : 'failed'));
 
+            // Update or create teacher_section_subject record with is_primary = true
+            // First, remove is_primary from any existing assignments for this section
+            DB::table('teacher_section_subject')
+                ->where('section_id', $sectionId)
+                ->update(['is_primary' => false]);
+
+            // Set the new homeroom teacher's assignments as primary
+            $updated = DB::table('teacher_section_subject')
+                ->where('teacher_id', $request->teacher_id)
+                ->where('section_id', $sectionId)
+                ->update([
+                    'is_primary' => true,
+                    'role' => 'primary'
+                ]);
+
+            Log::info("Updated {$updated} teacher_section_subject records to is_primary=true");
+
             // Refresh the section from database to get latest data
             $section->refresh();
 

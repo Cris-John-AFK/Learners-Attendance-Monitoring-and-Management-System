@@ -65,6 +65,11 @@ const router = createRouter({
                     component: () => import('@/views/pages/teacher/TeacherAttendanceSessions.vue')
                 },
                 {
+                    path: '/teacher/learner-status',
+                    name: 'teacher-learner-status',
+                    component: () => import('@/views/pages/teacher/LearnerStatus.vue')
+                },
+                {
                     path: '/pages/settings',
                     name: 'settings',
                     component: TeacherSettings

@@ -674,9 +674,27 @@ class AttendanceController extends Controller
                 return response()->json(['error' => 'Teacher not assigned to this section and subject'], 403);
             }
 
-            // Get students in the section
-            $section = Section::with(['activeStudents'])->findOrFail($sectionId);
-            $students = $section->activeStudents;
+            // Get students directly with enrollment status filter
+            Log::info('🎯🎯🎯 NEW CODE IS RUNNING - FILTERING DROPPED STUDENTS 🎯🎯🎯');
+            
+            $students = Student::whereHas('sections', function($query) use ($sectionId) {
+                    $query->where('section_id', $sectionId)
+                          ->where('student_section.is_active', true);
+                })
+                ->where(function($query) {
+                    $query->whereNull('enrollment_status')
+                          ->orWhere('enrollment_status', 'active')
+                          ->orWhere('enrollment_status', 'transferred_in');
+                })
+                ->get();
+            
+            Log::info('🔥 FILTERED STUDENTS RESULT', [
+                'teacher_id' => $teacherId,
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId,
+                'student_count' => $students->count(),
+                'student_ids' => $students->pluck('id')->toArray()
+            ]);
 
             $studentsData = $students->map(function ($student) {
                 return [
@@ -688,6 +706,8 @@ class AttendanceController extends Controller
                 ];
             });
 
+            $section = Section::findOrFail($sectionId);
+            
             return response()->json([
                 'section' => [
                     'id' => $section->id,

@@ -51,7 +51,11 @@ class Student extends Model
         'householdID',
         'hasDisability',
         'disabilities',
-        'isActive'
+        'isActive',
+        'enrollment_status',
+        'dropout_reason',
+        'dropout_reason_category',
+        'status_effective_date'
     ];
 
     protected $casts = [
@@ -64,6 +68,7 @@ class Student extends Model
         'birthdate' => 'date',
         'enrollmentDate' => 'datetime',
         'admissionDate' => 'datetime',
+        'status_effective_date' => 'date',
         'isIndigenous' => 'boolean',
         'is4PsBeneficiary' => 'boolean',
         'hasDisability' => 'boolean',
