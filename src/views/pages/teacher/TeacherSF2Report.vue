@@ -107,16 +107,20 @@ const maleDailyTotals = computed(() => {
     reportData.value.days_in_month.forEach((day) => {
         let present = 0,
             absent = 0,
-            late = 0;
+            late = 0,
+            excused = 0,
+            dropout = 0;
 
         maleStudents.value.forEach((student) => {
             const status = student.attendance_data?.[day.date];
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
+            else if (status === 'excused') excused++;
+            else if (status === 'dropout') dropout++;
         });
 
-        totals[day.date] = { present, absent, late, total: present + absent + late };
+        totals[day.date] = { present, absent, late, excused, dropout, total: present + absent + late + excused + dropout };
     });
 
     return totals;
@@ -130,16 +134,20 @@ const femaleDailyTotals = computed(() => {
     reportData.value.days_in_month.forEach((day) => {
         let present = 0,
             absent = 0,
-            late = 0;
+            late = 0,
+            excused = 0,
+            dropout = 0;
 
         femaleStudents.value.forEach((student) => {
             const status = student.attendance_data?.[day.date];
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
+            else if (status === 'excused') excused++;
+            else if (status === 'dropout') dropout++;
         });
 
-        totals[day.date] = { present, absent, late, total: present + absent + late };
+        totals[day.date] = { present, absent, late, excused, dropout, total: present + absent + late + excused + dropout };
     });
 
     return totals;
@@ -151,14 +159,16 @@ const combinedDailyTotals = computed(() => {
 
     const totals = {};
     reportData.value.days_in_month.forEach((day) => {
-        const maleTotal = maleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
-        const femaleTotal = femaleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0 };
+        const maleTotal = maleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0, excused: 0, dropout: 0 };
+        const femaleTotal = femaleDailyTotals.value[day.date] || { present: 0, absent: 0, late: 0, excused: 0, dropout: 0 };
 
         totals[day.date] = {
             present: maleTotal.present + femaleTotal.present,
             absent: maleTotal.absent + femaleTotal.absent,
             late: maleTotal.late + femaleTotal.late,
-            total: maleTotal.present + maleTotal.absent + maleTotal.late + femaleTotal.present + femaleTotal.absent + femaleTotal.late
+            excused: maleTotal.excused + femaleTotal.excused,
+            dropout: maleTotal.dropout + femaleTotal.dropout,
+            total: maleTotal.present + maleTotal.absent + maleTotal.late + maleTotal.excused + maleTotal.dropout + femaleTotal.present + femaleTotal.absent + femaleTotal.late + femaleTotal.excused + femaleTotal.dropout
         };
     });
 
@@ -315,6 +325,10 @@ const getAttendanceMark = (status) => {
             return '✗';
         case 'late':
             return 'L';
+        case 'excused':
+            return 'E';
+        case 'dropout':
+            return 'D';
         default:
             return '-';
     }
@@ -329,6 +343,10 @@ const getAttendanceColorClass = (mark) => {
             return 'attendance-absent';
         case 'L':
             return 'attendance-late';
+        case 'E':
+            return 'attendance-excused';
+        case 'D':
+            return 'attendance-dropout';
         default:
             return '';
     }
@@ -343,6 +361,10 @@ const getAttendanceColor = (status) => {
             return 'text-red-600';
         case 'late':
             return 'text-yellow-600';
+        case 'excused':
+            return 'text-blue-600';
+        case 'dropout':
+            return 'text-purple-600';
         default:
             return 'text-gray-400';
     }
@@ -432,6 +454,10 @@ const saveAttendanceEdit = () => {
         status = 'absent';
     } else if (inputValue === 'L' || inputValue.toLowerCase() === 'l' || inputValue.toLowerCase() === 'late') {
         status = 'late';
+    } else if (inputValue === 'E' || inputValue.toLowerCase() === 'e' || inputValue.toLowerCase() === 'excused') {
+        status = 'excused';
+    } else if (inputValue === 'D' || inputValue.toLowerCase() === 'd' || inputValue.toLowerCase() === 'dropout' || inputValue.toLowerCase() === 'drop out') {
+        status = 'dropout';
     } else if (inputValue === '' || inputValue === '-') {
         status = null;
     }
@@ -1068,13 +1094,15 @@ onMounted(() => {
                     />
                     <div class="bg-gray-50 p-3 rounded-lg">
                         <p class="text-xs font-medium text-gray-600 mb-2">Quick Reference:</p>
-                        <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div class="grid grid-cols-5 gap-2 text-xs">
                             <button @click="editAttendanceValue = '✓'" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded">✓ Present</button>
                             <button @click="editAttendanceValue = '✗'" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded">✗ Absent</button>
                             <button @click="editAttendanceValue = 'L'" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded">L Late</button>
+                            <button @click="editAttendanceValue = 'E'" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded">E Excused</button>
+                            <button @click="editAttendanceValue = 'D'" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-2 py-1 rounded">D Drop Out</button>
                         </div>
                     </div>
-                    <p class="text-xs text-gray-500 italic">Type any symbol or letter (✓, ✗, L, /, \\, etc.) or press Enter to save</p>
+                    <p class="text-xs text-gray-500 italic">Type any symbol or letter (✓, ✗, L, E, D, /, \\, etc.) or press Enter to save</p>
                 </div>
             </div>
 
@@ -1190,6 +1218,16 @@ onMounted(() => {
     color: #92400e !important;
 }
 
+.attendance-excused {
+    background-color: #dbeafe !important;
+    color: #1e40af !important;
+}
+
+.attendance-dropout {
+    background-color: #f3e8ff !important;
+    color: #7e22ce !important;
+}
+
 /* Compact row styling */
 .attendance-table-container tbody tr {
     height: 20px;
@@ -1240,7 +1278,9 @@ onMounted(() => {
     /* Remove colors in print - keep it plain */
     .attendance-present,
     .attendance-absent,
-    .attendance-late {
+    .attendance-late,
+    .attendance-excused,
+    .attendance-dropout {
         background-color: white !important;
         color: black !important;
     }
@@ -1377,7 +1417,9 @@ onMounted(() => {
 /* Override empty cell styling - keep gray background for empty columns */
 .bg-gray-100.attendance-present,
 .bg-gray-100.attendance-absent,
-.bg-gray-100.attendance-late {
+.bg-gray-100.attendance-late,
+.bg-gray-100.attendance-excused,
+.bg-gray-100.attendance-dropout {
     background-color: #f3f4f6 !important;
 }
 </style>
