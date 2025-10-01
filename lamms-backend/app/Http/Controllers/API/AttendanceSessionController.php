@@ -373,12 +373,20 @@ class AttendanceSessionController extends Controller
         $session->load(['section', 'subject', 'teacher', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus']);
         
         // Get all students in the section for accurate counts
-        $allStudents = Student::inSection($session->section_id)->active()->get();
+        $totalStudents = DB::table('student_details as sd')
+            ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+            ->where('ss.section_id', $session->section_id)
+            ->where(function($query) {
+                $query->where('ss.is_active', true)
+                      ->orWhereNull('ss.is_active');
+            })
+            ->count();
+        
         $records = $session->attendanceRecords;
         
         // Calculate attendance statistics
         $stats = [
-            'total_students' => $allStudents->count(),
+            'total_students' => $totalStudents,
             'marked_students' => $records->count(),
             'present' => $records->where('attendanceStatus.code', 'P')->count(),
             'absent' => $records->where('attendanceStatus.code', 'A')->count(),
@@ -423,7 +431,15 @@ class AttendanceSessionController extends Controller
             ])->findOrFail($sessionId);
 
             // Get all students in the section
-            $allStudents = Student::inSection($session->section_id)->active()->get();
+            $allStudents = DB::table('student_details as sd')
+                ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+                ->where('ss.section_id', $session->section_id)
+                ->where(function($query) {
+                    $query->where('ss.is_active', true)
+                          ->orWhereNull('ss.is_active');
+                })
+                ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.middleName')
+                ->get();
             
             // Get attendance records
             $records = $session->attendanceRecords;

@@ -363,6 +363,13 @@ const loadStudentsData = async () => {
                 subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
             }
 
+            // Validate section_id before loading students
+            if (!sectionId.value || sectionId.value === '' || sectionId.value === 'null') {
+                console.warn('Cannot load students: section_id is missing');
+                students.value = [];
+                return false;
+            }
+
             // Load students for this specific assignment
             const resolvedSubjectId = getResolvedSubjectId();
             const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, resolvedSubjectId);
@@ -3241,6 +3248,17 @@ const loadTodayAttendanceFromDatabase = async () => {
     try {
         const today = currentDate.value;
         console.log('Loading attendance from database for date:', today);
+
+        // Validate required parameters before making API call
+        if (!sectionId.value || sectionId.value === '' || sectionId.value === 'null') {
+            console.warn('Cannot load attendance: section_id is missing');
+            return;
+        }
+
+        if (!subjectId.value || subjectId.value === '' || subjectId.value === 'null') {
+            console.warn('Cannot load attendance: subject_id is missing');
+            return;
+        }
 
         // Fetch students with their attendance data from API
         const response = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, subjectId.value);
