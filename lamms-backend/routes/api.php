@@ -19,6 +19,7 @@ use App\Http\Controllers\API\AttendanceAnalyticsController;
 use App\Http\Controllers\API\GuardhouseController;
 use App\Http\Controllers\API\StudentStatusController;
 use App\Http\Controllers\API\UnifiedAuthController;
+use App\Http\Controllers\TeacherAssignmentValidationController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -526,3 +527,7 @@ Route::post('/debug/generate-analytics-cache', function() {
         'generated_count' => $generated
     ]);
 });
+
+// Teacher Assignment Validation Routes
+Route::get('/teachers/{teacherId}/assignments', [TeacherAssignmentValidationController::class, 'getTeacherAssignments']);
+Route::post('/teachers/validate-homeroom-assignment', [TeacherAssignmentValidationController::class, 'validateHomeroomAssignment']);

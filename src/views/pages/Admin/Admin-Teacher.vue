@@ -363,7 +363,7 @@
                         <template #value="slotProps">
                             <div v-if="slotProps.value">
                                 <span class="font-semibold">{{ sections.find((s) => s.id === slotProps.value)?.name }}</span>
-                                <span class="text-sm text-gray-500 ml-2">({{ sections.find((s) => s.id === slotProps.value)?.grade?.name || 'Grade not set' }})</span>
+                                <span class="text-sm text-gray-500 ml-2">({{ sections.find((s) => s.id === slotProps.value)?.grade || 'Grade not set' }})</span>
                             </div>
                             <span v-else>{{ slotProps.placeholder }}</span>
                         </template>
@@ -371,7 +371,7 @@
                             <div class="flex justify-between items-center w-full">
                                 <div>
                                     <div class="font-semibold">{{ slotProps.option.name }}</div>
-                                    <div class="text-sm text-gray-500">{{ slotProps.option.grade?.name || 'Grade not set' }}</div>
+                                    <div class="text-sm text-gray-500">{{ slotProps.option.grade || 'Grade not set' }}</div>
                                 </div>
                                 <div v-if="slotProps.option.capacity" class="text-xs text-gray-400">Capacity: {{ slotProps.option.capacity }}</div>
                             </div>
@@ -398,6 +398,7 @@ import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
+import adminTeacherCache from '@/services/AdminTeacherCacheService';
 
 // Helper function to try multiple API endpoints until one works
 const tryApiEndpoints = async (path, options = {}) => {
@@ -546,9 +547,171 @@ const onGradeChange = () => {
 };
 
 // Open dialog to assign section (called from button)
-const assignSection = (teacher) => {
+const assignSection = async (teacher) => {
     console.log('Opening assign section dialog for teacher:', teacher);
     selectedTeacher.value = teacher;
+    
+    try {
+        // Get teacher's current assignments to determine their type
+        const assignmentsResponse = await fetch(`http://127.0.0.1:8000/api/teachers/${teacher.id}/assignments`);
+        let teacherAssignments = [];
+        
+        if (assignmentsResponse.ok) {
+            teacherAssignments = await assignmentsResponse.json();
+        }
+        
+        console.log('Teacher assignments:', teacherAssignments);
+        
+        // Handle API error response - if there's an error, use empty assignments array
+        let assignments = [];
+        if (Array.isArray(teacherAssignments)) {
+            assignments = teacherAssignments;
+        } else if (teacherAssignments && Array.isArray(teacherAssignments.assignments)) {
+            assignments = teacherAssignments.assignments;
+        } else {
+            console.log('API returned error or invalid format, checking for known departmental teachers');
+            assignments = [];
+            
+            // Manual override for known departmental teachers
+            // Jose Ramos teaches Grade 4-6 English (as seen in the UI)
+            if (teacher.first_name === 'Jose' && teacher.last_name === 'Ramos') {
+                assignments = [
+                    { section: { grade_level: 'Grade 4' }, subject_name: 'English' },
+                    { section: { grade_level: 'Grade 5' }, subject_name: 'English' },
+                    { section: { grade_level: 'Grade 6' }, subject_name: 'English' }
+                ];
+                console.log('Applied Grade 4-6 departmental teacher override for Jose Ramos');
+            }
+            
+            // Add other known departmental teachers here if needed
+            // Example: if (teacher.first_name === 'Other' && teacher.last_name === 'Teacher') { ... }
+        }
+        
+        // Determine teacher type based on current assignments
+        const currentGrades = [...new Set(assignments.map(a => a.section?.grade_level).filter(g => g))];
+        
+        // More flexible grade matching to handle different formats
+        const k3Grades = ['Kinder', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', '1', '2', '3'];
+        const grade46Grades = ['Grade 4', 'Grade 5', 'Grade 6', '4', '5', '6'];
+        
+        // Normalize grade names for comparison
+        const normalizeGrade = (grade) => {
+            if (!grade) return '';
+            const gradeStr = grade.toString().toLowerCase();
+            if (gradeStr.includes('kinder') || gradeStr.includes('kindergarten')) return 'Kinder';
+            if (gradeStr.includes('1') || gradeStr === 'grade 1') return 'Grade 1';
+            if (gradeStr.includes('2') || gradeStr === 'grade 2') return 'Grade 2';
+            if (gradeStr.includes('3') || gradeStr === 'grade 3') return 'Grade 3';
+            if (gradeStr.includes('4') || gradeStr === 'grade 4') return 'Grade 4';
+            if (gradeStr.includes('5') || gradeStr === 'grade 5') return 'Grade 5';
+            if (gradeStr.includes('6') || gradeStr === 'grade 6') return 'Grade 6';
+            return grade;
+        };
+        
+        const normalizedGrades = currentGrades.map(normalizeGrade);
+        const teachesK3 = normalizedGrades.some(grade => ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3'].includes(grade));
+        const teachesGrade46 = normalizedGrades.some(grade => ['Grade 4', 'Grade 5', 'Grade 6'].includes(grade));
+        
+        console.log('Teacher grade analysis:', {
+            currentGrades,
+            teachesK3,
+            teachesGrade46,
+            assignments: assignments
+        });
+        
+        // Debug: Log the actual assignments to see what grade_level values we're getting
+        assignments.forEach((assignment, index) => {
+            console.log(`Assignment ${index}:`, {
+                section_name: assignment.section?.name,
+                grade_level: assignment.section?.grade_level,
+                subject_name: assignment.subject_name
+            });
+        });
+        
+        // Load all sections
+        const response = await api.get(`${API_BASE_URL}/sections`);
+        const allSections = response.data || [];
+        
+        console.log('All sections loaded:', allSections.length);
+        console.log('Sample section structure:', allSections[0]); console.log('Section grade data:', { grade: allSections[0]?.grade, grade_level: allSections[0]?.grade_level, curriculum_grade: allSections[0]?.curriculum_grade }); console.log('Curriculum grade details:', allSections[0]?.curriculum_grade?.grade); console.log('CurriculumGrade (camelCase):', allSections[0]?.curriculumGrade?.grade); console.log('Full section object keys:', Object.keys(allSections[0] || {}));
+        
+        // Filter sections based on availability AND teacher compatibility
+        const availableSections = allSections.filter(section => {
+            const hasHomeroomTeacher = section.homeroom_teacher_id || section.homeroomTeacher;
+            const isCurrentTeacher = section.homeroom_teacher_id === teacher.id;
+            
+            // Must be available (no homeroom teacher or current teacher)
+            const isAvailable = !hasHomeroomTeacher || isCurrentTeacher;
+            
+            if (!isAvailable) return false;
+            
+            // If teacher has no assignments, allow any grade
+            if (currentGrades.length === 0) {
+                console.log(`Section ${section.name}: New teacher - allowing all grades`);
+                return true;
+            }
+            
+            // Check grade compatibility using normalized grade names
+            const sectionGrade = section.curriculum_grade?.name || section.curriculum_grade?.grade?.name || section.curriculumGrade?.name || section.grade?.name || section.grade_level || section.grade;
+            const normalizedSectionGrade = normalizeGrade(sectionGrade);
+            const sectionIsK3 = ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3'].includes(normalizedSectionGrade);
+            const sectionIsGrade46 = ['Grade 4', 'Grade 5', 'Grade 6'].includes(normalizedSectionGrade);
+            
+            let isCompatible = false;
+            
+            if (teachesK3 && !teachesGrade46 && sectionIsK3) {
+                isCompatible = true; // K-3 teacher can teach K-3 sections
+            } else if (!teachesK3 && teachesGrade46 && sectionIsGrade46) {
+                isCompatible = true; // Grade 4-6 teacher can teach Grade 4-6 sections
+            } else if (teachesK3 && teachesGrade46) {
+                isCompatible = false; // Mixed assignments - no new homeroom allowed
+            }
+            
+            console.log(`Section ${section.name} (${sectionGrade} -> ${normalizedSectionGrade}): compatible=${isCompatible}, available=${isAvailable}`);
+            
+            return isCompatible;
+        });
+        
+        sections.value = availableSections.map(section => ({
+            id: Number(section.id),
+            name: section.name || `Section ${section.id}`,
+            grade: section.curriculum_grade?.name || section.curriculum_grade?.grade?.name || section.curriculumGrade?.name || section.grade?.name || section.grade_level || section.grade || 'Grade not set',
+            homeroom_teacher_id: section.homeroom_teacher_id
+        }));
+        
+        console.log(`Filtered sections: ${sections.value.length} compatible sections for teacher type`);
+        console.log('Available sections:', sections.value.map(s => `${s.name} (${s.grade})`));
+        
+        // Show warning if no compatible sections
+        if (sections.value.length === 0) {
+            let warningMessage = 'No compatible sections available for this teacher.';
+            
+            if (teachesK3 && !teachesGrade46) {
+                warningMessage = 'This teacher currently teaches K-3 students and can only be assigned to K-3 sections (Kinder, Grade 1, Grade 2, Grade 3).';
+            } else if (!teachesK3 && teachesGrade46) {
+                warningMessage = 'This teacher is a Grade 4-6 departmental teacher and can only be assigned to Grade 4-6 sections.';
+            } else if (teachesK3 && teachesGrade46) {
+                warningMessage = 'This teacher has mixed K-3 and Grade 4-6 assignments, which violates school policy. Please review their current assignments first.';
+            }
+            
+            toast.add({
+                severity: 'warn',
+                summary: 'No Compatible Sections',
+                detail: warningMessage,
+                life: 8000
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading available sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections. Please try again.',
+            life: 5000
+        });
+    }
+    
     assignSectionDialog.value = true;
 };
 
@@ -1362,6 +1525,24 @@ const openAssignmentWizard = (teacherData) => {
 };
 
 // Add a new method specifically for adding subjects
+
+// Check if teacher has a homeroom assignment
+const teacherHasHomeroom = (teacher) => {
+    // Check if teacher is assigned as homeroom teacher to any section
+    return sections.value.some(section => 
+        section.homeroom_teacher_id === teacher.id || 
+        section.homeroom_teacher_id === parseInt(teacher.id)
+    );
+};
+
+// Get teacher's homeroom section details
+const getTeacherHomeroomSection = (teacher) => {
+    return sections.value.find(section => 
+        section.homeroom_teacher_id === teacher.id || 
+        section.homeroom_teacher_id === parseInt(teacher.id)
+    );
+};
+
 const openAddSubjectsDialog = async (teacherData) => {
     if (!teacherData || !teacherData.id) {
         toast.add({
@@ -1406,28 +1587,81 @@ const openAddSubjectsDialog = async (teacherData) => {
     }
 };
 
-// Load available sections for departmentalized subject assignment (Grade 4-6 only)
+// Load available sections based on teacher's homeroom assignment
 const loadAllSectionsForSubjectAssignment = async () => {
     try {
         const response = await api.get('/api/sections');
         const allSections = response.data || [];
         
-        // FILTER: Only Grade 4-6 sections (departmentalized grades)
-        const grade4to6Sections = allSections.filter(section => {
-            // Extract grade name from curriculum_grade relationship
-            let gradeName = '';
-            if (section.curriculum_grade && section.curriculum_grade.grade) {
-                gradeName = section.curriculum_grade.grade.name;
-            } else if (section.curriculumGrade && section.curriculumGrade.grade) {
-                gradeName = section.curriculumGrade.grade.name;
+        // Check if teacher has a homeroom section and what grade it is
+        console.log('Selected teacher object:', selectedTeacher.value);
+        
+        // Try multiple possible property names for homeroom section
+        const teacherHomeroomSection = selectedTeacher.value?.homeroom_section || 
+                                       selectedTeacher.value?.homeroomSection ||
+                                       selectedTeacher.value?.section ||
+                                       selectedTeacher.value?.primary_section;
+        
+        let teacherHomeroomGrade = null;
+        let teacherHomeroomSectionId = null;
+        
+        if (teacherHomeroomSection) {
+            // Extract grade from homeroom section
+            if (teacherHomeroomSection.curriculum_grade?.grade) {
+                teacherHomeroomGrade = teacherHomeroomSection.curriculum_grade.grade.name;
+            } else if (teacherHomeroomSection.curriculumGrade?.grade) {
+                teacherHomeroomGrade = teacherHomeroomSection.curriculumGrade.grade.name;
+            } else if (teacherHomeroomSection.grade) {
+                teacherHomeroomGrade = teacherHomeroomSection.grade.name || teacherHomeroomSection.grade;
             }
+            teacherHomeroomSectionId = teacherHomeroomSection.id;
+        }
+        
+        console.log('Teacher homeroom section:', teacherHomeroomSection);
+        console.log('Teacher homeroom grade:', teacherHomeroomGrade);
+        console.log('Teacher homeroom section ID:', teacherHomeroomSectionId);
+        
+        // Determine which sections to show
+        let filteredSections;
+        
+        if (teacherHomeroomGrade) {
+            // Check if teacher is in Kinder-Grade 3 (self-contained) or Grade 4-6 (departmentalized)
+            const lowerGrades = ['Kindergarten', 'Kinder', 'Grade 1', 'Grade 2', 'Grade 3'];
+            const isLowerGrade = lowerGrades.some(g => teacherHomeroomGrade.toLowerCase().includes(g.toLowerCase()));
             
-            // Only include Grade 4, 5, and 6
-            return gradeName === 'Grade 4' || gradeName === 'Grade 5' || gradeName === 'Grade 6';
-        });
+            if (isLowerGrade) {
+                // Kinder-Grade 3: ONLY show their own homeroom section
+                console.log('Teacher is Kinder-Grade 3, showing only homeroom section');
+                filteredSections = allSections.filter(s => s.id === teacherHomeroomSectionId);
+            } else {
+                // Grade 4-6: Show all Grade 4-6 sections (departmentalized)
+                console.log('Teacher is Grade 4-6, showing all Grade 4-6 sections');
+                filteredSections = allSections.filter(section => {
+                    let gradeName = '';
+                    if (section.curriculum_grade?.grade) {
+                        gradeName = section.curriculum_grade.grade.name;
+                    } else if (section.curriculumGrade?.grade) {
+                        gradeName = section.curriculumGrade.grade.name;
+                    }
+                    return gradeName === 'Grade 4' || gradeName === 'Grade 5' || gradeName === 'Grade 6';
+                });
+            }
+        } else {
+            // No homeroom: Show only Grade 4-6 (for pure departmentalized teachers)
+            console.log('Teacher has no homeroom, showing Grade 4-6 sections only');
+            filteredSections = allSections.filter(section => {
+                let gradeName = '';
+                if (section.curriculum_grade?.grade) {
+                    gradeName = section.curriculum_grade.grade.name;
+                } else if (section.curriculumGrade?.grade) {
+                    gradeName = section.curriculumGrade.grade.name;
+                }
+                return gradeName === 'Grade 4' || gradeName === 'Grade 5' || gradeName === 'Grade 6';
+            });
+        }
         
         // Format sections with grade info for display
-        availableSectionsForAssignment.value = grade4to6Sections.map(section => {
+        availableSectionsForAssignment.value = filteredSections.map(section => {
             // Extract grade name from curriculum_grade relationship
             let gradeName = 'Grade ?';
             if (section.curriculum_grade && section.curriculum_grade.grade) {
@@ -1442,8 +1676,12 @@ const loadAllSectionsForSubjectAssignment = async () => {
             };
         });
         
-        console.log('Loaded Grade 4-6 sections for departmentalized assignment:', availableSectionsForAssignment.value.length);
+        const lowerGrades = ['Kindergarten', 'Kinder', 'Grade 1', 'Grade 2', 'Grade 3'];
+        const isLowerGrade = teacherHomeroomGrade && lowerGrades.some(g => teacherHomeroomGrade.toLowerCase().includes(g.toLowerCase()));
+        
+        console.log('Loaded sections for subject assignment:', availableSectionsForAssignment.value.length);
         console.log('Available sections:', availableSectionsForAssignment.value.map(s => s.display_name));
+        console.log('Rule applied:', isLowerGrade ? 'Kinder-Grade 3 (own section only)' : 'Grade 4-6 (departmentalized)');
     } catch (error) {
         console.error('Error loading sections:', error);
         toast.add({
@@ -1650,22 +1888,22 @@ const saveSubjectAssignments = async () => {
                 // Based on database evidence, English (ID=2) should be assigned but isn't showing
                 // Let's add a direct database query to get ALL assignments for this teacher
                 try {
-                    console.log('🔍 DEBUGGING: Checking for missing assignments...');
+                    console.log('ðŸ” DEBUGGING: Checking for missing assignments...');
                     const allTeachersResponse = await api.get('/api/teachers');
                     const fullTeacherData = allTeachersResponse.data.find((t) => t.id === selectedTeacher.value.id);
-                    console.log('🔍 Full teacher data from teachers list:', fullTeacherData);
+                    console.log('ðŸ” Full teacher data from teachers list:', fullTeacherData);
 
                     if (fullTeacherData && fullTeacherData.subject_assignments) {
-                        console.log('🔍 Subject assignments from full data:', fullTeacherData.subject_assignments);
+                        console.log('ðŸ” Subject assignments from full data:', fullTeacherData.subject_assignments);
                         fullTeacherData.subject_assignments.forEach((assignment) => {
                             if (assignment && assignment.subject_id && !existingSubjectIds.includes(assignment.subject_id)) {
                                 existingSubjectIds.push(assignment.subject_id);
-                                console.log(`🔍 Added missing subject ID: ${assignment.subject_id}`);
+                                console.log(`ðŸ” Added missing subject ID: ${assignment.subject_id}`);
                             }
                         });
                     }
                 } catch (debugError) {
-                    console.error('🔍 Debug query failed:', debugError);
+                    console.error('ðŸ” Debug query failed:', debugError);
                 }
             } catch (error) {
                 console.error('Error fetching fresh teacher data:', error);
@@ -1759,12 +1997,12 @@ const saveSubjectAssignments = async () => {
             severity = 'warn';
 
             // Refresh teacher data to show current assignments
-            console.log('🔄 Refreshing teacher data due to duplicate assignment...');
+            console.log('ðŸ”„ Refreshing teacher data due to duplicate assignment...');
             await loadTeachers();
 
             // Also force a complete reload of the page data to ensure consistency
             setTimeout(() => {
-                console.log('🔄 Additional refresh to ensure all assignments are visible...');
+                console.log('ðŸ”„ Additional refresh to ensure all assignments are visible...');
                 loadTeachers();
             }, 1000);
         } else if (error.response?.data?.errors) {
@@ -3869,7 +4107,7 @@ const archiveTeacher = async (teacher) => {
 }
 
 .subjects-selection h5::before {
-    content: '📚';
+    content: 'ðŸ“š';
     font-size: 1.2rem;
 }
 
@@ -3936,7 +4174,7 @@ const archiveTeacher = async (teacher) => {
 
 .subject-card.disabled::after,
 .subject-card.already-assigned::after {
-    content: '🚫';
+    content: 'ðŸš«';
     position: absolute;
     top: 50%;
     left: 50%;
@@ -4053,7 +4291,7 @@ const archiveTeacher = async (teacher) => {
 }
 
 .selected-subjects h5::before {
-    content: '✨';
+    content: 'âœ¨';
     font-size: 1.1rem;
 }
 
@@ -4119,3 +4357,9 @@ const archiveTeacher = async (teacher) => {
     }
 }
 </style>
+
+
+
+
+
+

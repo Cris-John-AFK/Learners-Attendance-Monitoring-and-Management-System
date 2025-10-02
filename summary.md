@@ -10,7 +10,79 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## Major Features Implemented
 
-### 🚨 RECENT CRITICAL FIXES (September 2025)
+### 🚨 RECENT CRITICAL FIXES (October 2, 2025)
+
+#### **1. Section-Specific Student Loading - RESOLVED**
+**Problem**: Teachers saw students from ALL sections taking the same subject, not just their assigned section.
+
+**Root Cause**: `AttendanceSessionController::getStudentsForTeacherSubject()` used `orWhere('sd.section', $sectionName)` which loaded all students with that section name across different grades.
+
+**Solution**:
+```php
+// OLD (wrong - loaded all "Dagohoy" students):
+->where(function($query) use ($sectionId, $sectionName) {
+    $query->where('ss.section_id', $sectionId)
+          ->orWhere('sd.section', $sectionName); // ❌ Too broad
+})
+
+// NEW (correct - only specified section):
+->join('student_section as ss', function($join) use ($sectionId) {
+    $join->on('sd.id', '=', 'ss.student_id')
+         ->where('ss.section_id', '=', $sectionId) // ✅ Section-specific
+         ->where('ss.is_active', '=', 1);
+})
+```
+
+#### **2. Duplicate Section Cleanup - COMPLETED**
+**Problem**: Multiple duplicate sections (Sampaguita, Gumamela, Mabini, etc.) causing confusion in assignment dialogs.
+
+**Solution**: 
+- Removed 8 duplicate sections
+- Kept sections with homeroom teachers assigned
+- Reassigned students from duplicates to kept sections
+
+#### **3. Homeroom Teacher Role Synchronization - FIXED**
+**Problem**: Only 1 teacher had `role='homeroom'` in `teacher_section_subject` table despite 9 sections having homeroom teachers.
+
+**Solution**:
+```php
+// Synced sections.homeroom_teacher_id with teacher_section_subject.role
+// Updated 3 existing assignments + created 6 new ones
+// All 9 homeroom teachers now properly marked
+```
+
+#### **4. Smart Section Assignment Filtering - IMPLEMENTED**
+**Problem**: Could assign sections that already had active homeroom teachers.
+
+**Solution**:
+```javascript
+// Filter sections BEFORE showing in dropdown
+sections.value = allSections.filter(section => 
+    !section.homeroom_teacher_id || 
+    section.homeroom_teacher_id === currentTeacher.id
+);
+```
+
+#### **5. Grade-Based Subject Assignment Rules - IMPLEMENTED**
+**Problem**: All teachers saw all sections when assigning subjects, regardless of their homeroom grade level.
+
+**Solution - Two-Tier System**:
+```javascript
+// Kinder-Grade 3 (Self-Contained):
+// - Show ONLY teacher's own homeroom section
+// - Teachers teach all subjects to their own class
+
+// Grade 4-6 (Departmentalized):
+// - Show ALL Grade 4-6 sections
+// - Subject specialists teach across sections
+```
+
+#### **6. Schedule Duplicate Removal - COMPLETED**
+**Problem**: Duplicate schedules at same time slots (e.g., 8:33:35 appearing 5 times).
+
+**Solution**: Cleaned up duplicate schedule entries, keeping only unique time slots per teacher.
+
+### 🚨 PREVIOUS CRITICAL FIXES (September 2025)
 
 #### **1. Teacher Dashboard Data Integrity Crisis - RESOLVED**
 **Problem**: Attendance data was being duplicated/multiplied due to complex JOIN operations, causing inaccurate trends and statistics.
@@ -508,14 +580,19 @@ GET    /api/guardhouse/attendance-stats      (Admin only)
 5. **`daily_archive_job.php`**: Automated daily maintenance script for archiving
 6. **`fix_guardhouse_table.php`**: Fixes foreign key constraints and database issues
 7. **`test_attendance_insert.php`**: Tests guardhouse attendance record insertion
+8. **✅ `cleanup_attendance.php`** - Cleanup script for invalid attendance records (Oct 2, 2025)
+9. **✅ `cleanup_session2.php`** - Cleaned session 2 attendance data (Oct 2, 2025)
+10. **✅ `check_homeroom.php`** - Verifies homeroom teacher assignments (Oct 2, 2025)
+11. **✅ `fix_homeroom_roles.php`** - Synced homeroom roles across tables (Oct 2, 2025)
+12. **✅ `remove_duplicate_sections.php`** - Removed 8 duplicate sections (Oct 2, 2025)
 
 ## Current System Status
 
 ### FULLY WORKING
 1. **Attendance System**: Complete database integration with teacher assignments ✅ **ENHANCED with data integrity fixes**
 2. **Seating Arrangements**: Full CRUD with proper database storage
-3. **Schedule Management**: Displays schedules correctly
-4. **Section Management**: Complete CRUD operations
+3. **Schedule Management**: Displays schedules correctly ✅ **CLEANED - Removed duplicates (Oct 2, 2025)**
+4. **Section Management**: Complete CRUD operations ✅ **CLEANED - Removed 8 duplicates (Oct 2, 2025)**
 5. **Production Attendance**: Advanced session management with audit trails ✅ **ENHANCED with duplicate prevention**
 6. **QR Code System**: Complete implementation with generation, validation, and scanning
 7. **Real-time Student Identification**: QR scanner identifies students in GuardHouse and classroom
@@ -523,11 +600,14 @@ GET    /api/guardhouse/attendance-stats      (Admin only)
 9. **Guardhouse QR Verification System**: Enterprise-ready with advanced caching, archiving, and performance optimization
 10. **Automated Data Archiving**: Daily archiving system with 90-day retention and cleanup
 11. **Smart Caching System**: Historical data cached for instant retrieval with forensic compliance
-12. **Teacher Dashboard Data Integrity**: ✅ **NEW - Accurate attendance statistics without duplication**
-13. **Performance Optimization**: ✅ **NEW - 7 database indexes for fast data loading**
-14. **Teacher-Only Session Filtering**: ✅ **NEW - Excludes gate data from classroom attendance**
-15. **Student Loading API**: ✅ **FIXED - Resolves AxiosError in dashboard**
-16. **Branded Reports**: ✅ **NEW - Consistent NCS logo and system naming**
+12. **Teacher Dashboard Data Integrity**: ✅ **Accurate attendance statistics without duplication**
+13. **Performance Optimization**: ✅ **7 database indexes for fast data loading**
+14. **Teacher-Only Session Filtering**: ✅ **Excludes gate data from classroom attendance**
+15. **Student Loading API**: ✅ **FIXED - Section-specific student loading (Oct 2, 2025)**
+16. **Branded Reports**: ✅ **Consistent NCS logo and system naming**
+17. **Homeroom Teacher Roles**: ✅ **NEW - Synced across sections and teacher_section_subject (Oct 2, 2025)**
+18. **Smart Section Assignment**: ✅ **NEW - Prevents assigning sections with existing homeroom teachers (Oct 2, 2025)**
+19. **Grade-Based Subject Assignment**: ✅ **NEW - Kinder-Grade 3 self-contained, Grade 4-6 departmentalized (Oct 2, 2025)**
 
 ### UNRESOLVED ISSUES
 
@@ -644,7 +724,8 @@ $students = DB::table('student_section as ss')
 - `SectionController.php` - Schedule management fixes
 - `GuardhouseController.php` - MAJOR OVERHAUL with enterprise features, caching, and archiving
 - **✅ `AttendanceSummaryController.php` - CRITICAL FIXES for data integrity and duplicate prevention**
-- **✅ `AttendanceSessionController.php` - FIXED student loading API with proper column references**
+- **✅ `AttendanceSessionController.php` - FIXED student loading to be section-specific (Oct 2, 2025)**
+- **✅ `SubjectScheduleController.php` - Removed duplicate schedule entries (Oct 2, 2025)**
 
 ### Database Migrations
 - **✅ `2025_09_29_094700_add_teacher_attendance_performance_indexes.php` - NEW performance optimization indexes**
@@ -658,6 +739,24 @@ $students = DB::table('student_section as ss')
 - `src/services/GuardhouseService.js` - Enhanced API service for guardhouse operations
 - **✅ `src/components/Teachers/AttendanceInsights.vue` - UPDATED with NCS logo integration and system naming**
 - **✅ `src/services/TeacherAuthService.js` - Enhanced with debugging for assignment loading**
+- **✅ `src/views/pages/Admin/Admin-Teacher.vue` - UPDATED with smart section filtering and grade-based assignment rules (Oct 2, 2025)**
 - Various service files for API communication
 
-This summary captures all essential technical details, solutions implemented, and context needed to continue development seamlessly. The system is now production-ready with proper database storage, enhanced validation, comprehensive error handling, **and critical data integrity fixes that ensure accurate attendance statistics and reliable teacher dashboard functionality**. Recent performance optimizations with database indexing and teacher-only session filtering have significantly improved system reliability and data accuracy.
+## Latest Session Achievements (October 2, 2025)
+
+### 🎯 MAJOR ACCOMPLISHMENTS
+1. **✅ Section-Specific Student Loading**: Fixed attendance system to show only students from teacher's assigned section (not all students taking the subject)
+2. **✅ Database Cleanup**: Removed 8 duplicate sections and synchronized homeroom teacher roles
+3. **✅ Smart Assignment Filtering**: Prevents assigning sections that already have homeroom teachers
+4. **✅ Grade-Based Subject Rules**: Implemented two-tier system (Kinder-Grade 3 self-contained, Grade 4-6 departmentalized)
+5. **✅ Schedule Duplicate Removal**: Cleaned up duplicate schedule entries
+6. **✅ Attendance Data Cleanup**: Fixed session 2 to show only valid students (30 instead of 54)
+
+### 🔧 TECHNICAL SOLUTIONS
+- **Section-specific queries**: Changed from `orWhere` to strict `join` with section_id filtering
+- **Duplicate prevention**: Created cleanup scripts for sections, schedules, and attendance data
+- **Role synchronization**: Synced `sections.homeroom_teacher_id` with `teacher_section_subject.role`
+- **Smart filtering**: Frontend filters based on teacher's homeroom grade level
+- **Data validation**: Ensured students belong to correct sections before displaying
+
+This summary captures all essential technical details, solutions implemented, and context needed to continue development seamlessly. The system is now production-ready with proper database storage, enhanced validation, comprehensive error handling, **and critical data integrity fixes that ensure accurate attendance statistics and reliable teacher dashboard functionality**. Recent fixes (October 2, 2025) have resolved section-specific student loading, duplicate data issues, and implemented grade-based teaching assignment rules that align with elementary school practices.
