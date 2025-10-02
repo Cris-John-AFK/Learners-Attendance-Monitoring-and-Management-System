@@ -2,6 +2,7 @@
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import { AttendanceRecordsService } from '@/services/AttendanceRecordsService';
 import TeacherAuthService from '@/services/TeacherAuthService';
+import teacherDataCache from '@/services/TeacherDataCacheService';
 import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
@@ -14,7 +15,6 @@ import Tag from 'primevue/tag';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import teacherDataCache from '@/services/TeacherDataCacheService';
 
 // Add custom CSS for enhanced animations
 const customStyles = `
@@ -108,15 +108,8 @@ const searchQuery = ref('');
 const attendanceRecords = ref([]);
 const subjects = ref([]);
 const selectedSubject = ref(null);
-// Fix date initialization to use local dates properly
-const getLocalDate = (date = new Date()) => {
-    // Set to noon to avoid timezone issues
-    date.setHours(12, 0, 0, 0);
-    return date;
-};
-
-const startDate = ref(getLocalDate(new Date(new Date().setDate(1)))); // First day of current month
-const endDate = ref(getLocalDate()); // Today with proper timezone
+const startDate = ref(new Date(new Date().setDate(1))); // First day of current month
+const endDate = ref(new Date()); // Today
 const showOnlyIssues = ref(false);
 const showStudentDialog = ref(false);
 const selectedStudentDetails = ref(null);
@@ -202,7 +195,7 @@ const getTeacherId = () => {
     // This is a fallback to sync with AppTopbar.vue logic
     console.warn('❌ DEBUG: No authenticated teacher found in standard places');
     console.warn('🔄 DEBUG: Will try to sync with AppTopbar authentication...');
-    
+
     // Return null to indicate we need to wait for proper authentication
     return null;
 };
@@ -883,7 +876,7 @@ const initializeComponent = async () => {
                 teacherId.value = 2;
             }
         }
-        
+
         console.log('Loading data for teacher ID:', teacherId.value);
 
         // First, let's check what teachers exist in the database
@@ -899,14 +892,21 @@ const initializeComponent = async () => {
         // Use caching service for better performance
         try {
             console.log(`Loading cached data for teacher ID: ${teacherId.value}`);
-            
+
             // Use preload function for optimal performance
-            const { assignments, sections: allSections, homeroomSection } = await teacherDataCache.preloadTeacherData(teacherId.value, axios.create({
-                baseURL: 'http://127.0.0.1:8000'
-            }));
-            
+            const {
+                assignments,
+                sections: allSections,
+                homeroomSection
+            } = await teacherDataCache.preloadTeacherData(
+                teacherId.value,
+                axios.create({
+                    baseURL: 'http://127.0.0.1:8000'
+                })
+            );
+
             console.log(`Loaded ${assignments.length} assignments from cache`);
-            
+
             if (assignments.length > 0) {
                 // Use the homeroomSection from preload function
                 if (homeroomSection) {
@@ -917,7 +917,7 @@ const initializeComponent = async () => {
 
                     // Extract subjects from all assignments for this teacher (not just homeroom)
                     const allSubjects = [];
-                    assignments.forEach(assignment => {
+                    assignments.forEach((assignment) => {
                         if (assignment.subjects && Array.isArray(assignment.subjects)) {
                             allSubjects.push(...assignment.subjects);
                         } else if (assignment.subject_name) {
@@ -969,22 +969,22 @@ const initializeComponent = async () => {
             }
         } catch (error) {
             console.error('Error loading teacher assignments:', error);
-            
+
             // Fallback: Try to load data without caching service
             console.log('🔄 Fallback: Loading data without caching...');
             try {
                 const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${teacherId.value}/assignments`);
-                const assignments = Array.isArray(response.data) ? response.data : (response.data.assignments || []);
+                const assignments = Array.isArray(response.data) ? response.data : response.data.assignments || [];
                 const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
-                
+
                 if (assignments.length > 0) {
                     // Find homeroom section
                     const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
-                    
+
                     if (homeroomSection) {
                         // Extract subjects from all assignments for this teacher
                         const allSubjects = [];
-                        assignments.forEach(assignment => {
+                        assignments.forEach((assignment) => {
                             if (assignment.subjects && Array.isArray(assignment.subjects)) {
                                 allSubjects.push(...assignment.subjects);
                             } else if (assignment.subject_name) {
@@ -997,19 +997,21 @@ const initializeComponent = async () => {
                                 }
                             }
                         });
-                        
-                        teacherSections.value = [{
-                            id: homeroomSection.id,
-                            name: homeroomSection.name,
-                            homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
-                            subjects: allSubjects
-                        }];
-                        
+
+                        teacherSections.value = [
+                            {
+                                id: homeroomSection.id,
+                                name: homeroomSection.name,
+                                homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
+                                subjects: allSubjects
+                            }
+                        ];
+
                         selectedSection.value = teacherSections.value[0];
                         console.log('✅ Fallback: Auto-selected homeroom section:', selectedSection.value.name);
                         console.log('✅ Fallback: Section subjects:', selectedSection.value.subjects);
                     }
-                    
+
                     allTeacherSections.value = assignments.map((assignment) => ({
                         id: assignment.section_id,
                         name: assignment.section_name,
@@ -1036,9 +1038,7 @@ const initializeComponent = async () => {
         teacherSections.value.forEach((section) => {
             section.subjects?.forEach((subject) => {
                 // Additional filtering to exclude homeroom and ensure valid subjects
-                if (subject && subject.name && 
-                    subject.name.toLowerCase() !== 'homeroom' && 
-                    !subjectMap.has(subject.id)) {
+                if (subject && subject.name && subject.name.toLowerCase() !== 'homeroom' && !subjectMap.has(subject.id)) {
                     subjectMap.set(subject.id, subject);
                 }
             });
@@ -1046,7 +1046,7 @@ const initializeComponent = async () => {
 
         const uniqueSubjects = Array.from(subjectMap.values());
         console.log('Unique subjects found:', uniqueSubjects);
-        
+
         // Set subjects - only real academic subjects
         subjects.value = uniqueSubjects;
 
@@ -1358,7 +1358,7 @@ const openSF2Report = () => {
         });
         return;
     }
-    
+
     // Navigate to SF2 report page with section ID
     router.push({
         name: 'teacher-sf2-report',

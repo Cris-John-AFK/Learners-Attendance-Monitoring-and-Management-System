@@ -1,25 +1,24 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useToast } from 'primevue/usetoast';
-import TeacherAuthService from '@/services/TeacherAuthService';
 import LearnerStatusService from '@/services/LearnerStatusService';
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
-import InputText from 'primevue/inputtext';
-import Dropdown from 'primevue/dropdown';
 import Calendar from 'primevue/calendar';
-import Textarea from 'primevue/textarea';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
 import Tag from 'primevue/tag';
+import Textarea from 'primevue/textarea';
 import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, ref } from 'vue';
 
 const toast = useToast();
 const loading = ref(false);
 const students = ref([]);
 const currentView = ref('section');
 const searchQuery = ref('');
-const statusFilter = ref('all'); // New status filter
 const isSectionAdviser = ref(false);
 const teacherId = ref(null);
 const showEditDialog = ref(false);
@@ -48,40 +47,15 @@ const statusOptions = [
     { label: 'Transferred In', value: 'transferred_in' }
 ];
 
-// Filter options for the status dropdown
-const statusFilterOptions = [
-    { label: 'All Status', value: 'all' },
-    { label: 'Active', value: 'active' },
-    { label: 'Dropped Out', value: 'dropped_out' },
-    { label: 'Transferred Out', value: 'transferred_out' },
-    { label: 'Transferred In', value: 'transferred_in' }
-];
-
 const reasonOptions = computed(() => {
     const options = LearnerStatusService.getReasonOptions();
     return options[editForm.value.new_status] || [];
 });
 
 const filteredStudents = computed(() => {
-    let filtered = students.value;
-    
-    // Apply status filter
-    if (statusFilter.value !== 'all') {
-        filtered = filtered.filter(s => 
-            s.enrollment_status === statusFilter.value
-        );
-    }
-    
-    // Apply search filter
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter(s => 
-            s.name.toLowerCase().includes(query) ||
-            s.student_id.toLowerCase().includes(query)
-        );
-    }
-    
-    return filtered;
+    if (!searchQuery.value) return students.value;
+    const query = searchQuery.value.toLowerCase();
+    return students.value.filter((s) => s.name.toLowerCase().includes(query) || s.student_id.toLowerCase().includes(query));
 });
 
 const loadStudents = async () => {
@@ -90,7 +64,7 @@ const loadStudents = async () => {
         console.log('Loading students for teacher:', teacherId.value, 'view:', currentView.value);
         const response = await LearnerStatusService.getStudentsForTeacher(teacherId.value, currentView.value);
         console.log('API Response:', response);
-        
+
         if (response.success) {
             students.value = response.students;
             isSectionAdviser.value = response.is_section_adviser;
@@ -102,11 +76,11 @@ const loadStudents = async () => {
     } catch (error) {
         console.error('Error loading students:', error);
         console.error('Error response:', error.response?.data);
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Error', 
-            detail: error.response?.data?.message || 'Failed to load students', 
-            life: 3000 
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.response?.data?.message || 'Failed to load students',
+            life: 3000
         });
     } finally {
         loading.value = false;
@@ -155,11 +129,11 @@ const viewStudentHistory = async (student) => {
 };
 
 const getStatusLabel = (status) => {
-    return { 'active': 'Active', 'dropped_out': 'Dropped Out', 'transferred_out': 'Transferred Out', 'transferred_in': 'Transferred In' }[status] || status;
+    return { active: 'Active', dropped_out: 'Dropped Out', transferred_out: 'Transferred Out', transferred_in: 'Transferred In' }[status] || status;
 };
 
 const getStatusSeverity = (status) => {
-    return { 'active': 'success', 'dropped_out': 'danger', 'transferred_out': 'warning', 'transferred_in': 'info' }[status] || 'secondary';
+    return { active: 'success', dropped_out: 'danger', transferred_out: 'warning', transferred_in: 'info' }[status] || 'secondary';
 };
 
 const formatDate = (dateString) => {
@@ -171,7 +145,7 @@ onMounted(() => {
     console.log('LearnerStatus component mounted');
     const teacherData = TeacherAuthService.getTeacherData();
     console.log('Teacher data from auth:', teacherData);
-    
+
     if (teacherData?.teacher) {
         teacherId.value = teacherData.teacher.id;
         console.log('Teacher ID set to:', teacherId.value);
@@ -191,32 +165,27 @@ onMounted(() => {
 <template>
     <div class="p-4">
         <Toast />
-        
+
         <div class="bg-white p-4 rounded-lg shadow mb-4">
             <h1 class="text-2xl font-bold mb-2">Learner Status Management</h1>
             <p class="text-gray-600">Manage student enrollment status</p>
         </div>
 
-        <div class="bg-white p-4 rounded-lg shadow mb-4">
-            <div class="flex justify-between items-center gap-4 flex-wrap">
-                <div class="flex gap-2">
-                    <Button v-for="view in viewOptions" :key="view.value" 
-                        :label="view.label" :icon="view.icon"
-                        :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
-                        @click="currentView = view.value; loadStudents()" />
-                </div>
-                <div class="flex gap-2 items-center">
-                    <InputText v-model="searchQuery" placeholder="Search..." class="w-64" />
-                    <Dropdown 
-                        v-model="statusFilter" 
-                        :options="statusFilterOptions" 
-                        optionLabel="label" 
-                        optionValue="value"
-                        placeholder="Filter by Status"
-                        class="w-48"
-                    />
-                </div>
+        <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center gap-4 flex-wrap">
+            <div class="flex gap-2">
+                <Button
+                    v-for="view in viewOptions"
+                    :key="view.value"
+                    :label="view.label"
+                    :icon="view.icon"
+                    :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
+                    @click="
+                        currentView = view.value;
+                        loadStudents();
+                    "
+                />
             </div>
+            <InputText v-model="searchQuery" placeholder="Search..." class="w-64" />
         </div>
 
         <div v-if="!isSectionAdviser" class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4 rounded">
@@ -236,12 +205,12 @@ onMounted(() => {
                 <Column field="grade_level" header="Grade" :sortable="true"></Column>
                 <Column field="section" header="Section" :sortable="true"></Column>
                 <Column field="enrollment_status" header="Status" :sortable="true">
-                    <template #body="{data}">
+                    <template #body="{ data }">
                         <Tag :value="getStatusLabel(data.enrollment_status)" :severity="getStatusSeverity(data.enrollment_status)" />
                     </template>
                 </Column>
                 <Column header="Actions">
-                    <template #body="{data}">
+                    <template #body="{ data }">
                         <Button icon="pi pi-eye" class="p-button-rounded p-button-text" @click="viewStudentHistory(data)" />
                         <Button v-if="isSectionAdviser" icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-success" @click="editStudentStatus(data)" />
                     </template>
@@ -261,7 +230,7 @@ onMounted(() => {
                 </div>
                 <div v-if="editForm.reason_category">
                     <label class="font-semibold">Reason</label>
-                    <Dropdown v-model="editForm.reason" :options="reasonOptions.find(r => r.category === editForm.reason_category)?.reasons || []" optionLabel="label" optionValue="value" class="w-full mt-2" />
+                    <Dropdown v-model="editForm.reason" :options="reasonOptions.find((r) => r.category === editForm.reason_category)?.reasons || []" optionLabel="label" optionValue="value" class="w-full mt-2" />
                 </div>
                 <div>
                     <label class="font-semibold">Effective Date</label>

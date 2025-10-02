@@ -7,11 +7,7 @@
                         <i class="pi pi-check-circle"></i>
                     </div>
                     <h2 class="modal-title">Attendance Completed</h2>
-                    <p class="modal-subtitle" :title="subjectName">
-                        <span class="subject-name-truncate">{{ subjectName }}</span>
-                        <span class="session-date-separator">-</span>
-                        <span class="session-date">{{ sessionDate }}</span>
-                    </p>
+                    <p class="modal-subtitle">{{ subjectName }} - {{ sessionDate }}</p>
                 </div>
 
                 <div class="modal-stats" v-if="sessionData && sessionData.statistics">
@@ -262,26 +258,6 @@ const handleDontShowAgainChange = () => {
     font-size: 1rem;
     color: #6b7280;
     margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    max-width: 100%;
-}
-
-.subject-name-truncate {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.session-date-separator {
-    flex-shrink: 0;
-}
-
-.session-date {
-    flex-shrink: 0;
 }
 
 .stats-grid {

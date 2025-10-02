@@ -67,18 +67,7 @@ const subjectName = ref(initialSubject.name);
 const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
 const teacherId = ref(null); // Will be set from authenticated teacher
-// CRITICAL FIX: Use local date to avoid timezone issues
-const getLocalDate = () => {
-    // Force local timezone by creating date at noon
-    const now = new Date();
-    now.setHours(12, 0, 0, 0); // Set to noon to avoid date boundary issues
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    console.log('📅 Local date calculated:', `${year}-${month}-${day}`);
-    return `${year}-${month}-${day}`;
-};
-const currentDate = ref(getLocalDate());
+const currentDate = ref(new Date().toISOString().split('T')[0]);
 const currentDateTime = ref(new Date());
 
 // Loading states
@@ -209,14 +198,14 @@ const fetchSubjectDetails = async (subjectIdentifier) => {
                 // If no exact match, try special mappings
                 if (!subject) {
                     const subjectMappings = {
-                        'technologyandlivelihoodeducation': 'Technology and Livelihood Education',
-                        'technology': 'Technology and Livelihood Education',
-                        'tle': 'Technology and Livelihood Education',
-                        'arts': 'Arts',
-                        'english': 'English',
-                        'filipino': 'Filipino',
-                        'mathematics': 'Mathematics',
-                        'science': 'Science'
+                        technologyandlivelihoodeducation: 'Technology and Livelihood Education',
+                        technology: 'Technology and Livelihood Education',
+                        tle: 'Technology and Livelihood Education',
+                        arts: 'Arts',
+                        english: 'English',
+                        filipino: 'Filipino',
+                        mathematics: 'Mathematics',
+                        science: 'Science'
                     };
 
                     const mappedName = subjectMappings[subjectIdentifier.toLowerCase()];
@@ -228,10 +217,7 @@ const fetchSubjectDetails = async (subjectIdentifier) => {
 
                 // If still no match, try partial match
                 if (!subject) {
-                    subject = subjects.find((s) =>
-                        s.name.toLowerCase().includes(subjectIdentifier.toLowerCase()) ||
-                        subjectIdentifier.toLowerCase().includes(s.name.toLowerCase().replace(/\s+/g, ''))
-                    );
+                    subject = subjects.find((s) => s.name.toLowerCase().includes(subjectIdentifier.toLowerCase()) || subjectIdentifier.toLowerCase().includes(s.name.toLowerCase().replace(/\s+/g, '')));
                     console.log(`🔍 Trying partial match for: ${subjectIdentifier}`);
                 }
 
@@ -359,11 +345,11 @@ const preloadData = async () => {
 
     try {
         // Only preload sections if not cached (students will be loaded per-section)
-        if (!isPermanentlyCached('sections')) {
+        if (!isCacheValid('sections')) {
             const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
             const sectionsData = await sectionsResponse.json();
-            permanentCache.sections = sectionsData.sections || sectionsData || [];
-            permanentCache.timestamp = Date.now();
+            dataCache.sections = sectionsData.sections || sectionsData || [];
+            dataCache.timestamp = Date.now();
             console.log('📦 Preloaded sections');
         } else {
             console.log('📦 Sections already cached');
@@ -385,11 +371,27 @@ const loadStudentsData = async () => {
     try {
         isLoadingStudents.value = true;
 
-        // SIMPLE: If we already have students, don't reload
-        if (students.value.length > 0) {
-            console.log('⚡ Students already loaded - skipping API call');
+        // Check cache first
+        if (isCacheValid('students') && dataCache.students) {
+            console.log('📦 Using cached student data');
+            students.value = dataCache.students;
             await nextTick();
             calculateUnassignedStudents();
+
+            // Even with cached students, we need to ensure seating arrangement is loaded
+            // Check if we already have a seating arrangement loaded
+            const hasSeatingArrangement = seatPlan.value.some((row) => row.some((seat) => seat.studentId !== null));
+
+            if (!hasSeatingArrangement) {
+                console.log('📦 Cached students loaded but no seating arrangement, loading seating...');
+                const restored = restorePreservedAssignments();
+                if (!restored) {
+                    await loadSeatingArrangementFromDatabase();
+                }
+            } else {
+                console.log('📦 Cached students and seating arrangement both available');
+            }
+
             return true;
         }
 
@@ -412,16 +414,24 @@ const loadStudentsData = async () => {
         console.log('🔍 Getting teacher homeroom section for teacher ID:', teacherId.value);
 
         try {
-            // Simple: Just load sections once
-            console.log('🔄 Fetching sections from database...');
-            const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
-            const sectionsData = await sectionsResponse.json();
-            const allSections = sectionsData.sections || sectionsData || [];
+            // Check sections cache first
+            let allSections;
+            if (isCacheValid('sections') && dataCache.sections) {
+                console.log('📦 Using cached sections data');
+                allSections = dataCache.sections;
+            } else {
+                console.log('🔄 Fetching sections from database...');
+                const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
+                const sectionsData = await sectionsResponse.json();
+                allSections = sectionsData.sections || sectionsData || [];
+
+                // Cache sections data
+                dataCache.sections = allSections;
+                dataCache.timestamp = Date.now();
+            }
 
             // Find homeroom section for this teacher
-            const homeroomSection = allSections.find(section =>
-                section.homeroom_teacher_id === parseInt(teacherId.value)
-            );
+            const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
             if (homeroomSection) {
                 console.log('✅ Found homeroom section:', homeroomSection.name, 'ID:', homeroomSection.id);
                 sectionId.value = homeroomSection.id;
@@ -429,35 +439,37 @@ const loadStudentsData = async () => {
                 // Use optimized teacher-specific API to avoid loading ALL students
                 console.log('🔄 Loading students for teacher section:', homeroomSection.id);
                 const studentsApiKey = `teacher_${teacherId.value}_students`;
-                
+
                 // Check if request is already pending
                 if (pendingRequests.has(studentsApiKey)) {
                     console.log('🔄 Teacher students API call already pending, waiting...');
                 } else {
                     // Use teacher-specific endpoint to get only relevant students
                     const requestPromise = TeacherAttendanceService.getStudentsForTeacherSubject(
-                        teacherId.value, 
-                        homeroomSection.id, 
+                        teacherId.value,
+                        homeroomSection.id,
                         null // null for homeroom
-                    ).then(data => {
-                        const students = data.students || [];
-                        pendingRequests.delete(studentsApiKey); // Clean up
-                        console.log(`📦 Loaded ${students.length} students via teacher API`);
-                        return students;
-                    }).catch(error => {
-                        console.warn('Teacher API failed, falling back to sections API:', error);
-                        pendingRequests.delete(studentsApiKey);
-                        // Fallback to smaller sections-based API
-                        return fetch(`http://127.0.0.1:8000/api/sections/${homeroomSection.id}`)
-                            .then(response => response.json())
-                            .then(data => data.students || []);
-                    });
-                    
+                    )
+                        .then((data) => {
+                            const students = data.students || [];
+                            pendingRequests.delete(studentsApiKey); // Clean up
+                            console.log(`📦 Loaded ${students.length} students via teacher API`);
+                            return students;
+                        })
+                        .catch((error) => {
+                            console.warn('Teacher API failed, falling back to sections API:', error);
+                            pendingRequests.delete(studentsApiKey);
+                            // Fallback to smaller sections-based API
+                            return fetch(`http://127.0.0.1:8000/api/sections/${homeroomSection.id}`)
+                                .then((response) => response.json())
+                                .then((data) => data.students || []);
+                        });
+
                     pendingRequests.set(studentsApiKey, requestPromise);
                 }
-                
-                const teacherStudents = await pendingRequests.get(studentsApiKey) || [];
-                
+
+                const teacherStudents = (await pendingRequests.get(studentsApiKey)) || [];
+
                 // Teacher API already returns filtered students for the section, no need to filter again
                 const filteredStudents = teacherStudents;
 
@@ -467,7 +479,7 @@ const loadStudentsData = async () => {
                     const dbId = student.id || student.student_id;
                     // Generate NCS format for display/compatibility but keep database ID as primary
                     const ncsId = student.student_id || `NCS-2025-${String(dbId).padStart(5, '0')}`;
-                    
+
                     return {
                         id: dbId,
                         name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
@@ -482,12 +494,16 @@ const loadStudentsData = async () => {
 
                 students.value = normalizedStudents;
 
-                // Simple: Students are now loaded and will stay loaded
-                console.log('✅ Students loaded and cached in memory');
+                // Cache student data
+                dataCache.students = normalizedStudents;
+                dataCache.timestamp = Date.now();
 
                 console.log('✅ Filtered and normalized', students.value.length, 'students for section', homeroomSection.name);
-                console.log('📋 Student IDs:', students.value.map(s => s.studentId));
-                
+                console.log(
+                    '📋 Student IDs:',
+                    students.value.map((s) => s.studentId)
+                );
+
                 // Prevent infinite loop - if we still have 0 students, don't retry
                 if (students.value.length === 0) {
                     console.warn('⚠️ No students found for section', homeroomSection.name, 'ID:', homeroomSection.id);
@@ -500,7 +516,7 @@ const loadStudentsData = async () => {
                 const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
                 console.log('Teacher assignments:', assignments);
 
-                const assignmentsArray = Array.isArray(assignments) ? assignments : (assignments.assignments || []);
+                const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];
 
                 if (assignmentsArray.length > 0) {
                     const assignmentData = assignmentsArray[0];
@@ -726,13 +742,16 @@ const loadSeatingArrangementFromDatabase = async () => {
 
         console.log('Loading seating arrangement response:', response);
         console.log('🔍 SUBJECT-SPECIFIC CHECK: Section', sectionId.value, 'Subject', getResolvedSubjectId(), 'Last Updated:', response?.last_updated);
-        
+
         // Check if this is actually subject-specific data
         if (response?.seating_layout?.seatPlan) {
-            const occupiedSeats = response.seating_layout.seatPlan.flat().filter(seat => seat.isOccupied);
+            const occupiedSeats = response.seating_layout.seatPlan.flat().filter((seat) => seat.isOccupied);
             console.log('🎯 SEATING CHECK: Found', occupiedSeats.length, 'occupied seats for Subject', getResolvedSubjectId());
             if (occupiedSeats.length > 0) {
-                console.log('🎯 FIRST 3 STUDENTS:', occupiedSeats.slice(0, 3).map(seat => seat.studentId));
+                console.log(
+                    '🎯 FIRST 3 STUDENTS:',
+                    occupiedSeats.slice(0, 3).map((seat) => seat.studentId)
+                );
             }
         }
 
@@ -750,9 +769,6 @@ const loadSeatingArrangementFromDatabase = async () => {
             // Set the seat plan with deep copy to avoid reference issues
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
-                
-                // Simple: Seating arrangement is now loaded and will stay loaded
-                console.log('✅ Seating arrangement loaded and cached in memory');
 
                 // Defer cleanup until after students are fully loaded
                 // Use nextTick to ensure students are loaded first
@@ -891,13 +907,13 @@ const autoAssignStudents = (method = null) => {
     }
 
     const assignmentMethod = method || selectedAssignmentMethod.value;
-    const methodLabel = assignmentMethods.value.find(m => m.value === assignmentMethod)?.label || 'Default';
+    const methodLabel = assignmentMethods.value.find((m) => m.value === assignmentMethod)?.label || 'Default';
 
     console.log(`Auto-assigning ${students.value.length} students using ${methodLabel} method`);
 
     // Clear all current assignments
-    seatPlan.value.forEach(row => {
-        row.forEach(seat => {
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
             seat.isOccupied = false;
             seat.studentId = null;
             seat.studentName = '';
@@ -970,7 +986,7 @@ const getStudentById = (studentId) => {
         const mainId = s.id ? s.id.toString() : '';
         const ncsId = s.studentId ? s.studentId.toString() : '';
         const altId = s.student_id ? s.student_id.toString() : '';
-        
+
         return dbId === idStr || mainId === idStr || ncsId === idStr || altId === idStr;
     });
 
@@ -1254,7 +1270,7 @@ const cleanupInvalidStudentAssignments = () => {
     }
 
     let cleanedCount = 0;
-    const studentIds = students.value.map(s => s.id);
+    const studentIds = students.value.map((s) => s.id);
 
     console.log(
         'Running cleanup - current students:',
@@ -1521,15 +1537,18 @@ const preserveCurrentAssignments = () => {
         // Use resolved subject ID for consistency
         const resolvedSubjectId = getResolvedSubjectId();
         const preservationKey = `preserved_assignments_${teacherId.value}_${sectionId.value}_${resolvedSubjectId}`;
-        localStorage.setItem(preservationKey, JSON.stringify({
-            assignments,
-            timestamp: new Date().toISOString(),
-            rows: rows.value,
-            columns: columns.value,
-            teacherId: teacherId.value,
-            sectionId: sectionId.value,
-            subjectId: resolvedSubjectId
-        }));
+        localStorage.setItem(
+            preservationKey,
+            JSON.stringify({
+                assignments,
+                timestamp: new Date().toISOString(),
+                rows: rows.value,
+                columns: columns.value,
+                teacherId: teacherId.value,
+                sectionId: sectionId.value,
+                subjectId: resolvedSubjectId
+            })
+        );
         console.log('Preserved assignments for navigation:', assignments.length);
     }
 };
@@ -1565,9 +1584,8 @@ const restorePreservedAssignments = () => {
 
                 // Restore assignments
                 console.log('Restoring assignments:', data.assignments);
-                data.assignments.forEach(assignment => {
-                    if (assignment.rowIndex < seatPlan.value.length &&
-                        assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+                data.assignments.forEach((assignment) => {
+                    if (assignment.rowIndex < seatPlan.value.length && assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
                         const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
                         seat.isOccupied = true;
                         seat.studentId = assignment.studentId;
@@ -2147,9 +2165,9 @@ const completeAttendanceSession = async () => {
 
         // Add notification with correct method
         const methodNames = {
-            'qr': 'QR Code Scan',
-            'seat_plan': 'Seat Plan',
-            'roll_call': 'Roll Call'
+            qr: 'QR Code Scan',
+            seat_plan: 'Seat Plan',
+            roll_call: 'Roll Call'
         };
 
         const sessionSummaryWithMethod = {
@@ -2180,7 +2198,7 @@ const completeAttendanceSession = async () => {
         // Force notification reload after a brief delay to ensure backend has created it
         try {
             // Small delay to ensure notification is created in database first
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             await NotificationService.loadNotifications();
             console.log('✅ Notifications reloaded after session completion - should show new notification');
         } catch (notifError) {
@@ -2245,13 +2263,9 @@ const markAllPresent = async () => {
                     // Update visual status
                     seat.status = 1; // Present status
 
-                    // CRITICAL FIX: Use numeric database ID for backend
-                    const student = getStudentById(seat.studentId);
-                    const numericId = student?.dbId || student?.id || seat.studentId;
-                    
                     // Add to batch
                     attendanceData.push({
-                        student_id: numericId, // Use numeric ID for backend
+                        student_id: seat.studentId,
                         attendance_status_id: 1, // Present
                         arrival_time: new Date().toTimeString().split(' ')[0],
                         remarks: null,
@@ -2261,6 +2275,7 @@ const markAllPresent = async () => {
                 }
             });
         });
+
         console.log('Collected attendance data for', attendanceData.length, 'students');
         console.log('Attendance data:', attendanceData);
 
@@ -2278,7 +2293,7 @@ const markAllPresent = async () => {
                     if (seat.isOccupied && seat.studentId) {
                         seat.status = 1; // Set to green/present
                         console.log(`Setting seat [${rowIndex}][${colIndex}] student ${seat.studentId} to status 1 (green)`);
-                        updatedSeats.push({rowIndex, colIndex, studentId: seat.studentId});
+                        updatedSeats.push({ rowIndex, colIndex, studentId: seat.studentId });
                     }
                 });
             });
@@ -2301,10 +2316,9 @@ const markAllPresent = async () => {
         console.error('Error marking all present:', error);
         console.error('Error response:', error.response?.data);
         console.error('Validation errors:', JSON.stringify(error.response?.data?.errors, null, 2));
+        console.error('Sent data:', attendanceData);
 
-        const errorMsg = error.response?.data?.message ||
-                        JSON.stringify(error.response?.data?.errors) ||
-                        'Failed to mark all students as present';
+        const errorMsg = error.response?.data?.message || JSON.stringify(error.response?.data?.errors) || 'Failed to mark all students as present';
 
         toast.add({
             severity: 'error',
@@ -2454,9 +2468,8 @@ const updateGridSize = () => {
     initializeSeatPlan();
 
     // Restore assignments to new grid if they fit
-    currentAssignments.forEach(assignment => {
-        if (assignment.rowIndex < seatPlan.value.length &&
-            assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+    currentAssignments.forEach((assignment) => {
+        if (assignment.rowIndex < seatPlan.value.length && assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
             const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
             seat.isOccupied = true;
             seat.studentId = assignment.studentId;
@@ -2477,43 +2490,64 @@ const updateGridSize = () => {
     }
 };
 
-// SINGLE route watcher to prevent loops
+// Watch for route changes to update subject
 watch(
-    () => route.params.subjectId,
-    async (newSubjectId, oldSubjectId) => {
-        // Skip if same subject
-        if (newSubjectId === oldSubjectId) return;
-        
-        console.log(`Route changed - Subject ${oldSubjectId} → ${newSubjectId}`);
-        
-        // Update subject ID
-        subjectId.value = newSubjectId;
-        
-        // If this is a subject change (not initial load)
-        if (oldSubjectId && newSubjectId && students.value.length > 0) {
-            console.log('⚡ INSTANT subject switch - data already loaded!');
-            
-            // Just update the subject name, don't reload data
-            try {
-                const subjectDetails = await fetchSubjectDetails(newSubjectId);
-                if (subjectDetails.name) {
-                    subjectName.value = subjectDetails.name;
-                    console.log('✅ Subject name updated to:', subjectDetails.name);
-                }
-            } catch (error) {
-                console.warn('Failed to fetch subject name:', error);
-                subjectName.value = formatSubjectName(newSubjectId);
+    () => route.params,
+    async (params, oldParams) => {
+        const matchedSubject = params.subjectId;
+        console.log(`Route changed - Updated to: ${subjectName.value} (ID: ${matchedSubject})`);
+
+        // Only reinitialize if the subject actually changed and we're not already loading
+        if (oldParams && oldParams.subjectId !== matchedSubject && !isLoadingStudents.value) {
+            console.log(`Subject changed from ${oldParams.subjectId} to ${matchedSubject}, reinitializing...`);
+
+            // Clear any existing intervals to prevent conflicts
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
             }
-            
-            return; // DONE - no data reload needed
+
+            // Clear current data
+            students.value = [];
+            seatPlan.value = [];
+            attendanceRecords.value = [];
+            resolvedSubjectId.value = null; // Clear resolved ID for fresh resolution
+
+            // Reset subject info
+            if (matchedSubject) {
+                subjectId.value = matchedSubject;
+
+                // Resolve subject details if needed
+                if (isNaN(matchedSubject)) {
+                    await resolveSubjectDetails(matchedSubject);
+                } else {
+                    subjectName.value = formatSubjectName(matchedSubject);
+                }
+
+                // Reinitialize component with new subject
+                await initializeComponent();
+            } else {
+                subjectName.value = 'Subject';
+                subjectId.value = '';
+            }
+        } else if (matchedSubject) {
+            // First load or same subject
+            subjectId.value = matchedSubject;
+
+            // Resolve subject details if needed for first load
+            if (isNaN(matchedSubject)) {
+                await resolveSubjectDetails(matchedSubject);
+            } else {
+                subjectName.value = formatSubjectName(matchedSubject);
+            }
+
+            loadSavedTemplates();
+        } else {
+            subjectName.value = 'Subject';
+            subjectId.value = '';
         }
-        
-        // First load - need to load data
-        if (!students.value.length && !isLoadingStudents.value) {
-            console.log('🔄 First load - getting data...');
-            loadStudentsData();
-        }
-    }
+    },
+    { immediate: true }
 );
 
 // Store interval reference for cleanup
@@ -2645,11 +2679,37 @@ const initializeComponent = async () => {
 // Track if component is currently initializing to prevent duplicate loads
 const isInitializing = ref(false);
 
-// DISABLED - Using single route watcher instead to prevent loops
-// watchEffect(() => {
-//     const newSubject = getInitialSubjectInfo();
-//     // Disabled to prevent infinite loops
-// });
+// Watch for route changes to update subject info immediately
+watchEffect(() => {
+    const newSubject = getInitialSubjectInfo();
+    if (newSubject.id !== subjectId.value || newSubject.name !== subjectName.value) {
+        subjectId.value = newSubject.id;
+        subjectName.value = newSubject.name;
+        console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
+
+        // Only reload students data if not currently initializing and teacher is available
+        if (teacherId.value && !isInitializing.value && !isLoadingStudents.value) {
+            console.log('Route change detected, reloading students data...');
+            // Only clear cache if subject actually changed, not on every route event
+            const currentSubjectFromRoute = route.params.subjectId;
+            if (currentSubjectFromRoute !== subjectId.value) {
+                console.log('Subject changed, clearing cache AND seating arrangement for fresh data');
+                clearCache();
+                pendingRequests.clear();
+                // CRITICAL: Clear seating arrangement to force reload for new subject
+                seatPlan.value = [];
+                console.log('🔄 CLEARED seating arrangement for subject change');
+            }
+            isLoadingSeating.value = true;
+            loadingMessage.value = 'Switching subjects...';
+            loadStudentsData();
+        } else if (isInitializing.value) {
+            console.log('Skipping route change reload - component is initializing');
+        } else if (isLoadingStudents.value) {
+            console.log('Skipping route change reload - students already loading');
+        }
+    }
+});
 
 // Initialize component
 onMounted(async () => {
@@ -2682,41 +2742,40 @@ onMounted(async () => {
             const subjectDetails = await fetchSubjectDetails(subjectId.value);
             console.log(`📋 Received subject details:`, subjectDetails);
 
-        if (subjectDetails.id) {
-            const newSubjectName = subjectDetails.name;
-            const newSubjectId = subjectDetails.id;
+            if (subjectDetails.id) {
+                const newSubjectName = subjectDetails.name;
+                const newSubjectId = subjectDetails.id;
 
-            subjectId.value = newSubjectId;
-            subjectName.value = newSubjectName;
-            resolvedSubjectId.value = newSubjectId; // Store the resolved ID
-            console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
+                subjectId.value = newSubjectId;
+                subjectName.value = newSubjectName;
+                resolvedSubjectId.value = newSubjectId; // Store the resolved ID
+                console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
 
-            // Force Vue to update the DOM
-            await nextTick();
-            console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
+                // Force Vue to update the DOM
+                await nextTick();
+                console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
 
-            // Force multiple updates to ensure it stuck
-            setTimeout(() => {
-                if (titleRef.value) {
-                    titleRef.value.textContent = `${newSubjectName} Attendance`;
-                    console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
-                }
-            }, 200);
+                // Force multiple updates to ensure it stuck
+                setTimeout(() => {
+                    if (titleRef.value) {
+                        titleRef.value.textContent = `${newSubjectName} Attendance`;
+                        console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
+                    }
+                }, 200);
+            } else {
+                console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
+            }
         } else {
-            console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
+            console.log(`⏭️ No subject ID resolution needed`);
         }
-    } else {
-        console.log(`⏭️ No subject ID resolution needed`);
-    }
 
-    console.log(`🎯 Final subject values - Name: ${subjectName.value}, ID: ${subjectId.value}`);
+        console.log(`🎯 Final subject values - Name: ${subjectName.value}, ID: ${subjectId.value}`);
 
         // Initialize component in background without blocking UI
         initializeComponent().catch(console.warn);
 
         // Load today's attendance in background
         loadTodayAttendanceFromDatabase().catch(console.warn);
-
     } catch (error) {
         console.error('Error during component initialization:', error);
         toast.add({
@@ -3048,35 +3107,19 @@ const handleSeatClick = async (rowIndex, colIndex) => {
         showAttendanceMethodModal.value = true;
         return;
     }
+
     // Just keep hover actions visible on click
 };
 
 // Handle quick action click
 const handleQuickAction = async (status) => {
     if (!hoveredSeat.value) return;
-    
-    // Check if session is active
-    if (!sessionActive.value) {
-        toast.add({
-            severity: 'warn',
-            summary: 'No Active Session',
-            detail: 'Please start a session first to mark attendance',
-            life: 3000
-        });
-        showAttendanceMethodModal.value = true;
-        return;
-    }
 
     const { row, col } = hoveredSeat.value;
     const seat = seatPlan.value[row][col];
+    const student = students.value.find((s) => s.id === seat.studentId);
 
-    // FIX: Use getStudentById to properly match students
-    const student = getStudentById(seat.studentId);
-
-    if (!student) {
-        console.error('Student not found for quick action:', seat.studentId);
-        return;
-    }
+    if (!student) return;
 
     // For Late or Excused, show reason dialog
     if (status === 'Late' || status === 'Excused') {
@@ -3131,13 +3174,7 @@ const onReasonConfirmed = async (reasonData) => {
 
     // Save to database with reason
     try {
-        await saveAttendanceToDatabase(
-            student.id,
-            status,
-            '',
-            reasonData.reason_id,
-            reasonData.reason_notes
-        );
+        await saveAttendanceToDatabase(student.id, status, '', reasonData.reason_id, reasonData.reason_notes);
 
         toast.add({
             severity: 'success',
@@ -4091,9 +4128,9 @@ const saveCompletedSession = (sessionData) => {
 
     // Add notification to the system with correct method
     const methodNames = {
-        'qr': 'QR Code Scan',
-        'seat_plan': 'Seat Plan',
-        'roll_call': 'Roll Call'
+        qr: 'QR Code Scan',
+        seat_plan: 'Seat Plan',
+        roll_call: 'Roll Call'
     };
 
     const sessionDataWithMethod = {
@@ -4394,36 +4431,34 @@ watch(showStudentIds, (newValue) => {
 
 // Track if we're currently restoring assignments to prevent grid reset
 const isRestoringAssignments = ref(false);
+
 // Store the resolved subject ID from API
 const resolvedSubjectId = ref(null);
 
 // Helper function to get resolved subject ID
 const getResolvedSubjectId = () => {
-    // CRITICAL FIX: Always use the CURRENT subject ID from route
-    const currentSubjectId = subjectId.value || route.params.subjectId;
-    
-    // If subjectId is already numeric, use it directly
-    if (typeof currentSubjectId === 'number' || !isNaN(Number(currentSubjectId))) {
-        const numericId = Number(currentSubjectId);
-        console.log(`Using CURRENT subject ID: ${numericId}`);
-        return numericId;
-    }
-
-    // Only use resolved ID if it exists
+    // First priority: Use the resolved ID from API if available
     if (resolvedSubjectId.value) {
         console.log(`Using resolved subject ID from API: ${resolvedSubjectId.value}`);
         return resolvedSubjectId.value;
     }
 
+    // Second priority: If subjectId is already numeric, use it
+    if (typeof subjectId.value === 'number' || !isNaN(Number(subjectId.value))) {
+        const numericId = Number(subjectId.value);
+        console.log(`Using numeric subject ID: ${numericId}`);
+        return numericId;
+    }
+
     // Third priority: Try to map by subject name
     const subjectMapping = {
-        'Arts': 5,
-        'English': 1,
-        'Filipino': 2,
-        'Mathematics': 3,
-        'Science': 4,
+        Arts: 5,
+        English: 1,
+        Filipino: 2,
+        Mathematics: 3,
+        Science: 4,
         'Technology and Livelihood Education': 23, // Updated to correct ID
-        'TLE': 23
+        TLE: 23
     };
 
     if (subjectName.value && subjectMapping[subjectName.value]) {
@@ -4433,14 +4468,14 @@ const getResolvedSubjectId = () => {
 
     // Last resort: Map route parameter to numeric ID (fallback only)
     const routeMapping = {
-        'arts': 5,
-        'english': 1,
-        'filipino': 2,
-        'mathematics': 3,
-        'science': 4,
-        'technologyandlivelihoodeducation': 23, // Updated to correct ID
-        'technology': 23,
-        'tle': 23
+        arts: 5,
+        english: 1,
+        filipino: 2,
+        mathematics: 3,
+        science: 4,
+        technologyandlivelihoodeducation: 23, // Updated to correct ID
+        technology: 23,
+        tle: 23
     };
 
     if (routeMapping[subjectId.value]) {
@@ -4462,14 +4497,14 @@ const calculateOptimalGridSize = (studentCount) => {
 
     // Optimal arrangements for different student counts (up to 50+ students):
     const arrangements = [
-        { rows: 5, columns: 5 },   // 25 seats
-        { rows: 5, columns: 6 },   // 30 seats
-        { rows: 6, columns: 6 },   // 36 seats
-        { rows: 6, columns: 7 },   // 42 seats
-        { rows: 7, columns: 7 },   // 49 seats
-        { rows: 7, columns: 8 },   // 56 seats (accommodates 50+ students)
-        { rows: 8, columns: 7 },   // 56 seats (alternative layout)
-        { rows: 8, columns: 8 }    // 64 seats (for very large classes)
+        { rows: 5, columns: 5 }, // 25 seats
+        { rows: 5, columns: 6 }, // 30 seats
+        { rows: 6, columns: 6 }, // 36 seats
+        { rows: 6, columns: 7 }, // 42 seats
+        { rows: 7, columns: 7 }, // 49 seats
+        { rows: 7, columns: 8 }, // 56 seats (accommodates 50+ students)
+        { rows: 8, columns: 7 }, // 56 seats (alternative layout)
+        { rows: 8, columns: 8 } // 64 seats (for very large classes)
     ];
 
     // Find the arrangement that fits the students with minimal empty seats (max 6 empty)
@@ -4510,21 +4545,23 @@ watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
 });
 
 // Watch for students loading to trigger cleanup if needed
-watch(students, (newStudents, oldStudents) => {
-    if (newStudents && newStudents.length > 0 && (!oldStudents || oldStudents.length === 0)) {
-        console.log('Students loaded, checking if cleanup is needed');
-        // Small delay to ensure seating arrangement is also loaded
-        setTimeout(() => {
-            const hasAssignedSeats = seatPlan.value.some(row =>
-                row.some(seat => seat.isOccupied && seat.studentId)
-            );
-            if (hasAssignedSeats) {
-                console.log('Found assigned seats, running cleanup to validate assignments');
-                cleanupInvalidStudentAssignments();
-            }
-        }, 500);
-    }
-}, { deep: true });
+watch(
+    students,
+    (newStudents, oldStudents) => {
+        if (newStudents && newStudents.length > 0 && (!oldStudents || oldStudents.length === 0)) {
+            console.log('Students loaded, checking if cleanup is needed');
+            // Small delay to ensure seating arrangement is also loaded
+            setTimeout(() => {
+                const hasAssignedSeats = seatPlan.value.some((row) => row.some((seat) => seat.isOccupied && seat.studentId));
+                if (hasAssignedSeats) {
+                    console.log('Found assigned seats, running cleanup to validate assignments');
+                    cleanupInvalidStudentAssignments();
+                }
+            }, 500);
+        }
+    },
+    { deep: true }
+);
 
 // Fix reference to isDropTarget
 const isDropTarget = ref(false);

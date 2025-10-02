@@ -11,6 +11,7 @@ const model = ref([
         label: 'Manage',
         items: [
             { label: 'Collected Reports', icon: 'pi pi-fw pi-clipboard', to: '/admin-collected-reports' },
+            { label: 'GuardHouse Reports', icon: 'pi pi-fw pi-shield', to: '/admin-guardhouse-reports' },
             { label: 'Subject', icon: 'pi pi-fw pi-book', to: '/admin-subject' },
             { label: 'Curricula', icon: 'pi pi-fw pi-briefcase', to: '/curriculum' },
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },

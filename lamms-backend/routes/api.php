@@ -417,6 +417,12 @@ Route::prefix('guardhouse')->group(function () {
     // Admin-only routes for historical data
     Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
     Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
+    
+    // New routes for GuardHouse Reports Admin Page
+    Route::get('/live-feed', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getLiveFeed']);
+    Route::post('/toggle-scanner', [App\Http\Controllers\API\GuardhouseReportsController::class, 'toggleScanner']);
+    Route::post('/archive-session', [App\Http\Controllers\API\GuardhouseReportsController::class, 'archiveSession']);
+    Route::get('/archived-sessions', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getArchivedSessions']);
 });
 
 // Smart Attendance Analytics Routes

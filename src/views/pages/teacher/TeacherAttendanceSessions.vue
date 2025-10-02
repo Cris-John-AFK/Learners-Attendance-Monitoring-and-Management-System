@@ -47,10 +47,10 @@ const statusOptions = [
 const monthOptions = computed(() => {
     const months = [];
     const currentDate = new Date();
-    
+
     // Add "All Months" option
     months.push({ label: 'All Months', value: null });
-    
+
     // Generate last 12 months
     for (let i = 0; i < 12; i++) {
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
@@ -58,7 +58,7 @@ const monthOptions = computed(() => {
         const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         months.push({ label: monthYear, value: value });
     }
-    
+
     return months;
 });
 
@@ -67,8 +67,8 @@ const filteredSessions = computed(() => {
     if (!selectedMonth.value) {
         return sessions.value;
     }
-    
-    return sessions.value.filter(session => {
+
+    return sessions.value.filter((session) => {
         const sessionDate = new Date(session.session_date);
         const sessionMonth = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
         return sessionMonth === selectedMonth.value;
@@ -438,19 +438,11 @@ onUnmounted(() => {
                 <h2 class="text-2xl font-bold text-gray-800 mb-2">Attendance Sessions</h2>
                 <p class="text-gray-600">View and edit your attendance sessions</p>
             </div>
-            
+
             <!-- Month Filter -->
             <div class="flex items-center gap-3">
                 <label class="text-sm font-medium text-gray-700">Filter by Month:</label>
-                <Dropdown 
-                    v-model="selectedMonth" 
-                    :options="monthOptions" 
-                    optionLabel="label" 
-                    optionValue="value" 
-                    placeholder="All Months"
-                    class="w-64"
-                    showClear
-                />
+                <Dropdown v-model="selectedMonth" :options="monthOptions" optionLabel="label" optionValue="value" placeholder="All Months" class="w-64" showClear />
             </div>
         </div>
 
@@ -470,9 +462,7 @@ onUnmounted(() => {
         <!-- Sessions Count -->
         <div v-if="!loading && sessions.length > 0" class="mb-4 text-sm text-gray-600">
             Showing <span class="font-semibold text-gray-800">{{ filteredSessions.length }}</span> of <span class="font-semibold text-gray-800">{{ sessions.length }}</span> sessions
-            <span v-if="selectedMonth" class="ml-2 text-blue-600">
-                (Filtered by {{ monthOptions.find(m => m.value === selectedMonth)?.label }})
-            </span>
+            <span v-if="selectedMonth" class="ml-2 text-blue-600"> (Filtered by {{ monthOptions.find((m) => m.value === selectedMonth)?.label }}) </span>
         </div>
 
         <!-- Sessions by Date -->
@@ -487,8 +477,8 @@ onUnmounted(() => {
                         <template #header>
                             <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-t-lg">
                                 <div class="flex justify-between items-start">
-                                    <div class="flex-1 min-w-0">
-                                        <h4 class="font-semibold text-lg truncate" :title="session.subject_name">{{ session.subject_name }}</h4>
+                                    <div>
+                                        <h4 class="font-semibold text-lg">{{ session.subject_name }}</h4>
                                         <p class="text-blue-100 text-sm">{{ session.section_name }}</p>
                                     </div>
                                     <div class="text-right text-xs">
