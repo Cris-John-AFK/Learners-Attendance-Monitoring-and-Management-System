@@ -423,6 +423,7 @@ Route::prefix('guardhouse')->group(function () {
     Route::post('/toggle-scanner', [App\Http\Controllers\API\GuardhouseReportsController::class, 'toggleScanner']);
     Route::post('/archive-session', [App\Http\Controllers\API\GuardhouseReportsController::class, 'archiveSession']);
     Route::get('/archived-sessions', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getArchivedSessions']);
+    Route::get('/session-records/{sessionId}', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getSessionRecords']);
 });
 
 // Smart Attendance Analytics Routes

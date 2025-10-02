@@ -101,48 +101,90 @@ class GuardhouseReportsController extends Controller
     public function archiveSession(Request $request)
     {
         try {
-            $sessionDate = $request->input('session_date', Carbon::today()->toDateString());
-            $records = $request->input('records', []);
+            DB::beginTransaction();
             
-            // Create or get archive session
+            $sessionDate = Carbon::today()->toDateString();
+            
+            // Get all today's records from guardhouse_attendance
+            $todayRecords = DB::table('guardhouse_attendance')
+                ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id')
+                ->where('guardhouse_attendance.date', $sessionDate)
+                ->select(
+                    'guardhouse_attendance.id',
+                    'guardhouse_attendance.student_id',
+                    DB::raw('CONCAT(student_details."firstName", \' \', student_details."lastName") as student_name'),
+                    'student_details.gradeLevel as grade_level',
+                    'student_details.section',
+                    'guardhouse_attendance.timestamp',
+                    'guardhouse_attendance.record_type'
+                )
+                ->get();
+            
+            if ($todayRecords->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No records found for today to archive'
+                ]);
+            }
+            
+            // Check if session already exists for today
+            $existingSession = DB::table('guardhouse_archive_sessions')
+                ->where('session_date', $sessionDate)
+                ->first();
+            
+            if ($existingSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Today\'s session has already been archived'
+                ]);
+            }
+            
+            // Create archive session
             $archiveSession = DB::table('guardhouse_archive_sessions')->insertGetId([
                 'session_date' => $sessionDate,
-                'total_records' => count($records),
+                'total_records' => $todayRecords->count(),
                 'archived_at' => now(),
-                'archived_by' => auth()->id() ?? 1, // Get current admin ID
+                'archived_by' => auth()->id() ?? 1,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
             // Archive the records
-            if (!empty($records)) {
-                $archiveRecords = [];
-                foreach ($records as $record) {
-                    $archiveRecords[] = [
-                        'session_id' => $archiveSession,
-                        'student_id' => $record['student_id'] ?? null,
-                        'student_name' => $record['student_name'] ?? '',
-                        'grade_level' => $record['grade_level'] ?? '',
-                        'section' => $record['section'] ?? '',
-                        'record_type' => $record['record_type'] ?? '',
-                        'timestamp' => $record['timestamp'] ?? now(),
-                        'session_date' => $sessionDate,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ];
-                }
-                
-                DB::table('guardhouse_archived_records')->insert($archiveRecords);
+            $archiveRecords = [];
+            foreach ($todayRecords as $record) {
+                $archiveRecords[] = [
+                    'session_id' => $archiveSession,
+                    'student_id' => $record->student_id,
+                    'student_name' => $record->student_name,
+                    'grade_level' => $record->grade_level,
+                    'section' => $record->section,
+                    'record_type' => $record->record_type,
+                    'timestamp' => $record->timestamp,
+                    'session_date' => $sessionDate,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
             }
+            
+            DB::table('guardhouse_archived_records')->insert($archiveRecords);
+            
+            // IMPORTANT: Delete the records from the main table after archiving
+            DB::table('guardhouse_attendance')
+                ->where('date', $sessionDate)
+                ->delete();
+            
+            DB::commit();
             
             return response()->json([
                 'success' => true,
                 'message' => 'Session archived successfully',
                 'session_id' => $archiveSession,
-                'records_archived' => count($records)
+                'records_archived' => count($archiveRecords),
+                'session_date' => $sessionDate
             ]);
             
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to archive session',
@@ -152,33 +194,51 @@ class GuardhouseReportsController extends Controller
     }
     
     /**
-     * Get archived sessions
+     * Get archived sessions (organized by date-based cards)
      */
     public function getArchivedSessions(Request $request)
     {
         try {
-            $query = DB::table('guardhouse_archived_records');
+            // Get archived sessions (date-based cards)
+            $sessions = DB::table('guardhouse_archive_sessions')
+                ->orderBy('session_date', 'desc')
+                ->get();
             
-            // Apply filters
-            if ($request->has('date')) {
-                $query->where('session_date', $request->input('date'));
+            $result = [];
+            foreach ($sessions as $session) {
+                $result[] = [
+                    'session_id' => $session->id,
+                    'session_date' => $session->session_date,
+                    'total_records' => $session->total_records,
+                    'archived_at' => $session->archived_at,
+                    'archived_by' => $session->archived_by
+                ];
             }
             
-            if ($request->has('search')) {
-                $search = $request->input('search');
-                $query->where(function($q) use ($search) {
-                    $q->where('student_name', 'ILIKE', "%{$search}%")
-                      ->orWhere('student_id', 'ILIKE', "%{$search}%");
-                });
-            }
+            return response()->json([
+                'success' => true,
+                'sessions' => $result
+            ]);
             
-            if ($request->has('type') && $request->input('type') !== 'all') {
-                $query->where('record_type', $request->input('type'));
-            }
-            
-            $records = $query->orderBy('timestamp', 'desc')
-                           ->limit(500)
-                           ->get();
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch archived sessions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get records for a specific archived session
+     */
+    public function getSessionRecords(Request $request, $sessionId)
+    {
+        try {
+            $records = DB::table('guardhouse_archived_records')
+                ->where('session_id', $sessionId)
+                ->orderBy('timestamp', 'desc')
+                ->get();
             
             return response()->json([
                 'success' => true,
@@ -186,54 +246,11 @@ class GuardhouseReportsController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            // If archived tables don't exist, try to get from main guardhouse_attendance table
-            try {
-                $query = DB::table('guardhouse_attendance')
-                    ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id');
-                
-                // Apply filters
-                if ($request->has('date')) {
-                    $query->where('guardhouse_attendance.date', $request->input('date'));
-                }
-                
-                if ($request->has('search')) {
-                    $search = $request->input('search');
-                    $query->where(function($q) use ($search) {
-                        $q->where(DB::raw('CONCAT(student_details."firstName", \' \', student_details."lastName")'), 'ILIKE', "%{$search}%")
-                          ->orWhere('guardhouse_attendance.student_id', '=', $search);
-                    });
-                }
-                
-                if ($request->has('type') && $request->input('type') !== 'all') {
-                    $query->where('guardhouse_attendance.record_type', $request->input('type'));
-                }
-                
-                $records = $query->select(
-                        'guardhouse_attendance.id',
-                        'guardhouse_attendance.student_id',
-                        DB::raw('CONCAT(student_details."firstName", \' \', student_details."lastName") as student_name'),
-                        'student_details.gradeLevel as grade_level',
-                        'student_details.section',
-                        'guardhouse_attendance.timestamp',
-                        'guardhouse_attendance.record_type',
-                        'guardhouse_attendance.date as session_date'
-                    )
-                    ->orderBy('guardhouse_attendance.timestamp', 'desc')
-                    ->limit(500)
-                    ->get();
-                
-                return response()->json([
-                    'success' => true,
-                    'records' => $records
-                ]);
-                
-            } catch (\Exception $fallbackError) {
-                return response()->json([
-                    'success' => true,
-                    'records' => [],
-                    'message' => 'No archived records found'
-                ]);
-            }
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch session records',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }

@@ -151,59 +151,73 @@
                     <i class="pi pi-history"></i>
                     Archived Sessions
                 </h2>
-                <div class="filter-controls">
-                    <Calendar 
-                        v-model="filterDate" 
-                        dateFormat="yy-mm-dd" 
-                        placeholder="Filter by date"
-                        showIcon
-                    />
-                    <InputText 
-                        v-model="searchQuery" 
-                        placeholder="Search student..."
-                        class="search-input"
-                    />
-                    <Dropdown 
-                        v-model="filterType" 
-                        :options="typeOptions" 
-                        optionLabel="label" 
-                        optionValue="value"
-                        placeholder="All Types"
-                    />
-                </div>
             </div>
 
-            <DataTable 
-                :value="filteredArchivedRecords" 
-                :paginator="true" 
-                :rows="10"
-                :loading="loadingArchived"
-                responsiveLayout="scroll"
-                class="archived-table"
-            >
-                <Column field="session_date" header="Date" :sortable="true">
-                    <template #body="slotProps">
-                        {{ formatDate(slotProps.data.session_date) }}
-                    </template>
-                </Column>
-                <Column field="student_id" header="Student ID" :sortable="true" />
-                <Column field="student_name" header="Name" :sortable="true" />
-                <Column field="grade_level" header="Grade" :sortable="true" />
-                <Column field="section" header="Section" :sortable="true" />
-                <Column field="record_type" header="Type" :sortable="true">
-                    <template #body="slotProps">
-                        <Tag 
-                            :value="slotProps.data.record_type" 
-                            :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'"
-                        />
-                    </template>
-                </Column>
-                <Column field="timestamp" header="Time" :sortable="true">
-                    <template #body="slotProps">
-                        {{ formatTime(slotProps.data.timestamp) }}
-                    </template>
-                </Column>
-            </DataTable>
+            <!-- Session Cards -->
+            <div v-if="archivedSessions.length === 0" class="empty-sessions">
+                <i class="pi pi-calendar-times"></i>
+                <p>No archived sessions found</p>
+                <span>Sessions will appear here after archiving</span>
+            </div>
+
+            <div v-else class="session-cards">
+                <div 
+                    v-for="session in archivedSessions" 
+                    :key="session.session_id"
+                    class="session-card"
+                    @click="toggleSessionDetails(session.session_id)"
+                >
+                    <div class="card-header">
+                        <div class="session-date">
+                            <i class="pi pi-calendar"></i>
+                            {{ formatDate(session.session_date) }}
+                        </div>
+                        <div class="session-stats">
+                            <Badge :value="session.total_records" severity="info" />
+                            <i :class="expandedSessions.includes(session.session_id) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="card-meta">
+                        <span>Archived: {{ formatDateTime(session.archived_at) }}</span>
+                    </div>
+
+                    <!-- Expanded Session Details -->
+                    <div v-if="expandedSessions.includes(session.session_id)" class="session-details">
+                        <div v-if="loadingSessionRecords[session.session_id]" class="loading-records">
+                            <i class="pi pi-spin pi-spinner"></i>
+                            Loading records...
+                        </div>
+                        
+                        <DataTable 
+                            v-else-if="sessionRecords[session.session_id]"
+                            :value="sessionRecords[session.session_id]" 
+                            :paginator="true" 
+                            :rows="5"
+                            responsiveLayout="scroll"
+                            class="session-records-table"
+                        >
+                            <Column field="student_id" header="Student ID" />
+                            <Column field="student_name" header="Name" />
+                            <Column field="grade_level" header="Grade" />
+                            <Column field="section" header="Section" />
+                            <Column field="record_type" header="Type">
+                                <template #body="slotProps">
+                                    <Tag 
+                                        :value="slotProps.data.record_type" 
+                                        :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'"
+                                    />
+                                </template>
+                            </Column>
+                            <Column field="timestamp" header="Time">
+                                <template #body="slotProps">
+                                    {{ formatTime(slotProps.data.timestamp) }}
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -229,23 +243,16 @@ const API_BASE_URL = 'http://localhost:8000/api';
 const scannerEnabled = ref(true);
 const checkInRecords = ref([]);
 const checkOutRecords = ref([]);
-const archivedRecords = ref([]);
+const archivedSessions = ref([]);
+const sessionRecords = ref({});
+const expandedSessions = ref([]);
+const loadingSessionRecords = ref({});
 const currentTime = ref('');
-const filterDate = ref(null);
-const searchQuery = ref('');
-const filterType = ref('all');
 const loadingArchived = ref(false);
 
 // Polling interval
 let pollingInterval = null;
 let timeInterval = null;
-
-// Filter options
-const typeOptions = [
-    { label: 'All Types', value: 'all' },
-    { label: 'Check-In', value: 'check-in' },
-    { label: 'Check-Out', value: 'check-out' }
-];
 
 // Computed
 const checkInCount = computed(() => checkInRecords.value.length);
@@ -261,32 +268,6 @@ const totalStudentsToday = computed(() => {
 const hasActiveRecords = computed(() => 
     checkInRecords.value.length > 0 || checkOutRecords.value.length > 0
 );
-
-const filteredArchivedRecords = computed(() => {
-    let filtered = archivedRecords.value;
-    
-    // Filter by date
-    if (filterDate.value) {
-        const dateStr = formatDateForFilter(filterDate.value);
-        filtered = filtered.filter(r => r.session_date === dateStr);
-    }
-    
-    // Filter by search query
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter(r => 
-            r.student_name.toLowerCase().includes(query) ||
-            r.student_id.toLowerCase().includes(query)
-        );
-    }
-    
-    // Filter by type
-    if (filterType.value !== 'all') {
-        filtered = filtered.filter(r => r.record_type === filterType.value);
-    }
-    
-    return filtered;
-});
 
 // Methods
 const getInitials = (name) => {
@@ -323,6 +304,58 @@ const formatDateForFilter = (date) => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const formatDateTime = (dateTimeStr) => {
+    if (!dateTimeStr) return '';
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+};
+
+// Toggle session details
+const toggleSessionDetails = async (sessionId) => {
+    const index = expandedSessions.value.indexOf(sessionId);
+    
+    if (index > -1) {
+        // Collapse
+        expandedSessions.value.splice(index, 1);
+    } else {
+        // Expand and load records
+        expandedSessions.value.push(sessionId);
+        
+        if (!sessionRecords.value[sessionId]) {
+            await loadSessionRecords(sessionId);
+        }
+    }
+};
+
+// Load records for a specific session
+const loadSessionRecords = async (sessionId) => {
+    loadingSessionRecords.value[sessionId] = true;
+    
+    try {
+        const response = await axios.get(`${API_BASE_URL}/guardhouse/session-records/${sessionId}`);
+        if (response.data.success) {
+            sessionRecords.value[sessionId] = response.data.records;
+        }
+    } catch (error) {
+        console.error('Error loading session records:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load session records',
+            life: 3000
+        });
+    } finally {
+        loadingSessionRecords.value[sessionId] = false;
+    }
 };
 
 const updateCurrentTime = () => {
@@ -425,16 +458,22 @@ const archiveCurrentSession = async () => {
     }
 };
 
-// Load archived records
+// Load archived sessions (date-based cards)
 const loadArchivedRecords = async () => {
     loadingArchived.value = true;
     try {
         const response = await axios.get(`${API_BASE_URL}/guardhouse/archived-sessions`);
         if (response.data.success) {
-            archivedRecords.value = response.data.records || [];
+            archivedSessions.value = response.data.sessions || [];
         }
     } catch (error) {
-        console.error('Error loading archived records:', error);
+        console.error('Error loading archived sessions:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load archived sessions',
+            life: 3000
+        });
     } finally {
         loadingArchived.value = false;
     }
@@ -691,14 +730,86 @@ onUnmounted(() => {
     gap: 0.5rem;
 }
 
-.filter-controls {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
+/* Empty Sessions State */
+.empty-sessions {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6c757d;
 }
 
-.search-input {
-    width: 200px;
+.empty-sessions i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Session Cards */
+.session-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.session-card {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.session-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.session-date {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.session-stats {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.card-meta {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+}
+
+.session-details {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.loading-records {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    justify-content: center;
+    color: #6c757d;
+}
+
+.session-records-table {
+    margin-top: 1rem;
 }
 
 /* Transitions */
