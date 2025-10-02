@@ -6,16 +6,15 @@ import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Checkbox from 'primevue/checkbox';
-import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import Tag from 'primevue/tag';
-import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref, watch } from 'vue'; // Added missing watch import
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import teacherDataCache from '@/services/TeacherDataCacheService';
 
 // Add custom CSS for enhanced animations
 const customStyles = `
@@ -109,8 +108,15 @@ const searchQuery = ref('');
 const attendanceRecords = ref([]);
 const subjects = ref([]);
 const selectedSubject = ref(null);
-const startDate = ref(new Date(new Date().setDate(1))); // First day of current month
-const endDate = ref(new Date()); // Today
+// Fix date initialization to use local dates properly
+const getLocalDate = (date = new Date()) => {
+    // Set to noon to avoid timezone issues
+    date.setHours(12, 0, 0, 0);
+    return date;
+};
+
+const startDate = ref(getLocalDate(new Date(new Date().setDate(1)))); // First day of current month
+const endDate = ref(getLocalDate()); // Today with proper timezone
 const showOnlyIssues = ref(false);
 const showStudentDialog = ref(false);
 const selectedStudentDetails = ref(null);
@@ -125,7 +131,7 @@ const selectedSection = ref(null);
 const allTeacherSections = ref([]);
 const availableDates = ref([]);
 const isLoadingDates = ref(false);
-// Try to get teacher ID from multiple sources
+// Try to get teacher ID from multiple sources with better authentication handling
 const getTeacherId = () => {
     console.log('🔍 DEBUG: Getting teacher ID...');
 
@@ -137,6 +143,21 @@ const getTeacherId = () => {
         console.log('✅ DEBUG: Using authenticated teacher ID:', teacherData.teacher.id);
         console.log('✅ DEBUG: Teacher name:', teacherData.teacher.first_name, teacherData.teacher.last_name);
         return parseInt(teacherData.teacher.id);
+    }
+
+    // Try to get from teacher_auth_data in localStorage (new format)
+    const authData = localStorage.getItem('teacher_auth_data');
+    if (authData) {
+        try {
+            const parsed = JSON.parse(authData);
+            console.log('🔍 DEBUG: teacher_auth_data found:', parsed);
+            if (parsed.teacher && parsed.teacher.id) {
+                console.log('✅ DEBUG: Using teacher_auth_data teacher ID:', parsed.teacher.id);
+                return parseInt(parsed.teacher.id);
+            }
+        } catch (e) {
+            console.error('❌ DEBUG: Error parsing teacher_auth_data:', e);
+        }
     }
 
     // Debug all localStorage keys
@@ -177,9 +198,13 @@ const getTeacherId = () => {
         }
     }
 
-    // Default fallback - Maria Santos teacher ID
-    console.warn('❌ DEBUG: No authenticated teacher found, using fallback ID: 1 (Maria Santos)');
-    return 1;
+    // Check if we can get teacher ID from the topbar (which seems to work)
+    // This is a fallback to sync with AppTopbar.vue logic
+    console.warn('❌ DEBUG: No authenticated teacher found in standard places');
+    console.warn('🔄 DEBUG: Will try to sync with AppTopbar authentication...');
+    
+    // Return null to indicate we need to wait for proper authentication
+    return null;
 };
 
 const teacherId = ref(getTeacherId());
@@ -845,7 +870,20 @@ const exportToExcel = async () => {
 // Initialize component data
 const initializeComponent = async () => {
     try {
-        // Teacher ID is already set in reactive ref
+        // Check if we have a valid teacher ID
+        if (!teacherId.value) {
+            console.log('⏳ No teacher ID available, waiting for authentication...');
+            // Try to get teacher ID again (maybe authentication completed)
+            const newId = getTeacherId();
+            if (newId) {
+                teacherId.value = newId;
+            } else {
+                // Use fallback ID 2 (Ana Cruz) since AppTopbar shows teacher ID 2
+                console.log('🔄 Using fallback teacher ID 2 (Ana Cruz) based on AppTopbar data');
+                teacherId.value = 2;
+            }
+        }
+        
         console.log('Loading data for teacher ID:', teacherId.value);
 
         // First, let's check what teachers exist in the database
@@ -858,36 +896,56 @@ const initializeComponent = async () => {
         const sectionsResponse = await axios.get('http://127.0.0.1:8000/api/sections');
         console.log('Available sections:', sectionsResponse.data);
 
-        // Use authenticated teacher's ID directly - no testing needed
+        // Use caching service for better performance
         try {
-            console.log(`Loading assignments for authenticated teacher ID: ${teacherId.value}`);
-            const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${teacherId.value}/assignments`);
-            console.log(`Response for teacher ${teacherId.value}:`, response.data);
-
-            if (response.data.success && response.data.assignments?.length > 0) {
-                const assignments = response.data.assignments || [];
-                const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
-
-                // Find the teacher's homeroom section directly from sections table
-                console.log('Finding homeroom section for teacher:', teacherId.value);
-                const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
-
+            console.log(`Loading cached data for teacher ID: ${teacherId.value}`);
+            
+            // Use preload function for optimal performance
+            const { assignments, sections: allSections, homeroomSection } = await teacherDataCache.preloadTeacherData(teacherId.value, axios.create({
+                baseURL: 'http://127.0.0.1:8000'
+            }));
+            
+            console.log(`Loaded ${assignments.length} assignments from cache`);
+            
+            if (assignments.length > 0) {
+                // Use the homeroomSection from preload function
                 if (homeroomSection) {
                     // Set the single homeroom section for this teacher
                     const sectionAssignment = assignments.find((assignment) => assignment.section_id === homeroomSection.id);
+                    console.log('🔍 Section assignment found:', sectionAssignment);
+                    console.log('🔍 All assignments for debugging:', assignments);
+
+                    // Extract subjects from all assignments for this teacher (not just homeroom)
+                    const allSubjects = [];
+                    assignments.forEach(assignment => {
+                        if (assignment.subjects && Array.isArray(assignment.subjects)) {
+                            allSubjects.push(...assignment.subjects);
+                        } else if (assignment.subject_name) {
+                            // Skip homeroom subjects - only include real academic subjects
+                            if (assignment.subject_name.toLowerCase() !== 'homeroom') {
+                                allSubjects.push({
+                                    id: assignment.subject_id || assignment.id,
+                                    name: assignment.subject_name
+                                });
+                            }
+                        }
+                    });
+
+                    console.log('🔍 Extracted subjects from assignments:', allSubjects);
 
                     teacherSections.value = [
                         {
                             id: homeroomSection.id,
                             name: homeroomSection.name,
                             homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
-                            subjects: sectionAssignment?.subjects || []
+                            subjects: allSubjects
                         }
                     ];
 
                     // Auto-select the homeroom section (no dropdown needed)
                     selectedSection.value = teacherSections.value[0];
                     console.log('Auto-selected homeroom section:', selectedSection.value.name);
+                    console.log('🔍 Section subjects:', selectedSection.value.subjects);
                 } else {
                     console.warn('No homeroom section found for teacher:', teacherId.value);
                     teacherSections.value = [];
@@ -911,36 +969,96 @@ const initializeComponent = async () => {
             }
         } catch (error) {
             console.error('Error loading teacher assignments:', error);
-            toast.add({
-                severity: 'warn',
-                summary: 'No Sections Found',
-                detail: 'No sections are assigned to any teacher. Please check the database setup.',
-                life: 5000
-            });
-            teacherSections.value = [];
-            allTeacherSections.value = [];
+            
+            // Fallback: Try to load data without caching service
+            console.log('🔄 Fallback: Loading data without caching...');
+            try {
+                const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${teacherId.value}/assignments`);
+                const assignments = Array.isArray(response.data) ? response.data : (response.data.assignments || []);
+                const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
+                
+                if (assignments.length > 0) {
+                    // Find homeroom section
+                    const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
+                    
+                    if (homeroomSection) {
+                        // Extract subjects from all assignments for this teacher
+                        const allSubjects = [];
+                        assignments.forEach(assignment => {
+                            if (assignment.subjects && Array.isArray(assignment.subjects)) {
+                                allSubjects.push(...assignment.subjects);
+                            } else if (assignment.subject_name) {
+                                // Skip homeroom subjects - only include real academic subjects
+                                if (assignment.subject_name.toLowerCase() !== 'homeroom') {
+                                    allSubjects.push({
+                                        id: assignment.subject_id || assignment.id,
+                                        name: assignment.subject_name
+                                    });
+                                }
+                            }
+                        });
+                        
+                        teacherSections.value = [{
+                            id: homeroomSection.id,
+                            name: homeroomSection.name,
+                            homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
+                            subjects: allSubjects
+                        }];
+                        
+                        selectedSection.value = teacherSections.value[0];
+                        console.log('✅ Fallback: Auto-selected homeroom section:', selectedSection.value.name);
+                        console.log('✅ Fallback: Section subjects:', selectedSection.value.subjects);
+                    }
+                    
+                    allTeacherSections.value = assignments.map((assignment) => ({
+                        id: assignment.section_id,
+                        name: assignment.section_name,
+                        subjects: assignment.subjects || []
+                    }));
+                } else {
+                    throw new Error('No assignments found');
+                }
+            } catch (fallbackError) {
+                console.error('❌ Fallback also failed:', fallbackError);
+                toast.add({
+                    severity: 'warn',
+                    summary: 'No Sections Found',
+                    detail: 'No sections are assigned to any teacher. Please check the database setup.',
+                    life: 5000
+                });
+                teacherSections.value = [];
+                allTeacherSections.value = [];
+            }
         }
 
-        // Extract unique subjects from homeroom sections and add 'All Subjects' option
+        // Extract unique subjects from homeroom sections
         const subjectMap = new Map();
         teacherSections.value.forEach((section) => {
             section.subjects?.forEach((subject) => {
-                if (!subjectMap.has(subject.id)) {
+                // Additional filtering to exclude homeroom and ensure valid subjects
+                if (subject && subject.name && 
+                    subject.name.toLowerCase() !== 'homeroom' && 
+                    !subjectMap.has(subject.id)) {
                     subjectMap.set(subject.id, subject);
                 }
             });
         });
 
         const uniqueSubjects = Array.from(subjectMap.values());
-        // Add 'All Subjects' option at the beginning
-        subjects.value = [{ id: 'all', name: 'All Subjects' }, ...uniqueSubjects];
+        console.log('Unique subjects found:', uniqueSubjects);
+        
+        // Set subjects - only real academic subjects
+        subjects.value = uniqueSubjects;
+
+        // Auto-select the first real subject (not "All Subjects")
+        if (subjects.value.length > 0) {
+            selectedSubject.value = subjects.value[0];
+            console.log('Auto-selected subject:', selectedSubject.value.name);
+        }
 
         // Load available dates for the selected section if it exists
         if (selectedSection.value) {
             await loadAvailableDates();
-        }
-        if (subjects.value.length > 0) {
-            selectedSubject.value = subjects.value[0]; // This will be 'All Subjects'
         }
 
         // Load initial data if both section and subject are selected
@@ -990,7 +1108,19 @@ const loadAvailableDates = async () => {
 watch([selectedSection, selectedSubject, startDate, endDate], async () => {
     if (selectedSection.value && selectedSubject.value) {
         await loadAvailableDates();
-        loadAttendanceRecords();
+        await loadAttendanceRecords();
+    }
+});
+
+// Watch specifically for subject changes to reload data immediately
+watch(selectedSubject, async (newSubject, oldSubject) => {
+    if (newSubject && selectedSection.value && newSubject !== oldSubject) {
+        console.log('Subject changed to:', newSubject.name);
+        // Add small delay to prevent multiple rapid calls
+        if (loadingTimeout) clearTimeout(loadingTimeout);
+        loadingTimeout = setTimeout(async () => {
+            await loadAttendanceRecords();
+        }, 300);
     }
 });
 

@@ -487,8 +487,8 @@ onUnmounted(() => {
                         <template #header>
                             <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-t-lg">
                                 <div class="flex justify-between items-start">
-                                    <div>
-                                        <h4 class="font-semibold text-lg">{{ session.subject_name }}</h4>
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="font-semibold text-lg truncate" :title="session.subject_name">{{ session.subject_name }}</h4>
                                         <p class="text-blue-100 text-sm">{{ session.section_name }}</p>
                                     </div>
                                     <div class="text-right text-xs">

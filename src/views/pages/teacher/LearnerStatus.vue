@@ -19,6 +19,7 @@ const loading = ref(false);
 const students = ref([]);
 const currentView = ref('section');
 const searchQuery = ref('');
+const statusFilter = ref('all'); // New status filter
 const isSectionAdviser = ref(false);
 const teacherId = ref(null);
 const showEditDialog = ref(false);
@@ -47,18 +48,40 @@ const statusOptions = [
     { label: 'Transferred In', value: 'transferred_in' }
 ];
 
+// Filter options for the status dropdown
+const statusFilterOptions = [
+    { label: 'All Status', value: 'all' },
+    { label: 'Active', value: 'active' },
+    { label: 'Dropped Out', value: 'dropped_out' },
+    { label: 'Transferred Out', value: 'transferred_out' },
+    { label: 'Transferred In', value: 'transferred_in' }
+];
+
 const reasonOptions = computed(() => {
     const options = LearnerStatusService.getReasonOptions();
     return options[editForm.value.new_status] || [];
 });
 
 const filteredStudents = computed(() => {
-    if (!searchQuery.value) return students.value;
-    const query = searchQuery.value.toLowerCase();
-    return students.value.filter(s => 
-        s.name.toLowerCase().includes(query) ||
-        s.student_id.toLowerCase().includes(query)
-    );
+    let filtered = students.value;
+    
+    // Apply status filter
+    if (statusFilter.value !== 'all') {
+        filtered = filtered.filter(s => 
+            s.enrollment_status === statusFilter.value
+        );
+    }
+    
+    // Apply search filter
+    if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        filtered = filtered.filter(s => 
+            s.name.toLowerCase().includes(query) ||
+            s.student_id.toLowerCase().includes(query)
+        );
+    }
+    
+    return filtered;
 });
 
 const loadStudents = async () => {
@@ -174,14 +197,26 @@ onMounted(() => {
             <p class="text-gray-600">Manage student enrollment status</p>
         </div>
 
-        <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center gap-4 flex-wrap">
-            <div class="flex gap-2">
-                <Button v-for="view in viewOptions" :key="view.value" 
-                    :label="view.label" :icon="view.icon"
-                    :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
-                    @click="currentView = view.value; loadStudents()" />
+        <div class="bg-white p-4 rounded-lg shadow mb-4">
+            <div class="flex justify-between items-center gap-4 flex-wrap">
+                <div class="flex gap-2">
+                    <Button v-for="view in viewOptions" :key="view.value" 
+                        :label="view.label" :icon="view.icon"
+                        :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
+                        @click="currentView = view.value; loadStudents()" />
+                </div>
+                <div class="flex gap-2 items-center">
+                    <InputText v-model="searchQuery" placeholder="Search..." class="w-64" />
+                    <Dropdown 
+                        v-model="statusFilter" 
+                        :options="statusFilterOptions" 
+                        optionLabel="label" 
+                        optionValue="value"
+                        placeholder="Filter by Status"
+                        class="w-48"
+                    />
+                </div>
             </div>
-            <InputText v-model="searchQuery" placeholder="Search..." class="w-64" />
         </div>
 
         <div v-if="!isSectionAdviser" class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4 rounded">

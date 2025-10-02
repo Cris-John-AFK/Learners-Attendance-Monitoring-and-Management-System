@@ -448,7 +448,11 @@ onUnmounted(() => {
         clearInterval(refreshInterval);
     }
     // Clear indexed data to free memory
-    AttendanceIndexingService.clearAllIndexedData();
+    try {
+        AttendanceIndexingService.clearAllIndexedData();
+    } catch (error) {
+        console.warn('Error clearing indexed data:', error);
+    }
 });
 
 // Load teacher's subjects from real API assignments

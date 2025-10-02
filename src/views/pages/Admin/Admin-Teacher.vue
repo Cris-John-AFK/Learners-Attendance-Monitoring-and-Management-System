@@ -95,10 +95,6 @@
                                 <i class="pi pi-pencil"></i>
                                 <span>Edit</span>
                             </button>
-                            <button class="action-btn archive-btn" @click="archiveTeacher(teacher)" title="Archive Teacher">
-                                <i class="pi pi-archive"></i>
-                                <span>Archive</span>
-                            </button>
                         </div>
                         <div class="action-buttons-row">
                             <button class="action-btn assign-section-btn" @click="assignSection(teacher)" title="Assign Section">
@@ -3188,42 +3184,6 @@ const handleSubjectAdded = async (teacherId) => {
     });
 };
 
-const confirmArchiveTeacher = (teacher) => {
-    confirm.require({
-        message: `Are you sure you want to archive ${teacher.first_name} ${teacher.last_name}?`,
-        header: 'Confirm Archive',
-        icon: 'pi pi-exclamation-triangle',
-        acceptClass: 'p-button-danger',
-        accept: () => archiveTeacher(teacher),
-        reject: () => {
-            // Do nothing if rejected
-        }
-    });
-};
-
-const archiveTeacher = async (teacher) => {
-    try {
-        loading.value = true;
-        const response = await axios.put(`${API_BASE_URL}/teachers/${teacher.id}/archive`);
-        toast.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Teacher archived successfully',
-            life: 3000
-        });
-        await loadTeachers();
-    } catch (error) {
-        console.error('Error archiving teacher:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: `Failed to archive teacher: ${error.message}`,
-            life: 5000
-        });
-    } finally {
-        loading.value = false;
-    }
-};
 </script>
 
 <style scoped>
@@ -3629,15 +3589,6 @@ const archiveTeacher = async (teacher) => {
     transform: translateY(-1px);
 }
 
-.archive-btn {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    color: white;
-}
-
-.archive-btn:hover {
-    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-    transform: translateY(-1px);
-}
 
 .assign-section-btn {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);

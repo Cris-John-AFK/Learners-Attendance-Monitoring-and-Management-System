@@ -5,7 +5,7 @@ import AdminMenuItem from './AdminMenuItem.vue';
 const model = ref([
     {
         label: 'Home',
-        items: [{ label: 'Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin' }]
+        items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-chart-line', to: '/admin' }]
     },
     {
         label: 'Manage',
@@ -17,9 +17,6 @@ const model = ref([
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
             { label: 'Enrollment', icon: 'pi pi-fw pi-user-edit', to: '/admin-enrollment' }
         ]
-    },
-    {
-        items: [{ label: 'Archive', icon: 'pi pi-fw pi-undo', to: '/archive' }]
     }
 ]);
 </script>
