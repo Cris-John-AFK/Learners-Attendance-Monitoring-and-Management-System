@@ -47,18 +47,16 @@ class AttendanceSessionController extends Controller
 
             Log::info("Section name retrieved", ['section_id' => $sectionId, 'section_name' => $sectionName]);
 
-            // Get all active students in the section
+            // Get all active students in the section - ONLY from pivot table
             $students = DB::table('student_details as sd')
-                ->leftJoin('student_section as ss', function($join) use ($sectionId) {
+                ->join('student_section as ss', function($join) use ($sectionId) {
                     $join->on('sd.id', '=', 'ss.student_id')
-                         ->where('ss.section_id', '=', $sectionId);
+                         ->where('ss.section_id', '=', $sectionId)
+                         ->where('ss.is_active', '=', 1);
                 })
-                ->leftJoin('sections as s', 'ss.section_id', '=', 's.id')
-                ->where(function($query) use ($sectionId, $sectionName) {
-                    // Get students either through pivot table or direct section field
-                    $query->where('ss.section_id', $sectionId)
-                          ->orWhere('sd.section', $sectionName);
-                })
+                ->join('sections as s', 'ss.section_id', '=', 's.id')
+                ->whereIn('sd.enrollment_status', ['active', 'enrolled'])
+                ->orWhereNull('sd.enrollment_status')
                 ->select([
                     'sd.id',
                     'sd.firstName as first_name',
@@ -69,7 +67,7 @@ class AttendanceSessionController extends Controller
                     'sd.gender',
                     'sd.age',
                     'sd.status',
-                    DB::raw("COALESCE(s.name, sd.section) as section_name")
+                    's.name as section_name'
                 ])
                 ->distinct()
                 ->orderBy('sd.lastName')

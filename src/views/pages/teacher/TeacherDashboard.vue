@@ -593,12 +593,10 @@ async function loadAttendanceData() {
 
             // Update studentsWithAbsenceIssues for the template
             // Use summary students if available, otherwise fall back to studentsResponse
-            const studentsData = (summaryResponse.data.students && summaryResponse.data.students.length > 0) 
-                ? summaryResponse.data.students 
-                : (studentsResponse.data || []);
-            
+            const studentsData = summaryResponse.data.students && summaryResponse.data.students.length > 0 ? summaryResponse.data.students : studentsResponse.data || [];
+
             console.log('📋 Students data for display:', studentsData);
-            
+
             studentsWithAbsenceIssues.value = studentsData.map((student) => ({
                 id: student.student_id || student.id,
                 name: student.name || `${student.firstName} ${student.lastName}`,
@@ -1429,7 +1427,7 @@ async function showStudentProfile(student) {
                             <div class="mr-4 bg-green-100 p-3 rounded-lg">
                                 <i class="pi pi-check-circle text-green-600 text-xl"></i>
                             </div>
-                            <div class="flex-1">
+                            <div class="flex-1 p-2">
                                 <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
                                 <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
                             </div>

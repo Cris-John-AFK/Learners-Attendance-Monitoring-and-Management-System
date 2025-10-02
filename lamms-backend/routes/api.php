@@ -294,6 +294,7 @@ Route::prefix('subject-schedules')->group(function () {
     Route::get('/available-slots', [App\Http\Controllers\API\SubjectScheduleController::class, 'getAvailableTimeSlots']);
     Route::post('/check-conflict', [App\Http\Controllers\API\SubjectScheduleController::class, 'checkTimeConflict']);
     Route::post('/save', [App\Http\Controllers\API\SubjectScheduleController::class, 'saveSchedule']);
+    Route::post('/teacher/{teacherId}/remove-duplicates', [App\Http\Controllers\API\SubjectScheduleController::class, 'removeDuplicates']);
     Route::delete('/{id}', [App\Http\Controllers\API\SubjectScheduleController::class, 'deleteSchedule']);
 });
 

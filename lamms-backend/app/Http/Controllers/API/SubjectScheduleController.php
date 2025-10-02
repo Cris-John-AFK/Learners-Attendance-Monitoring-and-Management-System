@@ -281,6 +281,61 @@ class SubjectScheduleController extends Controller
     }
 
     /**
+     * Remove duplicate schedules for a teacher
+     */
+    public function removeDuplicates($teacherId)
+    {
+        try {
+            // Find all schedules for this teacher
+            $schedules = DB::table('subject_schedules')
+                ->where('teacher_id', $teacherId)
+                ->whereNull('deleted_at')
+                ->orderBy('created_at')
+                ->get();
+            
+            Log::info("Found {$schedules->count()} total schedules for teacher $teacherId");
+            
+            // Group by unique combination
+            $groups = [];
+            foreach ($schedules as $schedule) {
+                $key = "{$schedule->section_id}_{$schedule->subject_id}_{$schedule->day}_{$schedule->start_time}_{$schedule->end_time}";
+                if (!isset($groups[$key])) {
+                    $groups[$key] = [];
+                }
+                $groups[$key][] = $schedule->id;
+            }
+            
+            // Delete duplicates (keep first, delete rest)
+            $deletedCount = 0;
+            foreach ($groups as $key => $ids) {
+                if (count($ids) > 1) {
+                    // Keep first ID, delete the rest
+                    $idsToDelete = array_slice($ids, 1);
+                    foreach ($idsToDelete as $id) {
+                        DB::table('subject_schedules')->where('id', $id)->delete();
+                        $deletedCount++;
+                    }
+                }
+            }
+            
+            Log::info("Removed $deletedCount duplicate schedules for teacher $teacherId");
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Removed $deletedCount duplicate schedules",
+                'deleted_count' => $deletedCount
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error removing duplicates: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error removing duplicates: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Check for time conflicts
      */
     private function checkTimeConflict($sectionId, $day, $startTime, $endTime, $excludeId = null)
