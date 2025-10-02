@@ -7,10 +7,51 @@ use App\Models\Curriculum;
 use App\Models\CurriculumGrade;
 use App\Models\Grade;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CurriculumGradeController extends Controller
 {
+    /**
+     * Get all curriculum-grade relationships with grade info
+     */
+    public function index()
+    {
+        try {
+            $curriculumGrades = DB::table('curriculum_grade as cg')
+                ->join('grades as g', 'cg.grade_id', '=', 'g.id')
+                ->select(
+                    'cg.id',
+                    'cg.curriculum_id',
+                    'cg.grade_id',
+                    'g.name',
+                    'g.level',
+                    'g.code'
+                )
+                ->get()
+                ->map(function($cg) {
+                    return [
+                        'id' => $cg->id,
+                        'curriculum_id' => $cg->curriculum_id,
+                        'grade_id' => $cg->grade_id,
+                        'grade' => [
+                            'id' => $cg->grade_id,
+                            'name' => $cg->name,
+                            'level' => $cg->level,
+                            'code' => $cg->code
+                        ]
+                    ];
+                });
+
+            return response()->json($curriculumGrades);
+        } catch (\Exception $e) {
+            Log::error('Error fetching curriculum grades: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to load curriculum grades: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     /**
      * Get a specific curriculum grade by curriculum and grade IDs
      */

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Models\Subject;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -41,43 +43,42 @@ class TeacherController extends Controller
                                 'name' => $homeroomSection->name,
                                 'grade' => $this->getGradeFromSection($homeroomSection)
                             ],
-                            'subject' => [
-                                'id' => null,
-                                'name' => 'Homeroom'
-                            ]
+                            // NO subject key - homeroom is not a subject, it's a section assignment
                         ];
                     }
                     
                     // Then process regular subject assignments
                     foreach ($teacher->assignments as $assignment) {
-                        // If no homeroom assignment found, check for primary role assignments
-                        if (!$primaryAssignment && ($assignment->role === 'homeroom_teacher' || $assignment->role === 'primary')) {
-                            $primaryAssignment = [
-                                'id' => $assignment->id,
-                                'section' => [
-                                    'id' => $assignment->section->id,
-                                    'name' => $assignment->section->name,
-                                    'grade' => $this->getGradeFromSection($assignment->section)
-                                ],
-                                'subject' => [
-                                    'id' => $assignment->subject->id ?? null,
-                                    'name' => $assignment->subject->name ?? 'Homeroom'
-                                ]
-                            ];
-                        } else {
-                            $subjectAssignments[] = [
-                                'id' => $assignment->id,
-                                'section' => [
-                                    'id' => $assignment->section->id,
-                                    'name' => $assignment->section->name,
-                                    'grade' => $this->getGradeFromSection($assignment->section)
-                                ],
-                                'subject' => [
-                                    'id' => $assignment->subject->id ?? null,
-                                    'name' => $assignment->subject->name ?? 'N/A'
-                                ]
-                            ];
+                        // Skip null subject_id (homeroom) assignments - they don't represent subjects
+                        if (!$assignment->subject_id) {
+                            // If this is a homeroom assignment and we don't have primary yet
+                            if (!$primaryAssignment && $assignment->role === 'homeroom') {
+                                $primaryAssignment = [
+                                    'id' => $assignment->id,
+                                    'section' => [
+                                        'id' => $assignment->section->id,
+                                        'name' => $assignment->section->name,
+                                        'grade' => $this->getGradeFromSection($assignment->section)
+                                    ],
+                                    // NO subject key for homeroom - it's just a section assignment
+                                ];
+                            }
+                            continue; // Skip adding to subject_assignments
                         }
+                        
+                        // Only add actual subject assignments (with subject_id)
+                        $subjectAssignments[] = [
+                            'id' => $assignment->id,
+                            'section' => [
+                                'id' => $assignment->section->id,
+                                'name' => $assignment->section->name,
+                                'grade' => $this->getGradeFromSection($assignment->section)
+                            ],
+                            'subject' => [
+                                'id' => $assignment->subject->id,
+                                'name' => $assignment->subject->name
+                            ]
+                        ];
                     }
 
                     return [
@@ -452,6 +453,43 @@ class TeacherController extends Controller
                 $assignmentsToUpdate[] = $assignment;
                 $processedIds[] = $existingAssignment->id;
             } else {
+                // CRITICAL: Check if another teacher is already assigned to this subject in this section
+                if ($assignment['subject_id']) { // Only check for non-null subjects
+                    $conflictingAssignment = TeacherSectionSubject::where('section_id', $assignment['section_id'])
+                        ->where('subject_id', $assignment['subject_id'])
+                        ->where('is_active', true)
+                        ->where('teacher_id', '!=', $teacher->id)
+                        ->first();
+
+                    if ($conflictingAssignment) {
+                        // Another teacher is already teaching this subject in this section
+                        $currentTeacher = Teacher::find($conflictingAssignment->teacher_id);
+                        $currentTeacherName = $currentTeacher 
+                            ? "{$currentTeacher->first_name} {$currentTeacher->last_name}" 
+                            : "Teacher ID {$conflictingAssignment->teacher_id}";
+                        
+                        $subject = Subject::find($assignment['subject_id']);
+                        $section = Section::find($assignment['section_id']);
+                        $subjectName = $subject ? $subject->name : "Subject ID {$assignment['subject_id']}";
+                        $sectionName = $section ? $section->name : "Section ID {$assignment['section_id']}";
+                        
+                        Log::warning("Cannot assign {$subjectName} in section {$sectionName} to teacher {$teacher->id}: Already assigned to {$conflictingAssignment->teacher_id}");
+                        
+                        DB::rollBack();
+                        
+                        return response()->json([
+                            'success' => false,
+                            'message' => "{$currentTeacherName} is already teaching {$subjectName} in {$sectionName}. Only one teacher can teach a subject per section. Please remove them first or choose a different subject.",
+                            'current_teacher' => [
+                                'id' => $conflictingAssignment->teacher_id,
+                                'name' => $currentTeacherName
+                            ],
+                            'subject_name' => $subjectName,
+                            'section_name' => $sectionName
+                        ], 409); // 409 Conflict
+                    }
+                }
+                
                 // Create new assignment
                 $assignment['teacher_id'] = $teacher->id;
                 $assignmentsToCreate[] = $assignment;
@@ -597,6 +635,95 @@ class TeacherController extends Controller
             return response()->json(['message' => 'Password reset flag set successfully']);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to set password reset flag: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Assign a section to a teacher as homeroom teacher
+     */
+    public function assignSection(Request $request, Teacher $teacher)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'section_id' => 'required|exists:sections,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            DB::beginTransaction();
+
+            $sectionId = $request->section_id;
+
+            Log::info("Assigning section {$sectionId} to teacher {$teacher->id} as homeroom teacher");
+
+            // CRITICAL: Check if section already has a homeroom teacher
+            $section = DB::table('sections')->where('id', $sectionId)->first();
+            
+            if ($section->homeroom_teacher_id && $section->homeroom_teacher_id != $teacher->id) {
+                // Section already has a different homeroom teacher
+                $currentTeacher = DB::table('teachers')
+                    ->where('id', $section->homeroom_teacher_id)
+                    ->first();
+                
+                $currentTeacherName = $currentTeacher 
+                    ? "{$currentTeacher->first_name} {$currentTeacher->last_name}" 
+                    : "Teacher ID {$section->homeroom_teacher_id}";
+                
+                Log::warning("Cannot assign section {$sectionId} to teacher {$teacher->id}: Section already has homeroom teacher {$section->homeroom_teacher_id}");
+                
+                DB::rollBack();
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => "This section already has a homeroom teacher ({$currentTeacherName}). Please remove them first before assigning a new homeroom teacher.",
+                    'current_teacher' => [
+                        'id' => $section->homeroom_teacher_id,
+                        'name' => $currentTeacherName
+                    ]
+                ], 409); // 409 Conflict
+            }
+
+            // Update the section's homeroom_teacher_id
+            DB::table('sections')
+                ->where('id', $sectionId)
+                ->update(['homeroom_teacher_id' => $teacher->id]);
+
+            // Also create/update the teacher_section_subject record for homeroom
+            DB::table('teacher_section_subject')->updateOrInsert(
+                [
+                    'teacher_id' => $teacher->id,
+                    'section_id' => $sectionId,
+                    'subject_id' => null,
+                ],
+                [
+                    'is_primary' => true,
+                    'is_active' => true,
+                    'role' => 'homeroom'
+                ]
+            );
+
+            Log::info("Successfully assigned teacher {$teacher->id} as homeroom teacher for section {$sectionId}");
+
+            DB::commit();
+
+            // Reload the teacher with fresh data
+            $teacher->refresh();
+            $teacher->load(['user', 'assignments.section', 'assignments.subject']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Section assigned successfully',
+                'teacher' => $teacher
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error assigning section to teacher: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign section: ' . $e->getMessage()
+            ], 500);
         }
     }
 

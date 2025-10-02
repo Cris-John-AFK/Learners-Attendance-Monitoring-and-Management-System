@@ -252,6 +252,34 @@ class SectionController extends Controller
             $section = Section::findOrFail($sectionId);
             $subject = Subject::findOrFail($subjectId);
 
+            // CRITICAL: Check if another teacher is already assigned to this subject in this section
+            $existingAssignment = TeacherSectionSubject::where('section_id', $sectionId)
+                ->where('subject_id', $subjectId)
+                ->where('is_active', true)
+                ->where('teacher_id', '!=', $validated['teacher_id'])
+                ->first();
+
+            if ($existingAssignment) {
+                // Another teacher is already teaching this subject in this section
+                $currentTeacher = Teacher::find($existingAssignment->teacher_id);
+                $currentTeacherName = $currentTeacher 
+                    ? "{$currentTeacher->first_name} {$currentTeacher->last_name}" 
+                    : "Teacher ID {$existingAssignment->teacher_id}";
+                
+                Log::warning("Cannot assign subject {$subjectId} in section {$sectionId} to teacher {$validated['teacher_id']}: Already assigned to {$existingAssignment->teacher_id}");
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => "{$currentTeacherName} is already teaching {$subject->name} in this section. Only one teacher can teach a subject per section. Please remove them first or choose a different subject.",
+                    'current_teacher' => [
+                        'id' => $existingAssignment->teacher_id,
+                        'name' => $currentTeacherName
+                    ],
+                    'subject_name' => $subject->name,
+                    'section_name' => $section->name
+                ], 409); // 409 Conflict
+            }
+
             // First, ensure the subject is added to the section_subject table
             $section->directSubjects()->syncWithoutDetaching([$subjectId]);
 
@@ -274,6 +302,7 @@ class SectionController extends Controller
 
             // Return the updated assignment with related data
             return response()->json([
+                'success' => true,
                 'message' => 'Teacher assigned to subject successfully',
                 'data' => [
                     'teacher_id' => $validated['teacher_id'],
@@ -285,6 +314,7 @@ class SectionController extends Controller
         } catch (\Exception $e) {
             Log::error("Error assigning teacher to subject: " . $e->getMessage());
             return response()->json([
+                'success' => false,
                 'message' => 'Failed to assign teacher to subject',
                 'error' => $e->getMessage()
             ], 500);

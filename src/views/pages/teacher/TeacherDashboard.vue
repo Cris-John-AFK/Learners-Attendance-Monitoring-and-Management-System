@@ -172,8 +172,8 @@ let refreshInterval;
 const initializeTeacherData = async () => {
     try {
         // Wait a bit for auth data to be fully saved (race condition fix)
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         // Check if teacher is authenticated
         if (!TeacherAuthService.isAuthenticated()) {
             // Redirect to unified login if not authenticated
@@ -185,14 +185,22 @@ const initializeTeacherData = async () => {
         // Get authenticated teacher data
         const teacherData = TeacherAuthService.getTeacherData();
         if (teacherData) {
+            // Get section from homeroom_section first, then fallback to assignments
+            let sectionName = 'No section assigned';
+            if (teacherData.teacher?.homeroom_section) {
+                sectionName = teacherData.teacher.homeroom_section.name;
+            } else if (teacherData.assignments && teacherData.assignments.length > 0) {
+                sectionName = teacherData.assignments.find((a) => a.section_name)?.section_name || 'No section assigned';
+            }
+
             currentTeacher.value = {
                 id: teacherData.teacher.id,
                 name: teacherData.teacher.full_name || `${teacherData.teacher.first_name} ${teacherData.teacher.last_name}`,
                 email: teacherData.user.email,
-                section: teacherData.assignments.find((a) => a.section_name)?.section_name || 'No section assigned',
+                section: sectionName,
+                homeroom_section: teacherData.teacher?.homeroom_section || null,
                 assignedGrades: []
             };
-
             // Get unique subjects from assignments with correct section IDs
             const assignments = TeacherAuthService.getAssignments();
             const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
@@ -200,11 +208,14 @@ const initializeTeacherData = async () => {
             availableSubjects.value = uniqueSubjects.map((subject) => {
                 // Find the assignment for this subject to get the correct section ID
                 const assignment = assignments.find((a) => a.subject_id === subject.id);
+                // Safe access to sections array with fallback
+                const sections = subject.sections || [];
+                const firstSection = sections[0] || {};
                 return {
                     id: subject.id,
                     name: subject.name,
-                    grade: subject.sections[0]?.grade || 'Unknown',
-                    sectionId: assignment?.section_id || subject.sections[0]?.id,
+                    grade: subject.grade || firstSection.grade || 'Unknown',
+                    sectionId: assignment?.section_id || subject.sectionId || firstSection.id,
                     originalSubject: { id: subject.id, name: subject.name },
                     assignment: assignment
                 };
@@ -213,6 +224,11 @@ const initializeTeacherData = async () => {
             // Set default selected subject
             if (availableSubjects.value.length > 0) {
                 selectedSubject.value = availableSubjects.value[0];
+                viewType.value = 'subject'; // Has subjects, use subject view
+            } else if (currentTeacher.value.homeroom_section) {
+                // Homeroom-only teacher, switch to all students view
+                viewType.value = 'all_students';
+                console.log('🏠 Homeroom-only teacher detected, switching to All Students view');
             }
 
             console.log('Teacher data loaded:', currentTeacher.value);
@@ -408,7 +424,7 @@ async function loadTeacherSubjects() {
                         id: subject.subject_id,
                         name: subject.subject_name,
                         grade: `Grade 3`, // Default grade for now
-                        sectionId: sectionId,
+
                         sectionName: sectionName,
                         role: subject.role,
                         isPrimary: subject.is_primary,
@@ -486,16 +502,29 @@ function handleFallbackData() {
 
 // Load attendance data for the selected subject with caching
 async function loadAttendanceData() {
-    if (!selectedSubject.value || !currentTeacher.value) return;
+    if (!currentTeacher.value) return;
 
-    console.log('Loading attendance data for subject:', selectedSubject.value);
+    // Support homeroom-only teachers (no subjects)
+    let sectionId, subjectId;
+    if (selectedSubject.value) {
+        console.log('Loading attendance data for subject:', selectedSubject.value);
+        sectionId = selectedSubject.value.sectionId;
+        subjectId = selectedSubject.value.id;
+    } else if (currentTeacher.value.homeroom_section) {
+        // Homeroom-only teacher
+        console.log('Loading attendance data for homeroom section:', currentTeacher.value.homeroom_section);
+        sectionId = currentTeacher.value.homeroom_section.id;
+        subjectId = null;
+    } else {
+        console.warn('No subject or homeroom section found for teacher');
+        return;
+    }
 
     try {
-        const sectionId = selectedSubject.value.sectionId;
         const params = {
             teacherId: currentTeacher.value.id,
             sectionId: sectionId,
-            subjectId: selectedSubject.value.id
+            subjectId: subjectId
         };
 
         // Cache key for this specific data request (include viewType to separate caches)
@@ -563,19 +592,26 @@ async function loadAttendanceData() {
             attendanceSummary.value = summary;
 
             // Update studentsWithAbsenceIssues for the template
-            studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
-                id: student.student_id,
-                name: student.name,
-                gradeLevel: student.grade_name || 'Unknown Grade',
-                section: student.section_name || `Section ${student.section_id}`,
-                absences: student.total_absences,
-                severity: student.severity,
-                attendanceRate: student.attendance_rate,
-                totalPresent: student.total_present,
-                totalLate: student.total_late
+            // Use summary students if available, otherwise fall back to studentsResponse
+            const studentsData = (summaryResponse.data.students && summaryResponse.data.students.length > 0) 
+                ? summaryResponse.data.students 
+                : (studentsResponse.data || []);
+            
+            console.log('📋 Students data for display:', studentsData);
+            
+            studentsWithAbsenceIssues.value = studentsData.map((student) => ({
+                id: student.student_id || student.id,
+                name: student.name || `${student.firstName} ${student.lastName}`,
+                gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+                section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
+                absences: student.total_absences || 0,
+                severity: student.severity || 'normal',
+                attendanceRate: student.attendance_rate || 100,
+                totalPresent: student.total_present || 0,
+                totalLate: student.total_late || 0
             }));
 
-            console.log('✅ Attendance data loaded and cached');
+            console.log('✅ Attendance data loaded and cached. Students:', studentsWithAbsenceIssues.value.length);
         }
     } catch (error) {
         console.error('Error loading attendance data:', error);
@@ -993,10 +1029,10 @@ function formatDateShort(date) {
 async function openStudentProfile(student) {
     selectedStudent.value = student;
     profileSubjectFilter.value = null; // Reset filter
-    
+
     // Load available subjects for this teacher
     profileAvailableSubjects.value = availableSubjects.value || [];
-    
+
     await prepareCalendarData(student);
     studentProfileVisible.value = true;
 }
@@ -1012,7 +1048,7 @@ async function onProfileSubjectChange() {
 // Prepare calendar data for the student profile using StudentAttendanceService
 async function prepareCalendarData(student) {
     if (!student) return;
-    
+
     // Use profileSubjectFilter if set, otherwise use selectedSubject
     const subjectToUse = profileSubjectFilter.value || selectedSubject.value?.id;
     if (!subjectToUse) return;
@@ -1041,25 +1077,28 @@ async function prepareCalendarData(student) {
 
         // Find absent days for the absence history section (include both ABSENT and EXCUSED with status)
         absentDays.value = records
-            .filter((record) => record.status === 'ABSENT' || record.status === 'EXCUSED')
+            .filter((record) => record.status === 'ABSENT' || record.status === 'EXCUSED' || record.status === 'LATE')
             .map((record) => ({
                 date: new Date(record.date),
                 status: record.status,
                 time: record.time || 'N/A',
-                recordId: record.id
+                recordId: record.id,
+                reason: record.reason,
+                reason_notes: record.reason_notes,
+                reason_description: record.reason_description
             }));
-        
+
         console.log('📋 Absence History Records:', absentDays.value);
 
         // Create a map of dates to attendance status for calendar display
         // Use priority: ABSENT > EXCUSED > LATE > PRESENT
         const statusPriority = {
-            'ABSENT': 4,
-            'EXCUSED': 3,
-            'LATE': 2,
-            'PRESENT': 1
+            ABSENT: 4,
+            EXCUSED: 3,
+            LATE: 2,
+            PRESENT: 1
         };
-        
+
         const attendanceMap = {};
         records.forEach((record) => {
             const date = new Date(record.date);
@@ -1076,7 +1115,7 @@ async function prepareCalendarData(student) {
                 const currentStatus = attendanceMap[day];
                 const currentPriority = statusPriority[currentStatus] || 0;
                 const newPriority = statusPriority[record.status] || 0;
-                
+
                 if (newPriority > currentPriority) {
                     attendanceMap[day] = record.status;
                     console.log(`✅ Updated day ${day} to status ${record.status} (priority ${newPriority} > ${currentPriority})`);
@@ -1207,7 +1246,27 @@ function formatDate(date) {
         weekday: 'short',
         month: 'short',
         day: 'numeric'
-    }).format(date);
+    }).format(new Date(date));
+}
+
+// Format grade level (don't add "Grade" prefix to Kindergarten or if already has "Grade")
+function formatGradeLevel(gradeLevel) {
+    if (!gradeLevel) return 'Unknown';
+
+    const grade = String(gradeLevel);
+
+    // If it's Kindergarten or Kinder, return as-is
+    if (grade.toLowerCase().includes('kinder')) {
+        return grade;
+    }
+
+    // If it already starts with "Grade", return as-is
+    if (grade.startsWith('Grade ')) {
+        return grade;
+    }
+
+    // Otherwise, add "Grade" prefix for numbers
+    return `Grade ${grade}`;
 }
 
 // Add function to apply date filter
@@ -1352,76 +1411,76 @@ async function showStudentProfile(student) {
                 <div class="lg:col-span-3">
                     <ScheduleStatusWidget />
                 </div>
-                
+
                 <!-- Attendance Stats Cards -->
                 <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                    <div class="mr-4 bg-blue-100 p-3 rounded-lg">
-                        <i class="pi pi-users text-blue-600 text-xl"></i>
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                        <div class="mr-4 bg-blue-100 p-3 rounded-lg">
+                            <i class="pi pi-users text-blue-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
+                            <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
-                        <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
-                    </div>
-                </div>
 
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
-                    <div class="flex items-center mb-3">
-                        <div class="mr-4 bg-green-100 p-3 rounded-lg">
-                            <i class="pi pi-check-circle text-green-600 text-xl"></i>
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center mb-3">
+                            <div class="mr-4 bg-green-100 p-3 rounded-lg">
+                                <i class="pi pi-check-circle text-green-600 text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                                <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
+                            </div>
                         </div>
-                        <div class="flex-1">
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
-                            <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
-                        </div>
-                    </div>
-                    <!-- Progress bar at bottom -->
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
-                            <div
-                                class="h-2.5 rounded-full transition-all duration-500"
+                        <!-- Progress bar at bottom -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
+                                <div
+                                    class="h-2.5 rounded-full transition-all duration-500"
+                                    :class="{
+                                        'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                        'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                        'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                        'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
+                                    }"
+                                    :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
+                                ></div>
+                            </div>
+                            <span
+                                class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
                                 :class="{
-                                    'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                    'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                    'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                    'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
+                                    'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
+                                    'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                    'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
+                                    'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
                                 }"
-                                :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
-                            ></div>
+                            >
+                                {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
+                            </span>
                         </div>
-                        <span
-                            class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
-                            :class="{
-                                'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
-                            }"
-                        >
-                            {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
-                        </span>
                     </div>
-                </div>
 
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                    <div class="mr-4 bg-yellow-100 p-3 rounded-lg">
-                        <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                        <div class="mr-4 bg-yellow-100 p-3 rounded-lg">
+                            <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
+                            <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
-                        <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
-                    </div>
-                </div>
 
-                <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                    <div class="mr-4 bg-red-100 p-3 rounded-lg">
-                        <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                        <div class="mr-4 bg-red-100 p-3 rounded-lg">
+                            <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">🚨 18+ Absences (Smart Detection)</div>
+                            <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="text-sm text-gray-500 mb-1 font-medium">🚨 18+ Absences (Smart Detection)</div>
-                        <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
-                    </div>
-                </div>
                 </div>
             </div>
 
@@ -1469,7 +1528,7 @@ async function showStudentProfile(student) {
                             </div>
                         </div>
 
-                        <div v-if="viewType === 'subject' && !selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                        <div v-if="viewType === 'subject' && !selectedSubject && !currentTeacher?.homeroom_section" class="flex flex-col items-center justify-center py-12 text-gray-500">
                             <i class="pi pi-chart-bar text-4xl mb-3 text-gray-300"></i>
                             <p class="font-normal">Please select a subject above to view attendance trends</p>
                         </div>
@@ -1554,7 +1613,7 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
 
-                <div v-if="!selectedSubject" class="flex flex-col items-center justify-center py-12 text-gray-500">
+                <div v-if="!selectedSubject && !currentTeacher?.homeroom_section" class="flex flex-col items-center justify-center py-12 text-gray-500">
                     <i class="pi pi-users text-4xl mb-3 text-gray-300"></i>
                     <p class="font-normal">Please select a subject to view student attendance</p>
                 </div>
@@ -1601,7 +1660,7 @@ async function showStudentProfile(student) {
 
                     <Column field="gradeLevel" header="Grade" style="width: 100px">
                         <template #body="slotProps">
-                            <span class="text-sm">Grade {{ slotProps.data.gradeLevel }}</span>
+                            <span class="text-sm">{{ formatGradeLevel(slotProps.data.gradeLevel) }}</span>
                         </template>
                     </Column>
 
@@ -1729,38 +1788,38 @@ async function showStudentProfile(student) {
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2">
                             <label for="profile-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
-                            <Dropdown 
+                            <Dropdown
                                 id="profile-subject-filter"
-                                v-model="profileSubjectFilter" 
+                                v-model="profileSubjectFilter"
                                 :options="profileAvailableSubjects"
                                 optionLabel="name"
                                 optionValue="id"
                                 placeholder="All Subjects"
                                 @change="onProfileSubjectChange"
                                 showClear
-                                style="min-width: 150px;"
+                                style="min-width: 150px"
                             />
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="flex items-center space-x-4 text-xs mb-3">
-                        <div class="flex items-center space-x-1">
-                            <div class="w-3 h-3 bg-red-100 border border-red-200 rounded-full"></div>
-                            <span class="text-gray-600">Absent</span>
-                        </div>
-                        <div class="flex items-center space-x-1">
-                            <div class="w-3 h-3 bg-blue-100 border border-blue-200 rounded-full"></div>
-                            <span class="text-gray-600">Excused</span>
-                        </div>
-                        <div class="flex items-center space-x-1">
-                            <div class="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded-full"></div>
-                            <span class="text-gray-600">Late</span>
-                        </div>
-                        <div class="flex items-center space-x-1">
-                            <div class="w-3 h-3 bg-green-100 border border-green-200 rounded-full"></div>
-                            <span class="text-gray-600">Present</span>
-                        </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-red-100 border border-red-200 rounded-full"></div>
+                        <span class="text-gray-600">Absent</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-blue-100 border border-blue-200 rounded-full"></div>
+                        <span class="text-gray-600">Excused</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded-full"></div>
+                        <span class="text-gray-600">Late</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <div class="w-3 h-3 bg-green-100 border border-green-200 rounded-full"></div>
+                        <span class="text-gray-600">Present</span>
+                    </div>
                 </div>
 
                 <div class="calendar-view mb-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
@@ -1820,21 +1879,23 @@ async function showStudentProfile(student) {
                 <h4 class="font-medium mb-3">Absence History</h4>
                 <div class="absence-history">
                     <div v-if="absentDays.length > 0" class="space-y-3">
-                        <div 
-                            v-for="day in absentDays" 
-                            :key="day.recordId || Math.random()" 
+                        <div
+                            v-for="day in absentDays"
+                            :key="day.recordId || Math.random()"
                             class="p-3 border-l-4 rounded-r-lg flex justify-between items-center"
                             :class="{
                                 'border-red-500 bg-red-50': day.status === 'ABSENT',
-                                'border-blue-500 bg-blue-50': day.status === 'EXCUSED'
+                                'border-blue-500 bg-blue-50': day.status === 'EXCUSED',
+                                'border-yellow-500 bg-yellow-50': day.status === 'LATE'
                             }"
                         >
                             <div class="flex items-center">
-                                <i 
+                                <i
                                     class="mr-2"
                                     :class="{
                                         'pi pi-times-circle text-red-500': day.status === 'ABSENT',
-                                        'pi pi-info-circle text-blue-500': day.status === 'EXCUSED'
+                                        'pi pi-info-circle text-blue-500': day.status === 'EXCUSED',
+                                        'pi pi-clock text-yellow-500': day.status === 'LATE'
                                     }"
                                 ></i>
                                 <div>
@@ -1842,14 +1903,15 @@ async function showStudentProfile(student) {
                                     <span v-if="day.time && day.time !== 'N/A'" class="text-xs text-gray-500 ml-2">({{ day.time }})</span>
                                 </div>
                             </div>
-                            <span 
+                            <span
                                 class="text-sm px-2 py-1 bg-white rounded-full font-medium"
                                 :class="{
                                     'text-red-600': day.status === 'ABSENT',
-                                    'text-blue-600': day.status === 'EXCUSED'
+                                    'text-blue-600': day.status === 'EXCUSED',
+                                    'text-yellow-600': day.status === 'LATE'
                                 }"
                             >
-                                {{ day.status === 'EXCUSED' ? 'Excused' : 'Unexcused' }}
+                                {{ day.status === 'EXCUSED' ? 'Excused' : day.status === 'LATE' ? 'Late' : 'Unexcused' }}
                             </span>
                         </div>
                     </div>
@@ -1936,11 +1998,7 @@ async function showStudentProfile(student) {
                                 </p>
                             </div>
                         </div>
-                        <Tag :value="selectedDayDetails.status" :severity="
-                            selectedDayDetails.status === 'ABSENT' ? 'danger' : 
-                            selectedDayDetails.status === 'EXCUSED' ? 'info' :
-                            selectedDayDetails.status === 'LATE' ? 'warning' : 'success'
-                        " />
+                        <Tag :value="selectedDayDetails.status" :severity="selectedDayDetails.status === 'ABSENT' ? 'danger' : selectedDayDetails.status === 'EXCUSED' ? 'info' : selectedDayDetails.status === 'LATE' ? 'warning' : 'success'" />
                     </div>
                 </div>
 

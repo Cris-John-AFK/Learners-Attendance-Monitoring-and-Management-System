@@ -44,7 +44,17 @@ class StudentStatusController extends Controller
                 ])
             ]);
 
-            if ($assignments->isEmpty()) {
+            // CRITICAL: Check if teacher is homeroom teacher for any section
+            $homeroomSectionIds = DB::table('sections')
+                ->where('homeroom_teacher_id', $teacherId)
+                ->pluck('id');
+            
+            Log::info('Homeroom sections:', [
+                'teacher_id' => $teacherId,
+                'homeroom_section_ids' => $homeroomSectionIds->toArray()
+            ]);
+
+            if ($assignments->isEmpty() && $homeroomSectionIds->isEmpty()) {
                 return response()->json([
                     'success' => true,
                     'students' => [],
@@ -52,44 +62,52 @@ class StudentStatusController extends Controller
                 ]);
             }
 
-            // Check if teacher is section adviser (is_primary = true)
-            $isSectionAdviser = $assignments->where('is_primary', true)->isNotEmpty();
-            Log::info('Is section adviser:', ['value' => $isSectionAdviser]);
+            // Check if teacher is section adviser (is_primary = true OR is homeroom teacher)
+            $isSectionAdviser = $assignments->where('is_primary', true)->isNotEmpty() || $homeroomSectionIds->isNotEmpty();
+            Log::info('Is section adviser:', ['value' => $isSectionAdviser, 'reason' => $homeroomSectionIds->isNotEmpty() ? 'homeroom_teacher' : 'is_primary']);
             $students = collect();
 
             if ($viewType === 'section') {
                 // Get students from teacher's primary section (if section adviser)
+                // CRITICAL: Include BOTH primary assignments AND homeroom sections
                 $primaryAssignments = $assignments->where('is_primary', true);
                 $sectionIds = $primaryAssignments->pluck('section_id')->unique();
                 
-                Log::info('Section view - Primary section IDs:', ['ids' => $sectionIds->toArray()]);
+                // Merge with homeroom section IDs (for homeroom teachers)
+                $sectionIds = $sectionIds->merge($homeroomSectionIds)->unique();
+                
+                Log::info('Section view - Combined section IDs:', [
+                    'primary_ids' => $primaryAssignments->pluck('section_id')->toArray(),
+                    'homeroom_ids' => $homeroomSectionIds->toArray(),
+                    'merged_ids' => $sectionIds->toArray()
+                ]);
                 
                 if ($sectionIds->isNotEmpty()) {
                     // Use the student_section junction table relationship
                     // NOTE: Include ALL students (including dropped out) for status management
-                    $students = Student::whereHas('sections', function($query) use ($sectionIds) {
-                        $query->whereIn('section_id', $sectionIds);
-                    })->get();
+                    $students = Student::with(['sections.curriculumGrade.grade'])
+                        ->whereHas('sections', function($query) use ($sectionIds) {
+                            $query->whereIn('section_id', $sectionIds);
+                        })->get();
                     Log::info('Students found:', ['count' => $students->count()]);
                 }
             } elseif ($viewType === 'subject') {
                 // Get students from teacher's assigned subjects
                 $sectionIds = $assignments->pluck('section_id')->unique();
                 
-                $students = Student::whereHas('sections', function($query) use ($sectionIds) {
-                    $query->whereIn('section_id', $sectionIds);
-                })->get();
+                $students = Student::with(['sections.curriculumGrade.grade'])
+                    ->whereHas('sections', function($query) use ($sectionIds) {
+                        $query->whereIn('section_id', $sectionIds);
+                    })->get();
             } else { // all
                 // Get all students from all teacher's sections
                 $sectionIds = $assignments->pluck('section_id')->unique();
                 
-                $students = Student::whereHas('sections', function($query) use ($sectionIds) {
-                    $query->whereIn('section_id', $sectionIds);
-                })->get();
+                $students = Student::with(['sections.curriculumGrade.grade'])
+                    ->whereHas('sections', function($query) use ($sectionIds) {
+                        $query->whereIn('section_id', $sectionIds);
+                    })->get();
             }
-
-            // Load section and grade relationships
-            $students->load(['sections.curriculumGrade.grade']);
             
             // Format student data with status information
             $formattedStudents = $students->map(function ($student) {
@@ -166,19 +184,37 @@ class StudentStatusController extends Controller
                 ], 404);
             }
 
-            // Check if teacher is section adviser (is_primary)
+            // Check if teacher is section adviser (is_primary OR homeroom teacher)
             // Load student's sections from junction table
             $student->load('sections');
             $studentSectionIds = $student->sections->pluck('id')->toArray();
             
             $teacher = Teacher::with('assignments.section')->find($request->teacher_id);
-            $isSectionAdviser = $teacher->assignments()
+            
+            // Check primary assignments
+            $hasPrimaryAssignment = $teacher->assignments()
                 ->where('is_primary', true)
                 ->get()
                 ->filter(function($assignment) use ($studentSectionIds) {
                     return in_array($assignment->section_id, $studentSectionIds);
                 })
                 ->isNotEmpty();
+            
+            // Check if teacher is homeroom teacher for student's section
+            $isHomeroomTeacher = DB::table('sections')
+                ->where('homeroom_teacher_id', $request->teacher_id)
+                ->whereIn('id', $studentSectionIds)
+                ->exists();
+            
+            $isSectionAdviser = $hasPrimaryAssignment || $isHomeroomTeacher;
+            
+            Log::info('Authorization check:', [
+                'teacher_id' => $request->teacher_id,
+                'student_sections' => $studentSectionIds,
+                'has_primary' => $hasPrimaryAssignment,
+                'is_homeroom' => $isHomeroomTeacher,
+                'is_adviser' => $isSectionAdviser
+            ]);
 
             if (!$isSectionAdviser) {
                 return response()->json([

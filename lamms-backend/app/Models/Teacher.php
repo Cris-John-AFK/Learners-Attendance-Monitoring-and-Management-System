@@ -43,7 +43,7 @@ class Teacher extends Authenticatable
 
     public function assignments()
     {
-        return $this->hasMany(TeacherSectionSubject::class);
+        return $this->hasMany(TeacherSectionSubject::class)->where('is_active', 1);
     }
 
     public function getFullNameAttribute()
@@ -53,20 +53,20 @@ class Teacher extends Authenticatable
 
     public function getActiveAssignments()
     {
-        return $this->assignments()->where('is_active', true)->get();
+        return $this->assignments()->where('is_active', 1)->get();
     }
 
     public function getPrimaryAssignments()
     {
-        return $this->assignments()->where('is_primary', true)->get();
+        return $this->assignments()->where('is_primary', 1)->get();
     }
 
     public function getPrimaryAssignmentAttribute()
     {
         return $this->assignments()
-            ->where('is_active', true)
+            ->where('is_active', 1)
             ->where(function($query) {
-                $query->where('is_primary', true)
+                $query->where('is_primary', 1)
                     ->orWhere('role', 'primary');
             })
             ->with(['section.grade', 'subject'])
@@ -76,9 +76,9 @@ class Teacher extends Authenticatable
     public function getSubjectAssignmentsAttribute()
     {
         return $this->assignments()
-            ->where('is_active', true)
+            ->where('is_active', 1)
             ->where(function($query) {
-                $query->where('is_primary', false)
+                $query->where('is_primary', 0)
                     ->where('role', '!=', 'primary');
             })
             ->with(['section.grade', 'subject'])

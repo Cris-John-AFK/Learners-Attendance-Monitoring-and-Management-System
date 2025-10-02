@@ -11,11 +11,6 @@ const model = ref([
         items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/teacher' }]
     },
     {
-        label: 'Homeroom',
-        icon: 'pi pi-fw pi-home',
-        items: []
-    },
-    {
         separator: true
     },
     {
@@ -70,64 +65,36 @@ onMounted(async () => {
             return;
         }
         
-        const assignments = TeacherAuthService.getAssignments();
+        // Use getUniqueSubjects() which already filters out homeroom
+        const subjects = TeacherAuthService.getUniqueSubjects();
         
-        if (assignments && assignments.length > 0) {
-            const homeroomSubjects = [];
-            const otherSubjects = [];
-            
-            assignments.forEach(assignment => {
-                if (assignment.subject_name) {
-                    const menuItem = {
-                        label: assignment.subject_name,
-                        icon: 'pi pi-fw pi-book',
-                        to: `/subject/${assignment.subject_name.toLowerCase().replace(/\s+/g, '')}`
-                    };
-                    
-                    if (assignment.subject_name.toLowerCase() === 'homeroom' || assignment.role === 'homeroom_teacher') {
-                        homeroomSubjects.push(menuItem);
-                    } else {
-                        otherSubjects.push(menuItem);
-                    }
+        if (subjects && subjects.length > 0) {
+            const subjectMenuItems = subjects.map(subject => {
+                // For departmentalized teachers (Grade 4-6), show "Subject - Section"
+                // For homeroom teachers, just show "Subject"
+                let displayLabel = subject.name;
+                
+                if (subject.sectionName && subject.sectionName !== 'Unknown Section') {
+                    // Show format: "English - Grade 4 Silang"
+                    displayLabel = `${subject.name} - Grade ${subject.grade} ${subject.sectionName}`;
                 }
+                
+                return {
+                    label: displayLabel,
+                    icon: 'pi pi-fw pi-book',
+                    to: `/subject/${subject.name.toLowerCase().replace(/\s+/g, '')}`
+                };
             });
             
-            // Update the menu model
-            const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom');
+            // Update the Subjects section
             const subjectsIndex = model.value.findIndex(item => item.label === 'Subjects');
-            
-            if (homeroomIndex !== -1) {
-                model.value[homeroomIndex].items = homeroomSubjects;
-            }
             if (subjectsIndex !== -1) {
-                model.value[subjectsIndex].items = otherSubjects;
+                model.value[subjectsIndex].items = subjectMenuItems;
             }
         }
     } catch (error) {
         console.error('Error loading teacher assignments for menu:', error);
-        // Keep default menu items as fallback
-        const homeroomIndex = model.value.findIndex(item => item.label === 'Homeroom');
-        const subjectsIndex = model.value.findIndex(item => item.label === 'Subjects');
-        
-        if (homeroomIndex !== -1) {
-            model.value[homeroomIndex].items = [
-                {
-                    label: 'Homeroom',
-                    icon: 'pi pi-fw pi-home',
-                    to: '/subject/homeroom'
-                }
-            ];
-        }
-        
-        if (subjectsIndex !== -1) {
-            model.value[subjectsIndex].items = [
-                {
-                    label: 'Mathematics',
-                    icon: 'pi pi-fw pi-book',
-                    to: '/subject/mathematics'
-                }
-            ];
-        }
+        // Keep Subjects section empty as fallback
     }
 });
 </script>

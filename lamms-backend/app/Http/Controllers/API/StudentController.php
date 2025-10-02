@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\ImagickImageBackEnd;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
@@ -18,13 +19,25 @@ class StudentController extends Controller
     {
         try {
             $students = Student::with(['sections' => function($query) {
-                $query->wherePivot('is_active', true)
+                $query->wherePivot('is_active', 1) // Use 1 for PostgreSQL boolean
                       ->wherePivot('school_year', '2025-2026');
             }])->get();
 
             return response()->json($students->map(function($student) {
                 $currentSection = $student->sections->first();
 
+                // Get proper grade name from section relationship
+                $gradeName = $student->gradeLevel;
+                if ($currentSection) {
+                    $gradeFromSection = DB::table('curriculum_grade')
+                        ->join('grades', 'curriculum_grade.grade_id', '=', 'grades.id')
+                        ->where('curriculum_grade.id', $currentSection->curriculum_grade_id)
+                        ->value('grades.name');
+                    if ($gradeFromSection) {
+                        $gradeName = $gradeFromSection;
+                    }
+                }
+                
                 return [
                     'id' => $student->id,
                     'name' => $student->name,
@@ -33,7 +46,7 @@ class StudentController extends Controller
                     'middleName' => $student->middleName,
                     'extensionName' => $student->extensionName,
                     'email' => $student->email,
-                    'gradeLevel' => $student->gradeLevel,
+                    'gradeLevel' => $gradeName, // Use proper grade name
                     'section' => $currentSection ? $currentSection->name : null,
                     'current_section_name' => $currentSection ? $currentSection->name : null,
                     'current_section_id' => $currentSection ? $currentSection->id : null,

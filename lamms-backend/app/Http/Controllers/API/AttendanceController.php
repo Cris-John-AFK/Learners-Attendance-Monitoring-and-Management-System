@@ -781,7 +781,7 @@ class AttendanceController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'student_ids' => 'required|string',
-                'subject_id' => 'required|integer',
+                'subject_id' => 'nullable', // Allow homeroom/null
                 'month' => 'required|integer|min:0|max:11',
                 'year' => 'required|integer|min:2020|max:2030'
             ]);
@@ -796,24 +796,43 @@ class AttendanceController extends Controller
 
             $studentIds = explode(',', $request->student_ids);
             $subjectId = $request->subject_id;
+            
+            // CRITICAL FIX: Convert 'homeroom' string to NULL
+            if ($subjectId === 'homeroom' || $subjectId === 'null' || $subjectId === '') {
+                $subjectId = null;
+            }
+            
             $month = $request->month + 1; // Convert JS month (0-11) to PHP month (1-12)
             $year = $request->year;
 
             // Get attendance records from attendance_records table with sessions
-            $records = DB::table('attendance_records as ar')
+            $recordsQuery = DB::table('attendance_records as ar')
                 ->join('attendance_sessions as as', 'ar.attendance_session_id', '=', 'as.id')
                 ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
-                ->whereIn('ar.student_id', $studentIds)
-                ->where('as.subject_id', $subjectId)
+                ->whereIn('ar.student_id', $studentIds);
+            
+            // Handle homeroom vs subject filtering
+            if ($subjectId === null) {
+                $recordsQuery->whereNull('as.subject_id');
+            } else {
+                $recordsQuery->where('as.subject_id', $subjectId);
+            }
+            
+            $records = $recordsQuery
+                ->leftJoin('attendance_reasons as areason', 'ar.reason_id', '=', 'areason.id')
                 ->whereYear('as.session_date', $year)
                 ->whereMonth('as.session_date', $month)
                 ->where('ar.is_current_version', true)
                 ->select([
+                    'ar.id as record_id',
                     'ar.student_id',
                     'as.session_date as date',
                     'ast.name as status',
                     'ast.code as status_code',
-                    'ar.marked_at'
+                    'ar.marked_at',
+                    'ar.reason_notes',
+                    'areason.reason_name',
+                    'areason.category as reason_category'
                 ])
                 ->get()
                 ->map(function ($record) {
@@ -821,16 +840,21 @@ class AttendanceController extends Controller
                     $statusMap = [
                         'P' => 'PRESENT',
                         'A' => 'ABSENT', 
-                        'L' => 'LATE'
+                        'L' => 'LATE',
+                        'E' => 'EXCUSED'
                     ];
                     
                     return [
+                        'id' => $record->record_id,
                         'student_id' => $record->student_id,
                         'date' => $record->date,
                         'status' => $statusMap[$record->status_code] ?? 'UNKNOWN',
                         'status_name' => $record->status,
                         'status_code' => $record->status_code,
-                        'marked_at' => $record->marked_at
+                        'marked_at' => $record->marked_at,
+                        'reason' => $record->reason_name,
+                        'reason_notes' => $record->reason_notes,
+                        'reason_category' => $record->reason_category
                     ];
                 });
 

@@ -173,8 +173,10 @@
             </div>
 
             <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
-                <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
+                <div style="margin-top: 1rem; width: 100%">
+                    <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                    <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveTeacher" />
+                </div>
             </template>
         </Dialog>
 
@@ -271,26 +273,42 @@
             </div>
         </Dialog>
 
-        <!-- Assignment Wizard Dialog -->
-        <Dialog v-model:visible="assignmentWizardDialog" modal :style="{ width: '800px' }" header="Add Subjects to Teacher" class="assignment-wizard-dialog">
+        <!-- Assignment Wizard Dialog - Enhanced for Departmentalized Teachers -->
+        <Dialog v-model:visible="assignmentWizardDialog" modal :style="{ width: '900px' }" header="Assign Subject to Teacher" class="assignment-wizard-dialog">
             <div v-if="selectedTeacher && assignmentWizardMode === 'add-subjects'" class="assignment-wizard-content">
                 <div class="teacher-info mb-4">
-                    <h4>Adding subjects for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
-                    <p class="text-sm text-gray-600">Select additional subjects to assign to this teacher</p>
+                    <h4>Assigning subject for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
+                    <p class="text-sm text-gray-600">Select section and subject for departmentalized teaching</p>
                 </div>
 
-                <div class="subjects-selection">
-                    <h5>Available Subjects</h5>
+                <!-- Step 1: Select Section -->
+                <div class="section-selection mb-4">
+                    <h5><i class="pi pi-building mr-2"></i>Step 1: Select Section</h5>
+                    <Dropdown
+                        v-model="selectedSectionForSubjectAssignment"
+                        :options="availableSectionsForAssignment"
+                        optionLabel="display_name"
+                        placeholder="Select a section"
+                        class="w-full"
+                        showClear
+                    />
+                </div>
+
+                <!-- Step 2: Select Subject -->
+                <div v-if="selectedSectionForSubjectAssignment" class="subjects-selection">
+                    <h5><i class="pi pi-book mr-2"></i>Step 2: Select Subject</h5>
                     <div class="subject-grid">
-                        <div v-for="subject in availableSubjectsForAssignment" 
-                             :key="subject.id" 
-                             class="subject-card" 
-                             :class="{ 
-                                 selected: selectedSubjectsForAssignment.some((s) => s.id === subject.id),
-                                 disabled: isSubjectAlreadyAssigned(subject),
-                                 'already-assigned': isSubjectAlreadyAssigned(subject)
-                             }" 
-                             @click="!isSubjectAlreadyAssigned(subject) && toggleSubjectSelection(subject)">
+                        <div
+                            v-for="subject in availableSubjectsForAssignment"
+                            :key="subject.id"
+                            class="subject-card"
+                            :class="{
+                                selected: selectedSubjectsForAssignment.some((s) => s.id === subject.id),
+                                disabled: isSubjectAlreadyAssigned(subject),
+                                'already-assigned': isSubjectAlreadyAssigned(subject)
+                            }"
+                            @click="!isSubjectAlreadyAssigned(subject) && toggleSubjectSelection(subject)"
+                        >
                             <div class="subject-content">
                                 <div class="subject-name">{{ subject.name }}</div>
                                 <div v-if="isSubjectAlreadyAssigned(subject)" class="already-assigned-badge">
@@ -305,20 +323,67 @@
                     </div>
                 </div>
 
-                <div v-if="selectedSubjectsForAssignment.length > 0" class="selected-subjects mt-4">
-                    <h5>Selected Subjects ({{ selectedSubjectsForAssignment.length }})</h5>
-                    <div class="selected-list">
-                        <span v-for="subject in selectedSubjectsForAssignment" :key="subject.id" class="selected-subject-tag">
-                            {{ subject.name }}
-                            <i class="pi pi-times" @click="removeSubjectFromAssignment(subject)"></i>
-                        </span>
+                <div v-if="selectedSubjectsForAssignment.length > 0 && selectedSectionForSubjectAssignment" class="selected-summary mt-4 p-3 border-2 border-green-200 bg-green-50 rounded-lg">
+                    <h5 class="text-green-800"><i class="pi pi-check-circle mr-2"></i>Assignment Summary</h5>
+                    <div class="text-sm text-gray-700">
+                        <p><strong>Teacher:</strong> {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</p>
+                        <p><strong>Section:</strong> {{ selectedSectionForSubjectAssignment.display_name }}</p>
+                        <p><strong>Subject(s):</strong></p>
+                        <div class="selected-list mt-2">
+                            <span v-for="subject in selectedSubjectsForAssignment" :key="subject.id" class="selected-subject-tag">
+                                {{ subject.name }}
+                                <i class="pi pi-times" @click="removeSubjectFromAssignment(subject)"></i>
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="assignmentWizardDialog = false" />
-                <Button label="Add Subjects" icon="pi pi-check" :disabled="selectedSubjectsForAssignment.length === 0" @click="saveSubjectAssignments" />
+                <Button 
+                    label="Assign Subject Teacher" 
+                    icon="pi pi-check" 
+                    :disabled="!selectedSectionForSubjectAssignment || selectedSubjectsForAssignment.length === 0" 
+                    @click="saveSubjectAssignments" 
+                />
+            </template>
+        </Dialog>
+
+        <!-- Assign Section Dialog -->
+        <Dialog v-model:visible="assignSectionDialog" modal :style="{ width: '500px' }" header="Assign Homeroom Section">
+            <div v-if="selectedTeacher" class="assign-section-content">
+                <div class="teacher-info mb-4 mt-4">
+                    <h4>Assigning section for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
+                </div>
+
+                <div class="field">
+                    <label for="section">Select Section*</label>
+                    <Dropdown id="section" v-model="selectedSection" :options="sections" optionLabel="name" optionValue="id" placeholder="Select a Section" class="w-full" :filter="true" filterPlaceholder="Search sections...">
+                        <template #value="slotProps">
+                            <div v-if="slotProps.value">
+                                <span class="font-semibold">{{ sections.find((s) => s.id === slotProps.value)?.name }}</span>
+                                <span class="text-sm text-gray-500 ml-2">({{ sections.find((s) => s.id === slotProps.value)?.grade?.name || 'Grade not set' }})</span>
+                            </div>
+                            <span v-else>{{ slotProps.placeholder }}</span>
+                        </template>
+                        <template #option="slotProps">
+                            <div class="flex justify-between items-center w-full">
+                                <div>
+                                    <div class="font-semibold">{{ slotProps.option.name }}</div>
+                                    <div class="text-sm text-gray-500">{{ slotProps.option.grade?.name || 'Grade not set' }}</div>
+                                </div>
+                                <div v-if="slotProps.option.capacity" class="text-xs text-gray-400">Capacity: {{ slotProps.option.capacity }}</div>
+                            </div>
+                        </template>
+                    </Dropdown>
+                    <small class="text-gray-500 mt-1">Total sections available: {{ sections.length }}</small>
+                </div>
+            </div>
+
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="assignSectionDialog = false" />
+                <Button label="Assign" icon="pi pi-check" :disabled="!selectedSection" @click="performSectionAssignment" />
             </template>
         </Dialog>
     </div>
@@ -480,8 +545,22 @@ const onGradeChange = () => {
     // This would be implemented based on your backend API
 };
 
-const assignSection = async () => {
+// Open dialog to assign section (called from button)
+const assignSection = (teacher) => {
+    console.log('Opening assign section dialog for teacher:', teacher);
+    selectedTeacher.value = teacher;
+    assignSectionDialog.value = true;
+};
+
+// Actually perform the assignment (called from dialog)
+const performSectionAssignment = async () => {
     try {
+        if (!selectedTeacher.value || !selectedTeacher.value.id) {
+            throw new Error('No teacher selected');
+        }
+
+        console.log('Assigning section to teacher:', selectedTeacher.value.id);
+
         const response = await fetch(`http://localhost:8000/api/teachers/${selectedTeacher.value.id}/sections`, {
             method: 'POST',
             headers: {
@@ -492,21 +571,29 @@ const assignSection = async () => {
             })
         });
 
+        const data = await response.json();
+
         if (!response.ok) {
-            throw new Error('Failed to assign section');
+            // Handle 409 Conflict - section already has a homeroom teacher
+            if (response.status === 409) {
+                const currentTeacherName = data.current_teacher?.name || 'Another teacher';
+                toast.add({ 
+                    severity: 'warn', 
+                    summary: 'Section Already Assigned', 
+                    detail: `This section already has a homeroom teacher (${currentTeacherName}). Please remove them first before assigning a new homeroom teacher.`, 
+                    life: 6000 
+                });
+                return;
+            }
+            throw new Error(data.message || 'Failed to assign section');
         }
 
         await loadTeachers();
         assignSectionDialog.value = false;
         toast.add({ severity: 'success', summary: 'Success', detail: 'Section assigned successfully', life: 3000 });
     } catch (error) {
+        console.error('Section assignment error:', error);
         toast.add({ severity: 'error', summary: 'Error', detail: error.message, life: 3000 });
-    }
-};
-
-const addSubjectToSelection = (subject) => {
-    if (!selectedSubjects.value.some((s) => s.id === subject.id)) {
-        selectedSubjects.value.push(subject);
     }
 };
 
@@ -614,24 +701,86 @@ const loadSections = async () => {
             return;
         }
 
+        // First get curriculum_grade data to map sections to grades
+        const curriculumGradeMap = {};
+        try {
+            const cgResponse = await api.get(`${API_BASE_URL}/curriculum-grades`);
+            cgResponse.data.forEach((cg) => {
+                curriculumGradeMap[cg.id] = cg.grade;
+            });
+        } catch (error) {
+            console.warn('Could not load curriculum grades, will use fallback:', error);
+        }
+
         // Map the data to ensure consistent structure AND ensure IDs are numbers
-        sections.value = data.map((section) => ({
-            id: Number(section.id), // Ensure ID is a number
-            name: section.name || `Section ${section.id}`,
-            grade_id: Number(section.grade_id), // Ensure grade_id is a number
-            grade: section.grade
-                ? {
-                      id: Number(section.grade.id), // Ensure grade.id is a number
-                      name: section.grade.name || `Grade ${section.grade.id}`
-                  }
-                : {
-                      id: Number(section.grade_id),
-                      name: `Grade ${section.grade_id}`
-                  },
-            room_number: section.room_number || 'N/A'
-        }));
+        const mappedSections = data.map((section) => {
+            // Get grade from curriculum_grade relationship
+            let grade = null;
+            if (section.curriculum_grade_id && curriculumGradeMap[section.curriculum_grade_id]) {
+                grade = {
+                    id: Number(curriculumGradeMap[section.curriculum_grade_id].id),
+                    name: curriculumGradeMap[section.curriculum_grade_id].name || curriculumGradeMap[section.curriculum_grade_id].level
+                };
+            } else if (section.curriculum_grade && section.curriculum_grade.grade) {
+                grade = {
+                    id: Number(section.curriculum_grade.grade.id),
+                    name: section.curriculum_grade.grade.name || section.curriculum_grade.grade.level
+                };
+            } else if (section.grade) {
+                grade = {
+                    id: Number(section.grade.id),
+                    name: section.grade.name || section.grade.level
+                };
+            }
+
+            return {
+                id: Number(section.id),
+                name: section.name || `Section ${section.id}`,
+                curriculum_grade_id: section.curriculum_grade_id,
+                grade: grade,
+                room_number: section.room_number || 'N/A',
+                capacity: section.capacity
+            };
+        });
+
+        // Remove duplicates based on name and grade combination (keep first occurrence)
+        const seen = new Set();
+        const uniqueSections = mappedSections.filter((section) => {
+            const key = `${section.name}-${section.grade?.name || 'unknown'}`;
+            if (seen.has(key)) {
+                console.log(`Removing duplicate section: ${key}`);
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+
+        // FILTER: Only show Kindergarten to Grade 6 sections (exclude Grade 7 and above)
+        const allowedGrades = [
+            'Kindergarten', 'Kinder',
+            'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'
+        ];
+        
+        sections.value = uniqueSections.filter((section) => {
+            if (!section.grade || !section.grade.name) {
+                console.log(`Excluding section with no grade: ${section.name}`);
+                return false;
+            }
+            
+            const gradeName = section.grade.name;
+            const isAllowed = allowedGrades.some(allowed => 
+                gradeName.toLowerCase().includes(allowed.toLowerCase())
+            );
+            
+            if (!isAllowed) {
+                console.log(`Excluding high school section: ${section.name} (${gradeName})`);
+            }
+            
+            return isAllowed;
+        });
 
         console.log('Successfully loaded sections with normalized IDs:', sections.value);
+        console.log(`Filtered to ${sections.value.length} elementary sections (Kinder-Grade 6 only)`);
 
         // Show success notification
         toast.add({
@@ -1225,31 +1374,24 @@ const openAddSubjectsDialog = async (teacherData) => {
     }
 
     try {
-        // First, check if the teacher has any primary assignment
-        const primaryAssignment = teacherData.primary_assignment || (teacherData.active_assignments && teacherData.active_assignments.find((a) => a.is_primary || a.role === 'primary'));
-
-        if (!primaryAssignment) {
-            toast.add({
-                severity: 'warn',
-                summary: 'No Primary Assignment',
-                detail: 'Teacher must be assigned as a primary teacher to a section first',
-                life: 5000
-            });
-            return;
-        }
-
         // Set the selected teacher and explicitly set add-subjects mode
         selectedTeacher.value = teacherData;
         assignmentWizardMode.value = 'add-subjects';
+        
+        // Reset selections
+        selectedSectionForSubjectAssignment.value = null;
+        selectedSubjectsForAssignment.value = [];
 
         console.log(`Opening add-subjects dialog for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
-        console.log(`Primary assignment:`, primaryAssignment);
 
+        // Load available sections for departmentalized assignment
+        await loadAllSectionsForSubjectAssignment();
+        
         // Load available subjects for assignment
         await loadSubjectsForAssignment();
 
         // Debug: Log teacher's current assignments for subject filtering
-        console.log('Teacher subject assignments:', selectedTeacher.value.subject_assignments);
+        console.log('Teacher assignments:', selectedTeacher.value.active_assignments);
 
         // Open the dialog
         assignmentWizardDialog.value = true;
@@ -1264,38 +1406,83 @@ const openAddSubjectsDialog = async (teacherData) => {
     }
 };
 
+// Load available sections for departmentalized subject assignment (Grade 4-6 only)
+const loadAllSectionsForSubjectAssignment = async () => {
+    try {
+        const response = await api.get('/api/sections');
+        const allSections = response.data || [];
+        
+        // FILTER: Only Grade 4-6 sections (departmentalized grades)
+        const grade4to6Sections = allSections.filter(section => {
+            // Extract grade name from curriculum_grade relationship
+            let gradeName = '';
+            if (section.curriculum_grade && section.curriculum_grade.grade) {
+                gradeName = section.curriculum_grade.grade.name;
+            } else if (section.curriculumGrade && section.curriculumGrade.grade) {
+                gradeName = section.curriculumGrade.grade.name;
+            }
+            
+            // Only include Grade 4, 5, and 6
+            return gradeName === 'Grade 4' || gradeName === 'Grade 5' || gradeName === 'Grade 6';
+        });
+        
+        // Format sections with grade info for display
+        availableSectionsForAssignment.value = grade4to6Sections.map(section => {
+            // Extract grade name from curriculum_grade relationship
+            let gradeName = 'Grade ?';
+            if (section.curriculum_grade && section.curriculum_grade.grade) {
+                gradeName = section.curriculum_grade.grade.name;
+            } else if (section.curriculumGrade && section.curriculumGrade.grade) {
+                gradeName = section.curriculumGrade.grade.name;
+            }
+            
+            return {
+                ...section,
+                display_name: `${gradeName} - ${section.name}`
+            };
+        });
+        
+        console.log('Loaded Grade 4-6 sections for departmentalized assignment:', availableSectionsForAssignment.value.length);
+        console.log('Available sections:', availableSectionsForAssignment.value.map(s => s.display_name));
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections',
+            life: 3000
+        });
+        availableSectionsForAssignment.value = [];
+    }
+};
+
 // Check if subject is already assigned to teacher
 const isSubjectAlreadyAssigned = (subject) => {
     if (!selectedTeacher.value) {
         return false;
     }
-    
+
     // Try different possible assignment property names
-    const assignments = selectedTeacher.value.subject_assignments || 
-                       selectedTeacher.value.active_assignments || 
-                       selectedTeacher.value.assignments || 
-                       selectedTeacher.value.teaching_subjects ||
-                       selectedTeacher.value.subjects ||
-                       [];
-    
+    const assignments = selectedTeacher.value.subject_assignments || selectedTeacher.value.active_assignments || selectedTeacher.value.assignments || selectedTeacher.value.teaching_subjects || selectedTeacher.value.subjects || [];
+
     if (!assignments || assignments.length === 0) {
         return false;
     }
-    
+
     // Check if teacher already has this subject assigned (check both ID and name for safety)
-    const isAssigned = assignments.some(assignment => {
+    const isAssigned = assignments.some((assignment) => {
         // Handle different assignment data structures
         const assignmentSubject = assignment.subject || assignment;
-        
+
         if (!assignmentSubject) {
             return false;
         }
-        
+
         // Check by ID (primary)
         if (assignmentSubject.id === subject.id) {
             return true;
         }
-        
+
         // Check by name (fallback for edge cases)
         if (assignmentSubject.name && subject.name) {
             const assignmentName = assignmentSubject.name.toLowerCase().trim();
@@ -1304,10 +1491,10 @@ const isSubjectAlreadyAssigned = (subject) => {
                 return true;
             }
         }
-        
+
         return false;
     });
-    
+
     return isAssigned;
 };
 
@@ -1317,10 +1504,10 @@ const toggleSubjectSelection = (subject) => {
     if (isSubjectAlreadyAssigned(subject)) {
         return;
     }
-    
+
     console.log('Toggling subject selection:', subject);
     console.log('Subject ID:', subject.id, 'Subject Name:', subject.name);
-    
+
     const index = selectedSubjectsForAssignment.value.findIndex((s) => s.id === subject.id);
     if (index > -1) {
         selectedSubjectsForAssignment.value.splice(index, 1);
@@ -1329,7 +1516,7 @@ const toggleSubjectSelection = (subject) => {
         selectedSubjectsForAssignment.value.push(subject);
         console.log('Added subject to selection');
     }
-    
+
     console.log('Current selected subjects:', selectedSubjectsForAssignment.value);
 };
 
@@ -1343,30 +1530,29 @@ const saveSubjectAssignments = async () => {
     try {
         loading.value = true;
 
-        // Get the teacher's primary assignment to determine the section
-        console.log('Selected teacher data:', selectedTeacher.value);
-        const primaryAssignment = selectedTeacher.value.primary_assignment || (selectedTeacher.value.active_assignments && selectedTeacher.value.active_assignments.find((a) => a.is_primary || a.role === 'primary'));
-        console.log('Found primary assignment:', primaryAssignment);
-
-        if (!primaryAssignment) {
+        // For departmentalized assignments, use the selected section
+        console.log('Selected teacher:', selectedTeacher.value);
+        console.log('Selected section:', selectedSectionForSubjectAssignment.value);
+        console.log('Selected subjects:', selectedSubjectsForAssignment.value);
+        
+        if (!selectedSectionForSubjectAssignment.value) {
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: 'No primary assignment found for teacher',
+                detail: 'Please select a section for the subject assignment',
                 life: 3000
             });
             return;
         }
 
-        // Get section ID with proper fallback
-        const sectionId = primaryAssignment.section_id || primaryAssignment.section?.id;
-        
+        // Get section ID from the selected section
+        const sectionId = selectedSectionForSubjectAssignment.value.id;
+
         if (!sectionId) {
-            console.error('No section ID found in primary assignment:', primaryAssignment);
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: 'No section ID found for teacher assignment',
+                detail: 'Invalid section selected',
                 life: 3000
             });
             return;
@@ -1375,31 +1561,31 @@ const saveSubjectAssignments = async () => {
         // Get existing subject assignments to avoid duplicates
         // Check both subject_assignments and any other assignment arrays
         const existingSubjectIds = [];
-        
+
         // Check subject_assignments array
         if (selectedTeacher.value.subject_assignments) {
-            selectedTeacher.value.subject_assignments.forEach(assignment => {
+            selectedTeacher.value.subject_assignments.forEach((assignment) => {
                 if (assignment && assignment.subject_id) {
                     existingSubjectIds.push(assignment.subject_id);
                 }
             });
         }
-        
+
         // Also check if there are assignments in other formats
         if (selectedTeacher.value.assignments) {
-            selectedTeacher.value.assignments.forEach(assignment => {
+            selectedTeacher.value.assignments.forEach((assignment) => {
                 if (assignment && assignment.subject_id) {
                     existingSubjectIds.push(assignment.subject_id);
                 }
             });
         }
-        
+
         console.log('Existing subject assignments:', existingSubjectIds);
         console.log('Teacher data structure:', {
             subject_assignments: selectedTeacher.value.subject_assignments,
             assignments: selectedTeacher.value.assignments
         });
-        
+
         // If no existing assignments found, fetch fresh data from backend
         if (existingSubjectIds.length === 0) {
             console.log('No existing assignments found in cached data, fetching fresh data...');
@@ -1407,14 +1593,14 @@ const saveSubjectAssignments = async () => {
                 const freshTeacherResponse = await api.get(`/api/teachers/${selectedTeacher.value.id}`);
                 const freshTeacher = freshTeacherResponse.data;
                 console.log('Fresh teacher data from backend:', freshTeacher);
-                
+
                 // Extract assignments from fresh data - check all possible fields
                 console.log('Fresh teacher data keys:', Object.keys(freshTeacher));
-                
+
                 // Check various possible assignment field names
                 const assignmentFields = ['subject_assignments', 'assignments', 'teacher_assignments', 'active_assignments'];
-                
-                assignmentFields.forEach(fieldName => {
+
+                assignmentFields.forEach((fieldName) => {
                     if (freshTeacher[fieldName] && Array.isArray(freshTeacher[fieldName])) {
                         console.log(`Found assignments in field: ${fieldName}`, freshTeacher[fieldName]);
                         freshTeacher[fieldName].forEach((assignment, index) => {
@@ -1428,9 +1614,9 @@ const saveSubjectAssignments = async () => {
                         });
                     }
                 });
-                
+
                 console.log('Updated existing subject assignments after fresh fetch:', existingSubjectIds);
-                
+
                 // If still no assignments found, try a direct database check
                 if (existingSubjectIds.length === 0) {
                     console.log('Still no assignments found, trying direct assignment check...');
@@ -1438,9 +1624,9 @@ const saveSubjectAssignments = async () => {
                         // Check if there's a specific endpoint for teacher assignments
                         const assignmentsResponse = await api.get(`/api/teachers/${selectedTeacher.value.id}/assignments`);
                         console.log('Direct assignments response:', assignmentsResponse.data);
-                        
+
                         if (assignmentsResponse.data && assignmentsResponse.data.assignments) {
-                            assignmentsResponse.data.assignments.forEach(assignment => {
+                            assignmentsResponse.data.assignments.forEach((assignment) => {
                                 if (assignment && assignment.subject_id) {
                                     existingSubjectIds.push(assignment.subject_id);
                                     console.log(`Added existing subject ID from direct check: ${assignment.subject_id}`);
@@ -1451,24 +1637,27 @@ const saveSubjectAssignments = async () => {
                         console.log('Direct assignment check failed:', directError.message);
                     }
                 }
-                
-                // Final check: if we're still going to try to assign subjects, 
+
+                // Final check: if we're still going to try to assign subjects,
                 // let's do a final validation by checking each subject individually
                 console.log('Final existing subject IDs before filtering:', existingSubjectIds);
-                console.log('Subjects attempting to assign:', selectedSubjectsForAssignment.value.map(s => ({id: s.id, name: s.name})));
-                
+                console.log(
+                    'Subjects attempting to assign:',
+                    selectedSubjectsForAssignment.value.map((s) => ({ id: s.id, name: s.name }))
+                );
+
                 // CRITICAL: The backend is not returning all assignments!
                 // Based on database evidence, English (ID=2) should be assigned but isn't showing
                 // Let's add a direct database query to get ALL assignments for this teacher
                 try {
                     console.log('🔍 DEBUGGING: Checking for missing assignments...');
                     const allTeachersResponse = await api.get('/api/teachers');
-                    const fullTeacherData = allTeachersResponse.data.find(t => t.id === selectedTeacher.value.id);
+                    const fullTeacherData = allTeachersResponse.data.find((t) => t.id === selectedTeacher.value.id);
                     console.log('🔍 Full teacher data from teachers list:', fullTeacherData);
-                    
+
                     if (fullTeacherData && fullTeacherData.subject_assignments) {
                         console.log('🔍 Subject assignments from full data:', fullTeacherData.subject_assignments);
-                        fullTeacherData.subject_assignments.forEach(assignment => {
+                        fullTeacherData.subject_assignments.forEach((assignment) => {
                             if (assignment && assignment.subject_id && !existingSubjectIds.includes(assignment.subject_id)) {
                                 existingSubjectIds.push(assignment.subject_id);
                                 console.log(`🔍 Added missing subject ID: ${assignment.subject_id}`);
@@ -1482,12 +1671,10 @@ const saveSubjectAssignments = async () => {
                 console.error('Error fetching fresh teacher data:', error);
             }
         }
-        
+
         // Filter out subjects that are already assigned
-        const newSubjects = selectedSubjectsForAssignment.value.filter(subject => 
-            !existingSubjectIds.includes(parseInt(subject.id))
-        );
-        
+        const newSubjects = selectedSubjectsForAssignment.value.filter((subject) => !existingSubjectIds.includes(parseInt(subject.id)));
+
         if (newSubjects.length === 0) {
             toast.add({
                 severity: 'warn',
@@ -1498,7 +1685,7 @@ const saveSubjectAssignments = async () => {
             loading.value = false;
             return;
         }
-        
+
         console.log('New subjects to assign:', newSubjects);
         console.log('Selected subjects for assignment:', selectedSubjectsForAssignment.value);
 
@@ -1509,7 +1696,7 @@ const saveSubjectAssignments = async () => {
                 name: subject.name,
                 parsedId: parseInt(subject.id)
             });
-            
+
             return {
                 section_id: parseInt(sectionId),
                 subject_id: parseInt(subject.id),
@@ -1522,9 +1709,9 @@ const saveSubjectAssignments = async () => {
         console.log('Sending assignment data:', { assignments });
         console.log('Teacher ID:', selectedTeacher.value.id);
         console.log('Full assignment payload:', JSON.stringify({ assignments }, null, 2));
-        
-        const response = await api.post(`/api/teachers/${selectedTeacher.value.id}/assignments`, { 
-            assignments 
+
+        const response = await api.post(`/api/teachers/${selectedTeacher.value.id}/assignments`, {
+            assignments
         });
         console.log('Assignment response:', response);
 
@@ -1543,22 +1730,38 @@ const saveSubjectAssignments = async () => {
         console.error('Error saving subject assignments:', error);
         console.error('Error response:', error.response?.data);
         console.error('Error status:', error.response?.status);
-        
+
         let errorMessage = 'Failed to add subjects to teacher';
         let severity = 'error';
-        
-        if (error.response?.data?.message && 
-            (error.response.data.message.includes('duplicate key value') || 
-             error.response.data.message.includes('SQLSTATE[23505]') ||
-             error.response.data.message.includes('already exists'))) {
+
+        // Handle 409 Conflict - another teacher already teaching this subject
+        if (error.response?.status === 409) {
+            const responseData = error.response.data;
+            const currentTeacherName = responseData.current_teacher?.name || 'Another teacher';
+            const subjectName = responseData.subject_name || 'this subject';
+            const sectionName = responseData.section_name || 'this section';
+            
+            errorMessage = `${currentTeacherName} is already teaching ${subjectName} in ${sectionName}. Only one teacher can teach a subject per section.`;
+            severity = 'warn';
+            
+            toast.add({
+                severity: severity,
+                summary: 'Subject Already Assigned',
+                detail: errorMessage,
+                life: 6000
+            });
+            
+            loading.value = false;
+            return;
+        } else if (error.response?.data?.message && (error.response.data.message.includes('duplicate key value') || error.response.data.message.includes('SQLSTATE[23505]') || error.response.data.message.includes('already exists'))) {
             // Handle duplicate assignment error specifically
             errorMessage = 'The selected subject is already assigned to this teacher. The page will refresh to show current assignments.';
             severity = 'warn';
-            
+
             // Refresh teacher data to show current assignments
             console.log('🔄 Refreshing teacher data due to duplicate assignment...');
             await loadTeachers();
-            
+
             // Also force a complete reload of the page data to ensure consistency
             setTimeout(() => {
                 console.log('🔄 Additional refresh to ensure all assignments are visible...');
@@ -1572,14 +1775,14 @@ const saveSubjectAssignments = async () => {
             // General error message
             errorMessage = error.response.data.message;
         }
-        
+
         toast.add({
             severity: severity,
             summary: severity === 'warn' ? 'Warning' : 'Error',
             detail: errorMessage,
             life: 5000
         });
-        
+
         // Close dialog on duplicate error to force refresh
         if (severity === 'warn') {
             assignmentWizardDialog.value = false;
@@ -2187,6 +2390,8 @@ onMounted(async () => {
         // Load everything needed for teacher management
         await Promise.all([
             loadTeachers(),
+            loadGrades(), // Load grades for assignment dialogs
+            loadSections(), // Load sections for assignment dialogs
             loadSubjects() // Explicitly load subjects on mount
         ]);
     } catch (error) {
@@ -2497,18 +2702,18 @@ const loadSubjectsForAssignment = async () => {
     try {
         loading.value = true;
         const response = await api(`/api/subjects`);
-        
+
         // Remove duplicate subjects by name (keep the first occurrence)
         const uniqueSubjects = [];
         const seenNames = new Set();
-        
-        response.data.forEach(subject => {
+
+        response.data.forEach((subject) => {
             if (!seenNames.has(subject.name.toLowerCase())) {
                 seenNames.add(subject.name.toLowerCase());
                 uniqueSubjects.push(subject);
             }
         });
-        
+
         availableSubjectsForAssignment.value = uniqueSubjects;
         console.log(`Loaded ${uniqueSubjects.length} unique subjects (filtered from ${response.data.length} total)`);
 
@@ -2659,6 +2864,8 @@ const selectedSubjectsForAssignment = ref([]);
 const assignmentWizardTeacher = ref(null);
 const availableSubjectsForAssignment = ref([]);
 const availableSections = ref([]);
+const selectedSectionForSubjectAssignment = ref(null); // For departmentalized assignment
+const availableSectionsForAssignment = ref([]);
 
 // In the script setup, add a ref for the subject adder dialog
 const subjectAdderDialog = ref(false);
@@ -3807,14 +4014,25 @@ const archiveTeacher = async (teacher) => {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
 }
 
 @keyframes bounceIn {
-    0% { transform: scale(0); }
-    50% { transform: scale(1.2); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 .selected-subjects {
@@ -3880,24 +4098,24 @@ const archiveTeacher = async (teacher) => {
 }
 
 @keyframes slideInUp {
-    0% { 
-        opacity: 0; 
-        transform: translateY(20px); 
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
     }
-    100% { 
-        opacity: 1; 
-        transform: translateY(0); 
+    100% {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
 @keyframes fadeInScale {
-    0% { 
-        opacity: 0; 
-        transform: scale(0.8); 
+    0% {
+        opacity: 0;
+        transform: scale(0.8);
     }
-    100% { 
-        opacity: 1; 
-        transform: scale(1); 
+    100% {
+        opacity: 1;
+        transform: scale(1);
     }
 }
 </style>

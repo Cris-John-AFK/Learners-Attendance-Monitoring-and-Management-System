@@ -185,39 +185,77 @@ class TeacherAuthService {
 
     /**
      * Get unique subjects for the teacher
+     * For departmentalized teachers (Grade 4-6), returns subjects with section names
+     * For homeroom teachers (Kinder-Grade 3), returns just the subject name
      */
     getUniqueSubjects() {
+        const teacherData = this.getTeacherData();
         const assignments = this.getAssignments();
-        const subjects = [];
-        const seen = new Set();
+        const subjectSectionMap = new Map(); // Map: subjectId -> array of sections
 
-        // Processing assignments
+        // CRITICAL: Don't add "Homeroom" as a subject - it's just a section assignment
+        const homeroomSeen = new Set();
+        if (teacherData?.teacher?.homeroom_section) {
+            homeroomSeen.add('homeroom');
+            homeroomSeen.add(null);
+        }
 
+        // Group assignments by subject, collecting all sections for each subject
         assignments.forEach(assignment => {
             const subjectId = assignment.subject_id;
-            const subjectName = assignment.subject_name || 'Homeroom';
             
-            if (!seen.has(subjectId)) {
-                seen.add(subjectId);
-                subjects.push({
+            // Skip homeroom assignments (subject_id = null)
+            if (!subjectId || homeroomSeen.has(subjectId)) {
+                return;
+            }
+            
+            // Extract subject name
+            let subjectName = 'Unknown Subject';
+            if (assignment.subject_name) {
+                subjectName = assignment.subject_name;
+            } else if (assignment.subject && assignment.subject.name) {
+                subjectName = assignment.subject.name;
+            }
+            
+            // Extract grade name
+            let gradeName = 'Unknown';
+            if (assignment.grade_name) {
+                gradeName = assignment.grade_name;
+            } else if (assignment.section && assignment.section.curriculum_grade && assignment.section.curriculum_grade.grade) {
+                gradeName = assignment.section.curriculum_grade.grade.name;
+            } else if (assignment.section && assignment.section.grade) {
+                gradeName = assignment.section.grade.name;
+            }
+            
+            // Clean grade name
+            if (gradeName.startsWith('Grade ')) {
+                gradeName = gradeName.replace('Grade ', '');
+            }
+            
+            // Extract section info
+            const sectionName = assignment.section_name || (assignment.section && assignment.section.name) || 'Unknown Section';
+            const sectionId = assignment.section_id || (assignment.section && assignment.section.id);
+            
+            // Create unique key for subject+section combination
+            const key = `${subjectId}_${sectionId}`;
+            
+            if (!subjectSectionMap.has(key)) {
+                subjectSectionMap.set(key, {
                     id: subjectId,
                     name: subjectName,
-                    sections: [{
-                        id: assignment.section_id,
-                        name: assignment.section_name,
-                        grade: assignment.grade_name
-                    }],
+                    sectionId: sectionId,
+                    sectionName: sectionName,
+                    grade: gradeName,
                     originalSubject: {
                         id: subjectId,
                         name: subjectName,
-                        sectionId: assignment.section_id
+                        sectionId: sectionId
                     }
                 });
             }
         });
 
-        // Generated unique subjects
-        return subjects;
+        return Array.from(subjectSectionMap.values());
     }
 
     /**

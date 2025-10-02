@@ -31,11 +31,19 @@ class AttendanceSummaryController extends Controller
                 ], 400);
             }
 
+            // CRITICAL FIX: Convert 'homeroom' string to NULL for database queries
+            if ($subjectId === 'homeroom' || $subjectId === 'null' || $subjectId === '') {
+                $subjectId = null;
+            }
+
             Log::info("Loading attendance summary for teacher {$teacherId}, period: {$period}, viewType: {$viewType}, subjectId: {$subjectId}");
             
             // Add debug logging for the query
-            if ($viewType === 'subject' && $subjectId) {
-                Log::info("Filtering attendance summary by subject", ['subject_id' => $subjectId]);
+            if ($viewType === 'subject') {
+                Log::info("Filtering attendance summary by subject", [
+                    'subject_id' => $subjectId,
+                    'is_homeroom' => $subjectId === null
+                ]);
             }
 
             // Calculate date range based on period
@@ -60,14 +68,22 @@ class AttendanceSummaryController extends Controller
                 ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
                 ->where('tss.teacher_id', $teacherId)
                 ->where('tss.is_active', true)
-                ->where('ss.is_active', true)
+                ->where('ss.is_active', 1) // PostgreSQL: use 1 instead of true
                 ->where('sd.current_status', 'active');
 
             // CRITICAL: For subject-specific view, only get students assigned to that specific subject
-            if ($viewType === 'subject' && $subjectId) {
-                $studentIdsQuery->where('tss.subject_id', $subjectId);
-                Log::info("Filtering teacher assignments by subject", ['subject_id' => $subjectId]);
+            if ($viewType === 'subject') {
+                if ($subjectId === null) {
+                    // Homeroom: subject_id IS NULL
+                    $studentIdsQuery->whereNull('tss.subject_id');
+                    Log::info("Filtering teacher assignments by HOMEROOM (subject_id IS NULL)");
+                } else {
+                    // Specific subject
+                    $studentIdsQuery->where('tss.subject_id', $subjectId);
+                    Log::info("Filtering teacher assignments by subject", ['subject_id' => $subjectId]);
+                }
             }
+            // For 'all_students' view type, we get ALL students from ALL teacher's assignments (no additional filtering)
 
             $studentIds = $studentIdsQuery->distinct()->pluck('sd.id');
             
@@ -291,11 +307,17 @@ class AttendanceSummaryController extends Controller
                 ], 400);
             }
 
+            // CRITICAL FIX: Convert 'homeroom' string to NULL for database queries
+            if ($subjectId === 'homeroom' || $subjectId === 'null' || $subjectId === '') {
+                $subjectId = null;
+            }
+
             Log::info("getTeacherAttendanceTrends called", [
                 'teacher_id' => $teacherId,
                 'period' => $period,
                 'view_type' => $viewType,
-                'subject_id' => $subjectId
+                'subject_id' => $subjectId,
+                'subject_id_type' => gettype($subjectId)
             ]);
 
             // Calculate date range and labels
@@ -349,8 +371,12 @@ class AttendanceSummaryController extends Controller
                     ->where('ss.is_active', true)
                     ->where('sd.current_status', 'active');
 
-                if ($viewType === 'subject' && $subjectId) {
-                    $teacherStudentIds->where('tss.subject_id', $subjectId);
+                if ($viewType === 'subject') {
+                    if ($subjectId === null) {
+                        $teacherStudentIds->whereNull('tss.subject_id');
+                    } else {
+                        $teacherStudentIds->where('tss.subject_id', $subjectId);
+                    }
                 }
 
                 $studentIdsList = $teacherStudentIds->distinct()->pluck('sd.id');
@@ -364,9 +390,13 @@ class AttendanceSummaryController extends Controller
                     ->whereNotNull('ases.teacher_id')
                     ->whereBetween('ases.session_date', [$startDate, $endDateRange]);
 
-                if ($viewType === 'subject' && $subjectId) {
+                if ($viewType === 'subject') {
                     // Filter by subject in the attendance session
-                    $attendanceQuery->where('ases.subject_id', $subjectId);
+                    if ($subjectId === null) {
+                        $attendanceQuery->whereNull('ases.subject_id');
+                    } else {
+                        $attendanceQuery->where('ases.subject_id', $subjectId);
+                    }
                 }
 
                 $counts = $attendanceQuery->select([

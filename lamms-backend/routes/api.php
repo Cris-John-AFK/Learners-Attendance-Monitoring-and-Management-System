@@ -95,6 +95,7 @@ Route::prefix('teachers')->group(function () {
     Route::delete('/{teacher}', [TeacherController::class, 'destroy']);
     Route::post('/{teacher}/restore', [TeacherController::class, 'restore']);
     Route::post('/{teacher}/assignments', [TeacherController::class, 'updateAssignments']);
+    Route::post('/{teacher}/sections', [TeacherController::class, 'assignSection']);
 });
 
 // Test route
@@ -156,6 +157,7 @@ Route::post('/sections/{sectionId}/subjects/{subjectId}/teacher', [SectionContro
 Route::post('/sections/{sectionId}/repair-subjects', [SectionController::class, 'repairSectionSubjectsEndpoint']);
 
 // Curriculum Grade routes with alternative endpoints
+Route::get('/curriculum-grades', [CurriculumGradeController::class, 'index']);
 Route::get('/curriculum-grade/{curriculum}/{grade}', [CurriculumGradeController::class, 'show']);
 Route::get('/curriculum_grade', [CurriculumGradeController::class, 'getByParams']);
 Route::get('/curriculums/{curriculumId}/grades/{gradeId}/relationship', [CurriculumGradeController::class, 'relationship']);

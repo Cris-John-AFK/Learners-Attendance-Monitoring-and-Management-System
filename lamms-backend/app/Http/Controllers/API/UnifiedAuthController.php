@@ -65,7 +65,37 @@ class UnifiedAuthController extends Controller
             switch ($user->role) {
                 case 'teacher':
                     // Load teacher with assignments for complete data
-                    $profile = $user->teacher()->with(['assignments.section', 'assignments.subject'])->first();
+                    $teacherProfile = $user->teacher()->with(['assignments.section', 'assignments.subject'])->first();
+                    
+                    if ($teacherProfile) {
+                        // Also check if this teacher is a homeroom teacher for any section
+                        $homeroomSection = DB::table('sections')
+                            ->where('homeroom_teacher_id', $teacherProfile->id)
+                            ->first();
+                        
+                        if ($homeroomSection) {
+                            // Get the grade info for homeroom section
+                            $grade = DB::table('curriculum_grade as cg')
+                                ->join('grades as g', 'cg.grade_id', '=', 'g.id')
+                                ->where('cg.id', $homeroomSection->curriculum_grade_id)
+                                ->select('g.id', 'g.name', 'g.level', 'g.code')
+                                ->first();
+                            
+                            // Add homeroom section info to teacher profile
+                            $teacherProfile->homeroom_section = [
+                                'id' => $homeroomSection->id,
+                                'name' => $homeroomSection->name,
+                                'grade' => $grade ? [
+                                    'id' => $grade->id,
+                                    'name' => $grade->name,
+                                    'level' => $grade->level,
+                                    'code' => $grade->code
+                                ] : null
+                            ];
+                        }
+                        
+                        $profile = $teacherProfile;
+                    }
                     break;
                 case 'admin':
                     $profile = $user->admin;
@@ -103,6 +133,26 @@ class UnifiedAuthController extends Controller
                 'email' => $user->email,
                 'session_id' => $userSession->id
             ]);
+
+            // CRITICAL FIX: For teachers, format assignments with complete subject info
+            if ($user->role === 'teacher' && isset($profile->assignments)) {
+                $formattedAssignments = [];
+                foreach ($profile->assignments as $assignment) {
+                    $formattedAssignments[] = [
+                        'id' => $assignment->id,
+                        'section_id' => $assignment->section_id,
+                        'subject_id' => $assignment->subject_id,
+                        'section_name' => $assignment->section ? $assignment->section->name : 'Unknown Section',
+                        'subject_name' => $assignment->subject ? $assignment->subject->name : 'Homeroom',
+                        'grade_name' => $assignment->section && $assignment->section->curriculumGrade 
+                            ? $assignment->section->curriculumGrade->grade->name 
+                            : 'Unknown Grade',
+                        'role' => $assignment->role ?? 'subject',
+                        'is_primary' => $assignment->is_primary ?? false
+                    ];
+                }
+                $profile->formatted_assignments = $formattedAssignments;
+            }
 
             // Return response based on role
             return response()->json([

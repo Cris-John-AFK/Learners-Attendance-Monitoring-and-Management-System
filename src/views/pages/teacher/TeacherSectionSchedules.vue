@@ -49,7 +49,16 @@
                                     <Tag v-if="assignment.hasSchedule" value="Scheduled" severity="success" />
                                     <Tag v-else value="No Schedule" severity="warning" />
                                 </div>
-                                <Button v-if="!assignment.hasSchedule" label="Create Schedule" icon="pi pi-calendar-plus" size="small" class="w-full mt-3" @click="openCreateScheduleDialog(assignment)" :disabled="false" />
+                                <Button 
+                                    v-if="!assignment.hasSchedule" 
+                                    :label="creatingScheduleFor === assignment.id ? 'Loading...' : 'Create Schedule'" 
+                                    :icon="creatingScheduleFor === assignment.id ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'" 
+                                    size="small" 
+                                    class="w-full mt-3" 
+                                    @click="openCreateScheduleDialog(assignment)" 
+                                    :disabled="creatingScheduleFor === assignment.id" 
+                                    :loading="creatingScheduleFor === assignment.id"
+                                />
                             </div>
                         </div>
                     </div>
@@ -286,84 +295,7 @@
         </template>
     </Dialog>
 
-    <!-- Create New Schedule Dialog -->
-    <Dialog v-model:visible="showCreateDialog" header="Create New Schedule" :modal="true" :closable="true" :style="{ width: '600px' }">
-        <div class="create-schedule-form">
-            <div class="field">
-                <label for="create-subject" class="block text-900 font-medium mb-2">Subject</label>
-                <Dropdown
-                    id="create-subject"
-                    v-model="selectedSubjectForCreate"
-                    :options="availableSubjectsForCreate"
-                    optionLabel="display_name"
-                    optionValue="value"
-                    optionDisabled="disabled"
-                    placeholder="Select a subject"
-                    class="w-full"
-                    :disabled="loading"
-                    @change="onSubjectChange"
-                >
-                    <template #option="{ option }">
-                        <div
-                            :class="{
-                                'text-gray-400 cursor-not-allowed': option.disabled,
-                                'cursor-pointer': !option.disabled
-                            }"
-                            :title="option.tooltip"
-                        >
-                            <i :class="option.disabled ? 'pi pi-ban text-red-500 mr-2' : 'pi pi-book text-blue-600 mr-2'"></i>
-                            {{ option.display_name }}
-                            <small v-if="option.section_name" class="text-gray-500 ml-2">({{ option.section_name }})</small>
-                        </div>
-                    </template>
-                </Dropdown>
-            </div>
-
-            <div class="field">
-                <label for="create-day" class="block text-900 font-medium mb-2">Day</label>
-                <Dropdown id="create-day" v-model="selectedDayForCreate" :options="availableDaysForCreate" optionLabel="label" optionValue="value" optionDisabled="disabled" placeholder="Select a day" class="w-full" :disabled="!selectedSubjectForCreate">
-                    <template #option="{ option }">
-                        <div
-                            :class="{
-                                'text-gray-400 cursor-not-allowed': option.disabled,
-                                'cursor-pointer': !option.disabled
-                            }"
-                            :title="option.tooltip"
-                        >
-                            <i :class="option.disabled ? 'pi pi-ban text-red-500 mr-2' : 'pi pi-calendar text-green-600 mr-2'"></i>
-                            {{ option.label }}
-                        </div>
-                    </template>
-                </Dropdown>
-            </div>
-
-            <div class="grid">
-                <div class="col-6">
-                    <div class="field">
-                        <label for="create-start-time" class="block text-900 font-medium mb-2">Start Time</label>
-                        <Calendar id="create-start-time" v-model="createStartTime" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="field">
-                        <label for="create-end-time" class="block text-900 font-medium mb-2">End Time</label>
-                        <Calendar id="create-end-time" v-model="createEndTime" timeOnly hourFormat="12" placeholder="Select time" class="w-full" />
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="createValidationError" class="p-message p-message-error mt-3">
-                <span class="p-message-text">{{ createValidationError }}</span>
-            </div>
-        </div>
-
-        <template #footer>
-            <div class="flex justify-content-end gap-2">
-                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="cancelCreate" />
-                <Button label="Create Schedule" icon="pi pi-check" @click="createNewSchedule" :loading="creating" />
-            </div>
-        </template>
-    </Dialog>
+    <!-- Old Create Dialog - REMOVED - Now uses dedicated CreateSchedule.vue page -->
 </template>
 
 <script setup>
@@ -391,6 +323,7 @@ const toast = useToast();
 
 // Data
 const loading = ref(false);
+const creatingScheduleFor = ref(null); // Track which assignment is being created
 const schedules = ref([]);
 const teacherAssignments = ref([]);
 const showDetailsDialog = ref(false);
@@ -572,22 +505,35 @@ const loadTeacherAssignments = async (teacherId) => {
     try {
         // Get teacher assignments from TeacherAuthService
         const teacherData = TeacherAuthService.getTeacherData();
+        console.log('Teacher data for assignments:', teacherData);
+        
         if (teacherData?.assignments) {
-            teacherAssignments.value = teacherData.assignments.map((assignment) => ({
-                id: `${assignment.section_id}_${assignment.subject_id}`,
-                section_id: assignment.section_id,
-                subject_id: assignment.subject_id,
-                section_name: assignment.section_name,
-                subject_name: assignment.subject_name,
-                hasSchedule: false // Will be updated below
-            }));
+            teacherAssignments.value = teacherData.assignments.map((assignment) => {
+                // Get subject and section info from assignment or section object
+                const subjectName = assignment.subject_name 
+                    || assignment.subject?.name 
+                    || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
+                
+                const sectionName = assignment.section_name 
+                    || assignment.section?.name 
+                    || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
+                
+                return {
+                    id: `${assignment.section_id}_${assignment.subject_id}`,
+                    section_id: assignment.section_id,
+                    subject_id: assignment.subject_id,
+                    section_name: sectionName,
+                    subject_name: subjectName,
+                    hasSchedule: false // Will be updated below
+                };
+            });
 
             // Mark assignments that have schedules
             teacherAssignments.value.forEach((assignment) => {
                 assignment.hasSchedule = schedules.value.some((schedule) => schedule.section_id == assignment.section_id && schedule.subject_id == assignment.subject_id);
             });
 
-            console.log('Loaded teacher assignments:', teacherAssignments.value.length);
+            console.log('Loaded teacher assignments:', teacherAssignments.value);
         } else {
             teacherAssignments.value = [];
         }
@@ -816,9 +762,20 @@ const saveScheduleChanges = async () => {
 
 // Create Schedule Methods
 const openCreateScheduleModal = () => {
-    console.log('🆕 Opening create schedule modal');
-    resetCreateForm();
-    showCreateDialog.value = true;
+    console.log('🆕 Navigating to create schedule page');
+    
+    // Navigate to create schedule page without pre-selected assignment
+    router.push({
+        path: '/teacher/create-schedule'
+    }).catch((error) => {
+        console.error('Navigation error:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Navigation Error',
+            detail: 'Failed to navigate to schedule creation page',
+            life: 3000
+        });
+    });
 };
 
 const resetCreateForm = () => {
@@ -944,9 +901,13 @@ const createAttendanceSession = (schedule) => {
 
 const openCreateScheduleDialog = (assignment) => {
     console.log('🔧 Create Schedule button clicked!', assignment);
+    
+    // Set loading state for this specific button
+    creatingScheduleFor.value = assignment.id;
 
     selectedAssignment.value = assignment;
-    showCreateScheduleDialog.value = true;
+    // DON'T show the dialog - navigate directly
+    // showCreateScheduleDialog.value = true;
 
     console.log('📝 Assignment details:', {
         subject: assignment.subject_name,
@@ -962,7 +923,7 @@ const openCreateScheduleDialog = (assignment) => {
         life: 3000
     });
 
-    // Redirect to teacher schedule creation interface
+    // Navigate immediately (reduced timeout for better UX)
     setTimeout(() => {
         console.log('🚀 Redirecting to teacher schedule creation interface...');
 
@@ -975,10 +936,18 @@ const openCreateScheduleDialog = (assignment) => {
                 section_name: assignment.section_name,
                 subject_name: assignment.subject_name
             }
+        }).catch((error) => {
+            // Clear loading state if navigation fails
+            console.error('Navigation error:', error);
+            creatingScheduleFor.value = null;
+            toast.add({
+                severity: 'error',
+                summary: 'Navigation Error',
+                detail: 'Failed to navigate to schedule creation page',
+                life: 3000
+            });
         });
-
-        showCreateScheduleDialog.value = false;
-    }, 1500);
+    }, 500); // Reduced from 1500ms to 500ms for better UX
 };
 
 const getCurrentTeacherId = () => {

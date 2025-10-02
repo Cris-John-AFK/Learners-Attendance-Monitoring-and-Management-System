@@ -127,29 +127,13 @@ const isEdit = ref(false);
 const selectedStudentAge = computed(() => calculateAge(selectedStudent.value?.birthdate));
 const originalStudentClone = ref(null);
 
-// Grade levels for filtering
-const gradeLevels = [
-    { name: 'Kindergarten', code: 'Kindergarten' },
-    { name: 'Grade 1', code: 'Grade 1' },
-    { name: 'Grade 2', code: 'Grade 2' },
-    { name: 'Grade 3', code: 'Grade 3' },
-    { name: 'Grade 4', code: 'Grade 4' },
-    { name: 'Grade 5', code: 'Grade 5' },
-    { name: 'Grade 6', code: 'Grade 6' }
-];
+// Grade levels loaded from database
+const gradeLevels = ref([]);
 
-// Sections for each grade level
-const sectionsByGrade = {
-    Kindergarten: ['Daisy', 'Rose', 'Sunflower'],
-    'Grade 1': ['Faith', 'Hope', 'Love'],
-    'Grade 2': ['Honesty', 'Kindness', 'Patience'],
-    'Grade 3': ['Wisdom', 'Courage', 'Respect'],
-    'Grade 4': ['Integrity', 'Excellence', 'Humility'],
-    'Grade 5': ['Diligence', 'Creativity', 'Teamwork'],
-    'Grade 6': ['Leadership', 'Perseverance', 'Responsibility']
-};
+// Sections loaded from database
+const allSections = ref([]);
+const sectionsByGrade = ref({});
 
-// Disability types for learners with disabilities
 const disabilityTypes = [
     'Visual Impairment',
     'Hearing Impairment',
@@ -167,15 +151,106 @@ const disabilityTypes = [
     'Cancer'
 ];
 
-// Load all grade levels and sections
-const loadGradesAndSections = () => {
+// Load sections from database
+const loadSectionsFromDatabase = async () => {
     try {
-        grades.value = gradeLevels;
+        const response = await fetch('http://127.0.0.1:8000/api/sections', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            }
+        });
 
-        // Set default sections based on first grade
-        if (gradeLevels.length > 0) {
-            sections.value = sectionsByGrade[gradeLevels[0].code] || [];
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const sectionsData = await response.json();
+        console.log('Loaded sections from API:', sectionsData);
+        
+        allSections.value = sectionsData;
+        
+        // Group sections by grade (removing duplicates)
+        const grouped = {};
+        sectionsData.forEach(section => {
+            // Extract grade name from curriculum_grade relationship
+            let gradeName = 'Unknown';
+            if (section.curriculum_grade && section.curriculum_grade.grade) {
+                gradeName = section.curriculum_grade.grade.name;
+            } else if (section.curriculumGrade && section.curriculumGrade.grade) {
+                gradeName = section.curriculumGrade.grade.name;
+            }
+            
+            if (!grouped[gradeName]) {
+                grouped[gradeName] = [];
+            }
+            
+            // Only add if not already in the array (prevent duplicates)
+            if (!grouped[gradeName].includes(section.name)) {
+                grouped[gradeName].push(section.name);
+            }
+        });
+        
+        sectionsByGrade.value = grouped;
+        console.log('Sections grouped by grade (unique):', grouped);
+        
+        // Set default sections for filter
+        if (filters.value.grade) {
+            sections.value = grouped[filters.value.grade] || [];
+        }
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load sections from database',
+            life: 3000
+        });
+    }
+};
+
+// Load grades from database
+const loadGradesFromDatabase = async () => {
+    try {
+        const response = await fetch('http://127.0.0.1:8000/api/grades', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const gradesData = await response.json();
+        console.log('Loaded grades from API:', gradesData);
+        
+        // Format grades for dropdown
+        gradeLevels.value = gradesData.map(grade => ({
+            name: grade.name,
+            code: grade.name
+        }));
+        
+        grades.value = gradeLevels.value;
+    } catch (error) {
+        console.error('Error loading grades:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load grades from database',
+            life: 3000
+        });
+    }
+};
+
+// Load all grade levels and sections
+const loadGradesAndSections = async () => {
+    try {
+        await loadGradesFromDatabase();
+        await loadSectionsFromDatabase();
     } catch (error) {
         console.error('Error loading grade data:', error);
         toast.add({
@@ -409,7 +484,7 @@ const loadStudents = async () => {
 const updateFilterCounts = () => {
     // Count students by grade level
     const gradeCounts = {};
-    gradeLevels.forEach((grade) => {
+    gradeLevels.value.forEach((grade) => {
         gradeCounts[grade.code] = students.value.filter((s) => s.gradeLevel === grade.code).length;
     });
 
@@ -444,15 +519,15 @@ function formatAddress(student) {
     if (student.currentAddress) {
         const addr = student.currentAddress;
         const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter((part) => part);
-        return parts.join(', ') || 'N/A';
+        return parts.join(', ');
     }
-    return student.address || 'N/A';
+    return student.address || '';
 }
 
 // Update sections when grade changes
 function updateSections() {
     if (filters.value.grade) {
-        sections.value = sectionsByGrade[filters.value.grade] || [];
+        sections.value = sectionsByGrade.value[filters.value.grade] || [];
         filters.value.section = null; // Reset section when grade changes
     } else {
         sections.value = [];

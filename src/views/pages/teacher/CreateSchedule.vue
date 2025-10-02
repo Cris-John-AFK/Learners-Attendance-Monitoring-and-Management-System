@@ -10,18 +10,51 @@
         </div>
 
         <div class="schedule-form-card">
-            <div class="assignment-info">
+            <!-- Assignment Selector (if not pre-selected) -->
+            <div v-if="!isAssignmentFromRoute" class="assignment-selector mb-4">
+                <h3>Select Subject Assignment:</h3>
+                <Dropdown 
+                    v-model="selectedAssignmentOption" 
+                    :options="teacherAssignments" 
+                    optionLabel="label"
+                    placeholder="Choose a subject to schedule"
+                    class="w-full"
+                    @change="onAssignmentChange"
+                >
+                    <template #value="slotProps">
+                        <div v-if="slotProps.value" class="flex items-center gap-2">
+                            <i class="pi pi-book text-blue-600"></i>
+                            <span>{{ slotProps.value.label }}</span>
+                        </div>
+                        <span v-else>{{ slotProps.placeholder }}</span>
+                    </template>
+                    <template #option="slotProps">
+                        <div class="flex flex-col">
+                            <div class="flex items-center gap-2">
+                                <i class="pi pi-book text-blue-600"></i>
+                                <strong>{{ slotProps.option.subject_name }}</strong>
+                            </div>
+                            <small class="text-gray-500">
+                                <i class="pi pi-users"></i> {{ slotProps.option.section_name }}
+                            </small>
+                        </div>
+                    </template>
+                </Dropdown>
+            </div>
+
+            <!-- Assignment Display (when selected) -->
+            <div v-if="assignment" class="assignment-info">
                 <h3>Creating Schedule For:</h3>
                 <div class="assignment-details">
                     <div class="detail-item">
                         <i class="pi pi-book text-blue-600"></i>
                         <span class="label">Subject:</span>
-                        <span class="value">{{ assignment?.subject_name }}</span>
+                        <span class="value">{{ assignment?.subject_name || 'Not selected' }}</span>
                     </div>
                     <div class="detail-item">
                         <i class="pi pi-users text-green-600"></i>
                         <span class="label">Section:</span>
-                        <span class="value">{{ assignment?.section_name }}</span>
+                        <span class="value">{{ assignment?.section_name || 'Not selected' }}</span>
                     </div>
                 </div>
             </div>
@@ -30,18 +63,27 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="days">Days of Week</label>
-                        <MultiSelect 
-                            id="days"
-                            v-model="scheduleForm.days" 
-                            :options="weekdays" 
-                            optionLabel="label" 
-                            optionValue="value"
-                            placeholder="Select Days"
-                            class="w-full"
-                            :class="{ 'p-invalid': errors.days }"
-                            display="chip"
-                            :maxSelectedLabels="3"
-                        />
+                        <div class="custom-days-selector" :class="{ 'p-invalid': errors.days }">
+                            <!-- Select All -->
+                            <div class="day-option select-all-option">
+                                <Checkbox 
+                                    :modelValue="scheduleForm.days.length === weekdays.length" 
+                                    @update:modelValue="selectAllDays" 
+                                    binary 
+                                    inputId="select-all"
+                                />
+                                <label for="select-all" class="ml-2 cursor-pointer font-semibold" @click="selectAllDays">Select All</label>
+                            </div>
+                            <!-- Individual Days -->
+                            <div v-for="day in weekdays" :key="day.value" class="day-option">
+                                <Checkbox 
+                                    v-model="scheduleForm.days" 
+                                    :value="day.value" 
+                                    :inputId="day.value"
+                                />
+                                <label :for="day.value" class="ml-2 cursor-pointer">{{ day.label }}</label>
+                            </div>
+                        </div>
                         <small v-if="errors.days" class="p-error">{{ errors.days }}</small>
                         <small v-else class="p-help">💡 Select multiple days to create schedules for all at once</small>
                     </div>
@@ -121,15 +163,14 @@
         </div>
     </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import Button from 'primevue/button';
-import Dropdown from 'primevue/dropdown';
-import MultiSelect from 'primevue/multiselect';
 import Calendar from 'primevue/calendar';
+import Dropdown from 'primevue/dropdown';
+import Checkbox from 'primevue/checkbox';
 import SubjectScheduleService from '@/services/SubjectScheduleService';
 import TeacherAuthService from '@/services/TeacherAuthService';
 
@@ -139,6 +180,9 @@ const toast = useToast();
 
 // Data
 const assignment = ref(null);
+const teacherAssignments = ref([]);
+const selectedAssignmentOption = ref(null);
+const isAssignmentFromRoute = ref(false);
 const saving = ref(false);
 const conflictWarning = ref('');
 const suggestedSlots = ref([]);
@@ -168,7 +212,7 @@ const isFormValid = computed(() => {
 });
 
 // Methods
-const initializeForm = () => {
+const initializeForm = async () => {
     // Get assignment data from route query or create from params
     if (route.query.subject_name) {
         assignment.value = {
@@ -177,7 +221,7 @@ const initializeForm = () => {
             section_id: parseInt(route.query.section_id),
             subject_id: parseInt(route.query.subject_id)
         };
-    } else {
+    } else if (route.query.section_id && route.query.subject_id) {
         // Fallback: get from teacher assignments
         const teacherData = TeacherAuthService.getTeacherData();
         const assignments = teacherData?.assignments || [];
@@ -198,6 +242,81 @@ const initializeForm = () => {
             });
             goBack();
         }
+    } else {
+        // NO ASSIGNMENT - User will select from their assignments
+        console.log('📝 No assignment pre-selected. Loading teacher assignments for selection.');
+        isAssignmentFromRoute.value = false;
+        assignment.value = null;
+        
+        // Load teacher assignments for selection
+        const teacherData = TeacherAuthService.getTeacherData();
+        console.log('📋 Raw teacher data:', teacherData);
+        
+        if (teacherData?.assignments && teacherData.assignments.length > 0) {
+            console.log('📋 First assignment structure:', teacherData.assignments[0]);
+            
+            // Load existing schedules to filter out
+            let existingSchedules = [];
+            try {
+                const teacherId = teacherData.teacher?.id || teacherData.id;
+                const schedulesResponse = await SubjectScheduleService.getTeacherSchedules(teacherId);
+                existingSchedules = schedulesResponse.data || [];
+                console.log('📅 Existing schedules:', existingSchedules);
+            } catch (error) {
+                console.warn('Could not load existing schedules:', error);
+            }
+            
+            teacherAssignments.value = teacherData.assignments
+                .map(a => {
+                    // Try different field name variations
+                    const subjectName = a.subject_name || a.subjectName || a.subject?.name || 'Unknown Subject';
+                    const sectionName = a.section_name || a.sectionName || a.section?.name || 'Unknown Section';
+                    const sectionId = a.section_id || a.sectionId || a.section?.id;
+                    const subjectId = a.subject_id || a.subjectId || a.subject?.id;
+                    
+                    return {
+                        label: `${subjectName} - ${sectionName}`,
+                        subject_name: subjectName,
+                        section_name: sectionName,
+                        section_id: sectionId,
+                        subject_id: subjectId
+                    };
+                })
+                .filter(assignment => {
+                    // Filter out assignments that already have schedules
+                    const hasSchedule = existingSchedules.some(schedule => 
+                        schedule.section_id == assignment.section_id && 
+                        schedule.subject_id == assignment.subject_id
+                    );
+                    return !hasSchedule;
+                });
+                
+            console.log('📋 Available assignments (filtered):', teacherAssignments.value);
+            
+            if (teacherAssignments.value.length === 0) {
+                toast.add({
+                    severity: 'info',
+                    summary: 'All Subjects Scheduled',
+                    detail: 'You have already created schedules for all your assignments!',
+                    life: 5000
+                });
+                setTimeout(() => goBack(), 2000);
+                return;
+            }
+        } else {
+            toast.add({
+                severity: 'warn',
+                summary: 'No Assignments',
+                detail: 'You have no subject assignments. Please contact admin.',
+                life: 5000
+            });
+        }
+        return; // Don't set assignment yet - wait for user selection
+    }
+    
+    // Mark that assignment came from route
+    if (assignment.value) {
+        isAssignmentFromRoute.value = true;
     }
     
     console.log('📝 Creating schedule for assignment:', assignment.value);
@@ -346,6 +465,16 @@ const saveSchedule = async () => {
             } catch (dayError) {
                 console.error(`Error saving schedule for ${day}:`, dayError);
                 failedDays.push(day);
+                
+                // Check if it's a conflict error (409)
+                if (dayError.response?.status === 409) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Schedule Conflict!',
+                        detail: `You already have a schedule on ${day} at this time. Please choose a different time or day.`,
+                        life: 6000
+                    });
+                }
             }
         }
         
@@ -387,6 +516,28 @@ const saveSchedule = async () => {
     }
 };
 
+const selectAllDays = () => {
+    if (scheduleForm.value.days.length === weekdays.value.length) {
+        // Deselect all
+        scheduleForm.value.days = [];
+    } else {
+        // Select all
+        scheduleForm.value.days = weekdays.value.map(day => day.value);
+    }
+};
+
+const onAssignmentChange = () => {
+    if (selectedAssignmentOption.value) {
+        assignment.value = {
+            subject_name: selectedAssignmentOption.value.subject_name,
+            section_name: selectedAssignmentOption.value.section_name,
+            section_id: selectedAssignmentOption.value.section_id,
+            subject_id: selectedAssignmentOption.value.subject_id
+        };
+        console.log('✅ Assignment selected:', assignment.value);
+    }
+};
+
 const goBack = () => {
     router.push('/teacher/schedules');
 };
@@ -424,6 +575,40 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Custom Days Selector Styling */
+.custom-days-selector {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 0.75rem;
+    background: white;
+}
+
+.custom-days-selector.p-invalid {
+    border-color: #ef4444;
+}
+
+.day-option {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.day-option:hover {
+    background-color: #f3f4f6;
+}
+
+.day-option.select-all-option {
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.75rem;
+}
+
+.day-option label {
+    margin-bottom: 0;
+}
+
 .create-schedule-container {
     max-width: 800px;
     margin: 0 auto;
