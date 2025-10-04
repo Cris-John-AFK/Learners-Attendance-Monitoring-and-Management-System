@@ -77,6 +77,7 @@ Route::patch('sections/{section}/toggle-status', [SectionController::class, 'tog
 Route::post('sections/{id}/restore', [SectionController::class, 'restore']);
 Route::get('/sections/{section}/subjects', [SectionController::class, 'getSubjects']);
 Route::get('/sections/{section}/direct-subjects', [SectionController::class, 'getDirectSubjects']);
+Route::get('/sections/{sectionId}/students', [AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
 
 // Teacher routes
 Route::prefix('teachers')->group(function () {
@@ -385,6 +386,7 @@ Route::get('teacher/reports/sf2/data/{sectionId}/{month}', [\App\Http\Controller
 Route::get('teacher/reports/sf2/download/{sectionId}', [\App\Http\Controllers\API\SF2ReportController::class, 'download'])->name('teacher.sf2.download');
 Route::get('teacher/reports/sf2/download/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'downloadByMonth'])->name('teacher.sf2.download.month');
 Route::post('teacher/reports/sf2/submit/{sectionId}/{month}', [\App\Http\Controllers\API\SF2ReportController::class, 'submitToAdmin'])->name('teacher.sf2.submit');
+Route::post('teacher/reports/sf2/save-edit', [\App\Http\Controllers\API\SF2ReportController::class, 'saveAttendanceEdit'])->name('teacher.sf2.save.edit');
 
 // Admin routes for managing submitted SF2 reports
 Route::get('admin/reports/submitted', [\App\Http\Controllers\API\SF2ReportController::class, 'getSubmittedReports'])->name('admin.sf2.submitted');

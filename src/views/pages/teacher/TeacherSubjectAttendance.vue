@@ -330,6 +330,11 @@ const isPermanentlyCached = (cacheKey) => {
     return permanentCache[cacheKey] !== null;
 };
 
+// Function to check if cache is valid (alias for isPermanentlyCached)
+const isCacheValid = (cacheKey) => {
+    return isPermanentlyCached(cacheKey);
+};
+
 // Only clear cache on explicit user action (not automatic)
 const clearCache = () => {
     console.log('🗑️ Clearing permanent cache (user requested)');
@@ -348,8 +353,8 @@ const preloadData = async () => {
         if (!isCacheValid('sections')) {
             const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
             const sectionsData = await sectionsResponse.json();
-            dataCache.sections = sectionsData.sections || sectionsData || [];
-            dataCache.timestamp = Date.now();
+            permanentCache.sections = sectionsData.sections || sectionsData || [];
+            permanentCache.timestamp = Date.now();
             console.log('📦 Preloaded sections');
         } else {
             console.log('📦 Sections already cached');
@@ -372,9 +377,9 @@ const loadStudentsData = async () => {
         isLoadingStudents.value = true;
 
         // Check cache first
-        if (isCacheValid('students') && dataCache.students) {
+        if (isCacheValid('students') && permanentCache.students) {
             console.log('📦 Using cached student data');
-            students.value = dataCache.students;
+            students.value = permanentCache.students;
             await nextTick();
             calculateUnassignedStudents();
 
@@ -416,9 +421,9 @@ const loadStudentsData = async () => {
         try {
             // Check sections cache first
             let allSections;
-            if (isCacheValid('sections') && dataCache.sections) {
+            if (isCacheValid('sections') && permanentCache.sections) {
                 console.log('📦 Using cached sections data');
-                allSections = dataCache.sections;
+                allSections = permanentCache.sections;
             } else {
                 console.log('🔄 Fetching sections from database...');
                 const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
@@ -426,8 +431,8 @@ const loadStudentsData = async () => {
                 allSections = sectionsData.sections || sectionsData || [];
 
                 // Cache sections data
-                dataCache.sections = allSections;
-                dataCache.timestamp = Date.now();
+                permanentCache.sections = allSections;
+                permanentCache.timestamp = Date.now();
             }
 
             // Find homeroom section for this teacher
@@ -495,8 +500,8 @@ const loadStudentsData = async () => {
                 students.value = normalizedStudents;
 
                 // Cache student data
-                dataCache.students = normalizedStudents;
-                dataCache.timestamp = Date.now();
+                permanentCache.students = normalizedStudents;
+                permanentCache.timestamp = Date.now();
 
                 console.log('✅ Filtered and normalized', students.value.length, 'students for section', homeroomSection.name);
                 console.log(

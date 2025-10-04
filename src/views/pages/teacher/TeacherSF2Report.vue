@@ -302,7 +302,7 @@ const submitToAdmin = async () => {
     submitting.value = true;
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
-        
+
         // Use the simple working endpoint
         const response = await axios.post('http://127.0.0.1:8000/api/sf2/submit', {
             section_id: parseInt(sectionId),
@@ -317,7 +317,7 @@ const submitToAdmin = async () => {
                 detail: `SF2 report for ${reportData.value?.section?.name || 'Matatag'} has been submitted to admin`,
                 life: 5000
             });
-            
+
             // Optional: Redirect to dashboard after successful submission
             setTimeout(() => {
                 router.push('/teacher');
@@ -354,7 +354,7 @@ const getAttendanceMark = (status, dateString = null) => {
     if (dateString && isFutureDate(dateString)) {
         return '';
     }
-    
+
     switch (status) {
         case 'present':
             return ''; // Blank for present (only green background)
@@ -377,7 +377,7 @@ const getAttendanceColorClass = (mark, dateString = null) => {
     if (dateString && isFutureDate(dateString)) {
         return '';
     }
-    
+
     switch (mark) {
         case '': // Blank means present
         case '✓':
@@ -498,7 +498,7 @@ const openEditDialog = (student, date, day) => {
 };
 
 // Save attendance edit
-const saveAttendanceEdit = () => {
+const saveAttendanceEdit = async () => {
     if (!editingCell.value) return;
 
     const { student, date } = editingCell.value;
@@ -526,12 +526,27 @@ const saveAttendanceEdit = () => {
     }
     student.attendance_data[date] = status;
 
-    // TODO: Send update to backend API
-    // await axios.put(`/api/teacher/reports/sf2/update-attendance`, {
-    //     student_id: student.id,
-    //     date: date,
-    //     status: status
-    // });
+    // Send update to backend API
+    try {
+        await axios.post(`/api/teacher/reports/sf2/save-edit`, {
+            student_id: student.id,
+            date: date,
+            status: status,
+            section_id: sectionId,
+            month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
+        });
+
+        console.log('SF2 edit saved successfully');
+    } catch (error) {
+        console.error('Error saving SF2 edit:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Save Error',
+            detail: 'Failed to save attendance edit. Please try again.',
+            life: 5000
+        });
+        return; // Don't update UI if save failed
+    }
 
     toast.add({
         severity: 'success',
@@ -771,7 +786,7 @@ onMounted(() => {
                                 style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 2px solid #000"
                             >
                                 ABSENT
-                            </th>   
+                            </th>
                             <th
                                 class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
                                 style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000"
@@ -795,26 +810,28 @@ onMounted(() => {
                                     v-if="dayAnnotations[col.date] && index === 0"
                                     :rowspan="maleStudents.length"
                                     class="border border-gray-900 bg-gray-200"
-                                    :style="{ 
-                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                    :style="{
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '',
                                         padding: '4px 0',
                                         verticalAlign: 'middle',
                                         textAlign: 'center',
                                         height: `${maleStudents.length * 20}px`
                                     }"
                                 >
-                                    <div :style="{ 
-                                        writingMode: 'vertical-rl', 
-                                        textOrientation: 'upright', 
-                                        fontSize: Math.min(14, Math.max(8, (maleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
-                                        color: '#991b1b', 
-                                        fontWeight: 'bold', 
-                                        letterSpacing: '-1px',
-                                        lineHeight: '1',
-                                        whiteSpace: 'nowrap',
-                                        margin: '0 auto',
-                                        display: 'inline-block'
-                                    }">
+                                    <div
+                                        :style="{
+                                            writingMode: 'vertical-rl',
+                                            textOrientation: 'upright',
+                                            fontSize: Math.min(14, Math.max(8, ((maleStudents.length * 20) / dayAnnotations[col.date].length) * 0.8)) + 'px',
+                                            color: '#991b1b',
+                                            fontWeight: 'bold',
+                                            letterSpacing: '-1px',
+                                            lineHeight: '1',
+                                            whiteSpace: 'nowrap',
+                                            margin: '0 auto',
+                                            display: 'inline-block'
+                                        }"
+                                    >
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
@@ -870,26 +887,28 @@ onMounted(() => {
                                     v-if="dayAnnotations[col.date] && index === 0"
                                     :rowspan="femaleStudents.length"
                                     class="border border-gray-900 bg-gray-200"
-                                    :style="{ 
-                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                    :style="{
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '',
                                         padding: '4px 0',
                                         verticalAlign: 'middle',
                                         textAlign: 'center',
                                         height: `${femaleStudents.length * 20}px`
                                     }"
                                 >
-                                    <div :style="{ 
-                                        writingMode: 'vertical-rl', 
-                                        textOrientation: 'upright', 
-                                        fontSize: Math.min(14, Math.max(8, (femaleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
-                                        color: '#991b1b', 
-                                        fontWeight: 'bold', 
-                                        letterSpacing: '-1px',
-                                        lineHeight: '1',
-                                        whiteSpace: 'nowrap',
-                                        margin: '0 auto',
-                                        display: 'inline-block'
-                                    }">
+                                    <div
+                                        :style="{
+                                            writingMode: 'vertical-rl',
+                                            textOrientation: 'upright',
+                                            fontSize: Math.min(14, Math.max(8, ((femaleStudents.length * 20) / dayAnnotations[col.date].length) * 0.8)) + 'px',
+                                            color: '#991b1b',
+                                            fontWeight: 'bold',
+                                            letterSpacing: '-1px',
+                                            lineHeight: '1',
+                                            whiteSpace: 'nowrap',
+                                            margin: '0 auto',
+                                            display: 'inline-block'
+                                        }"
+                                    >
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
