@@ -27,6 +27,7 @@ import TeacherAuthService from '@/services/TeacherAuthService';
 // Import our new smart analytics services
 import CacheService from '@/services/CacheService';
 import SmartAnalyticsService from '@/services/SmartAnalyticsService';
+import AttendanceIndexingService from '@/services/AttendanceIndexingService';
 // Sticky notes service removed
 
 // Import new components
@@ -53,6 +54,13 @@ const chartViewOptions = [
     { label: 'Monthly', value: 'month' }
 ];
 const chartView = ref('week');
+
+// Data indexing and refresh control
+const isIndexing = ref(false);
+const indexingProgress = ref(0);
+const lastRefreshTime = ref(null);
+const autoRefreshInterval = ref(null);
+const MIN_REFRESH_INTERVAL = 60000; // Minimum 1 minute between refreshes
 
 // Attendance view options
 const viewTypeOptions = [
@@ -159,13 +167,39 @@ const MOCK_ATTENDANCE_CHART_DATA = {
     ]
 };
 
-// Auto-refresh function to reload data
-async function refreshDashboardData() {
-    console.log('Refreshing dashboard data...');
+// Auto-refresh function to reload data with throttling
+async function refreshDashboardData(forceRefresh = false) {
+    // Check if we're already refreshing or too soon
+    const now = Date.now();
+    if (!forceRefresh && lastRefreshTime.value && (now - lastRefreshTime.value) < MIN_REFRESH_INTERVAL) {
+        console.log('⏳ Skipping refresh - too soon since last refresh');
+        return;
+    }
+    
+    console.log('🔄 Refreshing dashboard data...');
+    lastRefreshTime.value = now;
+    
+    // If we have indexed data, use it for instant update
+    if (selectedSubject.value || viewType.value === 'all_students') {
+        const indexedData = AttendanceIndexingService.getIndexedData(
+            currentTeacher.value?.id,
+            selectedSubject.value?.sectionId,
+            selectedSubject.value?.id,
+            viewType.value
+        );
+        
+        if (indexedData) {
+            console.log('⚡ Using indexed data for instant refresh');
+            processIndexedData(indexedData);
+            return;
+        }
+    }
+    
+    // Otherwise load fresh data
     await loadAttendanceData();
 }
 
-// Set up auto-refresh every 30 seconds to catch new enrollments
+// Controlled auto-refresh interval
 let refreshInterval;
 
 // Initialize authentication and load teacher data
@@ -381,8 +415,27 @@ onMounted(async () => {
         // Batch load remaining dashboard data efficiently
         await Promise.all([loadSmartAnalytics(), loadCriticalStudents()]);
 
-        // Set up auto-refresh to catch new student enrollments (reduced frequency)
-        refreshInterval = setInterval(refreshDashboardData, 30000); // Refresh every 30 seconds
+        // Pre-load and index all subjects' data for instant switching
+        if (teacherSubjects.value?.length > 0) {
+            console.log('📚 Starting data pre-indexing...');
+            isIndexing.value = true;
+            
+            AttendanceIndexingService.preloadAllData(
+                currentTeacher.value.id,
+                teacherSubjects.value
+            ).then(result => {
+                console.log('✅ Pre-indexing complete:', result);
+                isIndexing.value = false;
+            }).catch(err => {
+                console.error('❌ Pre-indexing error:', err);
+                isIndexing.value = false;
+            });
+        }
+        
+        // Set up controlled auto-refresh with minimum interval
+        refreshInterval = setInterval(() => {
+            refreshDashboardData(false); // Only refresh if enough time has passed
+        }, MIN_REFRESH_INTERVAL); // Check every minute
     } catch (error) {
         console.error('Error in onMounted:', error);
     } finally {
@@ -393,6 +446,12 @@ onMounted(async () => {
 onUnmounted(() => {
     if (refreshInterval) {
         clearInterval(refreshInterval);
+    }
+    // Clear indexed data to free memory
+    try {
+        AttendanceIndexingService.clearAllIndexedData();
+    } catch (error) {
+        console.warn('Error clearing indexed data:', error);
     }
 });
 
@@ -500,9 +559,83 @@ function handleFallbackData() {
     }
 }
 
+// Process indexed data into component state
+function processIndexedData(indexedData) {
+    if (!indexedData) {
+        console.warn('⚠️ No indexed data provided to processIndexedData');
+        return;
+    }
+    
+    console.log('📦 Processing indexed data:', indexedData);
+    
+    // Process summary data
+    if (indexedData.summary) {
+        attendanceSummary.value = {
+            totalStudents: indexedData.summary.total_students || 0,
+            averageAttendance: indexedData.summary.average_attendance || 0,
+            studentsWithWarning: indexedData.summary.students_with_warning || 0,
+            studentsWithCritical: indexedData.summary.students_with_critical || 0,
+            students: indexedData.summary.students || []
+        };
+        console.log('📊 Updated attendance summary from indexed data:', attendanceSummary.value);
+    } else {
+        console.warn('⚠️ No summary data in indexed data');
+    }
+    
+    // Process students data - try multiple sources
+    let studentsData = [];
+    
+    if (indexedData.students && Array.isArray(indexedData.students) && indexedData.students.length > 0) {
+        studentsData = indexedData.students;
+        console.log('👥 Using students from indexed.students:', studentsData.length);
+    } else if (indexedData.summary && indexedData.summary.students && Array.isArray(indexedData.summary.students) && indexedData.summary.students.length > 0) {
+        studentsData = indexedData.summary.students;
+        console.log('👥 Using students from indexed.summary.students:', studentsData.length);
+    } else {
+        console.warn('⚠️ No valid students data found in indexed data');
+        console.log('📋 Indexed data structure:', {
+            hasStudents: !!indexedData.students,
+            studentsLength: indexedData.students ? indexedData.students.length : 'N/A',
+            hasSummary: !!indexedData.summary,
+            summaryStudentsLength: indexedData.summary?.students ? indexedData.summary.students.length : 'N/A'
+        });
+        return; // Don't clear existing data if indexed data is empty
+    }
+    
+    if (studentsData.length > 0) {
+        studentsWithAbsenceIssues.value = studentsData.map(student => ({
+            id: student.student_id || student.id,
+            name: student.name || `${student.firstName} ${student.lastName}` || `${student.first_name} ${student.last_name}`,
+            gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+            section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
+            absences: student.total_absences || 0,
+            severity: student.severity || 'normal',
+            attendanceRate: student.attendance_rate || 100,
+            totalPresent: student.total_present || 0,
+            totalLate: student.total_late || 0
+        }));
+        console.log('✅ Processed students data successfully:', studentsWithAbsenceIssues.value.length);
+    }
+    
+    // Process trends data based on current chart view
+    if (indexedData.trends && indexedData.trends[chartView.value]) {
+        const trendsData = indexedData.trends[chartView.value];
+        if (trendsData.labels && trendsData.datasets) {
+            attendanceChartData.value = trendsData;
+        }
+    }
+}
+
 // Load attendance data for the selected subject with caching
 async function loadAttendanceData() {
     if (!currentTeacher.value) return;
+
+    // Handle "All Subjects" selection
+    if (selectedSubject.value && selectedSubject.value.id === null) {
+        console.log('Loading "All Subjects" attendance data');
+        await loadAllSubjectsData();
+        return;
+    }
 
     // Support homeroom-only teachers (no subjects)
     let sectionId, subjectId;
@@ -621,6 +754,70 @@ async function loadAttendanceData() {
             studentsWithCritical: 0,
             students: []
         };
+    }
+}
+
+// Load data for "All Subjects" view
+async function loadAllSubjectsData() {
+    console.log('📚 Loading All Subjects attendance data');
+    
+    try {
+        // Get attendance summary for all students (viewType: 'all_students')
+        const summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(
+            currentTeacher.value.id,
+            {
+                period: 'week',
+                viewType: 'all_students', // This is the key difference
+                subjectId: null
+            }
+        );
+
+        console.log('🔍 All Subjects Summary API called with:', {
+            teacherId: currentTeacher.value.id,
+            period: 'week',
+            viewType: 'all_students',
+            subjectId: null
+        });
+
+        if (summaryResponse.success && summaryResponse.data) {
+            attendanceSummary.value = {
+                totalStudents: summaryResponse.data.total_students || 0,
+                averageAttendance: summaryResponse.data.average_attendance || 0,
+                studentsWithWarning: summaryResponse.data.students_with_warning || 0,
+                studentsWithCritical: summaryResponse.data.students_with_critical || 0,
+                students: summaryResponse.data.students || []
+            };
+
+            // For "All Subjects", we get students from the summary response
+            if (summaryResponse.data.students) {
+                studentsWithAbsenceIssues.value = summaryResponse.data.students.map(student => ({
+                    id: student.student_id || student.id,
+                    name: student.name || `${student.first_name} ${student.last_name}`,
+                    gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+                    section: student.section_name || student.section || 'Unknown Section',
+                    absences: student.total_absences || 0,
+                    severity: student.severity || 'normal',
+                    attendanceRate: student.attendance_rate || 100,
+                    totalPresent: student.total_present || 0,
+                    totalLate: student.total_late || 0
+                }));
+            } else {
+                studentsWithAbsenceIssues.value = [];
+            }
+
+            console.log('✅ All Subjects data loaded. Students:', studentsWithAbsenceIssues.value.length);
+        }
+    } catch (error) {
+        console.error('Error loading All Subjects data:', error);
+        // Set fallback data
+        attendanceSummary.value = {
+            totalStudents: 0,
+            averageAttendance: 0,
+            studentsWithWarning: 0,
+            studentsWithCritical: 0,
+            students: []
+        };
+        studentsWithAbsenceIssues.value = [];
     }
 }
 
@@ -752,7 +949,10 @@ function calculateAverageAttendance(totalStudents, attendanceRecords) {
 
 // Prepare chart data for attendance visualization using real database API
 async function prepareChartData() {
-    if (!selectedSubject.value || !currentTeacher.value) return;
+    if (!currentTeacher.value) return;
+    
+    // Handle case where no subject is selected or "All Subjects" is selected
+    if (!selectedSubject.value) return;
 
     try {
         console.log('Preparing chart data for subject:', selectedSubject.value);
@@ -808,19 +1008,37 @@ async function prepareChartData() {
         };
 
         try {
+            // Determine the correct viewType and subjectId based on selection
+            let actualViewType = viewType.value;
+            let actualSubjectId = null;
+            
+            if (selectedSubject.value && selectedSubject.value.id === null) {
+                // "All Subjects" selected - use all_students view
+                actualViewType = 'all_students';
+                actualSubjectId = null;
+            } else if (viewType.value === 'subject' && selectedSubject.value) {
+                // Specific subject selected
+                actualViewType = 'subject';
+                actualSubjectId = selectedSubject.value.id;
+            } else {
+                // All students view
+                actualViewType = 'all_students';
+                actualSubjectId = null;
+            }
+
             const trendsParams = {
                 teacherId: currentTeacher.value.id,
                 period: chartView.value,
-                viewType: viewType.value,
-                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
+                viewType: actualViewType,
+                subjectId: actualSubjectId
             };
 
             console.log('🔍 Calling getAttendanceTrends with:', JSON.stringify(trendsParams, null, 2));
 
             const trendsResult = await AttendanceSummaryService.getAttendanceTrends(currentTeacher.value.id, {
                 period: chartView.value,
-                viewType: viewType.value,
-                subjectId: viewType.value === 'subject' ? selectedSubject.value.id : null
+                viewType: actualViewType,
+                subjectId: actualSubjectId
             });
 
             console.log('📊 Full trends response:', trendsResult);
@@ -1147,28 +1365,101 @@ async function prepareCalendarData(student) {
     }
 }
 
-// Handle subject change
+// Handle subject change with instant loading from index
 async function onSubjectChange() {
-    subjectLoading.value = true;
-    try {
-        await loadAttendanceData();
+    console.log('🔄 Subject changed to:', selectedSubject.value?.name);
+    
+    // Try to get indexed data first for instant switching
+    const indexedData = AttendanceIndexingService.getIndexedData(
+        currentTeacher.value?.id,
+        selectedSubject.value?.sectionId,
+        selectedSubject.value?.id,
+        viewType.value
+    );
+    
+    if (indexedData) {
+        console.log('⚡ Loading from index - instant!');
+        processIndexedData(indexedData);
         await prepareChartData();
-    } finally {
-        subjectLoading.value = false;
+        
+        // Note: Prefetching can be added later for further optimization
+    } else {
+        // Fallback to loading fresh data
+        subjectLoading.value = true;
+        try {
+            await loadAttendanceData();
+            await prepareChartData();
+            
+            // Index this data for next time
+            if (selectedSubject.value) {
+                AttendanceIndexingService.refreshSubjectData(
+                    currentTeacher.value?.id,
+                    selectedSubject.value.sectionId,
+                    selectedSubject.value.id,
+                    viewType.value,
+                    selectedSubject.value.name
+                );
+            }
+        } finally {
+            subjectLoading.value = false;
+        }
     }
 }
 
 // Handle view type change (subject-specific vs all students)
-function onViewTypeChange() {
-    console.log('View type changed to:', viewType.value);
-    loadAttendanceData();
-    prepareChartData();
+async function onViewTypeChange() {
+    console.log('🔄 View type changed to:', viewType.value);
+    
+    // Try to get indexed data for the new view type
+    const indexedData = AttendanceIndexingService.getIndexedData(
+        currentTeacher.value?.id,
+        selectedSubject.value?.sectionId,
+        selectedSubject.value?.id,
+        viewType.value
+    );
+    
+    if (indexedData) {
+        console.log('⚡ Loading from index for view type:', viewType.value);
+        processIndexedData(indexedData);
+        await prepareChartData();
+    } else {
+        // Load fresh data for the new view type
+        await loadAttendanceData();
+        await prepareChartData();
+        
+        // Index this data for next time
+        AttendanceIndexingService.refreshSubjectData(
+            currentTeacher.value?.id,
+            selectedSubject.value?.sectionId,
+            selectedSubject.value?.id,
+            viewType.value,
+            selectedSubject.value?.name || 'All Students'
+        );
+    }
 }
 
 // Handle chart view change (daily/weekly/monthly)
-function onChartViewChange() {
-    console.log('Chart view changed to:', chartView.value);
-    prepareChartData();
+async function onChartViewChange() {
+    console.log('📊 Chart view changed to:', chartView.value);
+    
+    // Try to get indexed data for the new chart view
+    const indexedData = AttendanceIndexingService.getIndexedData(
+        currentTeacher.value?.id,
+        selectedSubject.value?.sectionId,
+        selectedSubject.value?.id,
+        viewType.value
+    );
+    
+    if (indexedData && indexedData.trends && indexedData.trends[chartView.value]) {
+        console.log('⚡ Using indexed chart data for:', chartView.value);
+        const trendsData = indexedData.trends[chartView.value];
+        if (trendsData.labels && trendsData.datasets) {
+            attendanceChartData.value = trendsData;
+        }
+    } else {
+        // Fallback to preparing chart data from current summary
+        await prepareChartData();
+    }
 }
 
 // Watch for subject changes and reload data
@@ -1490,39 +1781,72 @@ async function showStudentProfile(student) {
                         <div class="mb-4">
                             <h2 class="text-lg font-semibold mb-4">Attendance Trends</h2>
 
-                            <!-- View Type Tabs -->
-                            <div class="flex gap-2 mb-4 border-b">
-                                <button
-                                    v-for="option in viewTypeOptions"
-                                    :key="option.value"
-                                    @click="
-                                        viewType = option.value;
-                                        onViewTypeChange();
-                                    "
-                                    :class="['px-4 py-2 text-sm font-medium transition-all duration-200', viewType === option.value ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']"
-                                >
-                                    {{ option.label }}
-                                </button>
+                            <!-- Enhanced Filters Section -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <!-- View Type Selector -->
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">View Type</label>
+                                    <SelectButton 
+                                        v-model="viewType" 
+                                        :options="viewTypeOptions" 
+                                        optionLabel="label" 
+                                        optionValue="value" 
+                                        class="text-xs w-full"
+                                        @change="onViewTypeChange"
+                                    />
+                                </div>
+                                
+                                <!-- Subject Filter (Always Visible) -->
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">
+                                        <i class="pi pi-book text-xs mr-1"></i>Subject Filter
+                                    </label>
+                                    <Dropdown 
+                                        v-model="selectedSubject" 
+                                        :options="[{ id: null, name: 'All Subjects' }, ...availableSubjects]" 
+                                        optionLabel="name" 
+                                        placeholder="Select Subject" 
+                                        class="w-full text-sm"
+                                        :disabled="viewType === 'all_students'"
+                                        @change="onSubjectChange"
+                                    >
+                                        <template #value="slotProps">
+                                            <div v-if="slotProps.value" class="flex items-center text-sm">
+                                                <i class="pi pi-book mr-1 text-blue-600 text-xs"></i>
+                                                <span>{{ slotProps.value.name }}</span>
+                                            </div>
+                                            <span v-else class="text-sm">{{ slotProps.placeholder }}</span>
+                                        </template>
+                                        <template #option="slotProps">
+                                            <div class="flex items-center">
+                                                <i v-if="slotProps.option.id" class="pi pi-book mr-2 text-blue-600 text-xs"></i>
+                                                <i v-else class="pi pi-list mr-2 text-gray-600 text-xs"></i>
+                                                <span>{{ slotProps.option.name }}</span>
+                                            </div>
+                                        </template>
+                                    </Dropdown>
+                                </div>
+                                
+                                <!-- Period Filter -->
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Period</label>
+                                    <SelectButton 
+                                        v-model="chartView" 
+                                        :options="chartViewOptions" 
+                                        optionLabel="label" 
+                                        optionValue="value" 
+                                        class="text-xs w-full"
+                                        @change="onChartViewChange"
+                                    />
+                                </div>
                             </div>
-
-                            <!-- Subject Selector (only for Subject-Specific view) -->
-                            <div v-if="viewType === 'subject'" class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <label class="block text-sm font-medium text-gray-700 mb-2"> <i class="pi pi-book mr-2"></i>Select Subject: </label>
-                                <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" placeholder="Choose a subject" class="w-full" @change="onSubjectChange">
-                                    <template #value="slotProps">
-                                        <div v-if="slotProps.value" class="flex items-center">
-                                            <i class="pi pi-book mr-2 text-blue-600"></i>
-                                            <span class="font-medium">{{ slotProps.value.name }}</span>
-                                        </div>
-                                        <span v-else>{{ slotProps.placeholder }}</span>
-                                    </template>
-                                </Dropdown>
-                            </div>
-
-                            <!-- Period Filter -->
-                            <div class="flex items-center gap-2">
-                                <label class="text-sm font-medium text-gray-600">Period:</label>
-                                <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartViewChange" />
+                            
+                            <!-- Indexing Progress Indicator -->
+                            <div v-if="isIndexing" class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <div class="flex items-center">
+                                    <ProgressSpinner style="width: 20px; height: 20px" strokeWidth="4" class="mr-2" />
+                                    <span class="text-sm text-blue-700">Pre-loading data for faster switching...</span>
+                                </div>
                             </div>
                         </div>
 

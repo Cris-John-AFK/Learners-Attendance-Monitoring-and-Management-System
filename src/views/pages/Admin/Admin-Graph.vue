@@ -1,10 +1,10 @@
 <template>
-    <div class="modern-dashboard" style="margin: 0 1rem">
+    <div class="admin-dashboard" style="margin: 0 1rem">
         <!-- Loading State -->
         <div v-if="loading" class="loading-overlay">
             <div class="loading-content">
                 <ProgressSpinner strokeWidth="4" style="width: 60px; height: 60px" class="text-purple-500" />
-                <p class="mt-4 text-gray-600 font-medium">Loading attendance analytics...</p>
+                <p class="mt-4 text-gray-600 font-medium">Loading dashboard data...</p>
             </div>
         </div>
 
@@ -18,292 +18,156 @@
                         <p class="text-red-600 text-sm mt-1">{{ error }}</p>
                     </div>
                 </div>
-                <button @click="loadDashboardData" class="retry-btn">
-                    <i class="pi pi-refresh mr-2"></i>Retry
-                </button>
+                <button @click="loadDashboardData" class="retry-btn"><i class="pi pi-refresh mr-2"></i>Retry</button>
             </div>
         </div>
 
         <div v-else>
-            <!-- Modern Header with Navigation Breadcrumbs -->
+            <!-- Dashboard Header -->
             <div class="dashboard-header">
-                <div class="flex items-center justify-between">
-                    <div class="header-content">
-                        <div class="breadcrumb-nav">
-                            <button 
-                                v-if="currentView !== 'overview'" 
-                                @click="navigateBack" 
-                                class="back-btn"
-                            >
-                                <i class="pi pi-arrow-left"></i>
-                            </button>
-                            <div class="breadcrumb-text">
-                                <span class="breadcrumb-item">Dashboard</span>
-                                <span v-if="currentView === 'grade'" class="breadcrumb-separator">></span>
-                                <span v-if="currentView === 'grade'" class="breadcrumb-item">{{ selectedGrade?.name }}</span>
-                                <span v-if="currentView === 'section'" class="breadcrumb-separator">></span>
-                                <span v-if="currentView === 'section'" class="breadcrumb-item">{{ selectedSection?.section_name }}</span>
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="pi pi-chart-line"></i>
+                        </div>
+                        <div class="header-text">
+                            <h1 class="header-title">Admin Dashboard</h1>
+                            <p class="header-subtitle">Naawan Central School - Overview</p>
+                            <div class="school-year">
+                                <i class="pi pi-calendar mr-2"></i>
+                                School Year: <span class="year-badge">{{ currentSchoolYear }}</span>
                             </div>
                         </div>
-                        <h1 class="dashboard-title">
-                            <span v-if="currentView === 'overview'">Attendance Analytics</span>
-                            <span v-else-if="currentView === 'grade'">{{ selectedGrade?.name }} - Sections</span>
-                            <span v-else-if="currentView === 'section'">{{ selectedSection?.section_name }} - Students</span>
-                        </h1>
-                        <p class="dashboard-subtitle">{{ currentDateTime }}</p>
                     </div>
-                    
-                    <div class="header-controls">
-                        <!-- Date Range Filter -->
-                        <div class="date-filter">
-                            <Dropdown 
-                                v-model="selectedDateRange" 
-                                :options="dateRangeOptions" 
-                                optionLabel="label" 
-                                optionValue="value"
-                                @change="onDateRangeChange"
-                                class="date-dropdown"
-                            />
-                        </div>
-                        
-                        <!-- Real-time indicator -->
-                        <div class="realtime-indicator">
-                            <div class="pulse-dot"></div>
-                            <span>Live</span>
+                    <div class="header-actions">
+                        <div class="last-updated">
+                            <i class="pi pi-clock mr-2"></i>
+                            Last Updated: {{ lastUpdated }}
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Modern Stats Cards -->
-            <div class="stats-grid">
-                <div class="stat-card stat-card-primary" @click="refreshData">
-                    <div class="stat-icon">
-                        <i class="pi pi-users"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Total Students</div>
-                        <div class="stat-value">{{ dashboardData.overview?.total_students || 0 }}</div>
-                        <div class="stat-trend">
-                            <i class="pi pi-arrow-up"></i>
-                            <span>Active</span>
+            <!-- Dashboard Statistics Cards -->
+            <div class="dashboard-stats">
+                <div class="stats-grid">
+                    <!-- Total Students Card -->
+                    <div class="stat-card students-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="pi pi-users"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 class="stat-title">Total Students</h3>
+                                <p class="stat-subtitle">Active Enrollments</p>
+                            </div>
+                        </div>
+                        <div class="stat-value">
+                            <span class="stat-number">{{ totalStudents }}</span>
+                            <span class="stat-label">Students</span>
                         </div>
                     </div>
-                </div>
 
-                <div class="stat-card stat-card-success">
-                    <div class="stat-icon">
-                        <i class="pi pi-check-circle"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Present Today</div>
-                        <div class="stat-value">{{ dashboardData.overview?.present_percentage || 0 }}%</div>
-                        <div class="stat-progress">
-                            <div 
-                                class="stat-progress-bar" 
-                                :style="{ width: (dashboardData.overview?.present_percentage || 0) + '%' }"
-                            ></div>
+                    <!-- Total Teachers Card -->
+                    <div class="stat-card teachers-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="pi pi-user-edit"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 class="stat-title">Total Teachers</h3>
+                                <p class="stat-subtitle">Faculty Members</p>
+                            </div>
+                        </div>
+                        <div class="stat-value">
+                            <span class="stat-number">{{ totalTeachers }}</span>
+                            <span class="stat-label">Teachers</span>
                         </div>
                     </div>
-                </div>
 
-                <div class="stat-card stat-card-warning">
-                    <div class="stat-icon">
-                        <i class="pi pi-clock"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Late Arrivals</div>
-                        <div class="stat-value">{{ dashboardData.overview?.late_count || 0 }}</div>
-                        <div class="stat-trend">
-                            <span>{{ dashboardData.overview?.late_percentage || 0 }}%</span>
+                    <!-- Total Sections Card -->
+                    <div class="stat-card sections-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="pi pi-building"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 class="stat-title">Total Sections</h3>
+                                <p class="stat-subtitle">Class Sections</p>
+                            </div>
+                        </div>
+                        <div class="stat-value">
+                            <span class="stat-number">{{ totalSections }}</span>
+                            <span class="stat-label">Sections</span>
                         </div>
                     </div>
-                </div>
 
-                <div class="stat-card stat-card-danger">
-                    <div class="stat-icon">
-                        <i class="pi pi-times-circle"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Absent Today</div>
-                        <div class="stat-value">{{ dashboardData.overview?.absent_count || 0 }}</div>
-                        <div class="stat-trend">
-                            <span>{{ dashboardData.overview?.absent_percentage || 0 }}%</span>
+                    <!-- School Year Card -->
+                    <div class="stat-card school-year-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">
+                                <i class="pi pi-calendar-plus"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 class="stat-title">Academic Year</h3>
+                                <p class="stat-subtitle">Current Session</p>
+                            </div>
+                        </div>
+                        <div class="stat-value">
+                            <span class="stat-number">{{ currentSchoolYear }}</span>
+                            <span class="stat-label">School Year</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Main Content Area with Drill-down Views -->
-            <div class="main-content">
-                <!-- Overview: Grade Level Cards -->
-                <div v-if="currentView === 'overview'" class="overview-content">
-                    <div class="content-header">
-                        <h2 class="content-title">Grade Level Attendance</h2>
-                        <p class="content-subtitle">Click on any grade to view sections</p>
-                    </div>
-                    
-                    <div class="grade-cards-grid">
-                        <div 
-                            v-for="grade in dashboardData.grade_breakdown" 
-                            :key="grade.grade_id"
-                            class="grade-card"
-                            @click="drillDownToGrade(grade)"
-                        >
-                            <div class="grade-card-header">
-                                <h3 class="grade-name">{{ grade.grade_name }}</h3>
-                                <div class="grade-stats">
-                                    <span class="student-count">{{ grade.total_students }} students</span>
-                                </div>
-                            </div>
-                            
-                            <div class="grade-chart">
-                                <Chart 
-                                    :key="`grade-${grade.grade_id}-${grade.total_students}-${grade.present_count}-${grade.attendance_percentage}`"
-                                    type="doughnut" 
-                                    :data="getGradeChartData(grade)" 
-                                    :options="doughnutOptions" 
-                                    style="height: 120px;"
-                                    :plugins="[]"
-                                />
-                            </div>
-                            
-                            <div class="grade-metrics">
-                                <div class="metric">
-                                    <span class="metric-label">Present</span>
-                                    <span class="metric-value present">{{ grade.attendance_percentage }}%</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="metric-label">Absent</span>
-                                    <span class="metric-value absent">{{ grade.absent_count }}</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="metric-label">Late</span>
-                                    <span class="metric-value late">{{ grade.late_count }}</span>
-                                </div>
-                            </div>
+            <!-- Quick Actions Section -->
+            <div class="quick-actions">
+                <h2 class="section-title">Quick Actions</h2>
+                <div class="actions-grid">
+                    <router-link to="/admin-teacher" class="action-card">
+                        <div class="action-icon">
+                            <i class="pi pi-users"></i>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Grade View: Section Cards -->
-                <div v-else-if="currentView === 'grade'" class="grade-content">
-                    <div class="content-header">
-                        <h2 class="content-title">{{ selectedGrade?.name }} Sections</h2>
-                        <p class="content-subtitle">Click on any section to view students</p>
-                    </div>
-                    
-                    <div class="section-cards-grid">
-                        <div 
-                            v-for="section in dashboardData.sections" 
-                            :key="section.section_id"
-                            class="section-card"
-                            @click="drillDownToSection(section)"
-                        >
-                            <div class="section-header">
-                                <h3 class="section-name">{{ section.section_name }}</h3>
-                                <div class="section-teacher">
-                                    <i class="pi pi-user"></i>
-                                    <span>{{ section.homeroom_teacher || 'No teacher assigned' }}</span>
-                                </div>
-                            </div>
-                            
-                            <div class="section-stats">
-                                <div class="stat-item">
-                                    <span class="stat-number">{{ section.total_students }}</span>
-                                    <span class="stat-label">Students</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-number present">{{ section.attendance_percentage }}%</span>
-                                    <span class="stat-label">Attendance</span>
-                                </div>
-                            </div>
-                            
-                            <div class="section-progress">
-                                <div class="progress-bar">
-                                    <div 
-                                        class="progress-fill" 
-                                        :style="{ width: section.attendance_percentage + '%' }"
-                                    ></div>
-                                </div>
-                            </div>
+                        <div class="action-content">
+                            <h3 class="action-title">Manage Teachers</h3>
+                            <p class="action-description">Add, edit, and assign teachers</p>
                         </div>
-                    </div>
-                </div>
+                        <i class="pi pi-arrow-right action-arrow"></i>
+                    </router-link>
 
-                <!-- Section View: Student Table -->
-                <div v-else-if="currentView === 'section'" class="section-content">
-                    <div class="content-header">
-                        <h2 class="content-title">{{ selectedSection?.section_name }} Students</h2>
-                        <p class="content-subtitle">Individual student attendance details</p>
-                    </div>
-                    
-                    <div class="students-table-container">
-                        <DataTable 
-                            :value="dashboardData.students" 
-                            class="modern-table"
-                            :paginator="true"
-                            :rows="10"
-                            responsiveLayout="scroll"
-                        >
-                            <Column field="full_name" header="Student Name" sortable>
-                                <template #body="{ data }">
-                                    <div class="student-info">
-                                        <span class="student-name">{{ data.full_name }}</span>
-                                        <span class="student-id">ID: {{ data.student_id }}</span>
-                                    </div>
-                                </template>
-                            </Column>
-                            
-                            <Column field="today_status" header="Today's Status" sortable>
-                                <template #body="{ data }">
-                                    <Tag 
-                                        :value="data.today_status || 'No record'" 
-                                        :severity="getStatusSeverity(data.today_status)"
-                                        class="status-tag"
-                                    />
-                                </template>
-                            </Column>
-                            
-                            <Column field="latest_time_in" header="Time In">
-                                <template #body="{ data }">
-                                    <span class="time-display">
-                                        {{ getTimeInDisplay(data) }}
-                                    </span>
-                                </template>
-                            </Column>
-                            
-                            
-                            <Column field="attendance_percentage" header="Attendance %" sortable>
-                                <template #body="{ data }">
-                                    <div class="attendance-cell">
-                                        <span class="percentage">{{ data.attendance_percentage }}%</span>
-                                        <div class="mini-progress">
-                                            <div 
-                                                class="mini-progress-fill" 
-                                                :style="{ width: data.attendance_percentage + '%' }"
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </Column>
-                        </DataTable>
-                    </div>
-                </div>
-            </div>
+                    <router-link to="/admin-student" class="action-card">
+                        <div class="action-icon">
+                            <i class="pi pi-user"></i>
+                        </div>
+                        <div class="action-content">
+                            <h3 class="action-title">Manage Students</h3>
+                            <p class="action-description">Student enrollment and records</p>
+                        </div>
+                        <i class="pi pi-arrow-right action-arrow"></i>
+                    </router-link>
 
-            <!-- Attendance Trend Chart (Always visible) -->
-            <div class="trend-chart-container">
-                <div class="chart-header">
-                    <h3 class="chart-title">Attendance Trend (Last 7 Days)</h3>
-                </div>
-                <div class="chart-content">
-                    <Chart 
-                        type="line" 
-                        :data="trendChartData" 
-                        :options="lineChartOptions" 
-                        style="height: 200px;"
-                    />
+                    <router-link to="/curriculum" class="action-card">
+                        <div class="action-icon">
+                            <i class="pi pi-book"></i>
+                        </div>
+                        <div class="action-content">
+                            <h3 class="action-title">Curriculum</h3>
+                            <p class="action-description">Manage curriculum and subjects</p>
+                        </div>
+                        <i class="pi pi-arrow-right action-arrow"></i>
+                    </router-link>
+
+                    <router-link to="/admin-collected-reports" class="action-card">
+                        <div class="action-icon">
+                            <i class="pi pi-chart-bar"></i>
+                        </div>
+                        <div class="action-content">
+                            <h3 class="action-title">Reports</h3>
+                            <p class="action-description">View system reports</p>
+                        </div>
+                        <i class="pi pi-arrow-right action-arrow"></i>
+                    </router-link>
                 </div>
             </div>
         </div>
@@ -311,863 +175,454 @@
 </template>
 
 <script setup>
-import { AttendanceAnalyticsService } from '@/services/AttendanceAnalyticsService';
-import Chart from 'primevue/chart';
+import api, { API_BASE_URL } from '@/config/axios';
 import ProgressSpinner from 'primevue/progressspinner';
-import Dropdown from 'primevue/dropdown';
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
-import Tag from 'primevue/tag';
-import { onMounted, onUnmounted, ref, computed, shallowRef } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
-// Core state
+// Reactive data
 const loading = ref(true);
 const error = ref(null);
-const currentDateTime = ref('');
-let timeInterval = null;
-let refreshInterval = null;
+const totalStudents = ref(0);
+const totalTeachers = ref(0);
+const totalSections = ref(0);
+const currentSchoolYear = ref('2024-2025');
 
-// Navigation state
-const currentView = ref('overview'); // 'overview', 'grade', 'section'
-const selectedGrade = ref(null);
-const selectedSection = ref(null);
-
-// Data state (using shallowRef to reduce reactivity and prevent unnecessary re-renders)
-const dashboardData = shallowRef({
-    overview: null,
-    grade_breakdown: [],
-    sections: [],
-    students: [],
-    attendance_trend: []
+// Computed properties
+const lastUpdated = computed(() => {
+    return new Date().toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 });
 
-// Date range filter
-const selectedDateRange = ref('lastWeek');
-const dateRangeOptions = [
-    { label: 'Today', value: 'today' },
-    { label: 'Yesterday', value: 'yesterday' },
-    { label: 'Last 7 Days', value: 'lastWeek' },
-    { label: 'Last 30 Days', value: 'lastMonth' }
-];
-
-// Chart data
-const trendChartData = ref({
-    labels: [],
-    datasets: []
-});
-
-// Chart options (static to prevent reactivity issues)
-const doughnutOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false, // Disable animations to prevent constant refreshing
-    interaction: {
-        intersect: false
-    },
-    elements: {
-        arc: {
-            borderWidth: 0
-        }
-    },
-    plugins: {
-        legend: {
-            display: false
-        },
-        tooltip: {
-            enabled: false
-        }
-    }
-};
-
-const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false, // Disable animations to prevent constant refreshing
-    plugins: {
-        legend: {
-            display: false
-        }
-    },
-    scales: {
-        y: {
-            beginAtZero: true,
-            max: 100,
-            ticks: {
-                callback: function(value) {
-                    return value + '%';
-                }
-            }
-        }
-    }
-};
-
-// Load dashboard data based on current view
-let isLoading = false;
+// Methods
 const loadDashboardData = async () => {
-    if (isLoading) return; // Prevent multiple simultaneous loads
-    
     try {
-        isLoading = true;
         loading.value = true;
         error.value = null;
 
-        const dateRange = AttendanceAnalyticsService.getDateRangePresets()[selectedDateRange.value];
-        
-        if (currentView.value === 'overview') {
-            // Load overview data
-            const response = await AttendanceAnalyticsService.getOverview(dateRange.from, dateRange.to);
-            if (response.success) {
-                dashboardData.value.overview = response.data.overview;
-                dashboardData.value.grade_breakdown = response.data.grade_breakdown || [];
-                dashboardData.value.attendance_trend = response.data.attendance_trend || [];
-                
-                // Update trend chart
-                trendChartData.value = AttendanceAnalyticsService.transformTrendToChartData(response.data.attendance_trend);
-            }
-        } else if (currentView.value === 'grade' && selectedGrade.value) {
-            // Load grade details
-            const response = await AttendanceAnalyticsService.getGradeDetails(selectedGrade.value.grade_id, dateRange.from, dateRange.to);
-            if (response.success) {
-                dashboardData.value.sections = response.data.sections || [];
-            }
-        } else if (currentView.value === 'section' && selectedSection.value) {
-            // Load section details
-            const response = await AttendanceAnalyticsService.getSectionDetails(selectedSection.value.section_id, dateRange.from, dateRange.to);
-            if (response.success) {
-                dashboardData.value.students = response.data.students || [];
-            }
-        }
+        // Load all data in parallel
+        const [studentsResponse, teachersResponse, sectionsResponse] = await Promise.all([api.get(`${API_BASE_URL}/students`), api.get(`${API_BASE_URL}/teachers`), api.get(`${API_BASE_URL}/sections`)]);
 
-        loading.value = false;
+        // Set the counts
+        totalStudents.value = studentsResponse.data?.length || 0;
+        totalTeachers.value = teachersResponse.data?.length || 0;
+        totalSections.value = sectionsResponse.data?.length || 0;
+
+        console.log('Dashboard data loaded:', {
+            students: totalStudents.value,
+            teachers: totalTeachers.value,
+            sections: totalSections.value
+        });
     } catch (err) {
         console.error('Error loading dashboard data:', err);
-        error.value = err.message || 'Failed to load dashboard data';
-        loading.value = false;
+        error.value = 'Failed to load dashboard data. Please try again.';
     } finally {
-        isLoading = false;
+        loading.value = false;
     }
 };
 
-// Navigation functions
-const drillDownToGrade = async (grade) => {
-    selectedGrade.value = grade;
-    currentView.value = 'grade';
-    await loadDashboardData();
-};
-
-const drillDownToSection = async (section) => {
-    selectedSection.value = section;
-    currentView.value = 'section';
-    await loadDashboardData();
-};
-
-const navigateBack = async () => {
-    if (currentView.value === 'section') {
-        currentView.value = 'grade';
-        selectedSection.value = null;
-    } else if (currentView.value === 'grade') {
-        currentView.value = 'overview';
-        selectedGrade.value = null;
-    }
-    await loadDashboardData();
-};
-
-// Chart data helpers with memoization
-const chartDataCache = new Map();
-
-const getGradeChartData = (grade) => {
-    const cacheKey = `${grade.grade_id}-${grade.present_count}-${grade.absent_count}-${grade.late_count}`;
-    
-    if (chartDataCache.has(cacheKey)) {
-        return chartDataCache.get(cacheKey);
-    }
-    
-    // Create a stable data structure to prevent unnecessary re-renders
-    const chartData = {
-        labels: ['Present', 'Absent', 'Late'],
-        datasets: [{
-            data: [
-                grade.present_count || 0,
-                grade.absent_count || 0,
-                grade.late_count || 0
-            ],
-            backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
-            borderWidth: 0,
-            borderColor: 'transparent'
-        }]
-    };
-    
-    chartDataCache.set(cacheKey, chartData);
-    return chartData;
-};
-
-// Utility functions
-const getStatusSeverity = (status) => {
-    switch (status) {
-        case 'present': return 'success';
-        case 'absent': return 'danger';
-        case 'late': return 'warning';
-        case 'no_record': return 'secondary';
-        default: return 'info';
-    }
-};
-
-const formatTime = (timeString) => {
-    if (!timeString) return '--';
-    try {
-        // Handle full timestamp format (2025-09-22 21:54:19) or time format (21:54:19)
-        let dateObj;
-        
-        if (timeString.includes(' ')) {
-            // Full timestamp format
-            dateObj = new Date(timeString);
-        } else if (timeString.includes(':')) {
-            // Time only format
-            dateObj = new Date(`2000-01-01T${timeString}`);
-        } else {
-            return timeString;
-        }
-        
-        return dateObj.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-    } catch {
-        return timeString;
-    }
-};
-
-// Enhanced Time In display with hybrid logic
-const getTimeInDisplay = (student) => {
-    // Handle absent students
-    if (student.today_status === 'absent') {
-        return 'Not Present';
-    }
-    
-    // Handle no record
-    if (student.today_status === 'no_record' || !student.today_status) {
-        return '--';
-    }
-    
-    // Handle present/late students with time
-    if (student.latest_time_in) {
-        return formatTime(student.latest_time_in);
-    }
-    
-    // Fallback
-    return '--';
-};
-
-// Event handlers
-const onDateRangeChange = async () => {
-    await loadDashboardData();
-};
-
-const refreshData = async () => {
-    await loadDashboardData();
-};
-
-// Function to update current date and time
-const updateDateTime = () => {
-    const now = new Date();
-    currentDateTime.value =
-        now.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        }) +
-        ' - ' +
-        now.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-};
-
-// Lifecycle hooks
-onMounted(async () => {
-
-    // Initialize date/time and start real-time updates
-    updateDateTime();
-    timeInterval = setInterval(updateDateTime, 1000);
-
-    // Load initial dashboard data
-    await loadDashboardData();
-
-    // Setup real-time data refresh every 5 minutes instead of 30 seconds
-    refreshInterval = setInterval(async () => {
-        await loadDashboardData();
-    }, 300000); // 5 minutes instead of 30 seconds
-});
-
-onUnmounted(() => {
-    if (timeInterval) {
-        clearInterval(timeInterval);
-    }
-    if (refreshInterval) {
-        clearInterval(refreshInterval);
-    }
+// Lifecycle
+onMounted(() => {
+    loadDashboardData();
 });
 </script>
 
 <style scoped>
-/* Modern Dashboard Styling */
-.modern-dashboard {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+.admin-dashboard {
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     padding: 1rem;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Loading Overlay */
 .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(10px);
     display: flex;
-    align-items: center;
     justify-content: center;
-    z-index: 1000;
+    align-items: center;
+    min-height: 60vh;
 }
 
 .loading-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 2rem;
+    text-align: center;
     background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-}
-
-/* Error Card */
-.error-card {
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-    border: 1px solid #fecaca;
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-}
-
-.retry-btn {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.retry-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
-}
-
-/* Dashboard Header */
-.dashboard-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 20px;
     padding: 2rem;
-    margin-bottom: 2rem;
-    color: white;
-    box-shadow: 0 20px 40px rgba(102, 126, 234, 0.2);
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
-.header-content {
-    flex: 1;
-}
-
-.breadcrumb-nav {
-    display: flex;
-    align-items: center;
+.error-card {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.75rem;
+    padding: 1rem;
     margin-bottom: 1rem;
 }
 
-.back-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
+.retry-btn {
+    background: #dc2626;
     color: white;
-    padding: 0.5rem;
-    border-radius: 8px;
-    margin-right: 1rem;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
     cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.back-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: translateX(-2px);
-}
-
-.breadcrumb-text {
     display: flex;
     align-items: center;
-    font-size: 0.9rem;
-    opacity: 0.9;
-}
-
-.breadcrumb-item {
+    font-size: 0.875rem;
     font-weight: 500;
 }
 
-.breadcrumb-separator {
-    margin: 0 0.5rem;
-    opacity: 0.7;
+.retry-btn:hover {
+    background: #b91c1c;
 }
 
-.dashboard-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.dashboard-header {
+    background: white;
+    border-radius: 1rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
 }
 
-.dashboard-subtitle {
-    opacity: 0.9;
-    font-size: 1.1rem;
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.header-controls {
+.header-left {
     display: flex;
     align-items: center;
     gap: 1rem;
 }
 
-.date-dropdown {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-}
-
-.realtime-indicator {
+.header-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.75rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
+    justify-content: center;
+    font-size: 1.25rem;
 }
 
-.pulse-dot {
-    width: 8px;
-    height: 8px;
-    background: #10b981;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
+.header-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+.header-subtitle {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin: 0.25rem 0;
 }
 
-/* Stats Grid */
+.school-year {
+    display: flex;
+    align-items: center;
+    color: #374151;
+    font-weight: 500;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.year-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+}
+
+.last-updated {
+    color: #6b7280;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-stats {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.75rem;
+    flex: 1;
 }
 
 .stat-card {
     background: white;
-    border-radius: 16px;
-    padding: 1.5rem;
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition:
+        transform 0.2s,
+        box-shadow 0.2s;
+    height: 140px;
     display: flex;
-    align-items: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
-    cursor: pointer;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
 .stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
 }
 
 .stat-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 1rem;
-    font-size: 1.5rem;
-}
-
-.stat-card-primary .stat-icon {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-size: 1rem;
     color: white;
+    flex-shrink: 0;
 }
 
-.stat-card-success .stat-icon {
+.students-card .stat-icon {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
 }
 
-.stat-card-warning .stat-icon {
+.teachers-card .stat-icon {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.sections-card .stat-icon {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.school-year-card .stat-icon {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
 }
 
-.stat-card-danger .stat-icon {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    color: white;
-}
-
-.stat-content {
+.stat-info {
     flex: 1;
 }
 
-.stat-label {
-    font-size: 0.9rem;
+.stat-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.stat-subtitle {
     color: #6b7280;
-    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    margin: 0;
+    line-height: 1.2;
 }
 
 .stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1f2937;
-    margin-bottom: 0.5rem;
-}
-
-.stat-trend {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.8rem;
-    color: #10b981;
-}
-
-.stat-progress {
-    height: 4px;
-    background: #e5e7eb;
-    border-radius: 2px;
-    overflow: hidden;
-}
-
-.stat-progress-bar {
-    height: 100%;
-    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-    transition: width 0.8s ease;
-}
-
-/* Main Content */
-.main-content {
-    background: white;
-    border-radius: 20px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.content-header {
-    margin-bottom: 2rem;
     text-align: center;
-}
-
-.content-title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1f2937;
-    margin-bottom: 0.5rem;
-}
-
-.content-subtitle {
-    color: #6b7280;
-    font-size: 1.1rem;
-}
-
-/* Grade Cards Grid */
-.grade-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1.5rem;
-}
-
-.grade-card {
-    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.grade-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(102, 126, 234, 0.15);
-    border-color: #667eea;
-}
-
-.grade-card-header {
+    margin: 1rem 0;
+    flex: 1;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.grade-name {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #1f2937;
-}
-
-.student-count {
-    font-size: 0.9rem;
-    color: #6b7280;
-}
-
-.grade-chart {
-    margin-bottom: 1rem;
-}
-
-.grade-metrics {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.metric {
-    text-align: center;
-}
-
-.metric-label {
-    font-size: 0.8rem;
-    color: #6b7280;
-    display: block;
-    margin-bottom: 0.25rem;
-}
-
-.metric-value {
-    font-weight: 600;
-    font-size: 1.1rem;
-}
-
-.metric-value.present { color: #10b981; }
-.metric-value.absent { color: #ef4444; }
-.metric-value.late { color: #f59e0b; }
-
-/* Section Cards Grid */
-.section-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
-
-.section-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.section-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
-    border-color: #667eea;
-}
-
-.section-header {
-    margin-bottom: 1rem;
-}
-
-.section-name {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 0.5rem;
-}
-
-.section-teacher {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #6b7280;
-    font-size: 0.9rem;
-}
-
-.section-stats {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-}
-
-.stat-item {
-    text-align: center;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .stat-number {
-    font-size: 1.5rem;
+    display: block;
+    font-size: 2rem;
     font-weight: 700;
     color: #1f2937;
-    display: block;
-}
-
-.stat-number.present {
-    color: #10b981;
+    line-height: 1;
 }
 
 .stat-label {
-    font-size: 0.8rem;
     color: #6b7280;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-top: 0.25rem;
 }
 
-.section-progress {
-    margin-top: 1rem;
-}
-
-.progress-bar {
-    height: 6px;
-    background: #e5e7eb;
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-    transition: width 0.8s ease;
-}
-
-/* Students Table */
-.students-table-container {
-    margin-top: 1rem;
-}
-
-:deep(.modern-table) {
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.modern-table .p-datatable-thead > tr > th) {
-    background: #f8fafc;
-    border: none;
-    font-weight: 600;
-    color: #374151;
-    padding: 1rem;
-}
-
-:deep(.modern-table .p-datatable-tbody > tr) {
-    border: none;
-    transition: background-color 0.2s;
-}
-
-:deep(.modern-table .p-datatable-tbody > tr:hover) {
-    background: #f8fafc;
-}
-
-:deep(.modern-table .p-datatable-tbody > tr > td) {
-    border: none;
-    padding: 1rem;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.student-info {
+.stat-footer {
     display: flex;
-    flex-direction: column;
-}
-
-.student-name {
-    font-weight: 600;
-    color: #1f2937;
-}
-
-.student-id {
-    font-size: 0.8rem;
-    color: #6b7280;
-}
-
-.time-display {
-    font-family: monospace;
+    align-items: center;
+    justify-content: center;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f3f4f6;
+    font-size: 0.75rem;
     font-weight: 500;
 }
 
-.attendance-cell {
-    display: flex;
-    flex-direction: column;
+/* Quick Actions Section */
+.quick-actions {
+    background: white;
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    margin-top: 0.75rem;
+    flex-shrink: 0;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 0.75rem 0;
+}
+
+.actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 0.5rem;
 }
 
-.percentage {
-    font-weight: 600;
+.action-card {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s;
+    background: #f9fafb;
 }
 
-.mini-progress {
-    height: 4px;
-    background: #e5e7eb;
-    border-radius: 2px;
-    overflow: hidden;
+.action-card:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
 }
 
-.mini-progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-    transition: width 0.8s ease;
+.action-icon {
+    width: 2rem;
+    height: 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    flex-shrink: 0;
 }
 
-/* Trend Chart */
-.trend-chart-container {
-    background: white;
-    border-radius: 20px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+.action-content {
+    flex: 1;
 }
 
-.chart-header {
-    margin-bottom: 1rem;
-}
-
-.chart-title {
-    font-size: 1.25rem;
+.action-title {
+    font-size: 0.875rem;
     font-weight: 600;
     color: #1f2937;
+    margin: 0 0 0.125rem 0;
 }
 
-/* Status Tags */
-:deep(.status-tag) {
-    font-weight: 500;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
+.action-description {
+    color: #6b7280;
+    font-size: 0.75rem;
+    margin: 0;
 }
 
-/* Responsive Design */
+.action-arrow {
+    color: #9ca3af;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+}
+
+.action-card:hover .action-arrow {
+    color: #667eea;
+}
+
 @media (max-width: 768px) {
+    .admin-dashboard {
+        padding: 0.5rem;
+        height: 100vh;
+    }
+
+    .header-content {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .header-left {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .actions-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .stat-card {
+        height: 120px;
+        padding: 0.75rem;
+    }
+
     .dashboard-header {
-        padding: 1.5rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
     }
-    
-    .dashboard-title {
-        font-size: 2rem;
+
+    .quick-actions {
+        padding: 0.75rem;
+        margin-top: 0.5rem;
     }
-    
+}
+
+@media (max-width: 480px) {
     .stats-grid {
         grid-template-columns: 1fr;
+        gap: 0.5rem;
     }
-    
-    .grade-cards-grid,
-    .section-cards-grid {
+
+    .actions-grid {
         grid-template-columns: 1fr;
+        gap: 0.5rem;
     }
-    
-    .header-controls {
-        flex-direction: column;
-        align-items: stretch;
+
+    .header-title {
+        font-size: 1.25rem;
+    }
+
+    .stat-number {
+        font-size: 1.5rem;
+    }
+
+    .stat-card {
+        height: 100px;
+        padding: 0.5rem;
     }
 }
 </style>

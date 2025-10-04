@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
@@ -123,6 +123,10 @@ const selectedStudent = ref(null);
 const fileInput = ref(null);
 const viewStudentDialog = ref(false);
 const isEdit = ref(false);
+const statusChangeDialog = ref(false);
+const selectedStudentForStatus = ref(null);
+const newStudentStatus = ref('');
+const statusChangeReason = ref('');
 
 const selectedStudentAge = computed(() => calculateAge(selectedStudent.value?.birthdate));
 const originalStudentClone = ref(null);
@@ -524,6 +528,41 @@ function formatAddress(student) {
     return student.address || '';
 }
 
+// Get student status display text
+function getStudentStatusDisplay(student) {
+    if (student.current_status) {
+        return student.current_status;
+    }
+    if (student.enrollment_status) {
+        return student.enrollment_status;
+    }
+    return student.isActive ? 'Active' : 'Inactive';
+}
+
+// Get student status severity for Tag component
+function getStudentStatusSeverity(student) {
+    const status = getStudentStatusDisplay(student).toLowerCase();
+    if (status.includes('active') || status.includes('enrolled')) {
+        return 'success';
+    } else if (status.includes('dropped') || status.includes('inactive')) {
+        return 'danger';
+    } else if (status.includes('transferred')) {
+        return 'warning';
+    }
+    return 'info';
+}
+
+// Get student reason for status change
+function getStudentReason(student) {
+    if (student.dropout_reason) {
+        return student.dropout_reason;
+    }
+    if (student.dropout_reason_category) {
+        return student.dropout_reason_category;
+    }
+    return null;
+}
+
 // Update sections when grade changes
 function updateSections() {
     if (filters.value.grade) {
@@ -874,7 +913,7 @@ function editStudent(studentData) {
     if (student.value.gradeLevel) {
         updateStudentSections();
     }
-
+    
     studentDialog.value = true;
 }
 
@@ -884,40 +923,50 @@ function confirmDeleteStudent(studentData) {
     deleteStudentDialog.value = true;
 }
 
-// Toggle student active status
-const toggleStudentStatus = async (studentData) => {
-    try {
-        const newStatus = !studentData.isActive;
+// Open status change dialog
+function openStatusChangeDialog(studentData) {
+    selectedStudentForStatus.value = { ...studentData };
+    newStudentStatus.value = getStudentStatusDisplay(studentData);
+    statusChangeReason.value = getStudentReason(studentData) || '';
+    statusChangeDialog.value = true;
+}
 
-        // Update student status in database
-        const response = await fetch(`http://127.0.0.1:8000/api/students/${studentData.id}`, {
+// Save student status change
+const saveStatusChange = async () => {
+    try {
+        if (!selectedStudentForStatus.value) return;
+        
+        const updateData = {
+            ...selectedStudentForStatus.value,
+            current_status: newStudentStatus.value,
+            enrollment_status: newStudentStatus.value,
+            dropout_reason: statusChangeReason.value,
+            status_changed_date: new Date().toISOString().split('T')[0],
+            status_effective_date: new Date().toISOString().split('T')[0]
+        };
+
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudentForStatus.value.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             },
-            body: JSON.stringify({
-                ...studentData.originalData,
-                isActive: newStatus
-            })
+            body: JSON.stringify(updateData)
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Update local data
-        studentData.isActive = newStatus;
-
         toast.add({
             severity: 'success',
             summary: 'Success',
-            detail: `Student ${newStatus ? 'activated' : 'deactivated'} successfully!`,
+            detail: 'Student status updated successfully!',
             life: 3000
         });
 
-        // Reload students to ensure data consistency
+        statusChangeDialog.value = false;
         await loadStudents();
     } catch (error) {
         console.error('Error updating student status:', error);
@@ -2002,7 +2051,7 @@ onMounted(() => {
                     :loading="loading"
                     stripedRows
                     showGridlines
-                    responsiveLayout="scroll"
+                    responsiveLayout="stack"
                     class="p-datatable-sm modern-datatable"
                     :globalFilterFields="['firstName', 'lastName', 'middleName', 'lrn', 'gradeLevel', 'section']"
                 >
@@ -2011,7 +2060,7 @@ onMounted(() => {
                             <span>{{ slotProps.index + 1 }}</span>
                         </template>
                     </Column>
-                    <Column header="Student" style="min-width: 200px">
+                    <Column header="Student" style="width: 180px">
                         <template #body="slotProps">
                             <div class="flex align-items-center">
                                 <Avatar :image="getStudentPhotoUrl(slotProps.data)" shape="circle" size="large" class="mr-2" />
@@ -2022,14 +2071,14 @@ onMounted(() => {
                             </div>
                         </template>
                     </Column>
-                    <Column field="gradeLevel" header="Grade" sortable style="width: 120px" />
-                    <Column field="section" header="Section" sortable style="width: 120px" />
-                    <Column field="lrn" header="LRN" sortable style="min-width: 150px">
+                    <Column field="gradeLevel" header="Grade" sortable style="width: 80px" />
+                    <Column field="section" header="Section" sortable style="width: 90px" />
+                    <Column field="lrn" header="LRN" sortable style="width: 130px">
                         <template #body="slotProps">
                             <span class="font-semibold">{{ slotProps.data.lrn }}</span>
                         </template>
                     </Column>
-                    <Column header="QR Code" style="width: 80px">
+                    <Column header="QR Code" style="width: 60px">
                         <template #body="slotProps">
                             <div v-if="slotProps.data.qrCodePath" class="flex justify-center">
                                 <img :src="slotProps.data.qrCodePath" alt="QR Code" class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform" @click="showQRCode(slotProps.data)" />
@@ -2039,37 +2088,39 @@ onMounted(() => {
                             </div>
                         </template>
                     </Column>
-                    <Column field="age" header="Age" sortable style="width: 80px">
+                    <Column field="age" header="Age" sortable style="width: 50px">
                         <template #body="slotProps">
                             <span>{{ slotProps.data.age }}</span>
                         </template>
                     </Column>
-                    <Column header="Gender" sortable style="width: 100px">
+                    <Column header="Gender" sortable style="width: 80px">
                         <template #body="slotProps">
                             <Tag :value="slotProps.data.gender" :severity="slotProps.data.gender === 'Male' ? 'info' : 'success'" />
                         </template>
                     </Column>
-                    <Column field="email" header="Email" sortable style="min-width: 200px" />
-                    <Column field="contact" header="Contact" style="width: 130px" />
-                    <Column header="Status" style="width: 120px">
+                    <Column field="email" header="Email" sortable style="width: 160px" />
+                    <Column field="contact" header="Contact" style="width: 100px" />
+                    <Column header="Status" style="width: 100px">
                         <template #body="slotProps">
                             <div class="flex align-items-center gap-2">
-                                <Tag :value="slotProps.data.isActive ? 'Active' : 'Inactive'" :severity="slotProps.data.isActive ? 'success' : 'danger'" />
+                                <Tag 
+                                    :value="getStudentStatusDisplay(slotProps.data)" 
+                                    :severity="getStudentStatusSeverity(slotProps.data)" 
+                                />
                                 <Button
-                                    :icon="slotProps.data.isActive ? 'pi pi-eye-slash' : 'pi pi-eye'"
-                                    class="p-button-rounded p-button-text p-button-sm"
-                                    :class="slotProps.data.isActive ? 'p-button-warning' : 'p-button-success'"
-                                    @click="toggleStudentStatus(slotProps.data)"
-                                    :title="slotProps.data.isActive ? 'Deactivate Student' : 'Activate Student'"
+                                    icon="pi pi-pencil"
+                                    class="p-button-rounded p-button-text p-button-sm p-button-info"
+                                    @click="openStatusChangeDialog(slotProps.data)"
+                                    title="Change Student Status"
                                 />
                             </div>
                         </template>
                     </Column>
-                    <Column header="Actions" style="width: 6rem">
+                    <Column header="Reason" style="width: 150px">
                         <template #body="slotProps">
                             <div class="flex gap-1">
-                                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" />
-                                <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click="confirmDeleteStudent(slotProps.data)" />
+                                <span class="text-sm">{{ getStudentReason(slotProps.data) || 'N/A' }}</span>
+                                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" title="View Details" />
                             </div>
                         </template>
                     </Column>
@@ -2847,7 +2898,52 @@ onMounted(() => {
             </div>
         </Dialog>
 
-        <!-- QR Code Dialog -->
+
+        <!-- Status Change Dialog -->
+        <Dialog v-model:visible="statusChangeDialog" modal header="Change Student Status" :style="{ width: '500px' }">
+            <div class="p-4">
+                <div class="mb-4">
+                    <h4 class="mb-2">Student: {{ selectedStudentForStatus?.name }}</h4>
+                    <p class="text-sm text-gray-600">Current Status: {{ getStudentStatusDisplay(selectedStudentForStatus) }}</p>
+                </div>
+                
+                <div class="field mb-4">
+                    <label for="newStatus" class="block text-sm font-medium mb-2">New Status</label>
+                    <Dropdown 
+                        id="newStatus"
+                        v-model="newStudentStatus" 
+                        :options="[
+                            { label: 'Active', value: 'Active' },
+                            { label: 'Dropped Out', value: 'Dropped Out' },
+                            { label: 'Transferred Out', value: 'Transferred Out' },
+                            { label: 'Graduated', value: 'Graduated' },
+                            { label: 'Inactive', value: 'Inactive' }
+                        ]"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select new status"
+                        class="w-full"
+                    />
+                </div>
+                
+                <div class="field mb-4">
+                    <label for="statusReason" class="block text-sm font-medium mb-2">Reason</label>
+                    <Textarea 
+                        id="statusReason"
+                        v-model="statusChangeReason" 
+                        rows="3" 
+                        placeholder="Enter reason for status change..."
+                        class="w-full"
+                    />
+                </div>
+                
+                <div class="flex justify-end space-x-2 mt-4">
+                    <Button label="Cancel" class="p-button-text" @click="statusChangeDialog = false" />
+                    <Button label="Save Changes" icon="pi pi-check" class="p-button-primary" @click="saveStatusChange" />
+                </div>
+            </div>
+        </Dialog>
+
         <Dialog v-model:visible="qrCodeDialog" modal header="Student LRN QR Code" :style="{ width: '350px' }">
             <div class="p-4 flex flex-column align-items-center">
                 <div v-if="selectedStudent && qrCodes[selectedStudent.lrn]" class="mb-3">
@@ -2883,7 +2979,7 @@ onMounted(() => {
                 </div>
 
                 <div class="success-message">
-                    <h2 class="success-title">🎉 Thank You! 🎉</h2>
+                    <h2 class="success-title">ðŸŽ‰ Thank You! ðŸŽ‰</h2>
                     <p class="success-subtitle">Student Enrolled Successfully!</p>
                     <div class="success-details">
                         <p>The new student has been successfully enrolled in the system.</p>
@@ -3409,10 +3505,47 @@ onMounted(() => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* Modern DataTable Styling */
+
+/* Improved table layout without horizontal scroll */
 .modern-datatable {
     border-radius: 8px;
     overflow: hidden;
+    width: 100%;
+}
+
+.modern-datatable .p-datatable-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.modern-datatable .p-datatable-tbody > tr > td {
+    padding: 0.5rem 0.25rem;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.modern-datatable .p-datatable-thead > tr > th {
+    padding: 0.75rem 0.25rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+/* Specific column styling */
+.modern-datatable .text-wrap {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.modern-datatable .p-button-sm {
+    padding: 0.25rem;
+    font-size: 0.75rem;
+}
+
+.modern-datatable .p-tag {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
 }
 
 :deep(.modern-datatable .p-datatable-header) {
@@ -3666,3 +3799,6 @@ onMounted(() => {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 </style>
+
+
+

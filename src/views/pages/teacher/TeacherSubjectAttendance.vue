@@ -14,7 +14,7 @@ import RadioButton from 'primevue/radiobutton';
 import Tag from 'primevue/tag';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch, watchEffect } from 'vue';
 import { QrcodeStream } from 'vue-qrcode-reader';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -191,39 +191,36 @@ const fetchSubjectDetails = async (subjectIdentifier) => {
             if (response.ok) {
                 const subjects = await response.json();
                 console.log(`📚 All subjects:`, subjects);
-                
+
                 // First try exact match
                 let subject = subjects.find((s) => s.name.toLowerCase() === subjectIdentifier.toLowerCase() || s.code.toLowerCase() === subjectIdentifier.toLowerCase());
-                
+
                 // If no exact match, try special mappings
                 if (!subject) {
                     const subjectMappings = {
-                        'technologyandlivelihoodeducation': 'Technology and Livelihood Education',
-                        'technology': 'Technology and Livelihood Education',
-                        'tle': 'Technology and Livelihood Education',
-                        'arts': 'Arts',
-                        'english': 'English',
-                        'filipino': 'Filipino',
-                        'mathematics': 'Mathematics',
-                        'science': 'Science'
+                        technologyandlivelihoodeducation: 'Technology and Livelihood Education',
+                        technology: 'Technology and Livelihood Education',
+                        tle: 'Technology and Livelihood Education',
+                        arts: 'Arts',
+                        english: 'English',
+                        filipino: 'Filipino',
+                        mathematics: 'Mathematics',
+                        science: 'Science'
                     };
-                    
+
                     const mappedName = subjectMappings[subjectIdentifier.toLowerCase()];
                     if (mappedName) {
                         subject = subjects.find((s) => s.name.toLowerCase() === mappedName.toLowerCase());
                         console.log(`🔄 Using mapping: ${subjectIdentifier} → ${mappedName}`);
                     }
                 }
-                
+
                 // If still no match, try partial match
                 if (!subject) {
-                    subject = subjects.find((s) => 
-                        s.name.toLowerCase().includes(subjectIdentifier.toLowerCase()) ||
-                        subjectIdentifier.toLowerCase().includes(s.name.toLowerCase().replace(/\s+/g, ''))
-                    );
+                    subject = subjects.find((s) => s.name.toLowerCase().includes(subjectIdentifier.toLowerCase()) || subjectIdentifier.toLowerCase().includes(s.name.toLowerCase().replace(/\s+/g, '')));
                     console.log(`🔍 Trying partial match for: ${subjectIdentifier}`);
                 }
-                
+
                 console.log(`🎯 Found matching subject:`, subject);
                 if (subject) {
                     return { id: subject.id, name: subject.name };
@@ -255,19 +252,19 @@ const initializeAttendanceSession = async () => {
                 // Check if session is from today - don't auto-resume old sessions
                 const sessionDate = new Date(matchingSession.session_date || matchingSession.created_at);
                 const today = new Date();
-                
+
                 // Use UTC dates to avoid timezone issues
                 const sessionDateUTC = sessionDate.toISOString().split('T')[0]; // YYYY-MM-DD
                 const todayUTC = today.toISOString().split('T')[0]; // YYYY-MM-DD
                 const isToday = sessionDateUTC === todayUTC;
-                
+
                 console.log('Session date check:');
                 console.log('- Session date (original):', matchingSession.session_date);
                 console.log('- Session date (parsed):', sessionDate.toISOString());
                 console.log('- Session date (UTC):', sessionDateUTC);
                 console.log('- Today date (UTC):', todayUTC);
                 console.log('- Is today?', isToday);
-                
+
                 if (isToday) {
                     currentSession.value = matchingSession;
                     sessionActive.value = true;
@@ -315,17 +312,90 @@ const initializeTeacherData = async () => {
     }
 };
 
-// Function to load students data from database
+// AGGRESSIVE CACHING - Load once, use forever
+const permanentCache = reactive({
+    students: null,
+    sections: null,
+    seatingArrangement: null,
+    teacherData: null,
+    timestamp: null
+});
+
+// Request deduplication to prevent multiple identical API calls
+const pendingRequests = new Map();
+const CACHE_FOREVER = true; // Since teacher/section/students don't change during session
+
+// Check if permanent cache exists (load once, use forever)
+const isPermanentlyCached = (cacheKey) => {
+    return permanentCache[cacheKey] !== null;
+};
+
+// Only clear cache on explicit user action (not automatic)
+const clearCache = () => {
+    console.log('🗑️ Clearing permanent cache (user requested)');
+    permanentCache.students = null;
+    permanentCache.sections = null;
+    permanentCache.seatingArrangement = null;
+    permanentCache.timestamp = null;
+};
+
+// Lightweight preload - only cache essential data
+const preloadData = async () => {
+    console.log('🚀 Preloading essential data...');
+
+    try {
+        // Only preload sections if not cached (students will be loaded per-section)
+        if (!isCacheValid('sections')) {
+            const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
+            const sectionsData = await sectionsResponse.json();
+            dataCache.sections = sectionsData.sections || sectionsData || [];
+            dataCache.timestamp = Date.now();
+            console.log('📦 Preloaded sections');
+        } else {
+            console.log('📦 Sections already cached');
+        }
+        console.log('✅ Preload completed');
+    } catch (error) {
+        console.warn('⚠️ Preload failed, will use regular loading:', error);
+    }
+};
+
+// Function to load students data with caching
 const loadStudentsData = async () => {
     // Prevent duplicate calls
     if (isLoadingStudents.value) {
         console.log('Students already loading, skipping duplicate call');
         return;
     }
-    
+
     try {
         isLoadingStudents.value = true;
-        console.log('Loading students from database...');
+
+        // Check cache first
+        if (isCacheValid('students') && dataCache.students) {
+            console.log('📦 Using cached student data');
+            students.value = dataCache.students;
+            await nextTick();
+            calculateUnassignedStudents();
+
+            // Even with cached students, we need to ensure seating arrangement is loaded
+            // Check if we already have a seating arrangement loaded
+            const hasSeatingArrangement = seatPlan.value.some((row) => row.some((seat) => seat.studentId !== null));
+
+            if (!hasSeatingArrangement) {
+                console.log('📦 Cached students loaded but no seating arrangement, loading seating...');
+                const restored = restorePreservedAssignments();
+                if (!restored) {
+                    await loadSeatingArrangementFromDatabase();
+                }
+            } else {
+                console.log('📦 Cached students and seating arrangement both available');
+            }
+
+            return true;
+        }
+
+        console.log('🔄 Loading students from database...');
 
         // Show loading animation
         isLoadingSeating.value = true;
@@ -340,78 +410,176 @@ const loadStudentsData = async () => {
             throw new Error('Teacher not authenticated');
         }
 
-        // First get teacher assignments to determine section/subject
-        const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
-        console.log('Teacher assignments:', assignments);
+        // Get teacher's homeroom section directly (more reliable)
+        console.log('🔍 Getting teacher homeroom section for teacher ID:', teacherId.value);
 
-        if (!assignments || assignments.length === 0 || !assignments.assignments || assignments.assignments.length === 0) {
-            console.warn('No assignments found for teacher, falling back to Grade 3 students');
-            // Fallback to Grade 3 students if no assignments
-            const studentsData = await AttendanceService.getStudentsByGrade(3);
-            students.value = studentsData || [];
+        try {
+            // Check sections cache first
+            let allSections;
+            if (isCacheValid('sections') && dataCache.sections) {
+                console.log('📦 Using cached sections data');
+                allSections = dataCache.sections;
+            } else {
+                console.log('🔄 Fetching sections from database...');
+                const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
+                const sectionsData = await sectionsResponse.json();
+                allSections = sectionsData.sections || sectionsData || [];
 
-            if (students.value.length > 0) {
-                const firstStudent = students.value[0];
-                sectionId.value = firstStudent.current_section_id || 13;
-
-                // Only set subject info if not already set by props/route
-                if (!subjectId.value || !subjectName.value) {
-                    subjectName.value = 'Mathematics (Grade 3)';
-                    subjectId.value = 1;
-                }
-            }
-        } else {
-            // Use the first assignment from the assignments array
-            const assignmentData = assignments.assignments[0];
-
-            sectionId.value = assignmentData.section_id;
-
-            // Only set subject info if not already set by props/route
-            if (!subjectId.value || !subjectName.value) {
-                const firstSubject = assignmentData.subjects[0];
-                subjectId.value = firstSubject.subject_id;
-                subjectName.value = firstSubject.subject_name || 'Mathematics (Grade 3)';
+                // Cache sections data
+                dataCache.sections = allSections;
+                dataCache.timestamp = Date.now();
             }
 
-            // Validate section_id before loading students
-            if (!sectionId.value || sectionId.value === '' || sectionId.value === 'null') {
-                console.warn('Cannot load students: section_id is missing');
-                students.value = [];
-                return false;
-            }
+            // Find homeroom section for this teacher
+            const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
+            if (homeroomSection) {
+                console.log('✅ Found homeroom section:', homeroomSection.name, 'ID:', homeroomSection.id);
+                sectionId.value = homeroomSection.id;
 
-            // Load students for this specific assignment
-            const resolvedSubjectId = getResolvedSubjectId();
-            const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, resolvedSubjectId);
+                // Use optimized teacher-specific API to avoid loading ALL students
+                console.log('🔄 Loading students for teacher section:', homeroomSection.id);
+                const studentsApiKey = `teacher_${teacherId.value}_students`;
 
-            if (studentsResponse && studentsResponse.students) {
-                students.value = studentsResponse.students.map((student) => ({
-                    id: student.id,
-                    name: student.name || `${student.first_name || student.firstName || ''} ${student.last_name || student.lastName || ''}`.trim(),
-                    firstName: student.first_name || student.firstName || '',
-                    lastName: student.last_name || student.lastName || '',
-                    current_section_id: sectionId.value,
-                    studentId: student.studentId || student.id,
-                    student_id: student.studentId || student.id
-                }));
-
-                // Ensure students are fully processed before loading seating arrangement
-                await nextTick();
-                console.log('Students loaded, now loading seating arrangement. Student count:', students.value.length);
-                
-                // Try to restore preserved assignments first
-                const restored = restorePreservedAssignments();
-                if (!restored) {
-                    // Load seating arrangement after students and sectionId are set
-                    await loadSeatingArrangementFromDatabase();
+                // Check if request is already pending
+                if (pendingRequests.has(studentsApiKey)) {
+                    console.log('🔄 Teacher students API call already pending, waiting...');
                 } else {
-                    console.log('Used preserved assignments instead of database');
-                    // Skip any further database loading to prevent overwriting restored assignments
-                    return;
+                    // Use teacher-specific endpoint to get only relevant students
+                    const requestPromise = TeacherAttendanceService.getStudentsForTeacherSubject(
+                        teacherId.value,
+                        homeroomSection.id,
+                        null // null for homeroom
+                    )
+                        .then((data) => {
+                            const students = data.students || [];
+                            pendingRequests.delete(studentsApiKey); // Clean up
+                            console.log(`📦 Loaded ${students.length} students via teacher API`);
+                            return students;
+                        })
+                        .catch((error) => {
+                            console.warn('Teacher API failed, falling back to sections API:', error);
+                            pendingRequests.delete(studentsApiKey);
+                            // Fallback to smaller sections-based API
+                            return fetch(`http://127.0.0.1:8000/api/sections/${homeroomSection.id}`)
+                                .then((response) => response.json())
+                                .then((data) => data.students || []);
+                        });
+
+                    pendingRequests.set(studentsApiKey, requestPromise);
+                }
+
+                const teacherStudents = (await pendingRequests.get(studentsApiKey)) || [];
+
+                // Teacher API already returns filtered students for the section, no need to filter again
+                const filteredStudents = teacherStudents;
+
+                // Normalize student data to ensure consistent IDs - use actual database IDs
+                const normalizedStudents = filteredStudents.map((student, index) => {
+                    // Use the actual database ID as primary identifier
+                    const dbId = student.id || student.student_id;
+                    // Generate NCS format for display/compatibility but keep database ID as primary
+                    const ncsId = student.student_id || `NCS-2025-${String(dbId).padStart(5, '0')}`;
+
+                    return {
+                        id: dbId,
+                        name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+                        firstName: student.first_name || student.firstName || '',
+                        lastName: student.last_name || student.lastName || '',
+                        current_section_id: homeroomSection.id,
+                        studentId: ncsId, // NCS format for display
+                        student_id: ncsId, // NCS format for compatibility
+                        dbId: dbId // Keep database ID for lookups
+                    };
+                });
+
+                students.value = normalizedStudents;
+
+                // Cache student data
+                dataCache.students = normalizedStudents;
+                dataCache.timestamp = Date.now();
+
+                console.log('✅ Filtered and normalized', students.value.length, 'students for section', homeroomSection.name);
+                console.log(
+                    '📋 Student IDs:',
+                    students.value.map((s) => s.studentId)
+                );
+
+                // Prevent infinite loop - if we still have 0 students, don't retry
+                if (students.value.length === 0) {
+                    console.warn('⚠️ No students found for section', homeroomSection.name, 'ID:', homeroomSection.id);
+                    console.warn('⚠️ This may indicate a data issue or API problem');
+                    // Don't return false here to avoid infinite retry loop
                 }
             } else {
-                students.value = [];
+                console.warn('❌ No homeroom section found for teacher', teacherId.value);
+                // Fallback to assignments method
+                const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
+                console.log('Teacher assignments:', assignments);
+
+                const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];
+
+                if (assignmentsArray.length > 0) {
+                    const assignmentData = assignmentsArray[0];
+                    sectionId.value = assignmentData.section_id;
+
+                    // Load students using the assignment data
+                    const resolvedSubjectId = getResolvedSubjectId();
+                    const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, resolvedSubjectId);
+
+                    if (studentsResponse && studentsResponse.students) {
+                        students.value = studentsResponse.students.map((student) => ({
+                            id: student.id,
+                            name: student.name || `${student.first_name || student.firstName || ''} ${student.last_name || student.lastName || ''}`.trim(),
+                            firstName: student.first_name || student.firstName || '',
+                            lastName: student.last_name || student.lastName || '',
+                            current_section_id: sectionId.value,
+                            studentId: student.studentId || student.id,
+                            student_id: student.studentId || student.id
+                        }));
+                        console.log('✅ Loaded', students.value.length, 'students from assignments');
+                    } else {
+                        students.value = [];
+                    }
+                } else {
+                    console.warn('❌ No assignments found, using fallback');
+                    // Final fallback
+                    sectionId.value = 289; // Ana Cruz's Gumamela section ID
+                    const studentsData = await AttendanceService.getStudentsByGrade('Kindergarten');
+                    students.value = studentsData || [];
+                }
             }
+        } catch (error) {
+            console.error('Error loading homeroom section:', error);
+            // Final fallback
+            sectionId.value = 289; // Ana Cruz's Gumamela section ID
+            const studentsData = await AttendanceService.getStudentsByGrade('Kindergarten');
+            students.value = studentsData || [];
+        }
+
+        // Validate section_id before proceeding
+        if (!sectionId.value || sectionId.value === '' || sectionId.value === 'null') {
+            console.warn('Cannot load attendance: section_id is missing');
+            return false;
+        }
+        // Ensure students are fully processed before loading seating arrangement
+        await nextTick();
+        console.log('Students loaded, now loading seating arrangement. Student count:', students.value.length);
+
+        // Try to restore preserved assignments first
+        const restored = restorePreservedAssignments();
+        if (!restored) {
+            // Load seating arrangement after students and sectionId are set
+            const layoutLoaded = await loadSeatingArrangementFromDatabase();
+
+            // If no saved layout exists, auto-assign students optimally
+            if (!layoutLoaded) {
+                console.log('No saved layout found, auto-assigning students optimally');
+                autoAssignStudents();
+            }
+        } else {
+            console.log('Used preserved assignments instead of database');
+            // Skip any further database loading to prevent overwriting restored assignments
+            return;
         }
 
         console.log('Loaded students for attendance:', students.value.length);
@@ -440,7 +608,7 @@ const loadStudentsData = async () => {
     } finally {
         // Clear loading flags
         isLoadingStudents.value = false;
-        
+
         // Hide loading animation after a minimum display time
         setTimeout(() => {
             isLoadingSeating.value = false;
@@ -462,8 +630,24 @@ const toggleEditMode = () => {
     }
 };
 
-// Save current layout
+// Debounced save function to prevent excessive API calls
+let saveTimeout = null;
+
+// Save current layout with debouncing
 const saveCurrentLayout = async (showToast = true) => {
+    // Clear existing timeout
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+    }
+
+    // Set new timeout to debounce saves
+    saveTimeout = setTimeout(async () => {
+        await saveCurrentLayoutImmediate(showToast);
+    }, 500); // 500ms debounce
+};
+
+// Immediate save function (internal)
+const saveCurrentLayoutImmediate = async (showToast = true) => {
     console.log('Saving current layout to database');
 
     try {
@@ -494,14 +678,14 @@ const saveCurrentLayout = async (showToast = true) => {
             seatPlan: layout.seatPlan,
             assignedSeats
         });
-        
+
         console.log('Calling SeatingService.saveSeatingArrangement with:', {
             sectionId: sectionId.value,
             subjectId: resolvedSubjectId,
             teacherId: teacherId.value,
             layoutKeys: Object.keys(layout)
         });
-        
+
         const response = await SeatingService.saveSeatingArrangement(sectionId.value, resolvedSubjectId, teacherId.value, layout);
 
         if (showToast) {
@@ -552,12 +736,24 @@ const loadSeatingArrangementFromDatabase = async () => {
             console.log('Current values - sectionId:', sectionId.value, 'teacherId:', teacherId.value);
             return loadSavedLayout();
         }
-
         console.log('Loading with sectionId:', sectionId.value, 'teacherId:', teacherId.value, 'subjectId:', getResolvedSubjectId());
 
         const response = await SeatingService.getSeatingArrangement(sectionId.value, teacherId.value, getResolvedSubjectId());
 
         console.log('Loading seating arrangement response:', response);
+        console.log('🔍 SUBJECT-SPECIFIC CHECK: Section', sectionId.value, 'Subject', getResolvedSubjectId(), 'Last Updated:', response?.last_updated);
+
+        // Check if this is actually subject-specific data
+        if (response?.seating_layout?.seatPlan) {
+            const occupiedSeats = response.seating_layout.seatPlan.flat().filter((seat) => seat.isOccupied);
+            console.log('🎯 SEATING CHECK: Found', occupiedSeats.length, 'occupied seats for Subject', getResolvedSubjectId());
+            if (occupiedSeats.length > 0) {
+                console.log(
+                    '🎯 FIRST 3 STUDENTS:',
+                    occupiedSeats.slice(0, 3).map((seat) => seat.studentId)
+                );
+            }
+        }
 
         if (response && response.seating_layout) {
             const layout = response.seating_layout;
@@ -577,7 +773,7 @@ const loadSeatingArrangementFromDatabase = async () => {
                 // Defer cleanup until after students are fully loaded
                 // Use nextTick to ensure students are loaded first
                 await nextTick();
-                
+
                 // Double-check students are loaded before cleanup
                 if (students.value && students.value.length > 0) {
                     console.log('Running cleanup after loading seating arrangement - students loaded:', students.value.length);
@@ -638,6 +834,15 @@ const formatSubjectName = (id) => {
 // Create an empty seat plan grid
 const initializeSeatPlan = () => {
     console.log(`Initializing seat plan with ${rows.value} rows and ${columns.value} columns`);
+
+    // If we have students, use optimal grid size for up to 50 students
+    if (students.value.length > 0 && (rows.value * columns.value < students.value.length || rows.value * columns.value > students.value.length + 15)) {
+        const optimal = calculateOptimalGridSize(students.value.length);
+        console.log(`Adjusting to optimal grid size: ${optimal.rows}x${optimal.columns} for ${students.value.length} students`);
+        rows.value = optimal.rows;
+        columns.value = optimal.columns;
+    }
+
     seatPlan.value = [];
     for (let i = 0; i < rows.value; i++) {
         const row = [];
@@ -645,104 +850,116 @@ const initializeSeatPlan = () => {
             row.push({
                 isOccupied: false,
                 studentId: null,
+                studentName: '',
                 status: null
             });
         }
         seatPlan.value.push(row);
     }
-    console.log(`Seat plan initialized with ${seatPlan.value.length} rows and ${seatPlan.value[0]?.length || 0} columns`);
+    console.log(`Seat plan initialized with ${rows.value} rows and ${columns.value} columns`);
 };
 
-// Update seat plan with changes to row/column count
-watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
-    if (isEditMode.value) {
-        // Save current student assignments
-        const currentAssignments = [];
+// Assignment method options
+const assignmentMethods = ref([
+    { label: 'Alphabetical (A-Z)', value: 'alphabetical', icon: 'pi pi-sort-alpha-down' },
+    { label: 'Reverse Alphabetical (Z-A)', value: 'reverse_alphabetical', icon: 'pi pi-sort-alpha-up' },
+    { label: 'Random', value: 'random', icon: 'pi pi-refresh' }
+]);
 
-        // Extract current assignments from the existing seat plan
-        for (let i = 0; i < seatPlan.value.length; i++) {
-            for (let j = 0; j < seatPlan.value[i].length; j++) {
-                const seat = seatPlan.value[i][j];
-                if (seat.isOccupied && seat.studentId) {
-                    currentAssignments.push({
-                        studentId: seat.studentId,
-                        status: seat.status,
-                        row: i,
-                        col: j
-                    });
-                }
+const selectedAssignmentMethod = ref('alphabetical');
+const showAssignmentOptions = ref(false);
+
+// Sort students based on selected method
+const sortStudents = (students, method) => {
+    const sortedStudents = [...students];
+
+    switch (method) {
+        case 'alphabetical':
+            return sortedStudents.sort((a, b) => a.name.localeCompare(b.name));
+
+        case 'reverse_alphabetical':
+            return sortedStudents.sort((a, b) => b.name.localeCompare(a.name));
+
+        case 'random':
+            // Fisher-Yates shuffle algorithm
+            for (let i = sortedStudents.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [sortedStudents[i], sortedStudents[j]] = [sortedStudents[j], sortedStudents[i]];
             }
-        }
+            return sortedStudents;
 
-        // Create a new seat plan with the updated dimensions
-        const newSeatPlan = [];
-
-        // If we're adding rows, add them at the top
-        // If we're removing rows, remove them from the top
-        const rowDifference = newRows - oldRows;
-
-        if (rowDifference > 0) {
-            // Add new rows at the top (further from teacher's desk)
-            for (let i = 0; i < rowDifference; i++) {
-                const newRow = [];
-                for (let j = 0; j < newColumns; j++) {
-                    newRow.push({
-                        row: i,
-                        col: j,
-                        studentId: null,
-                        status: null,
-                        isOccupied: false
-                    });
-                }
-                newSeatPlan.push(newRow);
-            }
-        }
-
-        // Keep existing rows, starting from the bottom ones (closest to teacher)
-        // if reducing rows, we'll skip the top ones
-        const startIndex = Math.max(0, -rowDifference);
-        const endIndex = oldRows;
-
-        for (let i = startIndex; i < endIndex; i++) {
-            if (i >= seatPlan.value.length) continue;
-
-            const newRow = [];
-            const oldRow = seatPlan.value[i];
-
-            // Handle column changes
-            const colDifference = newColumns - oldColumns;
-
-            // Keep existing columns, add new ones if needed
-            for (let j = 0; j < Math.min(oldColumns, newColumns); j++) {
-                if (j < oldRow.length) {
-                    // Copy existing seat
-                    newRow.push({ ...oldRow[j] });
-                }
-            }
-
-            // Add new columns if needed
-            if (colDifference > 0) {
-                for (let j = oldColumns; j < newColumns; j++) {
-                    newRow.push({
-                        row: newSeatPlan.length,
-                        col: j,
-                        studentId: null,
-                        status: null,
-                        isOccupied: false
-                    });
-                }
-            }
-
-            newSeatPlan.push(newRow);
-        }
-
-        // Update the seat plan
-        seatPlan.value = newSeatPlan;
-
-        // Recalculate unassigned students
-        calculateUnassignedStudents();
+        default:
+            return sortedStudents;
     }
-});
+};
+
+// Auto-assign students to seats with different methods
+const autoAssignStudents = (method = null) => {
+    if (!students.value || students.value.length === 0) {
+        console.log('No students to assign');
+        toast.add({
+            severity: 'warn',
+            summary: 'No Students',
+            detail: 'No students available to assign to seats',
+            life: 3000
+        });
+        return;
+    }
+
+    const assignmentMethod = method || selectedAssignmentMethod.value;
+    const methodLabel = assignmentMethods.value.find((m) => m.value === assignmentMethod)?.label || 'Default';
+
+    console.log(`Auto-assigning ${students.value.length} students using ${methodLabel} method`);
+
+    // Clear all current assignments
+    seatPlan.value.forEach((row) => {
+        row.forEach((seat) => {
+            seat.isOccupied = false;
+            seat.studentId = null;
+            seat.studentName = '';
+            seat.status = null;
+        });
+    });
+
+    // Sort students based on selected method
+    const sortedStudents = sortStudents(students.value, assignmentMethod);
+    let studentIndex = 0;
+
+    // Fill seats row by row, left to right
+    for (let row = 0; row < rows.value && studentIndex < sortedStudents.length; row++) {
+        for (let col = 0; col < columns.value && studentIndex < sortedStudents.length; col++) {
+            const student = sortedStudents[studentIndex];
+
+            // Update the existing seat object - use NCS format for seating arrangement
+            seatPlan.value[row][col].isOccupied = true;
+            seatPlan.value[row][col].studentId = student.studentId; // Use NCS format ID
+            seatPlan.value[row][col].studentName = student.name;
+            seatPlan.value[row][col].status = null;
+
+            console.log(`Assigned ${student.name} to seat [${row}][${col}]`);
+            studentIndex++;
+        }
+    }
+
+    // Recalculate unassigned students
+    calculateUnassignedStudents();
+
+    console.log(`Assigned ${studentIndex} students to seats using ${methodLabel}`);
+
+    // Save the layout after auto-assignment
+    saveCurrentLayout(false);
+
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Students Auto-Assigned',
+        detail: `Successfully assigned ${studentIndex} students using ${methodLabel} order`,
+        life: 3000
+    });
+
+    // Hide assignment options after successful assignment
+    showAssignmentOptions.value = false;
+};
 
 // Get student initials
 const getStudentInitials = (student) => {
@@ -762,8 +979,16 @@ const getStudentById = (studentId) => {
     // Convert to string for comparison if needed
     const idStr = studentId.toString();
 
-    // Find the student with the matching ID
-    const student = students.value.find((s) => s.id.toString() === idStr);
+    // Find the student with the matching ID - check all possible ID formats
+    const student = students.value.find((s) => {
+        // Check all possible ID fields
+        const dbId = s.dbId ? s.dbId.toString() : '';
+        const mainId = s.id ? s.id.toString() : '';
+        const ncsId = s.studentId ? s.studentId.toString() : '';
+        const altId = s.student_id ? s.student_id.toString() : '';
+
+        return dbId === idStr || mainId === idStr || ncsId === idStr || altId === idStr;
+    });
 
     if (!student) {
         // Only warn once per missing student to avoid console spam
@@ -828,7 +1053,7 @@ const startQRScanner = async () => {
     showQRScanner.value = true;
     scannedStudents.value = [];
     lastScannedStudent.value = null;
-    
+
     try {
         await initializeCamera();
     } catch (error) {
@@ -1045,7 +1270,7 @@ const cleanupInvalidStudentAssignments = () => {
     }
 
     let cleanedCount = 0;
-    const studentIds = students.value.map(s => s.id);
+    const studentIds = students.value.map((s) => s.id);
 
     console.log(
         'Running cleanup - current students:',
@@ -1058,7 +1283,7 @@ const cleanupInvalidStudentAssignments = () => {
             if (seat.isOccupied && seat.studentId) {
                 const student = getStudentById(seat.studentId);
                 console.log(`Checking seat [${rowIndex}][${colIndex}] with studentId ${seat.studentId}:`, student ? 'FOUND' : 'NOT FOUND');
-                
+
                 // Only remove if we're absolutely sure the student doesn't exist
                 // and we have a reasonable number of students loaded
                 if (!student && students.value.length > 0) {
@@ -1307,20 +1532,23 @@ const preserveCurrentAssignments = () => {
             }
         });
     });
-    
+
     if (assignments.length > 0) {
         // Use resolved subject ID for consistency
         const resolvedSubjectId = getResolvedSubjectId();
         const preservationKey = `preserved_assignments_${teacherId.value}_${sectionId.value}_${resolvedSubjectId}`;
-        localStorage.setItem(preservationKey, JSON.stringify({
-            assignments,
-            timestamp: new Date().toISOString(),
-            rows: rows.value,
-            columns: columns.value,
-            teacherId: teacherId.value,
-            sectionId: sectionId.value,
-            subjectId: resolvedSubjectId
-        }));
+        localStorage.setItem(
+            preservationKey,
+            JSON.stringify({
+                assignments,
+                timestamp: new Date().toISOString(),
+                rows: rows.value,
+                columns: columns.value,
+                teacherId: teacherId.value,
+                sectionId: sectionId.value,
+                subjectId: resolvedSubjectId
+            })
+        );
         console.log('Preserved assignments for navigation:', assignments.length);
     }
 };
@@ -1331,21 +1559,21 @@ const restorePreservedAssignments = () => {
     const resolvedSubjectId = getResolvedSubjectId();
     const preservationKey = `preserved_assignments_${teacherId.value}_${sectionId.value}_${resolvedSubjectId}`;
     const preserved = localStorage.getItem(preservationKey);
-    
+
     if (preserved) {
         try {
             const data = JSON.parse(preserved);
             const timeDiff = new Date() - new Date(data.timestamp);
-            
+
             // Only restore if preserved within the last 5 minutes
             if (timeDiff < 5 * 60 * 1000) {
                 console.log('Restoring preserved assignments:', data.assignments.length);
-                
+
                 // Set flag to prevent grid updates during restoration
                 isRestoringAssignments.value = true;
-                
+
                 console.log('Setting restoration flag to prevent grid updates');
-                
+
                 // Ensure grid matches preserved dimensions
                 if (data.rows && data.columns) {
                     console.log(`Restoring grid dimensions: ${data.rows}×${data.columns}`);
@@ -1353,12 +1581,11 @@ const restorePreservedAssignments = () => {
                     columns.value = data.columns;
                     initializeSeatPlan();
                 }
-                
+
                 // Restore assignments
                 console.log('Restoring assignments:', data.assignments);
-                data.assignments.forEach(assignment => {
-                    if (assignment.rowIndex < seatPlan.value.length && 
-                        assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+                data.assignments.forEach((assignment) => {
+                    if (assignment.rowIndex < seatPlan.value.length && assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
                         const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
                         seat.isOccupied = true;
                         seat.studentId = assignment.studentId;
@@ -1366,20 +1593,18 @@ const restorePreservedAssignments = () => {
                         console.log(`Restored: student ${assignment.studentId} to seat [${assignment.rowIndex}][${assignment.colIndex}]`);
                     }
                 });
-                
+
                 calculateUnassignedStudents();
-                
+
                 // Clear the restoration flag after a delay to ensure all watchers have processed
                 setTimeout(() => {
                     isRestoringAssignments.value = false;
                     console.log('Cleared restoration flag');
                 }, 100);
-                
-                // Save the restored layout to database immediately to persist it
-                setTimeout(() => {
-                    saveCurrentLayout(false);
-                }, 100);
-                
+
+                // Layout is already persisted in database, no need to save again
+                console.log('Seating arrangement restored from preserved assignments');
+
                 // Clean up preserved data
                 localStorage.removeItem(preservationKey);
                 return true;
@@ -1392,7 +1617,7 @@ const restorePreservedAssignments = () => {
             localStorage.removeItem(preservationKey);
         }
     }
-    
+
     return false;
 };
 
@@ -1539,7 +1764,12 @@ const calculateUnassignedStudents = () => {
     });
 
     // Filter out assigned students from the full student list
-    unassignedStudents.value = students.value.filter((student) => !assignedStudentIds.has(student.id));
+    // Check both student.id and student.studentId to match how we assign them
+    unassignedStudents.value = students.value.filter((student) => {
+        const studentId = student.studentId || student.id;
+        const studentIdAlt = student.id || student.studentId;
+        return !assignedStudentIds.has(studentId) && !assignedStudentIds.has(studentIdAlt);
+    });
 
     console.log('Total students:', students.value.length);
     console.log('Assigned students:', assignedStudentIds.size);
@@ -1766,7 +1996,7 @@ const createAttendanceSession = async () => {
     try {
         // Use resolved subject ID for session creation
         const resolvedSubjectId = getResolvedSubjectId();
-        
+
         const sessionData = {
             teacherId: teacherId.value,
             sectionId: sectionId.value,
@@ -1935,11 +2165,11 @@ const completeAttendanceSession = async () => {
 
         // Add notification with correct method
         const methodNames = {
-            'qr': 'QR Code Scan',
-            'seat_plan': 'Seat Plan',
-            'roll_call': 'Roll Call'
+            qr: 'QR Code Scan',
+            seat_plan: 'Seat Plan',
+            roll_call: 'Roll Call'
         };
-        
+
         const sessionSummaryWithMethod = {
             ...response.summary,
             method: methodNames[attendanceMethod.value] || 'Manual Entry'
@@ -1968,7 +2198,7 @@ const completeAttendanceSession = async () => {
         // Force notification reload after a brief delay to ensure backend has created it
         try {
             // Small delay to ensure notification is created in database first
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             await NotificationService.loadNotifications();
             console.log('✅ Notifications reloaded after session completion - should show new notification');
         } catch (notifError) {
@@ -2003,14 +2233,14 @@ const completeAttendanceSession = async () => {
 
 const markAllPresent = async () => {
     console.log('Mark All Present clicked');
-    
+
     if (!confirm('Are you sure you want to mark all students as present?')) {
         console.log('User cancelled');
         return;
     }
 
     console.log('Checking session status - Active:', sessionActive.value, 'Session:', currentSession.value);
-    
+
     if (!sessionActive.value || !currentSession.value) {
         toast.add({
             severity: 'error',
@@ -2032,7 +2262,7 @@ const markAllPresent = async () => {
                 if (seat.isOccupied && seat.studentId) {
                     // Update visual status
                     seat.status = 1; // Present status
-                    
+
                     // Add to batch
                     attendanceData.push({
                         student_id: seat.studentId,
@@ -2055,7 +2285,7 @@ const markAllPresent = async () => {
             await AttendanceSessionService.markSessionAttendance(currentSession.value.id, attendanceData);
             markedCount = attendanceData.length;
             console.log('Successfully marked', markedCount, 'students');
-            
+
             // Force visual update - ensure all seats show green status
             const updatedSeats = [];
             seatPlan.value.forEach((row, rowIndex) => {
@@ -2063,14 +2293,14 @@ const markAllPresent = async () => {
                     if (seat.isOccupied && seat.studentId) {
                         seat.status = 1; // Set to green/present
                         console.log(`Setting seat [${rowIndex}][${colIndex}] student ${seat.studentId} to status 1 (green)`);
-                        updatedSeats.push({rowIndex, colIndex, studentId: seat.studentId});
+                        updatedSeats.push({ rowIndex, colIndex, studentId: seat.studentId });
                     }
                 });
             });
-            
+
             console.log('Updated', updatedSeats.length, 'seats with green status');
             console.log('Updated seats:', updatedSeats);
-            
+
             // Force Vue reactivity with nextTick
             await nextTick();
             console.log('Vue DOM updated via nextTick');
@@ -2087,11 +2317,9 @@ const markAllPresent = async () => {
         console.error('Error response:', error.response?.data);
         console.error('Validation errors:', JSON.stringify(error.response?.data?.errors, null, 2));
         console.error('Sent data:', attendanceData);
-        
-        const errorMsg = error.response?.data?.message || 
-                        JSON.stringify(error.response?.data?.errors) || 
-                        'Failed to mark all students as present';
-        
+
+        const errorMsg = error.response?.data?.message || JSON.stringify(error.response?.data?.errors) || 'Failed to mark all students as present';
+
         toast.add({
             severity: 'error',
             summary: 'Validation Error',
@@ -2185,7 +2413,7 @@ const decrementColumns = () => {
 // Function to resolve subject details from identifier
 const resolveSubjectDetails = async (subjectIdentifier) => {
     console.log(`🚀 Resolving subject details for identifier: ${subjectIdentifier}`);
-    
+
     if (subjectIdentifier && (subjectName.value === 'Subject' || isNaN(subjectIdentifier))) {
         const subjectDetails = await fetchSubjectDetails(subjectIdentifier);
         console.log(`📋 Received subject details:`, subjectDetails);
@@ -2216,7 +2444,7 @@ const resolveSubjectDetails = async (subjectIdentifier) => {
 // Add missing updateGridSize function
 const updateGridSize = () => {
     console.log(`Updating grid size to ${rows.value} rows × ${columns.value} columns`);
-    
+
     // Preserve current assignments before reinitializing
     const currentAssignments = [];
     if (seatPlan.value && seatPlan.value.length > 0) {
@@ -2233,16 +2461,15 @@ const updateGridSize = () => {
             });
         });
     }
-    
+
     console.log('Preserving assignments during grid update:', currentAssignments.length);
-    
+
     // Reinitialize the grid
     initializeSeatPlan();
-    
+
     // Restore assignments to new grid if they fit
-    currentAssignments.forEach(assignment => {
-        if (assignment.rowIndex < seatPlan.value.length && 
-            assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
+    currentAssignments.forEach((assignment) => {
+        if (assignment.rowIndex < seatPlan.value.length && assignment.colIndex < seatPlan.value[assignment.rowIndex].length) {
             const seat = seatPlan.value[assignment.rowIndex][assignment.colIndex];
             seat.isOccupied = true;
             seat.studentId = assignment.studentId;
@@ -2252,9 +2479,15 @@ const updateGridSize = () => {
             console.log(`Could not restore assignment for student ${assignment.studentId} - position out of bounds`);
         }
     });
-    
+
     calculateUnassignedStudents();
-    saveCurrentLayout(false);
+
+    // Only save if this is a user-initiated grid change, not during initialization
+    if (!isInitializing.value && !isRestoringAssignments.value) {
+        saveCurrentLayout(false);
+    } else {
+        console.log('Skipping save during initialization/restoration');
+    }
 };
 
 // Watch for route changes to update subject
@@ -2267,30 +2500,30 @@ watch(
         // Only reinitialize if the subject actually changed and we're not already loading
         if (oldParams && oldParams.subjectId !== matchedSubject && !isLoadingStudents.value) {
             console.log(`Subject changed from ${oldParams.subjectId} to ${matchedSubject}, reinitializing...`);
-            
+
             // Clear any existing intervals to prevent conflicts
             if (refreshInterval) {
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
-            
+
             // Clear current data
             students.value = [];
             seatPlan.value = [];
             attendanceRecords.value = [];
             resolvedSubjectId.value = null; // Clear resolved ID for fresh resolution
-            
+
             // Reset subject info
             if (matchedSubject) {
                 subjectId.value = matchedSubject;
-                
+
                 // Resolve subject details if needed
                 if (isNaN(matchedSubject)) {
                     await resolveSubjectDetails(matchedSubject);
                 } else {
                     subjectName.value = formatSubjectName(matchedSubject);
                 }
-                
+
                 // Reinitialize component with new subject
                 await initializeComponent();
             } else {
@@ -2300,14 +2533,14 @@ watch(
         } else if (matchedSubject) {
             // First load or same subject
             subjectId.value = matchedSubject;
-            
+
             // Resolve subject details if needed for first load
             if (isNaN(matchedSubject)) {
                 await resolveSubjectDetails(matchedSubject);
             } else {
                 subjectName.value = formatSubjectName(matchedSubject);
             }
-            
+
             loadSavedTemplates();
         } else {
             subjectName.value = 'Subject';
@@ -2335,7 +2568,7 @@ const initializeComponent = async () => {
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
-            
+
             // Set up auto-refresh after initial load (much less frequent)
             refreshInterval = setInterval(async () => {
                 console.log('Auto-refreshing student data...');
@@ -2346,8 +2579,13 @@ const initializeComponent = async () => {
             }, 300000); // Refresh every 5 minutes instead of 30 seconds
         });
 
-        // Initialize an empty seat plan for grid layout
-        initializeSeatPlan();
+        // Only initialize empty seat plan if no students are loaded yet
+        if (students.value.length === 0) {
+            console.log('No students loaded yet, initializing empty seat plan');
+            initializeSeatPlan();
+        } else {
+            console.log('Students already loaded, skipping seat plan initialization to preserve seating arrangement');
+        }
 
         // Load seating arrangement after student data is loaded (moved to loadStudentsData)
 
@@ -2438,6 +2676,9 @@ const initializeComponent = async () => {
     }
 };
 
+// Track if component is currently initializing to prevent duplicate loads
+const isInitializing = ref(false);
+
 // Watch for route changes to update subject info immediately
 watchEffect(() => {
     const newSubject = getInitialSubjectInfo();
@@ -2446,64 +2687,108 @@ watchEffect(() => {
         subjectName.value = newSubject.name;
         console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
 
-        // Reload students data when subject changes
-        if (teacherId.value) {
+        // Only reload students data if not currently initializing and teacher is available
+        if (teacherId.value && !isInitializing.value && !isLoadingStudents.value) {
+            console.log('Route change detected, reloading students data...');
+            // Only clear cache if subject actually changed, not on every route event
+            const currentSubjectFromRoute = route.params.subjectId;
+            if (currentSubjectFromRoute !== subjectId.value) {
+                console.log('Subject changed, clearing cache AND seating arrangement for fresh data');
+                clearCache();
+                pendingRequests.clear();
+                // CRITICAL: Clear seating arrangement to force reload for new subject
+                seatPlan.value = [];
+                console.log('🔄 CLEARED seating arrangement for subject change');
+            }
             isLoadingSeating.value = true;
             loadingMessage.value = 'Switching subjects...';
             loadStudentsData();
+        } else if (isInitializing.value) {
+            console.log('Skipping route change reload - component is initializing');
+        } else if (isLoadingStudents.value) {
+            console.log('Skipping route change reload - students already loading');
         }
     }
 });
 
-// Initialize component when mounted
+// Initialize component
 onMounted(async () => {
-    console.log(`🔄 Component mounted with: ${subjectName.value} (ID: ${subjectId.value})`);
+    console.log('🔄 Component mounted with:', `Subject (ID: ${subjectId.value})`);
+    console.log(`🔍 Subject ID is NaN: ${isNaN(subjectId.value)}`);
 
-    // Initialize teacher authentication first
-    await initializeTeacherData();
+    // Set initialization flag to prevent duplicate loads
+    isInitializing.value = true;
 
-    console.log(`🔍 Checking if subject ID needs resolution: isNaN(${subjectId.value}) = ${isNaN(subjectId.value)}`);
+    try {
+        // Start preloading data in background (non-blocking)
+        preloadData().catch(console.warn);
 
-    // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
-    if (subjectId.value && (subjectName.value === 'Subject' || isNaN(subjectId.value))) {
-        console.log(`🚀 Fetching subject details for identifier: ${subjectId.value}`);
-        const subjectDetails = await fetchSubjectDetails(subjectId.value);
-        console.log(`📋 Received subject details:`, subjectDetails);
+        // Initialize teacher data first
+        await initializeTeacherData();
 
-        if (subjectDetails.id) {
-            const newSubjectName = subjectDetails.name;
-            const newSubjectId = subjectDetails.id;
+        // Load students and seating data (critical for UI)
+        await loadStudentsData();
 
-            subjectId.value = newSubjectId;
-            subjectName.value = newSubjectName;
-            resolvedSubjectId.value = newSubjectId; // Store the resolved ID
-            console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
+        // Clear loading state as soon as critical data is loaded
+        isLoadingSeating.value = false;
+        console.log('🎯 Critical data loaded, UI ready for interaction');
 
-            // Force Vue to update the DOM
-            await nextTick();
-            console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
+        // Load saved templates in background (non-blocking)
+        loadSavedTemplates().catch(console.warn);
 
-            // Force multiple updates to ensure it stuck
-            setTimeout(() => {
-                if (titleRef.value) {
-                    titleRef.value.textContent = `${newSubjectName} Attendance`;
-                    console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
-                }
-            }, 200);
+        // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
+        if (subjectId.value && (subjectName.value === 'Subject' || isNaN(subjectId.value))) {
+            console.log(`Fetching subject details for identifier: ${subjectId.value}`);
+            const subjectDetails = await fetchSubjectDetails(subjectId.value);
+            console.log(`📋 Received subject details:`, subjectDetails);
+
+            if (subjectDetails.id) {
+                const newSubjectName = subjectDetails.name;
+                const newSubjectId = subjectDetails.id;
+
+                subjectId.value = newSubjectId;
+                subjectName.value = newSubjectName;
+                resolvedSubjectId.value = newSubjectId; // Store the resolved ID
+                console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
+
+                // Force Vue to update the DOM
+                await nextTick();
+                console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
+
+                // Force multiple updates to ensure it stuck
+                setTimeout(() => {
+                    if (titleRef.value) {
+                        titleRef.value.textContent = `${newSubjectName} Attendance`;
+                        console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
+                    }
+                }, 200);
+            } else {
+                console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
+            }
         } else {
-            console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
+            console.log(`⏭️ No subject ID resolution needed`);
         }
-    } else {
-        console.log(`⏭️ No subject ID resolution needed`);
+
+        console.log(`🎯 Final subject values - Name: ${subjectName.value}, ID: ${subjectId.value}`);
+
+        // Initialize component in background without blocking UI
+        initializeComponent().catch(console.warn);
+
+        // Load today's attendance in background
+        loadTodayAttendanceFromDatabase().catch(console.warn);
+    } catch (error) {
+        console.error('Error during component initialization:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Initialization Error',
+            detail: 'Failed to initialize component properly',
+            life: 5000
+        });
+    } finally {
+        // Clear initialization flag
+        isInitializing.value = false;
+        console.log('🏁 Component initialization completed');
     }
-
-    console.log(`🎯 Final subject values - Name: ${subjectName.value}, ID: ${subjectId.value}`);
-
-    // Initialize component in background without blocking UI
-    initializeComponent();
-
-    // Load today's attendance in background
-    loadTodayAttendanceFromDatabase();
 });
 
 // Watch for session status changes and clear statuses when session becomes inactive
@@ -2717,7 +3002,7 @@ const startRollCall = () => {
 onUnmounted(() => {
     // Preserve current assignments before unmounting
     preserveCurrentAssignments();
-    
+
     // Stop scanning to release camera resources
     scanning.value = false;
     console.log('Component unmounting, camera resources released');
@@ -2727,12 +3012,12 @@ onUnmounted(() => {
         clearInterval(timeInterval.value);
         timeInterval.value = null;
     }
-    
+
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
     }
-    
+
     // Clear loading states
     isLoadingSeating.value = false;
     isLoadingStudents.value = false;
@@ -2755,14 +3040,14 @@ const sortedUnassignedStudents = computed(() => {
 const handleSeatHover = (rowIndex, colIndex, event) => {
     const seat = seatPlan.value[rowIndex][colIndex];
     if (!seat.isOccupied || !sessionActive.value || isEditMode.value || justClicked.value) return;
-    
+
     // Get total columns in the grid
     const totalColumns = seatPlan.value[0]?.length || 0;
     const totalRows = seatPlan.value.length || 0;
-    
+
     // Determine transform origin based on GRID POSITION (not viewport)
     let transformOrigin = '';
-    
+
     // Horizontal position in grid
     if (colIndex === 0) {
         // First column - expand to the RIGHT
@@ -2774,7 +3059,7 @@ const handleSeatHover = (rowIndex, colIndex, event) => {
         // Middle columns - expand from center
         transformOrigin = 'center';
     }
-    
+
     // Vertical position in grid
     if (rowIndex === 0) {
         // First row - expand DOWNWARD
@@ -2786,11 +3071,11 @@ const handleSeatHover = (rowIndex, colIndex, event) => {
         // Middle rows - expand from center
         transformOrigin += ' center';
     }
-    
-    hoveredSeat.value = { 
-        row: rowIndex, 
+
+    hoveredSeat.value = {
+        row: rowIndex,
         col: colIndex,
-        transformOrigin 
+        transformOrigin
     };
 };
 
@@ -2822,20 +3107,20 @@ const handleSeatClick = async (rowIndex, colIndex) => {
         showAttendanceMethodModal.value = true;
         return;
     }
-    
+
     // Just keep hover actions visible on click
 };
 
 // Handle quick action click
 const handleQuickAction = async (status) => {
     if (!hoveredSeat.value) return;
-    
+
     const { row, col } = hoveredSeat.value;
     const seat = seatPlan.value[row][col];
     const student = students.value.find((s) => s.id === seat.studentId);
-    
+
     if (!student) return;
-    
+
     // For Late or Excused, show reason dialog
     if (status === 'Late' || status === 'Excused') {
         pendingAttendanceUpdate.value = {
@@ -2850,14 +3135,14 @@ const handleQuickAction = async (status) => {
         clearHoveredSeat(); // Hide quick actions
         return;
     }
-    
+
     // For Present/Absent, save immediately
     seatPlan.value[row][col].status = status;
     clearHoveredSeat(); // Hide quick actions
-    
+
     try {
         await saveAttendanceToDatabase(student.id, status, '', null, null);
-        
+
         toast.add({
             severity: 'success',
             summary: 'Attendance Updated',
@@ -2868,7 +3153,7 @@ const handleQuickAction = async (status) => {
         console.error('Error saving attendance:', error);
         // Revert the change if save failed
         seatPlan.value[row][col].status = seat.status;
-        
+
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -2881,21 +3166,15 @@ const handleQuickAction = async (status) => {
 // Handle reason dialog confirmation
 const onReasonConfirmed = async (reasonData) => {
     if (!pendingAttendanceUpdate.value) return;
-    
+
     const { student, status, rowIndex, colIndex } = pendingAttendanceUpdate.value;
-    
+
     // Update seat with status and reason
     seatPlan.value[rowIndex][colIndex].status = status;
-    
+
     // Save to database with reason
     try {
-        await saveAttendanceToDatabase(
-            student.id, 
-            status, 
-            '', 
-            reasonData.reason_id, 
-            reasonData.reason_notes
-        );
+        await saveAttendanceToDatabase(student.id, status, '', reasonData.reason_id, reasonData.reason_notes);
 
         toast.add({
             severity: 'success',
@@ -2915,7 +3194,7 @@ const onReasonConfirmed = async (reasonData) => {
             life: 3000
         });
     }
-    
+
     // Clear pending update
     pendingAttendanceUpdate.value = null;
 };
@@ -3849,11 +4128,11 @@ const saveCompletedSession = (sessionData) => {
 
     // Add notification to the system with correct method
     const methodNames = {
-        'qr': 'QR Code Scan',
-        'seat_plan': 'Seat Plan',
-        'roll_call': 'Roll Call'
+        qr: 'QR Code Scan',
+        seat_plan: 'Seat Plan',
+        roll_call: 'Roll Call'
     };
-    
+
     const sessionDataWithMethod = {
         ...sessionData,
         method: methodNames[attendanceMethod.value] || 'Manual Entry'
@@ -4163,82 +4442,126 @@ const getResolvedSubjectId = () => {
         console.log(`Using resolved subject ID from API: ${resolvedSubjectId.value}`);
         return resolvedSubjectId.value;
     }
-    
+
     // Second priority: If subjectId is already numeric, use it
     if (typeof subjectId.value === 'number' || !isNaN(Number(subjectId.value))) {
         const numericId = Number(subjectId.value);
         console.log(`Using numeric subject ID: ${numericId}`);
         return numericId;
     }
-    
+
     // Third priority: Try to map by subject name
     const subjectMapping = {
-        'Arts': 5,
-        'English': 1,
-        'Filipino': 2,
-        'Mathematics': 3,
-        'Science': 4,
+        Arts: 5,
+        English: 1,
+        Filipino: 2,
+        Mathematics: 3,
+        Science: 4,
         'Technology and Livelihood Education': 23, // Updated to correct ID
-        'TLE': 23
+        TLE: 23
     };
-    
+
     if (subjectName.value && subjectMapping[subjectName.value]) {
         console.log(`Resolved subject ID by name: ${subjectName.value} → ${subjectMapping[subjectName.value]}`);
         return subjectMapping[subjectName.value];
     }
-    
+
     // Last resort: Map route parameter to numeric ID (fallback only)
     const routeMapping = {
-        'arts': 5,
-        'english': 1,
-        'filipino': 2,
-        'mathematics': 3,
-        'science': 4,
-        'technologyandlivelihoodeducation': 23, // Updated to correct ID
-        'technology': 23,
-        'tle': 23
+        arts: 5,
+        english: 1,
+        filipino: 2,
+        mathematics: 3,
+        science: 4,
+        technologyandlivelihoodeducation: 23, // Updated to correct ID
+        technology: 23,
+        tle: 23
     };
-    
+
     if (routeMapping[subjectId.value]) {
         console.log(`Resolved subject ID by route (fallback): ${subjectId.value} → ${routeMapping[subjectId.value]}`);
         return routeMapping[subjectId.value];
     }
-    
+
     console.warn(`Could not resolve subject ID for: name="${subjectName.value}", id="${subjectId.value}"`);
     return subjectId.value;
 };
+// Calculate optimal grid size for students (accommodates up to 50+ students)
+const calculateOptimalGridSize = (studentCount) => {
+    if (studentCount <= 0) return { rows: 4, columns: 5 };
 
-// Watch for rows and columns changes to ensure grid updates
+    // For 20 students, use exact fit arrangements to avoid empty seats
+    if (studentCount <= 20) {
+        return { rows: 4, columns: 5 }; // Exactly 20 seats
+    }
+
+    // Optimal arrangements for different student counts (up to 50+ students):
+    const arrangements = [
+        { rows: 5, columns: 5 }, // 25 seats
+        { rows: 5, columns: 6 }, // 30 seats
+        { rows: 6, columns: 6 }, // 36 seats
+        { rows: 6, columns: 7 }, // 42 seats
+        { rows: 7, columns: 7 }, // 49 seats
+        { rows: 7, columns: 8 }, // 56 seats (accommodates 50+ students)
+        { rows: 8, columns: 7 }, // 56 seats (alternative layout)
+        { rows: 8, columns: 8 } // 64 seats (for very large classes)
+    ];
+
+    // Find the arrangement that fits the students with minimal empty seats (max 6 empty)
+    for (const arrangement of arrangements) {
+        const totalSeats = arrangement.rows * arrangement.columns;
+        const emptySeats = totalSeats - studentCount;
+        if (totalSeats >= studentCount && emptySeats <= 6) {
+            return arrangement;
+        }
+    }
+
+    // Fallback: calculate square-ish grid
+    const sqrt = Math.ceil(Math.sqrt(studentCount));
+    return { rows: sqrt, columns: sqrt };
+};
+
+// Watch for rows and columns changes to ensure grid updates (with debouncing)
+let gridUpdateTimeout = null;
 watch([rows, columns], ([newRows, newColumns], [oldRows, oldColumns]) => {
     console.log(`Grid dimensions changed: ${oldRows}×${oldColumns} → ${newRows}×${newColumns}`);
-    
+
     // Don't update grid if we're currently restoring assignments
     if (isRestoringAssignments.value) {
         console.log('Skipping grid update - currently restoring assignments');
         return;
     }
-    
-    if (newRows !== oldRows || newColumns !== oldColumns) {
-        updateGridSize();
+
+    // Debounce grid updates to prevent rapid changes
+    if (gridUpdateTimeout) {
+        clearTimeout(gridUpdateTimeout);
     }
+
+    gridUpdateTimeout = setTimeout(() => {
+        if (newRows !== oldRows || newColumns !== oldColumns) {
+            updateGridSize();
+        }
+    }, 300);
 });
 
 // Watch for students loading to trigger cleanup if needed
-watch(students, (newStudents, oldStudents) => {
-    if (newStudents && newStudents.length > 0 && (!oldStudents || oldStudents.length === 0)) {
-        console.log('Students loaded, checking if cleanup is needed');
-        // Small delay to ensure seating arrangement is also loaded
-        setTimeout(() => {
-            const hasAssignedSeats = seatPlan.value.some(row => 
-                row.some(seat => seat.isOccupied && seat.studentId)
-            );
-            if (hasAssignedSeats) {
-                console.log('Found assigned seats, running cleanup to validate assignments');
-                cleanupInvalidStudentAssignments();
-            }
-        }, 500);
-    }
-}, { deep: true });
+watch(
+    students,
+    (newStudents, oldStudents) => {
+        if (newStudents && newStudents.length > 0 && (!oldStudents || oldStudents.length === 0)) {
+            console.log('Students loaded, checking if cleanup is needed');
+            // Small delay to ensure seating arrangement is also loaded
+            setTimeout(() => {
+                const hasAssignedSeats = seatPlan.value.some((row) => row.some((seat) => seat.isOccupied && seat.studentId));
+                if (hasAssignedSeats) {
+                    console.log('Found assigned seats, running cleanup to validate assignments');
+                    cleanupInvalidStudentAssignments();
+                }
+            }, 500);
+        }
+    },
+    { deep: true }
+);
 
 // Fix reference to isDropTarget
 const isDropTarget = ref(false);
@@ -4279,47 +4602,38 @@ const titleRef = ref(null);
 
         <!-- Action Buttons -->
         <div class="action-buttons flex flex-wrap gap-2 mb-4">
-            <Button 
-                icon="pi pi-pencil" 
-                label="Edit Seats" 
-                class="p-button-success" 
-                :class="{ 'p-button-outlined': !isEditMode }" 
-                @click="toggleEditMode"
-                :disabled="sessionActive"
-            />
+            <Button icon="pi pi-pencil" label="Edit Seats" class="p-button-success" :class="{ 'p-button-outlined': !isEditMode }" @click="toggleEditMode" :disabled="sessionActive" />
 
-            <Button 
-                icon="pi pi-save" 
-                label="Save as Template" 
-                class="p-button-outlined" 
-                @click="showTemplateSaveDialog = true"
-                :disabled="sessionActive"
-            />
+            <!-- Auto Assignment with Options -->
+            <div class="auto-assign-container">
+                <Button icon="pi pi-users" label="Auto Assign Students" class="p-button-info" @click="showAssignmentOptions = !showAssignmentOptions" :disabled="sessionActive || !isEditMode" />
 
-            <Button 
-                icon="pi pi-list" 
-                label="Load Template" 
-                class="p-button-outlined" 
-                @click="showTemplateManager = true"
-                :disabled="sessionActive"
-            />
+                <!-- Assignment Options Overlay -->
+                <div v-if="showAssignmentOptions" class="assignment-options-overlay">
+                    <div class="assignment-options-panel">
+                        <h4 class="mb-3">Choose Assignment Method</h4>
 
-            <Button 
-                icon="pi pi-play" 
-                label="Start Session" 
-                class="p-button-success" 
-                @click="startAttendanceSession" 
-                v-if="!sessionActive"
-                :disabled="isEditMode"
-            />
+                        <div class="assignment-methods">
+                            <div v-for="method in assignmentMethods" :key="method.value" class="assignment-method-item" @click="autoAssignStudents(method.value)">
+                                <i :class="method.icon" class="method-icon"></i>
+                                <span class="method-label">{{ method.label }}</span>
+                            </div>
+                        </div>
 
-            <Button 
-                icon="pi pi-check-circle" 
-                label="Mark All Present" 
-                class="p-button-success" 
-                @click="markAllPresent" 
-                :disabled="isCompletingSession || !sessionActive" 
-            />
+                        <div class="assignment-options-footer">
+                            <Button label="Cancel" class="p-button-text p-button-sm" @click="showAssignmentOptions = false" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <Button icon="pi pi-save" label="Save as Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" :disabled="sessionActive" />
+
+            <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" :disabled="sessionActive" />
+
+            <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" :disabled="isEditMode" />
+
+            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
 
             <Button
                 :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
@@ -4330,21 +4644,9 @@ const titleRef = ref(null);
                 :disabled="isCompletingSession"
             />
 
-            <Button 
-                icon="pi pi-refresh" 
-                label="Reset Attendance" 
-                class="p-button-outlined" 
-                @click="resetAllAttendance" 
-                :disabled="isCompletingSession || !sessionActive || isEditMode" 
-            />
+            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession || !sessionActive || isEditMode" />
 
-            <Button 
-                icon="pi pi-table" 
-                label="View Records" 
-                class="p-button-info" 
-                @click="viewAttendanceRecords"
-                :disabled="sessionActive || isEditMode"
-            />
+            <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" :disabled="sessionActive || isEditMode" />
         </div>
 
         <!-- Main content with seat plan - always visible -->
@@ -4392,18 +4694,18 @@ const titleRef = ref(null);
                     </div>
                 </div>
 
-                <!-- Seating grid -->
-                <div class="seating-grid-container">
-                    <!-- Teacher's desk at top -->
-                    <div v-if="showTeacherDesk" class="teacher-desk mb-6 flex justify-center">
-                        <div class="teacher-desk-label" :style="{ width: teacherDeskSize, height: teacherDeskSize }">
-                            <div>
-                                <i class="pi pi-user block mb-1"></i>
-                                <span class="text-xs">Teacher's Desk</span>
-                            </div>
+                <!-- Teacher's desk at the front of classroom -->
+                <div v-if="showTeacherDesk" class="teacher-desk-front">
+                    <div class="teacher-desk-label" :style="{ width: teacherDeskSize, height: teacherDeskSize }">
+                        <div>
+                            <i class="pi pi-user block mb-1"></i>
+                            <span class="text-xs">Teacher's Desk</span>
                         </div>
                     </div>
+                </div>
 
+                <!-- Student seating grid -->
+                <div class="seating-grid-container">
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
                             <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
@@ -4434,25 +4736,25 @@ const titleRef = ref(null);
                                             <i class="pi pi-times"></i>
                                             <span>Absent</span>
                                         </div>
-                                        
+
                                         <!-- Top-Right: Present (Green) -->
                                         <div class="quadrant quadrant-top-right quadrant-present" @click.stop="handleQuickAction('Present')">
                                             <i class="pi pi-check"></i>
                                             <span>Present</span>
                                         </div>
-                                        
+
                                         <!-- Bottom-Left: Excused (Blue) -->
                                         <div class="quadrant quadrant-bottom-left quadrant-excused" @click.stop="handleQuickAction('Excused')">
                                             <i class="pi pi-info-circle"></i>
                                             <span>Excused</span>
                                         </div>
-                                        
+
                                         <!-- Bottom-Right: Late (Orange/Yellow) -->
                                         <div class="quadrant quadrant-bottom-right quadrant-late" @click.stop="handleQuickAction('Late')">
                                             <i class="pi pi-clock"></i>
                                             <span>Late</span>
                                         </div>
-                                        
+
                                         <!-- Student name overlay in center -->
                                         <div class="student-name-overlay">
                                             {{ getStudentById(seat.studentId)?.name }}
@@ -4465,18 +4767,25 @@ const titleRef = ref(null);
                                             {{ getStudentInitials(getStudentById(seat.studentId)) }}
                                         </div>
                                         <!-- Status indicator badge -->
-                                        <div v-if="seat.status" class="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" :class="{
-                                            'bg-green-500': seat.status === 1 || seat.status === 'Present',
-                                            'bg-red-500': seat.status === 2 || seat.status === 'Absent',
-                                            'bg-yellow-500': seat.status === 3 || seat.status === 'Late',
-                                            'bg-blue-400': seat.status === 4 || seat.status === 'Excused'
-                                        }">
-                                            <i class="pi text-white text-xs" :class="{
-                                                'pi-check': seat.status === 1 || seat.status === 'Present',
-                                                'pi-times': seat.status === 2 || seat.status === 'Absent',
-                                                'pi-clock': seat.status === 3 || seat.status === 'Late',
-                                                'pi-info-circle': seat.status === 4 || seat.status === 'Excused'
-                                            }"></i>
+                                        <div
+                                            v-if="seat.status"
+                                            class="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+                                            :class="{
+                                                'bg-green-500': seat.status === 1 || seat.status === 'Present',
+                                                'bg-red-500': seat.status === 2 || seat.status === 'Absent',
+                                                'bg-yellow-500': seat.status === 3 || seat.status === 'Late',
+                                                'bg-blue-400': seat.status === 4 || seat.status === 'Excused'
+                                            }"
+                                        >
+                                            <i
+                                                class="pi text-white text-xs"
+                                                :class="{
+                                                    'pi-check': seat.status === 1 || seat.status === 'Present',
+                                                    'pi-times': seat.status === 2 || seat.status === 'Absent',
+                                                    'pi-clock': seat.status === 3 || seat.status === 'Late',
+                                                    'pi-info-circle': seat.status === 4 || seat.status === 'Excused'
+                                                }"
+                                            ></i>
                                         </div>
                                         <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
                                         <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ seat.studentId }}</div>
@@ -4843,8 +5152,7 @@ const titleRef = ref(null);
         <AttendanceReasonDialog
             v-model="showReasonDialog"
             :status-type="reasonDialogType"
-            :student-name="pendingAttendanceUpdate?.student?.name || 
-                           (pendingAttendanceUpdate?.student?.firstName + ' ' + pendingAttendanceUpdate?.student?.lastName)"
+            :student-name="pendingAttendanceUpdate?.student?.name || pendingAttendanceUpdate?.student?.firstName + ' ' + pendingAttendanceUpdate?.student?.lastName"
             @confirm="onReasonConfirmed"
         />
 
@@ -4941,6 +5249,87 @@ const titleRef = ref(null);
     flex: 1;
 }
 
+/* Auto Assignment Options */
+.auto-assign-container {
+    position: relative;
+}
+
+.assignment-options-overlay {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    margin-top: 0.5rem;
+}
+
+.assignment-options-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    min-width: 280px;
+}
+
+.assignment-options-panel h4 {
+    margin: 0 0 1rem 0;
+    color: #374151;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.assignment-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.assignment-method-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.assignment-method-item:hover {
+    background: #f8fafc;
+    border-color: #3b82f6;
+}
+
+.method-icon {
+    margin-right: 0.75rem;
+    color: #6b7280;
+    font-size: 1rem;
+}
+
+.method-label {
+    color: #374151;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.assignment-options-footer {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Teacher's desk at front of classroom */
+.teacher-desk-front {
+    display: flex;
+    justify-content: center;
+    margin: 2rem 0;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    border: 2px dashed #cbd5e1;
+}
+
 .teacher-desk {
     display: flex;
     justify-content: center;
@@ -4981,17 +5370,23 @@ const titleRef = ref(null);
 .seating-grid-container {
     width: 100%;
     overflow-x: auto;
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
 }
 
 .seating-grid {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    align-items: center;
+    max-width: fit-content;
 }
 
 .seat-row {
     display: flex;
     gap: 0.5rem;
+    justify-content: center;
 }
 
 .seat-container {

@@ -65,12 +65,19 @@ class CacheService {
     }
 
     /**
+     * Get all cache keys
+     */
+    getKeys() {
+        return Array.from(this.cache.keys());
+    }
+
+    /**
      * Get cache stats
      */
     getStats() {
         return {
             size: this.cache.size,
-            keys: Array.from(this.cache.keys())
+            keys: this.getKeys()
         };
     }
 

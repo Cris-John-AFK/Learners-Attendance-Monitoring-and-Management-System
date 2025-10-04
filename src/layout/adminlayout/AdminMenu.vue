@@ -5,21 +5,19 @@ import AdminMenuItem from './AdminMenuItem.vue';
 const model = ref([
     {
         label: 'Home',
-        items: [{ label: 'Graph', icon: 'pi pi-fw pi-chart-bar', to: '/admin' }]
+        items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-chart-line', to: '/admin' }]
     },
     {
         label: 'Manage',
         items: [
             { label: 'Collected Reports', icon: 'pi pi-fw pi-clipboard', to: '/admin-collected-reports' },
+            { label: 'GuardHouse Reports', icon: 'pi pi-fw pi-shield', to: '/admin-guardhouse-reports' },
             { label: 'Subject', icon: 'pi pi-fw pi-book', to: '/admin-subject' },
             { label: 'Curricula', icon: 'pi pi-fw pi-briefcase', to: '/curriculum' },
             { label: 'Teacher', icon: 'pi pi-fw pi-user-edit', to: '/admin-teacher' },
             { label: 'Student', icon: 'pi pi-fw pi-users', to: '/admin-student' },
             { label: 'Enrollment', icon: 'pi pi-fw pi-user-edit', to: '/admin-enrollment' }
         ]
-    },
-    {
-        items: [{ label: 'Archive', icon: 'pi pi-fw pi-undo', to: '/archive' }]
     }
 ]);
 </script>

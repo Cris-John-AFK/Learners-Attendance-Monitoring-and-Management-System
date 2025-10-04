@@ -4,8 +4,8 @@ echo "🔍 Checking Existing Database Indexes in LAMMS\n";
 echo "=" . str_repeat("=", 50) . "\n\n";
 
 try {
-    // Connect to PostgreSQL database
-    $pdo = new PDO('pgsql:host=localhost;dbname=sakai_lamms', 'postgres', '');
+    // Connect to PostgreSQL database with correct credentials
+    $pdo = new PDO('pgsql:host=localhost;dbname=lamms_db', 'postgres', '1234');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Query to get all indexes on our important tables

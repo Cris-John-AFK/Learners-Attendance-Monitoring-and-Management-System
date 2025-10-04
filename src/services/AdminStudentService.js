@@ -66,46 +66,6 @@ class AdminStudentService {
         }
     }
 
-    /**
-     * Manually archive a student
-     */
-    async archiveStudent(studentId, reason) {
-        try {
-            const response = await this.api.post(`/admin/students/${studentId}/archive`, {
-                reason: reason
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error archiving student:', error);
-            throw this.handleError(error);
-        }
-    }
-
-    /**
-     * Get archived students
-     */
-    async getArchivedStudents(filters = {}) {
-        try {
-            const response = await this.api.get('/admin/archive/students', { params: filters });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching archived students:', error);
-            throw this.handleError(error);
-        }
-    }
-
-    /**
-     * Restore student from archive
-     */
-    async restoreStudent(archiveId) {
-        try {
-            const response = await this.api.post(`/admin/archive/students/${archiveId}/restore`);
-            return response.data;
-        } catch (error) {
-            console.error('Error restoring student:', error);
-            throw this.handleError(error);
-        }
-    }
 
     /**
      * Get available student statuses

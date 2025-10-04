@@ -19,6 +19,7 @@ use App\Http\Controllers\API\AttendanceAnalyticsController;
 use App\Http\Controllers\API\GuardhouseController;
 use App\Http\Controllers\API\StudentStatusController;
 use App\Http\Controllers\API\UnifiedAuthController;
+use App\Http\Controllers\TeacherAssignmentValidationController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -410,6 +411,13 @@ Route::prefix('guardhouse')->group(function () {
     // Admin-only routes for historical data
     Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
     Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
+    
+    // New routes for GuardHouse Reports Admin Page
+    Route::get('/live-feed', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getLiveFeed']);
+    Route::post('/toggle-scanner', [App\Http\Controllers\API\GuardhouseReportsController::class, 'toggleScanner']);
+    Route::post('/archive-session', [App\Http\Controllers\API\GuardhouseReportsController::class, 'archiveSession']);
+    Route::get('/archived-sessions', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getArchivedSessions']);
+    Route::get('/session-records/{sessionId}', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getSessionRecords']);
 });
 
 // Smart Attendance Analytics Routes
@@ -520,3 +528,7 @@ Route::post('/debug/generate-analytics-cache', function() {
         'generated_count' => $generated
     ]);
 });
+
+// Teacher Assignment Validation Routes
+Route::get('/teachers/{teacherId}/assignments', [TeacherAssignmentValidationController::class, 'getTeacherAssignments']);
+Route::post('/teachers/validate-homeroom-assignment', [TeacherAssignmentValidationController::class, 'validateHomeroomAssignment']);

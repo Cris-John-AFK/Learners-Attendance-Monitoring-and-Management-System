@@ -1,15 +1,10 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
-import GuardhouseService from '@/services/GuardhouseService';
 import AuthService from '@/services/AuthService';
+import GuardhouseService from '@/services/GuardhouseService';
 import axios from 'axios';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
-import InputMask from 'primevue/inputmask';
-import InputText from 'primevue/inputtext';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -27,33 +22,8 @@ const selectedStudent = ref(null);
 const selectedGuest = ref(null);
 const toast = useToast();
 
-// Toggle between learners and guests
-const visitorOptions = [
-    { label: 'Learners', value: 'learners' },
-    { label: 'Guests', value: 'guests' }
-];
+// Only for learners
 const visitorType = ref('learners');
-
-// Guest form modal
-const guestDialog = ref(false);
-const guest = ref({
-    id: null,
-    name: '',
-    purpose: '',
-    contactNumber: '',
-    personToVisit: '',
-    department: ''
-});
-const guestFormSubmitted = ref(false);
-
-// Department options for dropdown
-const departments = [
-    { name: 'Administration', code: 'admin' },
-    { name: 'Faculty', code: 'faculty' },
-    { name: 'Guidance', code: 'guidance' },
-    { name: 'Registrar', code: 'registrar' },
-    { name: 'Accounting', code: 'accounting' }
-];
 
 // Load students from API
 const allStudents = ref([]);
@@ -67,8 +37,7 @@ axios
     });
 
 const currentDateTime = ref(new Date());
-const guardName = ref('Bread Doe');
-const guardId = ref('G-12345');
+// Removed hardcoded guard info
 const statusFilter = ref('all');
 const scanFeedback = ref({ show: false, type: '', message: '' });
 const cameraError = ref(null);
@@ -84,7 +53,7 @@ let verificationTimer = null;
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
 const totalCheckouts = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-out').length);
-const totalGuests = computed(() => guestAttendanceRecords.value.length);
+// Removed guest counter
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
@@ -97,7 +66,7 @@ onMounted(async () => {
 
     console.log('Component mounted, students data:', allStudents.value);
     console.log('Students data type:', typeof allStudents.value);
-    
+
     // Load today's attendance records
     await loadTodayAttendanceRecords();
 });
@@ -105,9 +74,9 @@ onMounted(async () => {
 // Load today's attendance records from the database
 const loadTodayAttendanceRecords = async () => {
     try {
-        console.log('Loading today\'s attendance records...');
+        console.log("Loading today's attendance records...");
         const response = await GuardhouseService.getTodayRecords();
-        
+
         if (response.success) {
             attendanceRecords.value = response.records || [];
             console.log('Loaded attendance records:', attendanceRecords.value.length);
@@ -118,11 +87,11 @@ const loadTodayAttendanceRecords = async () => {
     } catch (error) {
         console.error('Error loading attendance records:', error);
         attendanceRecords.value = [];
-        
+
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load today\'s attendance records',
+            detail: "Failed to load today's attendance records",
             life: 3000
         });
     }
@@ -241,7 +210,7 @@ const processQRCodeVerification = async (qrData) => {
             showScanFeedback('error', response.message || 'Invalid QR code');
             await playStatusSound('error');
             isLoadingVerification.value = false;
-            
+
             // Restart scanner after a delay
             setTimeout(() => {
                 scanning.value = true;
@@ -261,7 +230,7 @@ const processQRCodeVerification = async (qrData) => {
         verificationRecordType.value = nextRecordType;
         showVerificationModal.value = true;
         isLoadingVerification.value = false;
-        
+
         // Start countdown timer
         startVerificationCountdown();
 
@@ -271,7 +240,7 @@ const processQRCodeVerification = async (qrData) => {
         showScanFeedback('error', error.message || 'Error validating QR code');
         await playStatusSound('error');
         isLoadingVerification.value = false;
-        
+
         // Restart scanner after error
         setTimeout(() => {
             scanning.value = true;
@@ -284,7 +253,7 @@ const processQRCodeVerification = async (qrData) => {
 const onVerificationConfirm = async (data) => {
     try {
         console.log('Confirming verification:', data);
-        
+
         // Record attendance using GuardhouseService
         const response = await GuardhouseService.recordAttendance(
             data.student.id,
@@ -319,7 +288,7 @@ const onVerificationConfirm = async (data) => {
             selectedStudent.value = record;
 
             console.log('Attendance recorded successfully:', record);
-            
+
             toast.add({
                 severity: 'success',
                 summary: 'Success',
@@ -333,7 +302,7 @@ const onVerificationConfirm = async (data) => {
         console.error('Error recording attendance:', error);
         showScanFeedback('error', error.message || 'Failed to record attendance');
         await playStatusSound('error');
-        
+
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -349,21 +318,21 @@ const onVerificationConfirm = async (data) => {
 const onVerificationReject = (data) => {
     console.log('Verification rejected:', data);
     showScanFeedback('error', 'Verification rejected by guard');
-    
+
     toast.add({
         severity: 'warn',
         summary: 'Verification Rejected',
         detail: `${data.student.name} verification was rejected`,
         life: 3000
     });
-    
+
     // Close modal and restart scanner
     closeVerificationModal();
 };
 
 const onVerificationSkip = () => {
     console.log('Verification skipped - proceeding to next student');
-    
+
     // Close modal and restart scanner immediately
     closeVerificationModal();
 };
@@ -392,7 +361,7 @@ const closeVerificationModal = () => {
     showVerificationModal.value = false;
     verificationStudent.value = null;
     isLoadingVerification.value = false;
-    
+
     // Restart scanner after a short delay
     setTimeout(() => {
         scanning.value = true;
@@ -402,10 +371,10 @@ const closeVerificationModal = () => {
 // New action methods for inline verification
 const confirmVerification = async () => {
     if (isLoadingVerification.value || !verificationStudent.value) return;
-    
+
     isLoadingVerification.value = true;
     stopVerificationCountdown();
-    
+
     try {
         await onVerificationConfirm({
             student: verificationStudent.value,
@@ -418,7 +387,7 @@ const confirmVerification = async () => {
 
 const rejectVerification = () => {
     if (isLoadingVerification.value || !verificationStudent.value) return;
-    
+
     stopVerificationCountdown();
     onVerificationReject({
         student: verificationStudent.value,
@@ -427,13 +396,10 @@ const rejectVerification = () => {
     closeVerificationModal();
 };
 
-
 const handleImageError = (event) => {
     // Set default image based on gender or use generic default
-    const defaultImage = verificationStudent.value?.gender === 'male' 
-        ? '/demo/images/avatar/default-male-student.png'
-        : '/demo/images/avatar/default-female-student.png';
-    
+    const defaultImage = verificationStudent.value?.gender === 'male' ? '/demo/images/avatar/default-male-student.png' : '/demo/images/avatar/default-female-student.png';
+
     event.target.src = defaultImage;
 };
 
@@ -492,11 +458,11 @@ const manualCheckIn = async () => {
     try {
         // Show loading feedback
         showScanFeedback('info', 'Processing manual entry...');
-        
+
         // Get student information first
         const students = await GuardhouseService.getAllStudents();
-        const student = students.find(s => s.id.toString() === studentId.toString());
-        
+        const student = students.find((s) => s.id.toString() === studentId.toString());
+
         if (!student) {
             showScanFeedback('error', 'Student not found');
             toast.add({
@@ -556,7 +522,7 @@ const manualCheckIn = async () => {
     } catch (error) {
         console.error('Error with manual check-in:', error);
         showScanFeedback('error', error.message || 'Manual entry failed');
-        
+
         toast.add({
             severity: 'error',
             summary: 'Manual Entry Failed',
@@ -747,7 +713,7 @@ const submitGuestForm = () => {
 const logout = async () => {
     try {
         console.log('🚪 Guardhouse logging out...');
-        
+
         // Use unified AuthService to properly logout
         await AuthService.logout();
 
@@ -785,13 +751,6 @@ const logout = async () => {
                 </div>
             </div>
             <div class="header-right">
-                <div class="guard-info">
-                    <i class="pi pi-user"></i>
-                    <div>
-                        <div class="guard-name">{{ guardName }}</div>
-                        <div class="guard-id">ID: {{ guardId }}</div>
-                    </div>
-                </div>
                 <button @click="logout" class="logout-button">
                     <i class="pi pi-sign-out"></i>
                     Logout
@@ -828,18 +787,13 @@ const logout = async () => {
                                     <div class="verification-header">
                                         <h3>{{ verificationRecordType === 'check-in' ? 'Student Check-In Verification' : 'Student Check-Out Verification' }}</h3>
                                     </div>
-                                    
+
                                     <!-- Student Photo and Info -->
                                     <div class="student-display">
                                         <div class="photo-container">
-                                            <img 
-                                                :src="verificationStudent.photo || '/demo/images/avatar/default-student.png'" 
-                                                :alt="verificationStudent.name || 'Student'" 
-                                                class="student-photo"
-                                                @error="handleImageError"
-                                            />
+                                            <img :src="verificationStudent.photo || '/demo/images/avatar/default-student.png'" :alt="verificationStudent.name || 'Student'" class="student-photo" @error="handleImageError" />
                                         </div>
-                                        
+
                                         <div class="student-info">
                                             <h4 class="student-name">{{ verificationStudent.name || 'Unknown Student' }}</h4>
                                             <div class="info-grid">
@@ -868,30 +822,20 @@ const logout = async () => {
 
                                     <!-- Countdown Timer -->
                                     <div class="countdown-section">
-                                        <div class="countdown-circle" :class="{ 'urgent': verificationCountdown <= 3 }">
+                                        <div class="countdown-circle" :class="{ urgent: verificationCountdown <= 3 }">
                                             <div class="countdown-number">{{ verificationCountdown }}</div>
                                             <div class="countdown-label">seconds</div>
                                         </div>
-                                        <p class="verification-text">
-                                            Please verify this student's identity
-                                        </p>
+                                        <p class="verification-text">Please verify this student's identity</p>
                                     </div>
 
                                     <!-- Action Buttons -->
                                     <div class="action-buttons">
-                                        <button 
-                                            class="confirm-btn"
-                                            @click="confirmVerification"
-                                            :disabled="isLoadingVerification"
-                                        >
+                                        <button class="confirm-btn" @click="confirmVerification" :disabled="isLoadingVerification">
                                             <i class="pi pi-check"></i>
                                             Confirm
                                         </button>
-                                        <button 
-                                            class="reject-btn"
-                                            @click="rejectVerification"
-                                            :disabled="isLoadingVerification"
-                                        >
+                                        <button class="reject-btn" @click="rejectVerification" :disabled="isLoadingVerification">
                                             <i class="pi pi-times"></i>
                                             Reject
                                         </button>
@@ -978,23 +922,7 @@ const logout = async () => {
 
                     <!-- Right Column: Attendance Feed -->
                     <div class="right-column">
-                        <!-- Toggle Button for Learners/Guests -->
-                        <div class="visitor-toggle-container">
-                            <div class="visitor-toggle-buttons">
-                                <button @click="visitorType = 'learners'" :class="['visitor-toggle-button', { active: visitorType === 'learners' }]">
-                                    <i class="pi pi-users"></i>
-                                    Learners
-                                </button>
-                                <button @click="visitorType = 'guests'" :class="['visitor-toggle-button', { active: visitorType === 'guests' }]">
-                                    <i class="pi pi-user"></i>
-                                    Guests
-                                </button>
-                            </div>
-                            <button v-if="visitorType === 'guests'" @click="openGuestForm" class="guest-register-button">
-                                <i class="pi pi-user-plus"></i>
-                                Register Guest
-                            </button>
-                        </div>
+                        <!-- Learners Only -->
 
                         <!-- Attendance Feed -->
                         <div class="attendance-feed">
@@ -1008,7 +936,7 @@ const logout = async () => {
                                         </span>
                                     </div>
 
-                                    <div v-if="visitorType === 'learners'" class="filter-buttons">
+                                    <div class="filter-buttons">
                                         <button @click="statusFilter = 'all'" :class="['filter-button', statusFilter === 'all' ? 'active' : '']">All</button>
                                         <button @click="statusFilter = 'check-in'" :class="['filter-button', statusFilter === 'check-in' ? 'active' : '']"><i class="pi pi-sign-in"></i> Check-ins</button>
                                         <button @click="statusFilter = 'check-out'" :class="['filter-button', statusFilter === 'check-out' ? 'active' : '']"><i class="pi pi-sign-out"></i> Check-outs</button>
@@ -1016,10 +944,10 @@ const logout = async () => {
                                 </div>
                             </div>
 
-                            <!-- Two-column layout for attendance feeds -->
+                            <!-- Attendance feed -->
                             <div class="attendance-columns">
                                 <!-- Learners Attendance -->
-                                <div v-if="visitorType === 'learners'" class="attendance-column">
+                                <div class="attendance-column">
                                     <!-- Empty state for learner attendance feed -->
                                     <div v-if="filteredRecords.length === 0" class="empty-feed">
                                         <i class="pi pi-calendar-times"></i>
@@ -1044,26 +972,6 @@ const logout = async () => {
                                         <Column field="timestamp" header="Time" :sortable="true"></Column>
                                     </DataTable>
                                 </div>
-
-                                <!-- Guest Attendance -->
-                                <div v-if="visitorType === 'guests'" class="attendance-column">
-                                    <!-- Empty state for guest attendance feed -->
-                                    <div v-if="filteredGuestRecords.length === 0" class="empty-feed">
-                                        <i class="pi pi-calendar-times"></i>
-                                        <p>No guest attendance records found</p>
-                                        <span>Register a guest to see records here</span>
-                                    </div>
-
-                                    <!-- Guest attendance records table -->
-                                    <DataTable v-else :value="filteredGuestRecords" paginator :rows="10" class="attendance-table" responsiveLayout="scroll" :rowHover="true" v-model:selection="selectedGuest" selectionMode="single" dataKey="id">
-                                        <Column field="id" header="ID" :sortable="true"></Column>
-                                        <Column field="name" header="Name" :sortable="true"></Column>
-                                        <Column field="purpose" header="Purpose" :sortable="true"></Column>
-                                        <Column field="personToVisit" header="Person to Visit" :sortable="true"></Column>
-                                        <Column field="department.name" header="Department" :sortable="true"></Column>
-                                        <Column field="timestamp" header="Time" :sortable="true"></Column>
-                                    </DataTable>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1080,67 +988,10 @@ const logout = async () => {
                             <div class="stat-label">Check-outs</div>
                             <div class="stat-value">{{ totalCheckouts }}</div>
                         </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Guests</div>
-                            <div class="stat-value">{{ totalGuests }}</div>
-                        </div>
-                    </div>
-
-                    <div class="footer-actions">
-                        <button @click="exportReport" class="export-button">
-                            <i class="pi pi-download"></i>
-                            Export Report
-                        </button>
                     </div>
                 </div>
-
-                <!-- Guest Registration Dialog -->
-                <Dialog v-model:visible="guestDialog" header="Guest Registration" :modal="true" class="guest-dialog" :style="{ width: '450px' }">
-                    <div class="guest-form">
-                        <div class="form-field">
-                            <label for="name">Name*</label>
-                            <InputText id="name" v-model="guest.name" :class="{ 'p-invalid': guestFormSubmitted && !guest.name }" />
-                            <small v-if="guestFormSubmitted && !guest.name" class="p-error">Name is required.</small>
-                        </div>
-
-                        <div class="form-field">
-                            <label for="purpose">Purpose of Visit*</label>
-                            <InputText id="purpose" v-model="guest.purpose" :class="{ 'p-invalid': guestFormSubmitted && !guest.purpose }" />
-                            <small v-if="guestFormSubmitted && !guest.purpose" class="p-error">Purpose is required.</small>
-                        </div>
-
-                        <div class="form-field">
-                            <label for="contactNumber">Contact Number</label>
-                            <InputMask id="contactNumber" v-model="guest.contactNumber" mask="(999) 999-9999" />
-                        </div>
-
-                        <div class="form-field">
-                            <label for="personToVisit">Person to Visit*</label>
-                            <InputText id="personToVisit" v-model="guest.personToVisit" :class="{ 'p-invalid': guestFormSubmitted && !guest.personToVisit }" />
-                            <small v-if="guestFormSubmitted && !guest.personToVisit" class="p-error">Person to visit is required.</small>
-                        </div>
-
-                        <div class="form-field">
-                            <label for="department">Department*</label>
-                            <Dropdown id="department" v-model="guest.department" :options="departments" optionLabel="name" placeholder="Select Department" :class="{ 'p-invalid': guestFormSubmitted && !guest.department }" />
-                            <small v-if="guestFormSubmitted && !guest.department" class="p-error">Department is required.</small>
-                        </div>
-                    </div>
-
-                    <template #footer>
-                        <button @click="guestDialog = false" class="cancel-button">
-                            <i class="pi pi-times"></i>
-                            Cancel
-                        </button>
-                        <button @click="submitGuestForm" class="submit-button">
-                            <i class="pi pi-check"></i>
-                            Register
-                        </button>
-                    </template>
-                </Dialog>
             </div>
         </header>
-
     </div>
 </template>
 
@@ -1218,6 +1069,7 @@ const logout = async () => {
 
 .header-center {
     text-align: center;
+    margin-bottom: 2px;
 }
 
 .date-time {
@@ -1241,6 +1093,7 @@ const logout = async () => {
     display: flex;
     align-items: center;
     gap: 1rem;
+    margin-left: 10px;
 }
 
 .guard-info {
@@ -1778,8 +1631,13 @@ const logout = async () => {
 }
 
 @keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 .countdown-number {
@@ -1884,8 +1742,12 @@ const logout = async () => {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .processing-overlay p {

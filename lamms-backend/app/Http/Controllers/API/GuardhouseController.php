@@ -410,67 +410,64 @@ class GuardhouseController extends Controller
                     'total' => count($records),
                     'page' => $page,
                     'per_page' => $perPage,
-                    'total_pages' => ceil(count($records) / $perPage),
-                    'cached' => true
                 ]);
             }
-
-            // Query archive table for historical data
-            $query = DB::table('guardhouse_attendance_archive')
-                ->join('student_details', 'guardhouse_attendance_archive.student_id', '=', 'student_details.id')
-                ->where('guardhouse_attendance_archive.date', $date)
-                ->select(
-                    'guardhouse_attendance_archive.*',
-                    'student_details.firstName',
-                    'student_details.lastName',
-                    'student_details.gradeLevel',
-                    'student_details.section',
-                    'student_details.profilePhoto',
-                    'student_details.gender'
-                );
+            
+            // Query new archive system for historical data
+            $sessions = DB::table('guardhouse_archive_sessions')
+                ->where('session_date', $date)
+                ->get();
+            
+            if ($sessions->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                    'pagination' => [
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => 0,
+                        'last_page' => 1
+                    ]
+                ]);
+            }
+            
+            $sessionIds = $sessions->pluck('id');
+            
+            $query = DB::table('guardhouse_archived_records')
+                ->whereIn('session_id', $sessionIds);
 
             if ($recordType) {
-                $query->where('guardhouse_attendance_archive.record_type', $recordType);
+                $query->where('record_type', $recordType);
             }
 
             if ($search) {
                 $query->where(function($q) use ($search) {
-                    $q->where('student_details.firstName', 'ILIKE', "%{$search}%")
-                      ->orWhere('student_details.lastName', 'ILIKE', "%{$search}%")
-                      ->orWhere('student_details.gradeLevel', 'ILIKE', "%{$search}%")
-                      ->orWhere('student_details.section', 'ILIKE', "%{$search}%");
+                    $q->where('student_name', 'ILIKE', "%{$search}%")
+                      ->orWhere('student_id', 'ILIKE', "%{$search}%");
                 });
             }
 
             $totalRecords = $query->count();
-            $records = $query->orderBy('guardhouse_attendance_archive.timestamp', 'desc')
+            $records = $query->orderBy('timestamp', 'desc')
                            ->offset(($page - 1) * $perPage)
                            ->limit($perPage)
                            ->get();
 
-            // Format records
+            // Format records for new archive system
             $formattedRecords = $records->map(function($record) {
-                $photoPath = $record->profilePhoto;
-                if (!$photoPath) {
-                    $photoPath = $record->gender === 'male' 
-                        ? '/demo/images/avatar/default-male-student.png'
-                        : '/demo/images/avatar/default-female-student.png';
-                }
-
                 return [
-                    'id' => $record->original_id,
+                    'id' => $record->id,
                     'student_id' => $record->student_id,
-                    'name' => $record->firstName . ' ' . $record->lastName,
-                    'gradeLevel' => $record->gradeLevel,
+                    'name' => $record->student_name,
+                    'gradeLevel' => $record->grade_level,
                     'section' => $record->section,
                     'recordType' => $record->record_type,
                     'timestamp' => $record->timestamp,
-                    'date' => $record->date,
-                    'photo' => $photoPath,
-                    'guard_name' => $record->guard_name,
-                    'is_manual' => $record->is_manual,
-                    'notes' => $record->notes,
-                    'archived_at' => $record->archived_at
+                    'date' => $record->session_date,
+                    'photo' => '/demo/images/avatar/default-student.png', // Default photo
+                    'guard_name' => 'System',
+                    'is_manual' => false,
+                    'notes' => null
                 ];
             });
 

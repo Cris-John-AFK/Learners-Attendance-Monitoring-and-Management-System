@@ -92,6 +92,74 @@ class GuardhouseService {
             }
         }
     }
+
+    /**
+     * Get live feed data for admin dashboard
+     */
+    static async getLiveFeed() {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/guardhouse/live-feed`);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching live feed:', error);
+            // Return empty data on error
+            return {
+                success: true,
+                check_ins: [],
+                check_outs: []
+            };
+        }
+    }
+
+    /**
+     * Toggle scanner status
+     */
+    static async toggleScanner(enabled) {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/guardhouse/toggle-scanner`, {
+                enabled: enabled
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error toggling scanner:', error);
+            throw error.response?.data || { success: false, message: 'Network error' };
+        }
+    }
+
+    /**
+     * Archive current session
+     */
+    static async archiveSession(sessionData) {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/guardhouse/archive-session`, sessionData);
+            return response.data;
+        } catch (error) {
+            console.error('Error archiving session:', error);
+            throw error.response?.data || { success: false, message: 'Network error' };
+        }
+    }
+
+    /**
+     * Get archived sessions
+     */
+    static async getArchivedSessions(filters = {}) {
+        try {
+            const params = new URLSearchParams();
+            if (filters.date) params.append('date', filters.date);
+            if (filters.search) params.append('search', filters.search);
+            if (filters.type) params.append('type', filters.type);
+
+            const response = await axios.get(`${API_BASE_URL}/guardhouse/archived-sessions?${params}`);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching archived sessions:', error);
+            // Return empty data on error
+            return {
+                success: true,
+                records: []
+            };
+        }
+    }
 }
 
 export default GuardhouseService;
