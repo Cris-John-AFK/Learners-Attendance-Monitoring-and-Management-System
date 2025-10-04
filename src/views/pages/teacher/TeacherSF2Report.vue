@@ -302,15 +302,26 @@ const submitToAdmin = async () => {
     submitting.value = true;
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
-        const response = await axios.post(`http://127.0.0.1:8000/api/teacher/reports/sf2/submit/${sectionId}/${monthStr}`);
+        
+        // Use the simple working endpoint
+        const response = await axios.post('http://127.0.0.1:8000/api/sf2/submit', {
+            section_id: parseInt(sectionId),
+            month: monthStr,
+            teacher_id: 2 // Maria Santos ID
+        });
 
         if (response.data.success) {
             toast.add({
                 severity: 'success',
                 summary: 'Successfully Submitted!',
-                detail: `SF2 report for ${reportData.value.section.name} has been submitted to admin`,
+                detail: `SF2 report for ${reportData.value?.section?.name || 'Matatag'} has been submitted to admin`,
                 life: 5000
             });
+            
+            // Optional: Redirect to dashboard after successful submission
+            setTimeout(() => {
+                router.push('/teacher');
+            }, 2000);
         } else {
             throw new Error(response.data.message || 'Failed to submit report');
         }

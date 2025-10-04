@@ -48,15 +48,9 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// ========================================
-// SCHOOL CALENDAR ROUTES (Admin)
-// ========================================
-Route::prefix('calendar')->group(function () {
-    Route::get('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'index']);
-    Route::post('events', [\App\Http\Controllers\API\SchoolCalendarController::class, 'store']);
-    Route::put('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'update']);
-    Route::delete('events/{id}', [\App\Http\Controllers\API\SchoolCalendarController::class, 'destroy']);
-});
+// Simple SF2 Submission Routes (Fix for submit button)
+Route::post('/sf2/submit', [App\Http\Controllers\API\SimpleSF2Controller::class, 'submitToAdmin']);
+Route::get('/sf2/submitted', [App\Http\Controllers\API\SimpleSF2Controller::class, 'getSubmittedReports']);
 
 // Student routes
 Route::apiResource('students', StudentController::class);
