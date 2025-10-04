@@ -11,9 +11,9 @@ import Dialog from 'primevue/dialog';
 // import Dropdown from 'primevue/dropdown'; // Deprecated - using Select instead
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import MultiSelect from 'primevue/multiselect';
 import ProgressSpinner from 'primevue/progressspinner';
 import Select from 'primevue/select';
-import MultiSelect from 'primevue/multiselect';
 import TabMenu from 'primevue/tabmenu';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
@@ -945,7 +945,6 @@ onMounted(() => {
         }
     }
 
-
     // Curriculum CRUD operations
     const openNew = () => {
         // Get current year
@@ -1693,7 +1692,7 @@ onMounted(() => {
                     console.warn('Nested endpoint failed, trying direct sections endpoint');
                     try {
                         const allSections = await CurriculumService.getAllSections();
-                        sectionsForGrade = allSections.filter(s => s.grade_id === selectedGrade.value.id);
+                        sectionsForGrade = allSections.filter((s) => s.grade_id === selectedGrade.value.id);
                         console.log('Got sections from direct endpoint:', sectionsForGrade?.length || 0);
                     } catch (directError) {
                         console.error('Both section endpoints failed:', directError);
@@ -2180,7 +2179,6 @@ onMounted(() => {
                 // Refresh subject list to show updated schedules
                 refreshSectionSubjects();
             }
-
         } catch (error) {
             console.error('Error saving schedules:', error);
             toast.add({
@@ -2582,7 +2580,6 @@ onMounted(() => {
             }
         }
     };
-
 }); // Close onMounted function
 
 // Function to load all available grades - moved outside onMounted for global access
@@ -3199,20 +3196,20 @@ watch(
             const [hours, minutes] = newStartTime.split(':');
             const startHour = parseInt(hours);
             const startMinute = parseInt(minutes);
-            
+
             // Add 1 hour
             let endHour = startHour + 1;
             let endMinute = startMinute;
-            
+
             // Handle 24-hour overflow
             if (endHour >= 24) {
                 endHour = endHour - 24;
             }
-            
+
             // Format with leading zeros
             const formattedEndTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
             schedule.value.end_time = formattedEndTime;
-            
+
             console.log('🕒 Auto-calculated end time:', formattedEndTime);
         }
     }
@@ -3802,10 +3799,10 @@ const saveSectionDetailsFromHub = async () => {
     try {
         loading.value = true;
 
-        // Get the curriculum_grade_id - first try to get it from the section, 
+        // Get the curriculum_grade_id - first try to get it from the section,
         // otherwise find it from the curriculum-grade relationship
         let curriculumGradeId = selectedSectionForHub.value.curriculum_grade_id;
-        
+
         if (!curriculumGradeId) {
             // Try to get it from the relationship endpoint
             try {
@@ -3858,9 +3855,9 @@ const saveSectionDetailsFromHub = async () => {
         });
     } catch (error) {
         console.error('Error updating section:', error);
-        
+
         let errorMessage = 'Failed to update section';
-        
+
         if (error.response?.data?.message) {
             errorMessage = error.response.data.message;
         } else if (error.response?.data?.errors) {
@@ -3874,7 +3871,7 @@ const saveSectionDetailsFromHub = async () => {
         } else if (error.message) {
             errorMessage = error.message;
         }
-        
+
         toast.add({
             severity: 'error',
             summary: 'Error',

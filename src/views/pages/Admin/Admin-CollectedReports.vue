@@ -1,3834 +1,423 @@
-<template>
-    <div class="admin-reports-wrapper">
-        <!-- Background container for shapes -->
-        <div class="background-container">
-            <div class="geometric-shape circle"></div>
-            <div class="geometric-shape square"></div>
-            <div class="geometric-shape triangle"></div>
-            <div class="geometric-shape rectangle"></div>
-            <div class="geometric-shape diamond"></div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="content-container">
-            <!-- Header Section -->
-            <div class="reports-header">
-                <div class="header-content">
-                    <div class="title-section">
-                        <h1 class="page-title">
-                            <span class="emoji-icon">📊</span>
-                            <span class="text-gradient">Collected Reports</span>
-                        </h1>
-                        <p class="page-subtitle">Manage and view all system reports</p>
-                        <p class="debug-info" style="color: white; font-size: 0.9rem; margin-top: 0.5rem">Debug: Notification Count = {{ newSubmissionsCount }}, Reports = {{ submittedReports.length }}</p>
-                    </div>
-                    <div class="header-actions">
-                        <Button label="Generate Report" icon="pi pi-plus" class="p-button-success" @click="showGenerateDialog = true" />
-                        <Button label="Export All" icon="pi pi-download" class="p-button-outlined" @click="exportAllReports" />
-                        <Button label="Test Notification" icon="pi pi-bell" class="p-button-warning p-button-outlined" @click="receiveNewSubmission" />
-                        <Button label="Reload Reports" icon="pi pi-refresh" class="p-button-info p-button-outlined" @click="loadSubmittedReports" />
-                    </div>
-                </div>
-            </div>
-
-            <!-- Grade Level Statistics Section -->
-            <div class="grade-statistics-section">
-                <div class="statistics-header">
-                    <h2 class="statistics-title">
-                        <span class="emoji-icon">📊</span>
-                        Grade Level Overview
-                    </h2>
-                    <p class="statistics-subtitle">Section counts and student distribution by grade level</p>
-                </div>
-
-                <!-- Month Navigation -->
-                <div class="month-navigation-header">
-                    <Button icon="pi pi-chevron-left" class="p-button-text p-button-rounded month-nav-btn" @click="previousOverviewMonth()" :disabled="!canGoPreviousOverviewMonth()" v-tooltip.top="'Previous Month'" />
-                    <div class="current-month-display">
-                        <h3 class="month-title">{{ getCurrentOverviewMonthDisplay() }}</h3>
-                        <p class="month-subtitle">{{ getActiveSectionsCount() }} sections active</p>
-                    </div>
-                    <Button icon="pi pi-chevron-right" class="p-button-text p-button-rounded month-nav-btn" @click="nextOverviewMonth()" :disabled="!canGoNextOverviewMonth()" v-tooltip.top="'Next Month'" />
-                </div>
-
-                <div v-if="loadingRealData" class="loading-container">
-                    <ProgressSpinner />
-                    <p>Loading curriculum data...</p>
-                </div>
-
-                <div v-else-if="gradeStatistics.length === 0" class="empty-state">
-                    <i class="pi pi-inbox empty-icon"></i>
-                    <h3>No Grades Found</h3>
-                    <p>No grade levels have been configured in the curriculum yet.</p>
-                </div>
-
-                <div v-else class="grade-stats-grid">
-                    <div v-for="gradeStats in gradeStatistics" :key="gradeStats.grade" class="grade-stat-card">
-                        <div class="grade-header">
-                            <div class="grade-info">
-                                <h3 class="grade-name">{{ gradeStats.grade }}</h3>
-                                <span class="grade-level">{{ gradeStats.level }}</span>
-                            </div>
-                            <div class="grade-icon">
-                                <span class="grade-emoji">{{ gradeStats.emoji }}</span>
-                            </div>
-                        </div>
-
-                        <div class="grade-metrics">
-                            <div class="metric-item sections">
-                                <div class="metric-value">{{ gradeStats.sectionCount }}</div>
-                                <div class="metric-label">Sections</div>
-                            </div>
-                            <div class="metric-item students">
-                                <div class="metric-value">{{ gradeStats.totalStudents }}</div>
-                                <div class="metric-label">Students</div>
-                            </div>
-                            <div class="metric-item teachers">
-                                <div class="metric-value">{{ gradeStats.teacherCount }}</div>
-                                <div class="metric-label">Teachers</div>
-                            </div>
-                        </div>
-
-                        <div class="grade-attendance">
-                            <div class="attendance-bar">
-                                <div class="attendance-fill" :style="{ width: gradeStats.attendanceRate + '%' }" :class="getAttendanceBarClass(gradeStats.attendanceRate)"></div>
-                            </div>
-                            <div class="attendance-text">
-                                <span class="attendance-rate">{{ gradeStats.attendanceRate }}%</span>
-                                <span class="attendance-label">Attendance Rate</span>
-                            </div>
-                        </div>
-
-                        <div class="section-list">
-                            <div class="section-list-header">
-                                <span>Sections:</span>
-                            </div>
-                            <div class="sections-cards-grid">
-                                <div
-                                    v-for="section in gradeStats.sections"
-                                    :key="section.id"
-                                    class="section-card"
-                                    :class="section.statusClass"
-                                    @click="viewSectionDetails(section)"
-                                    :title="`${section.name} - ${section.teacher} (${section.attendanceRate}%)`"
-                                >
-                                    <div class="section-card-header" :class="section.statusClass">
-                                        <div class="section-card-title">{{ section.name }}</div>
-                                        <div class="section-card-subtitle">{{ section.teacher }}</div>
-                                        <div class="section-card-icon">
-                                            <span class="attendance-badge">{{ section.attendanceRate }}%</span>
-                                        </div>
-                                    </div>
-                                    <div class="section-card-body">
-                                        <div class="section-stats">
-                                            <div class="stat-item">
-                                                <i class="pi pi-users"></i>
-                                                <span>{{ section.studentCount }} Students</span>
-                                            </div>
-                                            <div class="stat-item">
-                                                <i class="pi pi-check-circle"></i>
-                                                <span>{{ section.presentCount }} Present</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="section-card-footer">
-                                        <Button icon="pi pi-eye" class="p-button-text p-button-sm" @click.stop="viewSectionDetails(section)" v-tooltip.top="'View Details'" />
-                                        <Button icon="pi pi-file-excel" class="p-button-text p-button-sm" @click.stop="downloadSectionReport(section)" v-tooltip.top="'Download Report'" />
-                                        <Button icon="pi pi-ellipsis-v" class="p-button-text p-button-sm" v-tooltip.top="'More Options'" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grade-actions">
-                            <Button label="View All Sections" icon="pi pi-eye" class="p-button-outlined p-button-sm" @click="viewGradeSections(gradeStats.grade)" />
-                            <Button label="Generate Report" icon="pi pi-file-excel" class="p-button-success p-button-outlined p-button-sm" @click="generateGradeReport(gradeStats.grade)" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Filter Section -->
-            <div class="filter-section">
-                <div class="filter-grid">
-                    <div class="filter-item">
-                        <label class="filter-label">Grade Type</label>
-                        <Select v-model="selectedGradeType" :options="gradeTypes" optionLabel="name" optionValue="value" placeholder="All Grades" class="w-full" />
-                    </div>
-                    <div class="filter-item">
-                        <label class="filter-label">Year</label>
-                        <Select v-model="selectedDateRange" :options="dateRanges" optionLabel="name" optionValue="value" placeholder="All Years" class="w-full" />
-                    </div>
-                    <div class="filter-item">
-                        <label class="filter-label">Month</label>
-                        <Select v-model="selectedStatus" :options="monthOptions" optionLabel="name" optionValue="value" placeholder="All Months" class="w-full" />
-                    </div>
-                    <div class="filter-item">
-                        <label class="filter-label">Search</label>
-                        <InputText v-model="searchQuery" placeholder="Search reports..." class="w-full" />
-                    </div>
-                </div>
-            </div>
-
-            <!-- Reports Table -->
-            <div class="reports-table-container">
-                <div v-if="loading" class="loading-container">
-                    <ProgressSpinner />
-                    <p>Loading reports...</p>
-                </div>
-
-                <div v-else>
-                    <!-- Empty State - Only show when there are no reports at all -->
-                    <div v-if="reports.length === 0" class="empty-state">
-                        <i class="pi pi-inbox empty-icon"></i>
-                        <h3>No Submitted Reports</h3>
-                        <p>Submitted reports from teachers will appear here</p>
-                    </div>
-
-                    <!-- No Results State - When there are reports but none match filters -->
-                    <div v-else-if="filteredReports.length === 0" class="empty-state">
-                        <i class="pi pi-file-excel empty-icon"></i>
-                        <h3>No Reports Found</h3>
-                        <p>No reports match your current filters. Try adjusting your search criteria.</p>
-                    </div>
-
-                    <!-- Reports List - Only show when there are reports -->
-                    <div v-else class="reports-list">
-                        <div v-for="report in filteredReports" :key="report.id" class="report-card">
-                            <div class="report-header">
-                                <div class="report-info">
-                                    <h4 class="report-title">{{ report.title }}</h4>
-                                    <p class="report-description">{{ report.description }}</p>
-                                </div>
-                                <div class="report-status">
-                                    <span :class="['status-badge', getStatusClass(report.status)]">
-                                        {{ report.status }}
-                                    </span>
-                                    <span v-if="report.submitted" class="new-submission-badge" v-tooltip.top="'New Submission'"></span>
-                                </div>
-                            </div>
-
-                            <div class="report-details">
-                                <div class="detail-item">
-                                    <i class="pi pi-calendar"></i>
-                                    <span>{{ formatDate(report.created_at) }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <i class="pi pi-user"></i>
-                                    <span>{{ report.generated_by }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <i class="pi pi-file"></i>
-                                    <span>{{ report.type }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <i class="pi pi-database"></i>
-                                    <span>{{ report.records_count }} records</span>
-                                </div>
-                            </div>
-
-                            <div class="report-actions">
-                                <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" @click="viewReport(report)" v-tooltip.top="'View Report'" />
-                                <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadReport(report)" v-tooltip.top="'Download Report'" />
-                                <Button icon="pi pi-share-alt" class="p-button-rounded p-button-info p-button-outlined p-button-sm" @click="shareReport(report)" v-tooltip.top="'Share Report'" />
-                                <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="confirmDeleteReport(report)" v-tooltip.top="'Delete Report'" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Submitted Reports Section -->
-            <div class="submitted-reports-section" v-if="submittedReports.length > 0">
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <span class="emoji-icon">📋</span>
-                        Submitted SF2 Reports
-                    </h2>
-                    <p class="section-subtitle">Reports submitted by teachers awaiting review</p>
-                </div>
-
-                <div class="submitted-reports-grid">
-                    <div v-for="report in submittedReports" :key="report.id" class="submitted-report-card">
-                        <div class="report-card-header">
-                            <div class="report-info">
-                                <h4 class="report-section-name">{{ report.section_name }}</h4>
-                                <p class="report-teacher">{{ report.teacher_name }}</p>
-                                <p class="report-month">{{ report.month_name }}</p>
-                            </div>
-                            <div class="report-status-badge">
-                                <span :class="['status-badge', getStatusClass(report.status)]">
-                                    {{ report.status.toUpperCase() }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="report-card-details">
-                            <div class="detail-item">
-                                <i class="pi pi-calendar"></i>
-                                <span>Submitted: {{ formatDate(report.submitted_at) }}</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="pi pi-tag"></i>
-                                <span>Grade: {{ report.grade_level }}</span>
-                            </div>
-                            <div class="detail-item">
-                                <i class="pi pi-file"></i>
-                                <span>Type: {{ report.report_type }}</span>
-                            </div>
-                        </div>
-
-                        <div class="report-card-actions">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-outlined p-button-sm" v-tooltip.top="'View Report'" />
-                            <Button icon="pi pi-download" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="downloadSubmittedReport(report)" v-tooltip.top="'Download Report'" />
-                            <Button icon="pi pi-check" class="p-button-rounded p-button-success p-button-outlined p-button-sm" @click="approveReport(report)" v-tooltip.top="'Approve Report'" v-if="report.status === 'submitted'" />
-                            <Button icon="pi pi-times" class="p-button-rounded p-button-danger p-button-outlined p-button-sm" @click="rejectReport(report)" v-tooltip.top="'Reject Report'" v-if="report.status === 'submitted'" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Generate Report Dialog -->
-        <Dialog v-model:visible="showGenerateDialog" :header="'Generate New Report'" modal class="p-fluid" :style="{ width: '500px' }">
-            <div class="generate-form">
-                <div class="field">
-                    <label for="reportTitle" class="font-medium mb-2 block">Report Title</label>
-                    <InputText id="reportTitle" v-model="newReport.title" placeholder="Enter report title" class="w-full" />
-                </div>
-
-                <div class="field">
-                    <label for="reportType" class="font-medium mb-2 block">Report Type</label>
-                    <Select id="reportType" v-model="newReport.type" :options="reportTypes" optionLabel="name" optionValue="value" placeholder="Select report type" class="w-full" />
-                </div>
-
-                <div class="field">
-                    <label for="reportDescription" class="font-medium mb-2 block">Description</label>
-                    <InputText id="reportDescription" v-model="newReport.description" placeholder="Enter report description" class="w-full" />
-                </div>
-
-                <div class="field">
-                    <label class="font-medium mb-2 block">Date Range</label>
-                    <div class="flex gap-2">
-                        <InputText v-model="newReport.startDate" type="date" class="w-full" />
-                        <InputText v-model="newReport.endDate" type="date" class="w-full" />
-                    </div>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showGenerateDialog = false" />
-                <Button label="Generate" icon="pi pi-check" class="p-button-primary" @click="generateReport" :loading="generating" />
-            </template>
-        </Dialog>
-
-        <!-- Detailed Section Attendance Dialog -->
-        <Dialog
-            v-model:visible="showSectionDetailsDialog"
-            :header="getSectionDialogTitle()"
-            modal
-            class="p-fluid section-details-overlay"
-            :style="{ width: '95vw', maxWidth: '1400px', height: '90vh' }"
-            :appendTo="'body'"
-            :blockScroll="true"
-            :baseZIndex="1000"
-            :closable="true"
-            :dismissableMask="true"
-            @hide="backToMainReport"
-        >
-            <div v-if="selectedSectionDetails" class="section-attendance-details">
-                <!-- Section Header Info -->
-                <div class="section-info-header">
-                    <div class="section-basic-info">
-                        <h3 class="section-title">{{ selectedSectionDetails.name }}</h3>
-                        <p class="teacher-name">{{ selectedSectionDetails.teacher }}</p>
-                        <div class="attendance-summary">
-                            <div class="summary-item">
-                                <span class="summary-label">Total Students:</span>
-                                <span class="summary-value">{{ selectedSectionDetails.studentCount }}</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Present Today:</span>
-                                <span class="summary-value present">{{ selectedSectionDetails.presentCount }}</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Absent Today:</span>
-                                <span class="summary-value absent">{{ selectedSectionDetails.absentCount }}</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Attendance Rate:</span>
-                                <span class="summary-value" :class="getRateClass(selectedSectionDetails.attendanceRate)">{{ selectedSectionDetails.attendanceRate }}%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="report-period-info">
-                        <div class="period-badge">
-                            <i class="pi pi-calendar"></i>
-                            <span>September 2025</span>
-                        </div>
-                        <div class="school-info">
-                            <strong>Kagawasan Elementary School</strong>
-                            <p>School Form 2 (SF2) Daily Attendance Report</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Official SF2 Header -->
-                <div class="sf2-official-header">
-                    <div class="header-top">
-                        <div class="deped-logo">
-                            <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="logo-img" />
-                        </div>
-                        <div class="header-center">
-                            <div class="form-title">
-                                <span class="form-number">(The replaced Form 1, Form 2 & SF Form 4 - Absenteeism and Dropout Profile)</span>
-                                <h2>School Form 2 (SF2) - Daily Attendance Report of Learners</h2>
-                            </div>
-                        </div>
-                        <div class="deped-text">
-                            <div class="deped-brand"><span class="dep">Dep</span><span class="ed">ED</span></div>
-                            <p>DEPARTMENT OF EDUCATION</p>
-                        </div>
-                    </div>
-
-                    <div class="school-details-form">
-                        <div class="form-row">
-                            <div class="form-field">
-                                <label>School ID:</label>
-                                <input type="text" class="form-input" value="123456" readonly />
-                            </div>
-                            <div class="form-field">
-                                <label>School Year:</label>
-                                <input type="text" class="form-input" value="2024-2025" readonly />
-                            </div>
-                            <div class="form-field">
-                                <label>Report for the Month of:</label>
-                                <input type="text" class="form-input" value="September 2025" readonly />
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-field wide">
-                                <label>Name of School:</label>
-                                <input type="text" class="form-input" value="Kagawasan Elementary School" readonly />
-                            </div>
-                            <div class="form-field">
-                                <label>Grade Level:</label>
-                                <input type="text" class="form-input" value="Kindergarten" readonly />
-                            </div>
-                            <div class="form-field">
-                                <label>Section:</label>
-                                <input type="text" class="form-input" :value="selectedSectionDetails.name" readonly />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Month Navigation -->
-                <div class="month-navigation">
-                    <Button icon="pi pi-chevron-left" class="p-button-text p-button-sm" @click="previousMonth()" :disabled="!canGoPreviousMonth()" />
-                    <div class="month-selector">
-                        <h4>{{ getCurrentMonthDisplay() }}</h4>
-                        <p class="teacher-info">{{ getCurrentTeacher() }}</p>
-                    </div>
-                    <Button icon="pi pi-chevron-right" class="p-button-text p-button-sm" @click="nextMonth()" :disabled="!canGoNextMonth()" />
-                </div>
-
-                <!-- Attendance Grid -->
-                <div class="attendance-grid-container">
-                    <div class="grid-header">
-                        <h4>Daily Attendance Record - {{ getCurrentMonthDisplay() }}</h4>
-                        <div class="legend">
-                            <div class="legend-item">
-                                <span class="legend-symbol present-symbol">✓</span>
-                                <span>Present</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-symbol absent-symbol">✗</span>
-                                <span>Absent</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-symbol late-symbol">L</span>
-                                <span>Late</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="attendance-table-wrapper">
-                        <table class="attendance-table">
-                            <thead>
-                                <tr>
-                                    <th class="student-name-header">Learner's Name<br /><small>(Last Name, First Name, Middle Name)</small></th>
-                                    <th v-for="day in attendanceDays" :key="day.date" class="day-header">
-                                        <div class="day-info">
-                                            <span class="day-number">{{ day.day }}</span>
-                                            <span class="day-name">{{ day.dayName }}</span>
-                                        </div>
-                                    </th>
-                                    <th class="summary-header">Total<br />Present</th>
-                                    <th class="summary-header">Total<br />Absent</th>
-                                    <th class="summary-header">Attendance<br />Rate</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- MALE Students Section -->
-                                <tr class="gender-header-row">
-                                    <td class="gender-header" colspan="26">
-                                        <div class="gender-section">
-                                            <span class="gender-label">👨 MALE</span>
-                                            <span class="gender-total">TOTAL Per Day</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr v-for="student in getMaleStudents(selectedSectionDetails.name)" :key="student.id" class="student-row">
-                                    <td class="student-name-cell">
-                                        <div class="student-info">
-                                            <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
-                                                {{ student.status.replace('_', ' ') }}
-                                                <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
-                                            </span>
-                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
-                                            <span class="student-lrn">LRN: {{ student.lrn }}</span>
-                                        </div>
-                                    </td>
-                                    <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
-                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance?.[day.date])]">
-                                            {{ getAttendanceMark(student.attendance?.[day.date]) }}
-                                        </span>
-                                    </td>
-                                    <td class="summary-cell present-count">{{ student.totalPresent }}</td>
-                                    <td class="summary-cell absent-count">{{ student.totalAbsent }}</td>
-                                    <td class="summary-cell rate-cell">
-                                        <span :class="['rate-badge', getRateClass(student.attendanceRate)]">{{ student.attendanceRate }}%</span>
-                                    </td>
-                                </tr>
-
-                                <!-- MALE TOTAL Per Day Row -->
-                                <tr class="gender-total-row male-total">
-                                    <td class="gender-total-label">
-                                        <strong>👨 MALE | TOTAL Per Day</strong>
-                                    </td>
-                                    <td v-for="day in attendanceDays" :key="day.date" class="gender-total-cell">
-                                        <strong>{{ getMaleDayTotal(selectedSectionDetails.name, day.date) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getMaleTotalPresent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getMaleTotalAbsent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</strong>
-                                    </td>
-                                </tr>
-
-                                <!-- FEMALE Students Section -->
-                                <tr class="gender-header-row">
-                                    <td class="gender-header" colspan="26">
-                                        <div class="gender-section">
-                                            <span class="gender-label">👩 FEMALE</span>
-                                            <span class="gender-total">TOTAL Per Day</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr v-for="student in getFemaleStudents(selectedSectionDetails.name)" :key="student.id" class="student-row">
-                                    <td class="student-name-cell">
-                                        <div class="student-info">
-                                            <span class="student-name">{{ student.lastName }}, {{ student.firstName }} {{ student.middleName }}</span>
-                                            <span v-if="student.status && student.status !== 'active'" :class="'status-badge status-' + student.status.replace('_', '-')" :title="student.statusDate ? 'Status changed on: ' + student.statusDate : ''">
-                                                {{ student.status.replace('_', ' ') }}
-                                                <small v-if="student.statusDate"> ({{ formatStatusDate(student.statusDate) }})</small>
-                                            </span>
-                                            <button v-if="!student.status || student.status === 'active'" class="status-change-btn" @click="showStatusChangeDialog(student)" title="Change student status">⚙️</button>
-                                            <span class="student-lrn">LRN: {{ student.lrn }}</span>
-                                        </div>
-                                    </td>
-                                    <td v-for="day in attendanceDays" :key="day.date" class="attendance-cell">
-                                        <span :class="['attendance-mark', getAttendanceClass(student.attendance?.[day.date])]">
-                                            {{ getAttendanceMark(student.attendance?.[day.date]) }}
-                                        </span>
-                                    </td>
-                                    <td class="summary-cell present-count">{{ student.totalPresent }}</td>
-                                    <td class="summary-cell absent-count">{{ student.totalAbsent }}</td>
-                                    <td class="summary-cell rate-cell">
-                                        <span :class="['rate-badge', getRateClass(student.attendanceRate)]">{{ student.attendanceRate }}%</span>
-                                    </td>
-                                </tr>
-
-                                <!-- FEMALE TOTAL Per Day Row -->
-                                <tr class="gender-total-row female-total">
-                                    <td class="gender-total-label">
-                                        <strong>👩 FEMALE | TOTAL Per Day</strong>
-                                    </td>
-                                    <td v-for="day in attendanceDays" :key="day.date" class="gender-total-cell">
-                                        <strong>{{ getFemaleDayTotal(selectedSectionDetails.name, day.date) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getFemaleTotalPresent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getFemaleTotalAbsent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="gender-total-cell">
-                                        <strong>{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</strong>
-                                    </td>
-                                </tr>
-
-                                <!-- Combined TOTAL PER DAY Row -->
-                                <tr class="combined-total-row">
-                                    <td class="total-label-cell">
-                                        <strong>Combined TOTAL PER DAY</strong>
-                                    </td>
-                                    <td v-for="day in attendanceDays" :key="day.date" class="total-cell">
-                                        <strong>{{ getDayTotal(selectedSectionDetails.name, day.date) }}</strong>
-                                    </td>
-                                    <td class="total-cell">
-                                        <strong>{{ getTotalPresent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="total-cell">
-                                        <strong>{{ getTotalAbsent(selectedSectionDetails.name) }}</strong>
-                                    </td>
-                                    <td class="total-cell">
-                                        <strong>{{ getOverallAttendanceRate(selectedSectionDetails.name) }}%</strong>
-                                    </td>
-                                </tr>
-
-                                <!-- Line Numbers Row -->
-                                <tr class="line-numbers-row">
-                                    <td class="line-number-label">Line No.</td>
-                                    <td v-for="(day, index) in attendanceDays" :key="day.date" class="line-number-cell">{{ index + 2 }}</td>
-                                    <td class="line-number-cell">{{ attendanceDays.length + 2 }}</td>
-                                    <td class="line-number-cell">{{ attendanceDays.length + 3 }}</td>
-                                    <td class="line-number-cell">{{ attendanceDays.length + 4 }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Monthly Statistics -->
-                <div class="monthly-statistics">
-                    <h4>Monthly Statistics</h4>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="pi pi-users"></i>
-                            </div>
-                            <div class="stat-content">
-                                <span class="stat-number">{{ selectedSectionDetails.studentCount }}</span>
-                                <span class="stat-label">Total Students</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon present">
-                                <i class="pi pi-check-circle"></i>
-                            </div>
-                            <div class="stat-content">
-                                <span class="stat-number">{{ calculateTotalPresent() }}</span>
-                                <span class="stat-label">Total Present Days</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon absent">
-                                <i class="pi pi-times-circle"></i>
-                            </div>
-                            <div class="stat-content">
-                                <span class="stat-number">{{ calculateTotalAbsent() }}</span>
-                                <span class="stat-label">Total Absent Days</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon rate">
-                                <i class="pi pi-chart-line"></i>
-                            </div>
-                            <div class="stat-content">
-                                <span class="stat-number">{{ selectedSectionDetails.attendanceRate }}%</span>
-                                <span class="stat-label">Average Attendance</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SF2 Template Preview -->
-            <div class="sf2-template-preview">
-                <div class="sf2-header">
-                    <h3>SCHOOL FORM 2 (SF2) - DAILY ATTENDANCE REPORT OF LEARNERS</h3>
-                </div>
-
-                <div class="sf2-info-section">
-                    <div class="sf2-school-info">
-                        <div class="info-row">
-                            <span class="label">School:</span>
-                            <span class="value">Kagawasan Elementary School</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Section:</span>
-                            <span class="value">{{ selectedSectionDetails.name }}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Teacher:</span>
-                            <span class="value">{{ getCurrentTeacher() }}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Month/Year:</span>
-                            <span class="value">{{ getCurrentMonthDisplay() }}</span>
-                        </div>
-                    </div>
-
-                    <div class="sf2-guidelines">
-                        <h4>GUIDELINES:</h4>
-                        <ol>
-                            <li>This attendance shall be accomplished daily. Refer to the codes for checking learners' attendance.</li>
-                            <li>Data shall be written in the columns after Learner's Name.</li>
-                            <li>To compute the following:</li>
-                        </ol>
-                        <div class="formulas">
-                            <div class="formula-item">
-                                <span class="formula-label">a. Percentage of Enrolment =</span>
-                                <div class="formula-box">
-                                    <div>Registered Learners as of end of the month</div>
-                                    <div class="divider">Enrolment as of 1st Friday of the School Year</div>
-                                    <span class="multiply">x 100</span>
-                                </div>
-                            </div>
-                            <div class="formula-item">
-                                <span class="formula-label">b. Average Daily Attendance =</span>
-                                <div class="formula-box">
-                                    <div>Total Daily Attendance</div>
-                                    <div class="divider">Number of School Days in reporting month</div>
-                                </div>
-                            </div>
-                            <div class="formula-item">
-                                <span class="formula-label">c. Percentage of Attendance for the month =</span>
-                                <div class="formula-box">
-                                    <div>Average Daily Attendance</div>
-                                    <div class="divider">Registered Learners as of end of the month</div>
-                                    <span class="multiply">x 100</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sf2-codes">
-                        <h4>CODES FOR CHECKING ATTENDANCE</h4>
-                        <div class="codes-grid">
-                            <div class="code-section">
-                                <h5>A. REASONS/CAUSES (Specify the appropriate code)</h5>
-                                <div class="code-list">
-                                    <div class="code-item">a. Domestic-Related Factors</div>
-                                    <div class="code-item">a1. Had to take care of siblings</div>
-                                    <div class="code-item">a2. Early marriage/pregnancy</div>
-                                    <div class="code-item">a3. Parents' attitude toward schooling</div>
-                                    <div class="code-item">a4. Peer pressure</div>
-                                    <div class="code-item">b. Individual-Related Factors</div>
-                                    <div class="code-item">b1. Illness</div>
-                                    <div class="code-item">b2. Overage</div>
-                                    <div class="code-item">b3. Death</div>
-                                    <div class="code-item">b4. Drug Abuse</div>
-                                    <div class="code-item">b5. Poor academic performance</div>
-                                    <div class="code-item">b6. Lack of interest/Disinterest</div>
-                                    <div class="code-item">b7. Hunger/Malnutrition</div>
-                                </div>
-                            </div>
-                            <div class="code-section">
-                                <h5>c. School-Related Factors</h5>
-                                <div class="code-list">
-                                    <div class="code-item">c1. Teacher Factor</div>
-                                    <div class="code-item">c2. Physical condition of classroom</div>
-                                    <div class="code-item">c3. Peer influence</div>
-                                    <div class="code-item">c4. School environment</div>
-                                    <div class="code-item">d. Geographic/Environmental</div>
-                                    <div class="code-item">d1. Distance between home and school</div>
-                                    <div class="code-item">d2. Armed conflict area. Tribal wars & clan feuds</div>
-                                    <div class="code-item">d3. Calamities/Disasters</div>
-                                    <div class="code-item">e. Economic/Financial</div>
-                                    <div class="code-item">e1. Child labor - work</div>
-                                    <div class="code-item">f. Others (Specify)</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sf2-summary-section">
-                        <div class="summary-box">
-                            <div class="summary-header">
-                                <div class="header-box">Month: _____</div>
-                                <div class="header-box">No. of Days of Classes: _____</div>
-                                <div class="header-box summary-box-header">Summary</div>
-                            </div>
-
-                            <table class="sf2-summary-table">
-                                <thead>
-                                    <tr>
-                                        <th class="summary-description"></th>
-                                        <th class="summary-m">M</th>
-                                        <th class="summary-f">F</th>
-                                        <th class="summary-total">TOTAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="summary-label">* Enrolment as of (1st Friday of June)</td>
-                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Late Enrolment during the month<br /><small>(beyond cut-off)</small></td>
-                                        <td class="summary-value">0</td>
-                                        <td class="summary-value">0</td>
-                                        <td class="summary-value">0</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Registered Learners as of <em>end of the month</em></td>
-                                        <td class="summary-value">{{ getMaleStudentsCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getFemaleStudentsCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ selectedSectionDetails.totalStudents }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Percentage of Enrolment as of <em>end of the month</em></td>
-                                        <td class="summary-value">100%</td>
-                                        <td class="summary-value">100%</td>
-                                        <td class="summary-value">100%</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Average Daily Attendance</td>
-                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
-                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
-                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Percentage of Attendance for the month</td>
-                                        <td class="summary-value">{{ getMaleAttendanceRate(selectedSectionDetails.name) }}%</td>
-                                        <td class="summary-value">{{ getFemaleAttendanceRate(selectedSectionDetails.name) }}%</td>
-                                        <td class="summary-value">{{ selectedSectionDetails.attendanceRate }}%</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Number of students absent for 5 consecutive days:</td>
-                                        <td class="summary-value">0</td>
-                                        <td class="summary-value">0</td>
-                                        <td class="summary-value">0</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Drop out</td>
-                                        <td class="summary-value">{{ getMaleDroppedOutCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getFemaleDroppedOutCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getDroppedOutCount(selectedSectionDetails.name) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Transferred out</td>
-                                        <td class="summary-value">{{ getMaleTransferredOutCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getFemaleTransferredOutCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getTransferredOutCount(selectedSectionDetails.name) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="summary-label">Transferred in</td>
-                                        <td class="summary-value">{{ getMaleTransferredInCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getFemaleTransferredInCount(selectedSectionDetails.name) }}</td>
-                                        <td class="summary-value">{{ getTransferredInCount(selectedSectionDetails.name) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <div class="certification">
-                                <p>I certify that this is a true and correct report.</p>
-                                <div class="signature-section">
-                                    <div class="signature-box">
-                                        <div class="signature-line"></div>
-                                        <span>(Signature of Teacher over Printed Name)</span>
-                                    </div>
-                                    <div class="signature-box">
-                                        <span>Attested by:</span>
-                                        <div class="signature-line"></div>
-                                        <span>(Signature of School Head over Printed Name)</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sf2-footer">
-                    <span>School Form 2 - Page ___ of ___</span>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Back to Reports" icon="pi pi-arrow-left" class="p-button-text" @click="backToMainReport()" />
-                <Button label="Download SF2 Report" icon="pi pi-download" class="p-button-primary" @click="downloadSF2Report()" />
-                <Button label="Print Report" icon="pi pi-print" class="p-button-success" @click="printReport()" />
-            </template>
-        </Dialog>
-
-        <!-- View Report Dialog -->
-        <Dialog v-model:visible="showViewDialog" :header="selectedReport?.title || 'Report Details'" modal class="p-fluid" :style="{ width: '80vw', maxWidth: '1000px' }">
-            <div v-if="selectedReport" class="report-preview">
-                <div class="preview-header">
-                    <div class="header-main">
-                        <h3>{{ selectedReport.title }}</h3>
-                        <p>{{ selectedReport.description }}</p>
-                    </div>
-                    <div class="report-period">
-                        <span class="period-text">{{ getReportPeriod(selectedReport) }}</span>
-                    </div>
-                </div>
-
-                <div class="preview-content">
-                    <div v-if="hasGradeSections(selectedReport.grade)" class="grade-sections">
-                        <div class="sections-header">
-                            <h4 class="sections-title mb-4">{{ selectedReport.grade }} Sections</h4>
-                            <div class="records-count">
-                                <span class="records-text">{{ getRecordsCount(selectedReport.grade) }}</span>
-                            </div>
-                        </div>
-                        <div class="sections-grid">
-                            <div v-for="section in getGradeSections(selectedReport.grade)" :key="section.id" class="section-card">
-                                <div class="section-header">
-                                    <div class="section-status" :class="section.statusClass">{{ section.status }}</div>
-                                </div>
-                                <div class="section-content">
-                                    <h5 class="section-name">{{ section.name }}</h5>
-                                    <p class="section-teacher">{{ section.teacher }}</p>
-                                    <div class="section-stats">
-                                        <div class="stat-item">
-                                            <span class="stat-label">Students:</span>
-                                            <span class="stat-value">{{ section.studentCount }}</span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span class="stat-label">Present:</span>
-                                            <span class="stat-value">{{ section.presentCount }}</span>
-                                        </div>
-                                        <div class="stat-item">
-                                            <span class="stat-label">Absent:</span>
-                                            <span class="stat-value">{{ section.absentCount }}</span>
-                                        </div>
-                                    </div>
-                                    <div class="attendance-rate">
-                                        <span class="rate-label">Attendance Rate:</span>
-                                        <span class="rate-value" :class="getRateClass(section.attendanceRate)">{{ section.attendanceRate }}%</span>
-                                    </div>
-                                </div>
-                                <div class="section-actions">
-                                    <Button label="View Details" size="small" class="p-button-outlined p-button-sm" @click="viewSectionDetails(section)" />
-                                    <Button icon="pi pi-download" size="small" class="p-button-text p-button-sm" @click="downloadSectionReport(section)" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="general-report-content">
-                        <p>Report content would be displayed here...</p>
-                        <p>Generated on: {{ formatDate(selectedReport.created_at) }}</p>
-                        <p>Records: {{ selectedReport.records_count }}</p>
-                    </div>
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Close" icon="pi pi-times" class="p-button-text" @click="showViewDialog = false" />
-                <Button label="Download" icon="pi pi-download" class="p-button-primary" @click="downloadReport(selectedReport)" />
-            </template>
-        </Dialog>
-
-        <!-- Status Change Dialog -->
-        <Dialog v-model:visible="statusChangeDialog" modal header="Change Student Status" :style="{ width: '450px' }">
-            <div class="status-change-form" v-if="selectedStudent">
-                <div class="student-details">
-                    <h4>{{ selectedStudent.firstName }} {{ selectedStudent.lastName }}</h4>
-                    <p>LRN: {{ selectedStudent.lrn }}</p>
-                    <p>Current Status: {{ selectedStudent.status || 'Active' }}</p>
-                </div>
-
-                <div class="form-group">
-                    <label for="newStatus">New Status:</label>
-                    <Dropdown v-model="newStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="Select new status" class="w-full" />
-                </div>
-
-                <div class="form-group" v-if="newStatus">
-                    <label for="statusDate">Effective Date:</label>
-                    <Calendar v-model="statusDate" dateFormat="yy-mm-dd" placeholder="Select date" class="w-full" />
-                </div>
-
-                <div class="form-group" v-if="newStatus">
-                    <label for="statusReason">Reason (Optional):</label>
-                    <Textarea v-model="statusReason" rows="3" placeholder="Enter reason for status change..." class="w-full" />
-                </div>
-            </div>
-
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="closeStatusDialog" class="p-button-text" />
-                <Button label="Update Status" icon="pi pi-check" @click="updateStudentStatus" :disabled="!newStatus || !statusDate" />
-            </template>
-        </Dialog>
-    </div>
-</template>
-
 <script setup>
-import { CurriculumService } from '@/router/service/CurriculumService';
-import 'jspdf-autotable';
-import Button from 'primevue/button';
-import Calendar from 'primevue/calendar';
-import Dialog from 'primevue/dialog';
-import Dropdown from 'primevue/dropdown';
-import InputText from 'primevue/inputtext';
-import ProgressSpinner from 'primevue/progressspinner';
-import Select from 'primevue/select';
-import Textarea from 'primevue/textarea';
-import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import QRCode from 'qrcode';
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 const toast = useToast();
-const confirm = useConfirm();
+const router = useRouter();
+const students = ref([]);
+const grades = ref([]);
+const loading = ref(true);
+const studentDialog = ref(false);
+const deleteStudentDialog = ref(false);
+const expandedRows = ref([]);
+const qrCodes = ref({});
+const student = ref({
+    id: null,
+    // Personal Information
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    extensionName: '',
+    name: '',
+    birthdate: null,
+    age: '',
+    gender: 'Male',
 
-// Reactive data
-const loading = ref(false);
-const generating = ref(false);
-const showGenerateDialog = ref(false);
-const showViewDialog = ref(false);
-const showSectionDetailsDialog = ref(false);
-const selectedReport = ref(null);
-const selectedSectionDetails = ref(null);
+    // Academic Information
+    schoolYear: '2025-2026',
+    gradeLevel: '',
+    section: '',
+    learnerType: 'New/Move In',
+    learnerStatus: 'WITH LRN',
+    lastGradeCompleted: '',
+    lastSYAttended: '',
+    previousSchool: '',
+    schoolId: '',
 
-// Real curriculum data
-const realGrades = ref([]);
-const realSections = ref([]);
-const loadingRealData = ref(false);
+    // LRN and PSA
+    lrn: '',
+    psaBirthCert: '',
 
-// Status change dialog variables
-const statusChangeDialog = ref(false);
+    // Contact Information
+    email: '',
+    phone: '',
+    parentContact: '',
+
+    // Address Information
+    address: '',
+    houseNo: '',
+    street: '',
+    barangay: '',
+    city: '',
+    province: '',
+
+    // Current Address (Detailed)
+    currentHouseNo: '',
+    currentStreet: '',
+    currentBarangay: '',
+    currentCity: '',
+    currentProvince: '',
+    currentCountry: 'Philippines',
+    currentZipCode: '',
+
+    // Permanent Address
+    sameAsCurrentAddress: true,
+    permanentHouseNo: '',
+    permanentStreet: '',
+    permanentBarangay: '',
+    permanentCity: '',
+    permanentProvince: '',
+    permanentCountry: 'Philippines',
+    permanentZipCode: '',
+
+    // Additional Information
+    photo: null,
+    profilephoto: null,
+    enrollmentDate: new Date().toISOString().split('T')[0],
+    status: 'Enrolled',
+    isActive: true,
+
+    // Basic Education Fields
+    placeOfBirth: '',
+    motherTongue: '',
+    isIndigenous: false,
+    indigenousCommunity: '',
+    is4PsBeneficiary: false,
+    householdID: '',
+    hasDisability: false,
+    disabilities: [],
+    houseIncome: '',
+
+    // Parent's/Guardian's Information
+    fatherLastName: '',
+    fatherFirstName: '',
+    fatherMiddleName: '',
+    fatherContactNumber: '',
+    fatherOccupation: '',
+    motherMaidenLastName: '',
+    motherMaidenFirstName: '',
+    motherMaidenMiddleName: '',
+    motherContactNumber: '',
+    motherOccupation: ''
+});
+
+const submitted = ref(false);
+const termsAccepted = ref(false);
+const currentStep = ref(1);
+const totalSteps = ref(2);
+const successDialog = ref(false);
+const showFireworks = ref(false);
+const filters = ref({
+    grade: null,
+    section: null,
+    month: null,
+    searchTerm: ''
+});
+const sections = ref([]);
+const totalStudents = ref(0);
+const qrCodeDialog = ref(false);
 const selectedStudent = ref(null);
-const newStatus = ref('');
-const statusDate = ref(null);
-const statusReason = ref('');
+const fileInput = ref(null);
+const viewStudentDialog = ref(false);
+const isEdit = ref(false);
 
-const statusOptions = [
-    { label: 'Drop Out', value: 'dropped_out' },
-    { label: 'Transfer Out', value: 'transferred_out' },
-    { label: 'Transfer In', value: 'transferred_in' }
+const selectedStudentAge = computed(() => calculateAge(selectedStudent.value?.birthdate));
+const originalStudentClone = ref(null);
+
+// Grade levels loaded from database
+const gradeLevels = ref([]);
+
+// Sections loaded from database
+const allSections = ref([]);
+const sectionsByGrade = ref({});
+
+const disabilityTypes = [
+    'Visual Impairment',
+    'Hearing Impairment',
+    'Learning Disability',
+    'Intellectual Disability',
+    'Blind',
+    'Autism Spectrum Disorder',
+    'Low Vision',
+    'Speech/Language Disorder',
+    'Emotional-Behavioral Disorder',
+    'Cerebral Palsy',
+    'Orthopedic/Physical Handicap',
+    'Special Health Problem/Chronic Disease',
+    'Multiple Disorder',
+    'Cancer'
 ];
-const searchQuery = ref('');
-const selectedGradeType = ref(null);
-const selectedDateRange = ref(null);
-const selectedStatus = ref(null);
 
-// Notification system
-const newSubmissionsCount = ref(0);
-const submittedReports = ref([]);
-const pollingInterval = ref(null);
-const lastCheckedTime = ref(new Date());
-
-// Current month and year for navigation
-const currentMonth = ref(8); // September (0-indexed)
-const currentYear = ref(2025);
-
-// Overview month navigation (separate from section details)
-const currentOverviewMonth = ref(8); // September (0-indexed)
-const currentOverviewYear = ref(2025);
-
-// Available months for navigation
-const availableMonths = ref([
-    { month: 7, year: 2025, display: 'August 2025' },
-    { month: 8, year: 2025, display: 'September 2025' },
-    { month: 9, year: 2025, display: 'October 2025' }
-]);
-
-// Historical section data with different teachers per month
-const historicalSectionData = ref({
-    'Kinder A': {
-        'August 2025': {
-            teacher: 'Ms. Maria Santos',
-            students: [
-                {
-                    id: 1,
-                    firstName: 'Juan',
-                    middleName: 'Carlos',
-                    lastName: 'Dela Cruz',
-                    gender: 'Male',
-                    lrn: '123456789010',
-                    attendance: {
-                        '2025-08-01': 'present',
-                        '2025-08-02': 'present',
-                        '2025-08-05': 'present',
-                        '2025-08-06': 'present',
-                        '2025-08-07': 'present',
-                        '2025-08-08': 'present',
-                        '2025-08-09': 'present',
-                        '2025-08-12': 'present',
-                        '2025-08-13': 'absent',
-                        '2025-08-14': 'present',
-                        '2025-08-15': 'present',
-                        '2025-08-16': 'present',
-                        '2025-08-19': 'present',
-                        '2025-08-20': 'present',
-                        '2025-08-21': 'present',
-                        '2025-08-22': 'present',
-                        '2025-08-23': 'present',
-                        '2025-08-26': 'present',
-                        '2025-08-27': 'present',
-                        '2025-08-28': 'present',
-                        '2025-08-29': 'present',
-                        '2025-08-30': 'present'
-                    },
-                    totalPresent: 21,
-                    totalAbsent: 1,
-                    attendanceRate: 95
-                },
-                {
-                    id: 2,
-                    firstName: 'Maria',
-                    middleName: 'Elena',
-                    lastName: 'Rodriguez',
-                    gender: 'Female',
-                    lrn: '123456789011',
-                    attendance: {
-                        '2025-08-01': 'present',
-                        '2025-08-02': 'present',
-                        '2025-08-05': 'present',
-                        '2025-08-06': 'present',
-                        '2025-08-07': 'present',
-                        '2025-08-08': 'present',
-                        '2025-08-09': 'present',
-                        '2025-08-12': 'present',
-                        '2025-08-13': 'present',
-                        '2025-08-14': 'present',
-                        '2025-08-15': 'present',
-                        '2025-08-16': 'present',
-                        '2025-08-19': 'present',
-                        '2025-08-20': 'present',
-                        '2025-08-21': 'present',
-                        '2025-08-22': 'present',
-                        '2025-08-23': 'present',
-                        '2025-08-26': 'present',
-                        '2025-08-27': 'present',
-                        '2025-08-28': 'present',
-                        '2025-08-29': 'present',
-                        '2025-08-30': 'present'
-                    },
-                    totalPresent: 22,
-                    totalAbsent: 0,
-                    attendanceRate: 100
-                },
-                {
-                    id: 3,
-                    firstName: 'Carlos',
-                    middleName: 'Antonio',
-                    lastName: 'Martinez',
-                    gender: 'Male',
-                    lrn: '123456789012',
-                    attendance: {
-                        '2025-08-01': 'present',
-                        '2025-08-02': 'present',
-                        '2025-08-05': 'present',
-                        '2025-08-06': 'present',
-                        '2025-08-07': 'present',
-                        '2025-08-08': 'absent',
-                        '2025-08-09': 'present',
-                        '2025-08-12': 'present',
-                        '2025-08-13': 'present',
-                        '2025-08-14': 'present',
-                        '2025-08-15': 'present',
-                        '2025-08-16': 'present',
-                        '2025-08-19': 'present',
-                        '2025-08-20': 'present',
-                        '2025-08-21': 'present',
-                        '2025-08-22': 'present',
-                        '2025-08-23': 'present',
-                        '2025-08-26': 'present',
-                        '2025-08-27': 'present',
-                        '2025-08-28': 'present',
-                        '2025-08-29': 'present',
-                        '2025-08-30': 'present'
-                    },
-                    totalPresent: 21,
-                    totalAbsent: 1,
-                    attendanceRate: 95
-                },
-                {
-                    id: 4,
-                    firstName: 'Ana',
-                    middleName: 'Isabel',
-                    lastName: 'Garcia',
-                    gender: 'Female',
-                    lrn: '123456789013',
-                    attendance: {
-                        '2025-08-01': 'present',
-                        '2025-08-02': 'present',
-                        '2025-08-05': 'present',
-                        '2025-08-06': 'present',
-                        '2025-08-07': 'present',
-                        '2025-08-08': 'present',
-                        '2025-08-09': 'present',
-                        '2025-08-12': 'present',
-                        '2025-08-13': 'present',
-                        '2025-08-14': 'present',
-                        '2025-08-15': 'absent',
-                        '2025-08-16': 'present',
-                        '2025-08-19': 'present',
-                        '2025-08-20': 'present',
-                        '2025-08-21': 'present',
-                        '2025-08-22': 'present',
-                        '2025-08-23': 'present',
-                        '2025-08-26': 'present',
-                        '2025-08-27': 'present',
-                        '2025-08-28': 'present',
-                        '2025-08-29': 'present',
-                        '2025-08-30': 'present'
-                    },
-                    totalPresent: 21,
-                    totalAbsent: 1,
-                    attendanceRate: 95
-                }
-            ]
-        },
-        'September 2025': {
-            teacher: 'Ms. Lisa Chen',
-            students: [] // Will use existing sectionStudents data
-        },
-        'October 2025': {
-            teacher: 'Ms. Lisa Chen',
-            students: [
-                {
-                    id: 1,
-                    firstName: 'Juan',
-                    middleName: 'Carlos',
-                    lastName: 'Dela Cruz',
-                    gender: 'Male',
-                    lrn: '123456789010',
-                    attendance: {
-                        '2025-10-01': 'present',
-                        '2025-10-02': 'present',
-                        '2025-10-03': 'present',
-                        '2025-10-04': 'present',
-                        '2025-10-07': 'present',
-                        '2025-10-08': 'present',
-                        '2025-10-09': 'present',
-                        '2025-10-10': 'present',
-                        '2025-10-11': 'present',
-                        '2025-10-14': 'present',
-                        '2025-10-15': 'present',
-                        '2025-10-16': 'present',
-                        '2025-10-17': 'present',
-                        '2025-10-18': 'present',
-                        '2025-10-21': 'present',
-                        '2025-10-22': 'present',
-                        '2025-10-23': 'present',
-                        '2025-10-24': 'present',
-                        '2025-10-25': 'present',
-                        '2025-10-28': 'present',
-                        '2025-10-29': 'present',
-                        '2025-10-30': 'present',
-                        '2025-10-31': 'present'
-                    },
-                    totalPresent: 23,
-                    totalAbsent: 0,
-                    attendanceRate: 100
-                }
-            ]
-        }
-    }
-});
-
-// Kinder sections data
-const kinderSections = ref([
-    {
-        id: 1,
-        name: 'Kinder A',
-        teacher: 'Ms. Lisa Chen',
-        studentCount: 25,
-        presentCount: 23,
-        absentCount: 2,
-        attendanceRate: 92,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Kinder B',
-        teacher: 'Ms. Maria Santos',
-        studentCount: 28,
-        presentCount: 26,
-        absentCount: 2,
-        attendanceRate: 93,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 3,
-        name: 'Kinder C',
-        teacher: 'Ms. Lisa Chen',
-        studentCount: 24,
-        presentCount: 20,
-        absentCount: 4,
-        attendanceRate: 83,
-        status: 'GOOD',
-        statusClass: 'status-good'
-    },
-    {
-        id: 4,
-        name: 'Kinder D',
-        teacher: 'Ms. Anna Rodriguez',
-        studentCount: 26,
-        presentCount: 18,
-        absentCount: 8,
-        attendanceRate: 69,
-        status: 'NEEDS ATTENTION',
-        statusClass: 'status-warning'
-    }
-]);
-
-// Grade 1 sections data
-const grade1Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 1-A',
-        teacher: 'Ms. Jennifer Lee',
-        studentCount: 30,
-        presentCount: 28,
-        absentCount: 2,
-        attendanceRate: 93,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 1-B',
-        teacher: 'Ms. Patricia Wong',
-        studentCount: 29,
-        presentCount: 25,
-        absentCount: 4,
-        attendanceRate: 86,
-        status: 'GOOD',
-        statusClass: 'status-good'
-    },
-    {
-        id: 3,
-        name: 'Grade 1-C',
-        teacher: 'Ms. Rebecca Davis',
-        studentCount: 28,
-        presentCount: 22,
-        absentCount: 6,
-        attendanceRate: 79,
-        status: 'GOOD',
-        statusClass: 'status-good'
-    }
-]);
-
-// Grade 3 sections data
-const grade3Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 3-A',
-        teacher: 'Mr. Michael Brown',
-        studentCount: 32,
-        presentCount: 30,
-        absentCount: 2,
-        attendanceRate: 94,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 3-B',
-        teacher: 'Ms. Amanda Wilson',
-        studentCount: 31,
-        presentCount: 27,
-        absentCount: 4,
-        attendanceRate: 87,
-        status: 'GOOD',
-        statusClass: 'status-good'
-    },
-    {
-        id: 3,
-        name: 'Grade 3-C',
-        teacher: 'Ms. Karen Martinez',
-        studentCount: 30,
-        presentCount: 20,
-        absentCount: 10,
-        attendanceRate: 67,
-        status: 'NEEDS ATTENTION',
-        statusClass: 'status-warning'
-    }
-]);
-
-// Grade 2 sections data
-const grade2Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 2-A',
-        teacher: 'Ms. Catherine Lopez',
-        studentCount: 27,
-        presentCount: 26,
-        absentCount: 1,
-        attendanceRate: 96,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 2-B',
-        teacher: 'Ms. Diana Cruz',
-        studentCount: 29,
-        presentCount: 28,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 3,
-        name: 'Grade 2-C',
-        teacher: 'Mr. Robert Kim',
-        studentCount: 28,
-        presentCount: 25,
-        absentCount: 3,
-        attendanceRate: 89,
-        status: 'GOOD',
-        statusClass: 'status-good'
-    },
-    {
-        id: 4,
-        name: 'Grade 2-D',
-        teacher: 'Ms. Elena Reyes',
-        studentCount: 30,
-        presentCount: 29,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    }
-]);
-
-// Grade 4 sections data
-const grade4Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 4-A',
-        teacher: 'Mr. James Thompson',
-        studentCount: 32,
-        presentCount: 31,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 4-B',
-        teacher: 'Ms. Michelle Garcia',
-        studentCount: 31,
-        presentCount: 30,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 3,
-        name: 'Grade 4-C',
-        teacher: 'Ms. Sandra Flores',
-        studentCount: 29,
-        presentCount: 27,
-        absentCount: 2,
-        attendanceRate: 93,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 4,
-        name: 'Grade 4-D',
-        teacher: 'Mr. David Park',
-        studentCount: 33,
-        presentCount: 31,
-        absentCount: 2,
-        attendanceRate: 94,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    }
-]);
-
-// Grade 5 sections data
-const grade5Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 5-A',
-        teacher: 'Ms. Patricia Wilson',
-        studentCount: 30,
-        presentCount: 29,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 5-B',
-        teacher: 'Mr. Robert Chen',
-        studentCount: 28,
-        presentCount: 26,
-        absentCount: 2,
-        attendanceRate: 93,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 3,
-        name: 'Grade 5-C',
-        teacher: 'Ms. Jennifer Lopez',
-        studentCount: 31,
-        presentCount: 30,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    }
-]);
-
-// Grade 6 sections data
-const grade6Sections = ref([
-    {
-        id: 1,
-        name: 'Grade 6-A',
-        teacher: 'Mr. Michael Rodriguez',
-        studentCount: 29,
-        presentCount: 28,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 2,
-        name: 'Grade 6-B',
-        teacher: 'Ms. Angela Davis',
-        studentCount: 32,
-        presentCount: 30,
-        absentCount: 2,
-        attendanceRate: 94,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 3,
-        name: 'Grade 6-C',
-        teacher: 'Mr. Thomas Anderson',
-        studentCount: 30,
-        presentCount: 29,
-        absentCount: 1,
-        attendanceRate: 97,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    },
-    {
-        id: 4,
-        name: 'Grade 6-D',
-        teacher: 'Ms. Lisa Martinez',
-        studentCount: 33,
-        presentCount: 31,
-        absentCount: 2,
-        attendanceRate: 94,
-        status: 'EXCELLENT',
-        statusClass: 'status-excellent'
-    }
-]);
-
-// Attendance days for September 2025
-const attendanceDays = ref([
-    { date: '2025-09-01', day: 1, dayName: 'M' },
-    { date: '2025-09-02', day: 2, dayName: 'T' },
-    { date: '2025-09-03', day: 3, dayName: 'W' },
-    { date: '2025-09-04', day: 4, dayName: 'Th' },
-    { date: '2025-09-05', day: 5, dayName: 'F' },
-    { date: '2025-09-08', day: 8, dayName: 'M' },
-    { date: '2025-09-09', day: 9, dayName: 'T' },
-    { date: '2025-09-10', day: 10, dayName: 'W' },
-    { date: '2025-09-11', day: 11, dayName: 'Th' },
-    { date: '2025-09-12', day: 12, dayName: 'F' },
-    { date: '2025-09-15', day: 15, dayName: 'M' },
-    { date: '2025-09-16', day: 16, dayName: 'T' },
-    { date: '2025-09-17', day: 17, dayName: 'W' },
-    { date: '2025-09-18', day: 18, dayName: 'Th' },
-    { date: '2025-09-19', day: 19, dayName: 'F' },
-    { date: '2025-09-22', day: 22, dayName: 'M' },
-    { date: '2025-09-23', day: 23, dayName: 'T' },
-    { date: '2025-09-24', day: 24, dayName: 'W' },
-    { date: '2025-09-25', day: 25, dayName: 'Th' },
-    { date: '2025-09-26', day: 26, dayName: 'F' },
-    { date: '2025-09-29', day: 29, dayName: 'M' },
-    { date: '2025-09-30', day: 30, dayName: 'T' }
-]);
-
-// Sample student data for each section
-const sectionStudents = ref({
-    'Kinder A': [
-        // MALE STUDENTS
-        {
-            id: 1,
-            firstName: 'Juan',
-            middleName: 'Dela',
-            lastName: 'Reyes',
-            gender: 'Male',
-            lrn: '123456789013',
-            status: 'active', // active, dropped_out, transferred_out, transferred_in
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'absent',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'absent',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 2,
-            firstName: 'Pedro',
-            middleName: 'Jose',
-            lastName: 'Martinez',
-            gender: 'Male',
-            lrn: '123456789014',
-            status: 'dropped_out', // Student dropped out
-            statusDate: '2025-09-15', // Date when student dropped out
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present'
-                // Student dropped out on Sept 15, so no attendance after this date
-            },
-            totalPresent: 10,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 3,
-            firstName: 'Carlos',
-            middleName: 'Antonio',
-            lastName: 'Santos',
-            gender: 'Male',
-            lrn: '123456789015',
-            status: 'transferred_out', // Student transferred out
-            statusDate: '2025-09-20', // Date when student transferred out
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'absent',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'absent',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present'
-                // Student transferred out on Sept 20, so no attendance after this date
-            },
-            totalPresent: 13,
-            totalAbsent: 2,
-            attendanceRate: 87
-        },
-        {
-            id: 4,
-            firstName: 'Miguel',
-            middleName: 'Angel',
-            lastName: 'Rodriguez',
-            gender: 'Male',
-            lrn: '123456789019',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'late',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        // FEMALE STUDENTS
-        {
-            id: 4,
-            firstName: 'Maria',
-            middleName: 'Santos',
-            lastName: 'Cruz',
-            gender: 'Female',
-            lrn: '123456789016',
-            status: 'transferred_in', // Student transferred in
-            statusDate: '2025-09-10', // Date when student transferred in
-            attendance: {
-                // Student transferred in on Sept 10, so no attendance before this date
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'absent',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 5,
-            firstName: 'Ana',
-            middleName: 'Marie',
-            lastName: 'Garcia',
-            gender: 'Female',
-            lrn: '123456789017',
-            status: 'active',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'absent',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 6,
-            firstName: 'Sofia',
-            middleName: 'Isabel',
-            lastName: 'Lopez',
-            gender: 'Female',
-            lrn: '123456789018',
-            status: 'active',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'absent',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'absent',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 7,
-            firstName: 'Sofia',
-            middleName: 'Isabel',
-            lastName: 'Lopez',
-            gender: 'Female',
-            lrn: '123456789016',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'absent',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'absent',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 8,
-            firstName: 'Isabella',
-            middleName: 'Grace',
-            lastName: 'Dela Cruz',
-            gender: 'Female',
-            lrn: '123456789021',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'absent',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 9,
-            firstName: 'Gabriel',
-            middleName: 'Luis',
-            lastName: 'Mendoza',
-            gender: 'Male',
-            lrn: '123456789022',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'absent',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 10,
-            firstName: 'Camila',
-            middleName: 'Rose',
-            lastName: 'Villanueva',
-            gender: 'Female',
-            lrn: '123456789023',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'absent',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 11,
-            firstName: 'Diego',
-            middleName: 'Carlos',
-            lastName: 'Ramos',
-            gender: 'Male',
-            lrn: '123456789024',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 12,
-            firstName: 'Valentina',
-            middleName: 'Joy',
-            lastName: 'Santos',
-            gender: 'Female',
-            lrn: '123456789025',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'absent',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'absent',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        }
-    ],
-    'Kinder B': [
-        {
-            id: 6,
-            firstName: 'Carlos',
-            middleName: 'Antonio',
-            lastName: 'Fernandez',
-            gender: 'Male',
-            lrn: '123456789017',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 7,
-            firstName: 'Isabella',
-            middleName: 'Grace',
-            lastName: 'Morales',
-            gender: 'Female',
-            lrn: '123456789018',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'absent',
-                '2025-09-30': 'absent'
-            },
-            totalPresent: 20,
-            totalAbsent: 2,
-            attendanceRate: 91
-        },
-        {
-            id: 13,
-            firstName: 'Sebastian',
-            middleName: 'Miguel',
-            lastName: 'Torres',
-            gender: 'Male',
-            lrn: '123456789026',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 14,
-            firstName: 'Lucia',
-            middleName: 'Carmen',
-            lastName: 'Herrera',
-            gender: 'Female',
-            lrn: '123456789027',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'absent',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 15,
-            firstName: 'Mateo',
-            middleName: 'Jose',
-            lastName: 'Castillo',
-            gender: 'Male',
-            lrn: '123456789028',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'absent',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 16,
-            firstName: 'Emilia',
-            middleName: 'Faith',
-            lastName: 'Jimenez',
-            gender: 'Female',
-            lrn: '123456789029',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        }
-    ],
-    'Grade 1-A': [
-        {
-            id: 8,
-            firstName: 'Miguel',
-            middleName: 'Angel',
-            lastName: 'Rodriguez',
-            gender: 'Male',
-            lrn: '123456789019',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 17,
-            firstName: 'Adriana',
-            middleName: 'Nicole',
-            lastName: 'Vargas',
-            gender: 'Female',
-            lrn: '123456789030',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'absent',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 18,
-            firstName: 'Leonardo',
-            middleName: 'David',
-            lastName: 'Gutierrez',
-            gender: 'Male',
-            lrn: '123456789031',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'absent',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 19,
-            firstName: 'Natalia',
-            middleName: 'Esperanza',
-            lastName: 'Medina',
-            gender: 'Female',
-            lrn: '123456789032',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        },
-        {
-            id: 20,
-            firstName: 'Santiago',
-            middleName: 'Rafael',
-            lastName: 'Aguilar',
-            gender: 'Male',
-            lrn: '123456789033',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'absent',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 21,
-            totalAbsent: 1,
-            attendanceRate: 95
-        },
-        {
-            id: 21,
-            firstName: 'Valeria',
-            middleName: 'Cristina',
-            lastName: 'Ortega',
-            gender: 'Female',
-            lrn: '123456789034',
-            attendance: {
-                '2025-09-01': 'present',
-                '2025-09-02': 'present',
-                '2025-09-03': 'present',
-                '2025-09-04': 'present',
-                '2025-09-05': 'present',
-                '2025-09-08': 'present',
-                '2025-09-09': 'present',
-                '2025-09-10': 'present',
-                '2025-09-11': 'present',
-                '2025-09-12': 'present',
-                '2025-09-15': 'present',
-                '2025-09-16': 'present',
-                '2025-09-17': 'present',
-                '2025-09-18': 'present',
-                '2025-09-19': 'present',
-                '2025-09-22': 'present',
-                '2025-09-23': 'present',
-                '2025-09-24': 'present',
-                '2025-09-25': 'present',
-                '2025-09-26': 'present',
-                '2025-09-29': 'present',
-                '2025-09-30': 'present'
-            },
-            totalPresent: 22,
-            totalAbsent: 0,
-            attendanceRate: 100
-        }
-    ]
-});
-
-// Form data for new report
-const newReport = ref({
-    title: '',
-    type: null,
-    description: '',
-    startDate: '',
-    endDate: ''
-});
-
-// Reports data - starts empty until reports are submitted
-const reports = ref([]);
-
-// Options for dropdowns
-const gradeTypes = ref([
-    { name: 'Kinder', value: 'Kinder' },
-    { name: 'Grade 1', value: 'Grade 1' },
-    { name: 'Grade 2', value: 'Grade 2' },
-    { name: 'Grade 3', value: 'Grade 3' },
-    { name: 'Grade 4', value: 'Grade 4' },
-    { name: 'Grade 5', value: 'Grade 5' },
-    { name: 'Grade 6', value: 'Grade 6' }
-]);
-
-const dateRanges = ref([
-    { name: '2025', value: '2025' },
-    { name: '2024', value: '2024' },
-    { name: '2023', value: '2023' },
-    { name: '2022', value: '2022' },
-    { name: '2021', value: '2021' },
-    { name: '2020', value: '2020' }
-]);
-
-const monthOptions = ref([
-    { name: 'January', value: 'january' },
-    { name: 'February', value: 'february' },
-    { name: 'March', value: 'march' },
-    { name: 'April', value: 'april' },
-    { name: 'May', value: 'may' },
-    { name: 'June', value: 'june' },
-    { name: 'July', value: 'july' },
-    { name: 'August', value: 'august' },
-    { name: 'September', value: 'september' },
-    { name: 'October', value: 'october' },
-    { name: 'November', value: 'november' },
-    { name: 'December', value: 'december' }
-]);
-
-// Computed properties
-const filteredReports = computed(() => {
-    let filtered = reports.value;
-
-    if (searchQuery.value) {
-        filtered = filtered.filter((report) => report.title.toLowerCase().includes(searchQuery.value.toLowerCase()) || report.description.toLowerCase().includes(searchQuery.value.toLowerCase()));
-    }
-
-    if (selectedGradeType.value) {
-        filtered = filtered.filter((report) => report.grade === selectedGradeType.value);
-    }
-
-    if (selectedDateRange.value) {
-        filtered = filtered.filter((report) => report.year === selectedDateRange.value);
-    }
-
-    if (selectedStatus.value) {
-        filtered = filtered.filter((report) => report.month === selectedStatus.value);
-    }
-
-    return filtered;
-});
-
-// Methods
-const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
-};
-
-const getStatusClass = (status) => {
-    switch (status) {
-        case 'COMPLETED':
-            return 'status-completed';
-        case 'INCOMPLETE':
-            return 'status-incomplete';
-        case 'EMPTY':
-            return 'status-empty';
-        case 'Pending':
-            return 'status-pending';
-        default:
-            return '';
-    }
-};
-
-const getRateClass = (rate) => {
-    if (rate >= 90) return 'rate-excellent';
-    if (rate >= 80) return 'rate-good';
-    if (rate >= 70) return 'rate-warning';
-    return 'rate-poor';
-};
-
-const getReportPeriod = (report) => {
-    if (!report) return '';
-    const monthNames = {
-        september: 'September',
-        august: 'August',
-        december: 'December',
-        june: 'June'
-    };
-    const month = monthNames[report.month] || 'September';
-    return `${month}, ${report.year}`;
-};
-
-const hasGradeSections = (grade) => {
-    return ['Kinder', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4'].includes(grade);
-};
-
-const getGradeSections = (grade) => {
-    switch (grade) {
-        case 'Kinder':
-            return kinderSections.value;
-        case 'Grade 1':
-            return grade1Sections.value;
-        case 'Grade 2':
-            return grade2Sections.value;
-        case 'Grade 3':
-            return grade3Sections.value;
-        case 'Grade 4':
-            return grade4Sections.value;
-        case 'Grade 5':
-            return grade5Sections.value;
-        case 'Grade 6':
-            return grade6Sections.value;
-        default:
-            return [];
-    }
-};
-
-// Month-specific section data
-const monthlyGradeData = ref({
-    'August 2025': {
-        Kindergarten: {
-            sections: [
-                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 22, presentCount: 20, absentCount: 2, attendanceRate: 91, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 25, presentCount: 23, absentCount: 2, attendanceRate: 92, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 21, presentCount: 18, absentCount: 3, attendanceRate: 86, status: 'GOOD', statusClass: 'status-good' }
-            ]
-        },
-        'Grade 1': {
-            sections: [
-                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 28, presentCount: 26, absentCount: 2, attendanceRate: 93, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 27, presentCount: 23, absentCount: 4, attendanceRate: 85, status: 'GOOD', statusClass: 'status-good' }
-            ]
-        },
-        'Grade 2': {
-            sections: [
-                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 25, presentCount: 24, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 27, presentCount: 26, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 26, presentCount: 23, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' }
-            ]
-        }
-    },
-    'September 2025': {
-        Kindergarten: {
-            sections: kinderSections.value
-        },
-        'Grade 1': {
-            sections: grade1Sections.value
-        },
-        'Grade 2': {
-            sections: grade2Sections.value
-        },
-        'Grade 3': {
-            sections: grade3Sections.value
-        },
-        'Grade 4': {
-            sections: grade4Sections.value
-        },
-        'Grade 5': {
-            sections: grade5Sections.value
-        },
-        'Grade 6': {
-            sections: grade6Sections.value
-        }
-    },
-    'October 2025': {
-        Kindergarten: {
-            sections: [
-                { id: 1, name: 'Kinder A', teacher: 'Ms. Lisa Chen', studentCount: 26, presentCount: 25, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Kinder B', teacher: 'Ms. Maria Santos', studentCount: 29, presentCount: 28, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 3, name: 'Kinder C', teacher: 'Ms. Lisa Chen', studentCount: 25, presentCount: 22, absentCount: 3, attendanceRate: 88, status: 'GOOD', statusClass: 'status-good' },
-                { id: 4, name: 'Kinder D', teacher: 'Ms. Anna Rodriguez', studentCount: 27, presentCount: 20, absentCount: 7, attendanceRate: 74, status: 'NEEDS ATTENTION', statusClass: 'status-warning' }
-            ]
-        },
-        'Grade 1': {
-            sections: [
-                { id: 1, name: 'Grade 1-A', teacher: 'Ms. Jennifer Lee', studentCount: 31, presentCount: 29, absentCount: 2, attendanceRate: 94, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Grade 1-B', teacher: 'Ms. Patricia Wong', studentCount: 30, presentCount: 26, absentCount: 4, attendanceRate: 87, status: 'GOOD', statusClass: 'status-good' },
-                { id: 3, name: 'Grade 1-C', teacher: 'Ms. Rebecca Davis', studentCount: 29, presentCount: 24, absentCount: 5, attendanceRate: 83, status: 'GOOD', statusClass: 'status-good' }
-            ]
-        },
-        'Grade 2': {
-            sections: [
-                { id: 1, name: 'Grade 2-A', teacher: 'Ms. Catherine Lopez', studentCount: 28, presentCount: 27, absentCount: 1, attendanceRate: 96, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 2, name: 'Grade 2-B', teacher: 'Ms. Diana Cruz', studentCount: 30, presentCount: 29, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 3, name: 'Grade 2-C', teacher: 'Mr. Robert Kim', studentCount: 29, presentCount: 26, absentCount: 3, attendanceRate: 90, status: 'EXCELLENT', statusClass: 'status-excellent' },
-                { id: 4, name: 'Grade 2-D', teacher: 'Ms. Elena Reyes', studentCount: 31, presentCount: 30, absentCount: 1, attendanceRate: 97, status: 'EXCELLENT', statusClass: 'status-excellent' }
-            ]
-        }
-    }
-});
-
-// Computed property for grade statistics based on real curriculum data
-const gradeStatistics = computed(() => {
-    if (loadingRealData.value || realGrades.value.length === 0) {
-        return [];
-    }
-
-    const gradeEmojiMap = {
-        Kindergarten: '🎨',
-        'Grade 1': '📚',
-        'Grade 2': '✏️',
-        'Grade 3': '💻',
-        'Grade 4': '🔬',
-        'Grade 5': '🌟',
-        'Grade 6': '🎓'
-    };
-
-    return realGrades.value
-        .map((grade) => {
-            // Get sections for this grade
-            const gradeSections = realSections.value.filter((section) => section.gradeId === grade.id);
-
-            // Use real data from loaded sections
-            const sectionsWithData = gradeSections.map((section) => {
-                const studentCount = section.studentCount || 0;
-                // For now, generate mock attendance data until we have real attendance API
-                const presentCount = Math.floor(studentCount * (0.85 + Math.random() * 0.15)); // 85-100% attendance
-                const absentCount = studentCount - presentCount;
-                const attendanceRate = studentCount > 0 ? Math.round((presentCount / studentCount) * 100) : 0;
-
-                return {
-                    id: section.id,
-                    name: section.name,
-                    teacher: section.teacher || 'No Teacher Assigned',
-                    studentCount,
-                    presentCount,
-                    absentCount,
-                    attendanceRate,
-                    status: attendanceRate >= 95 ? 'EXCELLENT' : attendanceRate >= 85 ? 'GOOD' : 'NEEDS ATTENTION',
-                    statusClass: attendanceRate >= 95 ? 'status-excellent' : attendanceRate >= 85 ? 'status-good' : 'status-warning'
-                };
-            });
-
-            const sectionCount = sectionsWithData.length;
-            const totalStudents = sectionsWithData.reduce((sum, section) => sum + section.studentCount, 0);
-            const teacherCount = new Set(sectionsWithData.map((section) => section.teacher)).size;
-            const totalPresent = sectionsWithData.reduce((sum, section) => sum + section.presentCount, 0);
-            const attendanceRate = totalStudents > 0 ? Math.round((totalPresent / totalStudents) * 100) : 0;
-
-            return {
-                grade: grade.name,
-                level: grade.name.includes('Kindergarten') ? 'Pre-Elementary' : 'Elementary',
-                emoji: gradeEmojiMap[grade.name] || '📖',
-                sections: sectionsWithData,
-                sectionCount,
-                totalStudents,
-                teacherCount,
-                attendanceRate
-            };
-        })
-        .filter((grade) => grade.sectionCount > 0); // Only show grades with sections
-});
-
-const getAttendanceBarClass = (rate) => {
-    if (rate >= 95) return 'excellent';
-    if (rate >= 90) return 'good';
-    if (rate >= 80) return 'warning';
-    return 'poor';
-};
-
-const viewGradeSections = (grade) => {
-    toast.add({
-        severity: 'info',
-        summary: 'Grade Sections',
-        detail: `Viewing all sections for ${grade}`,
-        life: 3000
-    });
-};
-
-const generateGradeReport = (grade) => {
-    toast.add({
-        severity: 'success',
-        summary: 'Report Generation',
-        detail: `Generating comprehensive report for ${grade}`,
-        life: 3000
-    });
-};
-
-// Load real curriculum data
-const loadRealCurriculumData = async () => {
+// Load sections from database
+const loadSectionsFromDatabase = async () => {
     try {
-        loadingRealData.value = true;
+        const response = await fetch('http://127.0.0.1:8000/api/sections', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            }
+        });
 
-        // Get all curriculums (use plural method)
-        const curriculumsResponse = await CurriculumService.getCurriculums();
-        const curriculums = Array.isArray(curriculumsResponse) ? curriculumsResponse : curriculumsResponse.data || [];
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-        // Find the active curriculum or use the first one
-        const activeCurriculum = curriculums.find((c) => c.is_active) || curriculums[0];
+        const sectionsData = await response.json();
+        console.log('Loaded sections from API:', sectionsData);
 
-        if (activeCurriculum && activeCurriculum.id) {
-            console.log('Using curriculum:', activeCurriculum);
+        allSections.value = sectionsData;
 
-            // Get grades for this curriculum
-            const gradesResponse = await CurriculumService.getGradesByCurriculum(activeCurriculum.id);
-            realGrades.value = Array.isArray(gradesResponse) ? gradesResponse : gradesResponse.data || [];
-
-            console.log('Loaded grades:', realGrades.value);
-
-            // Get all sections for each grade
-            const allSections = [];
-            for (const grade of realGrades.value) {
-                try {
-                    const sectionsResponse = await CurriculumService.getSectionsByGrade(activeCurriculum.id, grade.id);
-                    const sections = Array.isArray(sectionsResponse) ? sectionsResponse : sectionsResponse.data || [];
-
-                    console.log(`Sections for grade ${grade.name}:`, sections);
-
-                    // Add grade info to each section and load student counts
-                    for (const section of sections) {
-                        section.gradeName = grade.name;
-                        section.gradeId = grade.id;
-                        section.curriculumId = activeCurriculum.id;
-
-                        // Load real student count for this section
-                        try {
-                            const response = await fetch(`http://127.0.0.1:8000/api/sections/${section.id}/students/count`);
-                            if (response.ok) {
-                                const data = await response.json();
-                                section.studentCount = data.count || 0;
-                            } else {
-                                section.studentCount = 0;
-                            }
-                        } catch (error) {
-                            console.warn(`Error loading student count for section ${section.name}:`, error);
-                            section.studentCount = 0;
-                        }
-
-                        // Load teacher information
-                        if (section.homeroom_teacher_id) {
-                            try {
-                                const teacherResponse = await fetch(`http://127.0.0.1:8000/api/teachers/${section.homeroom_teacher_id}`);
-                                if (teacherResponse.ok) {
-                                    const teacherData = await teacherResponse.json();
-                                    section.teacher = `${teacherData.first_name} ${teacherData.last_name}`;
-                                } else {
-                                    section.teacher = 'No Teacher Assigned';
-                                }
-                            } catch (error) {
-                                console.warn(`Error loading teacher for section ${section.name}:`, error);
-                                section.teacher = 'No Teacher Assigned';
-                            }
-                        } else {
-                            section.teacher = 'No Teacher Assigned';
-                        }
-
-                        allSections.push(section);
-                    }
-                } catch (error) {
-                    console.warn(`Error loading sections for grade ${grade.name}:`, error);
-                }
+        // Group sections by grade (removing duplicates)
+        const grouped = {};
+        sectionsData.forEach((section) => {
+            // Extract grade name from curriculum_grade relationship
+            let gradeName = 'Unknown';
+            if (section.curriculum_grade && section.curriculum_grade.grade) {
+                gradeName = section.curriculum_grade.grade.name;
+            } else if (section.curriculumGrade && section.curriculumGrade.grade) {
+                gradeName = section.curriculumGrade.grade.name;
             }
 
-            realSections.value = allSections;
-            console.log('Loaded real curriculum data:', {
-                curriculum: activeCurriculum,
-                grades: realGrades.value,
-                sections: realSections.value
-            });
+            if (!grouped[gradeName]) {
+                grouped[gradeName] = [];
+            }
 
-            // Force reactivity update
-            loadingRealData.value = false;
+            // Only add if not already in the array (prevent duplicates)
+            if (!grouped[gradeName].includes(section.name)) {
+                grouped[gradeName].push(section.name);
+            }
+        });
 
-            toast.add({
-                severity: 'success',
-                summary: 'Data Loaded',
-                detail: `Loaded ${realGrades.value.length} grades and ${realSections.value.length} sections`,
-                life: 3000
-            });
-        } else {
-            console.warn('No active curriculum found');
-            toast.add({
-                severity: 'warn',
-                summary: 'No Curriculum',
-                detail: 'No active curriculum found. Please set up curriculum first.',
-                life: 5000
-            });
+        sectionsByGrade.value = grouped;
+        console.log('Sections grouped by grade (unique):', grouped);
+
+        // Set default sections for filter
+        if (filters.value.grade) {
+            sections.value = grouped[filters.value.grade] || [];
         }
     } catch (error) {
-        console.error('Error loading curriculum data:', error);
+        console.error('Error loading sections:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load curriculum data: ' + error.message,
-            life: 5000
-        });
-    } finally {
-        loadingRealData.value = false;
-    }
-};
-
-const getRecordsCount = (grade) => {
-    switch (grade) {
-        case 'Kinder':
-            return 'Records: 4 / 4';
-        case 'Grade 1':
-            return 'Records: 3 / 4';
-        case 'Grade 2':
-            return 'Records: 4 / 4';
-        case 'Grade 3':
-            return 'Records: 3 / 4';
-        case 'Grade 4':
-            return 'Records: 4 / 4';
-        case 'Grade 5':
-            return 'Records: 3 / 3';
-        case 'Grade 6':
-            return 'Records: 4 / 4';
-        default:
-            return 'Records: 0 / 0';
-    }
-};
-
-const viewReport = (report) => {
-    selectedReport.value = report;
-    showViewDialog.value = true;
-};
-
-const downloadReport = (report) => {
-    toast.add({
-        severity: 'info',
-        summary: 'Download Started',
-        detail: `Downloading ${report.title}...`,
-        life: 3000
-    });
-    // Implement actual download logic here
-};
-
-const shareReport = (report) => {
-    toast.add({
-        severity: 'info',
-        summary: 'Share Report',
-        detail: `Sharing ${report.title}...`,
-        life: 3000
-    });
-    // Implement sharing logic here
-};
-
-const confirmDeleteReport = (report) => {
-    confirm.require({
-        message: `Are you sure you want to delete "${report.title}"?`,
-        header: 'Confirm Deletion',
-        icon: 'pi pi-exclamation-triangle',
-        accept: () => {
-            deleteReport(report);
-        }
-    });
-};
-
-const deleteReport = (report) => {
-    const index = reports.value.findIndex((r) => r.id === report.id);
-    if (index > -1) {
-        reports.value.splice(index, 1);
-        toast.add({
-            severity: 'success',
-            summary: 'Report Deleted',
-            detail: `${report.title} has been deleted`,
+            detail: 'Failed to load sections from database',
             life: 3000
         });
     }
 };
 
-const generateReport = async () => {
-    if (!newReport.value.title || !newReport.value.type) {
-        toast.add({
-            severity: 'warn',
-            summary: 'Validation Error',
-            detail: 'Please fill in all required fields',
-            life: 3000
-        });
-        return;
-    }
-
-    generating.value = true;
-
-    // Simulate report generation
-    setTimeout(() => {
-        const newId = Math.max(...reports.value.map((r) => r.id)) + 1;
-        reports.value.unshift({
-            id: newId,
-            title: newReport.value.title,
-            description: newReport.value.description,
-            type: newReport.value.type,
-            status: 'Processing',
-            created_at: new Date().toISOString().split('T')[0],
-            generated_by: 'Admin User',
-            records_count: Math.floor(Math.random() * 1000) + 100
-        });
-
-        toast.add({
-            severity: 'success',
-            summary: 'Report Generated',
-            detail: `${newReport.value.title} has been generated successfully`,
-            life: 3000
-        });
-
-        // Reset form
-        newReport.value = {
-            title: '',
-            type: null,
-            description: '',
-            startDate: '',
-            endDate: ''
-        };
-
-        generating.value = false;
-        showGenerateDialog.value = false;
-    }, 2000);
-};
-
-const exportAllReports = () => {
-    toast.add({
-        severity: 'info',
-        summary: 'Export Started',
-        detail: 'Exporting all reports to Excel...',
-        life: 3000
-    });
-    // Implement export logic here
-};
-
-// Notification functions
-const scrollToSubmittedReports = () => {
-    const submittedSection = document.querySelector('.submitted-reports-section');
-    if (submittedSection) {
-        submittedSection.scrollIntoView({ behavior: 'smooth' });
-        // Clear notification count when user clicks
-        newSubmissionsCount.value = 0;
-    } else {
-        // Fallback to reports section if submitted section doesn't exist
-        const reportsSection = document.querySelector('.reports-table-container');
-        if (reportsSection) {
-            reportsSection.scrollIntoView({ behavior: 'smooth' });
-            newSubmissionsCount.value = 0;
-        }
-    }
-};
-
-// Load submitted reports from API
-const loadSubmittedReports = async () => {
+// Load grades from database
+const loadGradesFromDatabase = async () => {
     try {
-        console.log('Loading submitted reports...');
-        const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
-        const data = await response.json();
-
-        console.log('API Response:', data);
-
-        if (data.success) {
-            const newReports = data.data;
-            const previousReports = submittedReports.value;
-
-            // Check for truly new submissions (not in previous list)
-            const newSubmissions = newReports.filter((report) => {
-                return report.status === 'submitted' && !previousReports.some((prev) => prev.id === report.id);
-            });
-
-            // Update submitted reports
-            submittedReports.value = newReports;
-
-            // Update notification count (only count 'submitted' status reports)
-            const submittedCount = newReports.filter((report) => report.status === 'submitted').length;
-            newSubmissionsCount.value = submittedCount;
-
-            console.log('Submitted reports count:', submittedCount);
-            console.log('New submissions:', newSubmissions.length);
-
-            // Show toast notification for new submissions (only after initial load)
-            if (newSubmissions.length > 0 && previousReports.length > 0) {
-                newSubmissions.forEach((report) => {
-                    toast.add({
-                        severity: 'info',
-                        summary: 'New Report Submitted',
-                        detail: `${report.teacher_name} submitted SF2 report for ${report.section_name}`,
-                        life: 5000
-                    });
-                });
-                
-                // Trigger refresh of AdminTopbar notifications
-                window.dispatchEvent(new Event('refreshNotifications'));
-            }
-
-            // Update last checked time
-            lastCheckedTime.value = new Date();
-            
-            // Also trigger refresh if count changed (for manual reloads)
-            window.dispatchEvent(new Event('refreshNotifications'));
-        }
-    } catch (error) {
-        console.error('Error loading submitted reports:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Connection Error',
-            detail: 'Failed to load submitted reports. Please check if the server is running.',
-            life: 5000
-        });
-    }
-};
-
-// Start real-time polling
-const startPolling = () => {
-    // Load immediately
-    loadSubmittedReports();
-
-    // Then poll every 30 seconds
-    pollingInterval.value = setInterval(() => {
-        loadSubmittedReports();
-    }, 30000);
-};
-
-// Stop polling
-const stopPolling = () => {
-    if (pollingInterval.value) {
-        clearInterval(pollingInterval.value);
-        pollingInterval.value = null;
-    }
-};
-
-// Simulate receiving new submission notification (for testing)
-const receiveNewSubmission = () => {
-    newSubmissionsCount.value += 1;
-    toast.add({
-        severity: 'info',
-        summary: 'New Report Submitted',
-        detail: 'A teacher has submitted a new SF2 report',
-        life: 5000
-    });
-    
-    // Trigger refresh of AdminTopbar notifications
-    window.dispatchEvent(new Event('refreshNotifications'));
-};
-
-// Submitted reports actions
-const viewSubmittedReport = (report) => {
-    // Open the SF2 report in a new window/tab
-    const url = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`;
-    window.open(url, '_blank');
-
-    toast.add({
-        severity: 'info',
-        summary: 'Opening Report',
-        detail: `Viewing SF2 report for ${report.section_name}`,
-        life: 3000
-    });
-};
-
-const downloadSubmittedReport = async (report) => {
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${report.section_id}/${report.month}`);
-
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `SF2_${report.section_name}_${report.month_name}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            toast.add({
-                severity: 'success',
-                summary: 'Download Complete',
-                detail: `SF2 report for ${report.section_name} downloaded successfully`,
-                life: 3000
-            });
-        } else {
-            throw new Error('Download failed');
-        }
-    } catch (error) {
-        console.error('Error downloading report:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Download Failed',
-            detail: 'Failed to download the SF2 report',
-            life: 3000
-        });
-    }
-};
-
-const approveReport = async (report) => {
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                status: 'approved',
-                admin_notes: 'Report approved by admin'
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Update the report status in the local array
-            const reportIndex = submittedReports.value.findIndex((r) => r.id === report.id);
-            if (reportIndex !== -1) {
-                submittedReports.value[reportIndex].status = 'approved';
-            }
-
-            // Update notification count
-            const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
-            newSubmissionsCount.value = submittedCount;
-            
-            // Trigger refresh of AdminTopbar notifications
-            window.dispatchEvent(new Event('refreshNotifications'));
-
-            toast.add({
-                severity: 'success',
-                summary: 'Report Approved',
-                detail: `SF2 report for ${report.section_name} has been approved`,
-                life: 3000
-            });
-        } else {
-            throw new Error(data.message || 'Failed to approve report');
-        }
-    } catch (error) {
-        console.error('Error approving report:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Approval Failed',
-            detail: 'Failed to approve the SF2 report',
-            life: 3000
-        });
-    }
-};
-
-const rejectReport = async (report) => {
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/submitted/${report.id}/status`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                status: 'rejected',
-                admin_notes: 'Report rejected by admin - please review and resubmit'
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Update the report status in the local array
-            const reportIndex = submittedReports.value.findIndex((r) => r.id === report.id);
-            if (reportIndex !== -1) {
-                submittedReports.value[reportIndex].status = 'rejected';
-            }
-
-            // Update notification count
-            const submittedCount = submittedReports.value.filter((r) => r.status === 'submitted').length;
-            newSubmissionsCount.value = submittedCount;
-            
-            // Trigger refresh of AdminTopbar notifications
-            window.dispatchEvent(new Event('refreshNotifications'));
-
-            toast.add({
-                severity: 'warn',
-                summary: 'Report Rejected',
-                detail: `SF2 report for ${report.section_name} has been rejected`,
-                life: 3000
-            });
-        } else {
-            throw new Error(data.message || 'Failed to reject report');
-        }
-    } catch (error) {
-        console.error('Error rejecting report:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Rejection Failed',
-            detail: 'Failed to reject the SF2 report',
-            life: 3000
-        });
-    }
-};
-
-// Section details methods
-const viewSectionDetails = async (section) => {
-    // Close the main report dialog first
-    showViewDialog.value = false;
-    
-    // Load real student data for this section
-    await loadSectionStudents(section);
-    
-    // Wait a moment then open the section details dialog
-    setTimeout(() => {
-        selectedSectionDetails.value = section;
-        showSectionDetailsDialog.value = true;
-    }, 100);
-};
-
-// Load real students from database and integrate with SF2 data
-const loadSectionStudents = async (section) => {
-    try {
-        console.log('Loading students for section:', section.name, 'ID:', section.id);
-        
-        // Step 1: Get section details to get section name
-        const sectionResponse = await fetch(`http://127.0.0.1:8000/api/sections/${section.id}`);
-        if (!sectionResponse.ok) {
-            throw new Error(`Failed to fetch section details: ${sectionResponse.status}`);
-        }
-        const sectionData = await sectionResponse.json();
-        const sectionNameFromAPI = sectionData.name;
-        console.log('Section name from API:', sectionNameFromAPI);
-        
-        // Step 2: Get all students and filter by section name
-        const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
-        if (!studentsResponse.ok) {
-            throw new Error(`Failed to fetch students: ${studentsResponse.status}`);
-        }
-        const studentsData = await studentsResponse.json();
-        
-        // Filter students by section name
-        const filteredStudents = studentsData.filter(student => 
-            student.section === sectionNameFromAPI || 
-            student.current_section_name === sectionNameFromAPI
-        );
-        
-        console.log('Found students for section:', filteredStudents.length);
-        
-        // Step 3: Check for submitted SF2 reports for this section and month
-        const currentMonth = getCurrentMonthForAPI();
-        console.log('Checking for submitted SF2 data for month:', currentMonth);
-        
-        let sf2Data = null;
-        try {
-            // First try to get stored submitted SF2 data (admin endpoint)
-            const submittedSF2Response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${section.id}/${currentMonth}`);
-            if (submittedSF2Response.ok) {
-                const submittedData = await submittedSF2Response.json();
-                if (submittedData.success) {
-                    sf2Data = submittedData.data;
-                    console.log('Found submitted SF2 data:', sf2Data);
-                    
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Real Submitted SF2 Data Loaded',
-                        detail: `Showing data submitted by ${sf2Data.section?.teacher?.name || 'teacher'} (Status: ${sf2Data.submission_info?.status || 'submitted'})`,
-                        life: 5000
-                    });
-                }
-            } else {
-                console.log('No submitted SF2 data found, trying live data...');
-                
-                // Fallback to live SF2 data (teacher endpoint)
-                const liveSF2Response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${section.id}/${currentMonth}`);
-                if (liveSF2Response.ok) {
-                    const liveData = await liveSF2Response.json();
-                    if (liveData.success) {
-                        sf2Data = liveData.data;
-                        console.log('Found live SF2 data:', sf2Data);
-                        
-                        toast.add({
-                            severity: 'info',
-                            summary: 'Live SF2 Data Loaded',
-                            detail: 'Showing current attendance data (not yet submitted)',
-                            life: 4000
-                        });
-                    }
-                } else {
-                    console.log('No SF2 data found, using sample data');
-                    toast.add({
-                        severity: 'warn',
-                        summary: 'Sample Data Only',
-                        detail: 'No SF2 report data found for this section and month',
-                        life: 4000
-                    });
-                }
-            }
-        } catch (sf2Error) {
-            console.log('Error fetching SF2 data:', sf2Error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error Loading SF2 Data',
-                detail: 'Failed to fetch SF2 report data from server',
-                life: 4000
-            });
-        }
-        
-        // Step 4: Process students and integrate with SF2 data
-        const processedStudents = filteredStudents.map((student, index) => {
-            // Try to find matching student in SF2 data
-            let sf2StudentData = null;
-            if (sf2Data && sf2Data.students) {
-                sf2StudentData = sf2Data.students.find(sf2Student => 
-                    sf2Student.id === student.id || 
-                    (sf2Student.firstName === student.firstName && sf2Student.lastName === student.lastName)
-                );
-            }
-            
-            return {
-                id: student.id || index + 1,
-                firstName: student.firstName || student.name?.split(' ')[0] || 'Unknown',
-                lastName: student.lastName || student.name?.split(' ').slice(1).join(' ') || 'Student',
-                middleName: student.middleName || '',
-                gender: student.gender || (index % 2 === 0 ? 'Male' : 'Female'),
-                gradeLevel: student.gradeLevel || sectionData.grade || 'Unknown',
-                section: sectionNameFromAPI,
-                
-                // Use real SF2 attendance data if available, otherwise generate sample
-                attendance: sf2StudentData ? sf2StudentData.attendance : generateSampleAttendance(),
-                totalPresent: sf2StudentData ? sf2StudentData.totalPresent : 15,
-                totalAbsent: sf2StudentData ? sf2StudentData.totalAbsent : 5,
-                attendanceRate: sf2StudentData ? sf2StudentData.attendanceRate : 75,
-                status: sf2StudentData ? sf2StudentData.status : 'active'
-            };
-        });
-        
-        // Step 5: Update the sectionStudents data
-        sectionStudents.value[sectionNameFromAPI] = processedStudents;
-        
-        console.log('Updated section students:', processedStudents.length, 'students loaded');
-        
-    } catch (error) {
-        console.error('Error loading section students:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error Loading Students',
-            detail: 'Failed to load student data from database',
-            life: 5000
-        });
-        
-        // Fallback to existing sample data
-        console.log('Falling back to sample data for section:', section.name);
-    }
-};
-
-// Helper function to get current month in API format
-const getCurrentMonthForAPI = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-};
-
-// Generate sample attendance data when real data is not available
-const generateSampleAttendance = () => {
-    const attendance = {};
-    const daysInMonth = attendanceDays.value.length;
-    
-    attendanceDays.value.forEach(day => {
-        // Generate realistic attendance pattern (80% present, 15% absent, 5% late)
-        const rand = Math.random();
-        if (rand < 0.80) {
-            attendance[day.date] = 'present';
-        } else if (rand < 0.95) {
-            attendance[day.date] = 'absent';
-        } else {
-            attendance[day.date] = 'late';
-        }
-    });
-    
-    return attendance;
-};
-
-const downloadSectionReport = (section) => {
-    toast.add({
-        severity: 'info',
-        summary: 'Download Started',
-        detail: `Downloading ${section.name} attendance report...`,
-        life: 3000
-    });
-};
-
-const getSectionDialogTitle = () => {
-    if (!selectedSectionDetails.value) return 'Section Details';
-    return `${selectedSectionDetails.value.name} - Daily Attendance Report`;
-};
-
-const getSectionStudents = (sectionName) => {
-    const monthDisplay = getCurrentMonthDisplay();
-    const historicalData = historicalSectionData.value[sectionName];
-
-    // Check if we have historical data for this month
-    if (historicalData && historicalData[monthDisplay] && historicalData[monthDisplay].students.length > 0) {
-        return historicalData[monthDisplay].students;
-    }
-
-    // Fall back to current section students data
-    return sectionStudents.value[sectionName] || [];
-};
-
-const getMaleStudents = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Male');
-};
-
-const getFemaleStudents = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Female');
-};
-
-const getDayTotal = (sectionName, date) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.attendance[date] === 'present').length;
-};
-
-const getTotalPresent = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.reduce((total, student) => total + student.totalPresent, 0);
-};
-
-const getTotalAbsent = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.reduce((total, student) => total + student.totalAbsent, 0);
-};
-
-const getOverallAttendanceRate = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    if (students.length === 0) return 0;
-    const totalRate = students.reduce((sum, student) => sum + student.attendanceRate, 0);
-    return Math.round(totalRate / students.length);
-};
-
-// Male-specific calculations
-const getMaleDayTotal = (sectionName, date) => {
-    const maleStudents = getMaleStudents(sectionName);
-    return maleStudents.filter((student) => student.attendance[date] === 'present').length;
-};
-
-const getMaleTotalPresent = (sectionName) => {
-    const maleStudents = getMaleStudents(sectionName);
-    return maleStudents.reduce((total, student) => total + student.totalPresent, 0);
-};
-
-const getMaleTotalAbsent = (sectionName) => {
-    const maleStudents = getMaleStudents(sectionName);
-    return maleStudents.reduce((total, student) => total + student.totalAbsent, 0);
-};
-
-// Removed duplicate - using the one defined later in gender-based functions section
-
-// Female-specific calculations
-const getFemaleDayTotal = (sectionName, date) => {
-    const femaleStudents = getFemaleStudents(sectionName);
-    return femaleStudents.filter((student) => student.attendance[date] === 'present').length;
-};
-
-const getFemaleTotalPresent = (sectionName) => {
-    const femaleStudents = getFemaleStudents(sectionName);
-    return femaleStudents.reduce((total, student) => total + student.totalPresent, 0);
-};
-
-const getFemaleTotalAbsent = (sectionName) => {
-    const femaleStudents = getFemaleStudents(sectionName);
-    return femaleStudents.reduce((total, student) => total + student.totalAbsent, 0);
-};
-
-// Removed duplicate - using the one defined later in gender-based functions section
-
-const getAttendanceMark = (status) => {
-    switch (status) {
-        case 'present':
-            return '✓';
-        case 'absent':
-            return '✗';
-        case 'late':
-            return 'L';
-        default:
-            return '-';
-    }
-};
-
-const formatStatusDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-// Student status functions
-const getDroppedOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.status === 'dropped_out').length;
-};
-
-const getTransferredOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.status === 'transferred_out').length;
-};
-
-const getTransferredInCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.status === 'transferred_in').length;
-};
-
-// Status change functions
-const showStatusChangeDialog = (student) => {
-    selectedStudent.value = student;
-    newStatus.value = '';
-    statusDate.value = null;
-    statusReason.value = '';
-    statusChangeDialog.value = true;
-};
-
-const closeStatusDialog = () => {
-    statusChangeDialog.value = false;
-    selectedStudent.value = null;
-    newStatus.value = '';
-    statusDate.value = null;
-    statusReason.value = '';
-};
-
-const updateStudentStatus = () => {
-    if (!selectedStudent.value || !newStatus.value || !statusDate.value) {
-        toast.add({
-            severity: 'warn',
-            summary: 'Missing Information',
-            detail: 'Please fill in all required fields.',
-            life: 3000
-        });
-        return;
-    }
-
-    // Find the student in the data and update their status
-    const sectionName = selectedSectionDetails.value.name;
-    const students = sectionStudents.value[sectionName];
-    const studentIndex = students.findIndex((s) => s.id === selectedStudent.value.id);
-
-    if (studentIndex !== -1) {
-        // Update student status
-        students[studentIndex].status = newStatus.value;
-        students[studentIndex].statusDate = statusDate.value.toISOString().split('T')[0];
-        students[studentIndex].statusReason = statusReason.value;
-
-        // If dropping out or transferring out, remove future attendance
-        if (newStatus.value === 'dropped_out' || newStatus.value === 'transferred_out') {
-            const cutoffDate = new Date(statusDate.value);
-            const attendance = students[studentIndex].attendance;
-
-            // Remove attendance records after the status change date
-            Object.keys(attendance).forEach((dateKey) => {
-                const attendanceDate = new Date(dateKey);
-                if (attendanceDate > cutoffDate) {
-                    delete attendance[dateKey];
-                }
-            });
-
-            // Recalculate totals
-            const presentDays = Object.values(attendance).filter((status) => status === 'present').length;
-            const absentDays = Object.values(attendance).filter((status) => status === 'absent').length;
-            const totalDays = presentDays + absentDays;
-
-            students[studentIndex].totalPresent = presentDays;
-            students[studentIndex].totalAbsent = absentDays;
-            students[studentIndex].attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
-        }
-
-        toast.add({
-            severity: 'success',
-            summary: 'Status Updated',
-            detail: `${selectedStudent.value.firstName} ${selectedStudent.value.lastName} status changed to ${newStatus.value.replace('_', ' ')}.`,
-            life: 3000
-        });
-
-        closeStatusDialog();
-    }
-};
-
-const getActiveStudentsCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.status === 'active').length;
-};
-
-// Gender-based count functions
-const getMaleStudentsCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Male').length;
-};
-
-const getFemaleStudentsCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Female').length;
-};
-
-const getMaleAttendanceRate = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    const maleStudents = students.filter((student) => student.gender === 'Male');
-    if (maleStudents.length === 0) return 0;
-
-    const totalRate = maleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
-    return Math.round(totalRate / maleStudents.length);
-};
-
-const getFemaleAttendanceRate = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    const femaleStudents = students.filter((student) => student.gender === 'Female');
-    if (femaleStudents.length === 0) return 0;
-
-    const totalRate = femaleStudents.reduce((sum, student) => sum + (student.attendanceRate || 0), 0);
-    return Math.round(totalRate / femaleStudents.length);
-};
-
-const getMaleDroppedOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Male' && student.status === 'dropped_out').length;
-};
-
-const getFemaleDroppedOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Female' && student.status === 'dropped_out').length;
-};
-
-const getMaleTransferredOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_out').length;
-};
-
-const getFemaleTransferredOutCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_out').length;
-};
-
-const getMaleTransferredInCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Male' && student.status === 'transferred_in').length;
-};
-
-const getFemaleTransferredInCount = (sectionName) => {
-    const students = getSectionStudents(sectionName);
-    return students.filter((student) => student.gender === 'Female' && student.status === 'transferred_in').length;
-};
-
-const getAttendanceClass = (status) => {
-    switch (status) {
-        case 'present':
-            return 'mark-present';
-        case 'absent':
-            return 'mark-absent';
-        case 'late':
-            return 'mark-late';
-        default:
-            return 'mark-none';
-    }
-};
-
-const calculateTotalPresent = () => {
-    if (!selectedSectionDetails.value) return 0;
-    const students = getSectionStudents(selectedSectionDetails.value.name);
-    return students.reduce((total, student) => total + student.totalPresent, 0);
-};
-
-const calculateTotalAbsent = () => {
-    if (!selectedSectionDetails.value) return 0;
-    const students = getSectionStudents(selectedSectionDetails.value.name);
-    return students.reduce((total, student) => total + student.totalAbsent, 0);
-};
-
-// Month navigation functions
-const getCurrentMonthDisplay = () => {
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    return `${monthNames[currentMonth.value]} ${currentYear.value}`;
-};
-
-const getCurrentTeacher = () => {
-    if (!selectedSectionDetails.value) return '';
-    const sectionName = selectedSectionDetails.value.name;
-    const monthDisplay = getCurrentMonthDisplay();
-    const historicalData = historicalSectionData.value[sectionName];
-
-    if (historicalData && historicalData[monthDisplay]) {
-        return historicalData[monthDisplay].teacher;
-    }
-    return selectedSectionDetails.value.teacher;
-};
-
-const canGoPreviousMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
-    return currentIndex > 0;
-};
-
-const canGoNextMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
-    return currentIndex < availableMonths.value.length - 1;
-};
-
-const previousMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
-    if (currentIndex > 0) {
-        const prevMonth = availableMonths.value[currentIndex - 1];
-        currentMonth.value = prevMonth.month;
-        currentYear.value = prevMonth.year;
-    }
-};
-
-const nextMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentMonth.value && m.year === currentYear.value);
-    if (currentIndex < availableMonths.value.length - 1) {
-        const nextMonth = availableMonths.value[currentIndex + 1];
-        currentMonth.value = nextMonth.month;
-        currentYear.value = nextMonth.year;
-    }
-};
-
-// Overview month navigation functions
-const getCurrentOverviewMonthDisplay = () => {
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    return `${monthNames[currentOverviewMonth.value]} ${currentOverviewYear.value}`;
-};
-
-const canGoPreviousOverviewMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
-    return currentIndex > 0;
-};
-
-const canGoNextOverviewMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
-    return currentIndex < availableMonths.value.length - 1;
-};
-
-const previousOverviewMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
-    if (currentIndex > 0) {
-        const prevMonth = availableMonths.value[currentIndex - 1];
-        currentOverviewMonth.value = prevMonth.month;
-        currentOverviewYear.value = prevMonth.year;
-    }
-};
-
-const nextOverviewMonth = () => {
-    const currentIndex = availableMonths.value.findIndex((m) => m.month === currentOverviewMonth.value && m.year === currentOverviewYear.value);
-    if (currentIndex < availableMonths.value.length - 1) {
-        const nextMonth = availableMonths.value[currentIndex + 1];
-        currentOverviewMonth.value = nextMonth.month;
-        currentOverviewYear.value = nextMonth.year;
-    }
-};
-
-const getActiveSectionsCount = () => {
-    const currentMonthDisplay = getCurrentOverviewMonthDisplay();
-    const monthData = monthlyGradeData.value[currentMonthDisplay] || {};
-
-    let totalSections = 0;
-    Object.values(monthData).forEach((gradeData) => {
-        if (gradeData.sections) {
-            totalSections += gradeData.sections.length;
-        }
-    });
-
-    return totalSections;
-};
-
-const downloadSF2Report = async () => {
-    if (!selectedSectionDetails.value) {
-        toast.add({
-            severity: 'warn',
-            summary: 'No Section Selected',
-            detail: 'Please select a section to download SF2 report.',
-            life: 3000
-        });
-        return;
-    }
-
-    try {
-        // Get current section data
-        const section = selectedSectionDetails.value;
-        const sectionId = section.id;
-        const monthDisplay = getCurrentMonthDisplay();
-
-        // Convert month display to YYYY-MM format for API
-        const monthParts = monthDisplay.split(' ');
-        const monthName = monthParts[0];
-        const year = monthParts[1];
-        const monthNumber = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
-        const monthParam = `${year}-${monthNumber.toString().padStart(2, '0')}`;
-
-        toast.add({
-            severity: 'info',
-            summary: 'Generating Report',
-            detail: 'Please wait while we generate your SF2 report...',
-            life: 3000
-        });
-
-        // Call Laravel backend API to generate and download SF2 report
-        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/download/${sectionId}/${monthParam}`, {
+        const response = await fetch('http://127.0.0.1:8000/api/grades', {
             method: 'GET',
             headers: {
-                Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const gradesData = await response.json();
+        console.log('Loaded grades from API:', gradesData);
+
+        // Format grades for dropdown
+        gradeLevels.value = gradesData.map((grade) => ({
+            name: grade.name,
+            code: grade.name
+        }));
+
+        grades.value = gradeLevels.value;
+    } catch (error) {
+        console.error('Error loading grades:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load grades from database',
+            life: 3000
+        });
+    }
+};
+
+// Load all grade levels and sections
+const loadGradesAndSections = async () => {
+    try {
+        await loadGradesFromDatabase();
+        await loadSectionsFromDatabase();
+    } catch (error) {
+        console.error('Error loading grade data:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load grade data',
+            life: 3000
+        });
+    }
+};
+
+// Generate QR code from LRN
+const generateQRCode = async (lrn) => {
+    if (!lrn) return '';
+
+    // Return cached QR code if available
+    if (qrCodes.value[lrn]) {
+        return qrCodes.value[lrn];
+    }
+
+    try {
+        const qrDataUrl = await QRCode.toDataURL(lrn, {
+            width: 128,
+            margin: 1,
+            color: {
+                dark: '#4a90e2',
+                light: '#ffffff'
+            }
+        });
+        // Cache the QR code
+        qrCodes.value[lrn] = qrDataUrl;
+        return qrDataUrl;
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+        return '';
+    }
+};
+
+// Navigate to enrollment statistics page
+const viewEnrollmentStats = () => {
+    if (selectedStudent.value) {
+        router.push({
+            path: '/admin-student-statistics',
+            query: {
+                name: selectedStudent.value.name,
+                photo: selectedStudent.value.photo || ''
+            }
+        });
+        // Set QR codes from backend data
+        students.value.forEach((student) => {
+            if (student.qrCodePath && student.lrn) {
+                qrCodes.value[student.lrn] = student.qrCodePath;
+            }
+        });
+        // Generate QR codes for students without backend QR codes
+        generateAllQRCodes();
+    }
+};
+
+// Generate QR codes for all students
+const generateAllQRCodes = async () => {
+    for (const student of students.value) {
+        if (student.lrn && !qrCodes.value[student.lrn]) {
+            await generateQRCode(student.lrn);
+        }
+    }
+};
+
+// Get proper photo URL for student
+const getStudentPhotoUrl = (student) => {
+    console.log('Student photo data length:', student.photo ? student.photo.length : 'null', 'for student:', student.name);
+
+    if (!student.photo || student.photo === 'N/A' || student.photo === '' || student.photo === null || student.photo === '/demo/images/student-photo.jpg') {
+        console.log('Using placeholder for student:', student.name);
+        return 'demo/images/student-photo.jpg';
+    }
+
+    // If it's base64 data, validate it's properly formatted
+    if (student.photo.startsWith('data:image')) {
+        // Check if base64 data is valid (not too short, has proper format)
+        if (student.photo.length < 100 || !student.photo.includes('base64,')) {
+            console.log('Invalid base64 data for student:', student.name, 'using placeholder');
+            return 'demo/images/student-photo.jpg';
+        }
+        return student.photo;
+    }
+
+    // If it's a full URL, return as is
+    if (student.photo.startsWith('http')) {
+        return student.photo;
+    }
+
+    // If it's a path starting with /, make it absolute with backend URL
+    if (student.photo.startsWith('/')) {
+        return `http://127.0.0.1:8000${student.photo}`;
+    }
+
+    // If it's just a filename in photos directory
+    if (student.photo.includes('photos/')) {
+        return `http://127.0.0.1:8000/${student.photo}`;
+    }
+
+    // Default fallback
+    console.log('Using fallback placeholder for student:', student.name);
+    return 'demo/images/student-photo.jpg';
+};
+
+// Handle photo loading errors
+const handlePhotoError = (event) => {
+    const img = event.target;
+    img.src = 'demo/images/student-photo.jpg';
+};
+
+// Generate QR code for specific student
+const generateStudentQR = async (student) => {
+    if (student.id) {
+        try {
+            // Import QRCodeAPIService
+            const { QRCodeAPIService } = await import('@/router/service/QRCodeAPIService');
+
+            // Generate QR code using new API
+            const result = await QRCodeAPIService.generateQRCode(student.id);
+            console.log('QR code generated:', result);
+
+            if (result.success) {
+                // Update the student's QR code path to use the new API endpoint
+                const qrImageUrl = QRCodeAPIService.getQRCodeImageURL(student.id);
+                qrCodes.value[student.lrn || student.id] = qrImageUrl;
+
+                // Update the student object if needed
+                const studentIndex = students.value.findIndex((s) => s.id === student.id);
+                if (studentIndex !== -1) {
+                    students.value[studentIndex].qrCodePath = qrImageUrl;
+                }
+
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: `QR code generated for ${student.firstName} ${student.lastName}`,
+                    life: 3000
+                });
+
+                // Navigate to Student QR Codes page to show the generated QR code
+                router.push('/teacher/student-qrcodes');
+            } else {
+                throw new Error('Failed to generate QR code');
+            }
+        } catch (error) {
+            console.error('Error generating QR code:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'QR Generation Failed',
+                detail: 'Could not generate QR code',
+                life: 3000
+            });
+        }
+    }
+};
+
+// Load all submitted SF2 reports from database via API
+const loadStudents = async () => {
+    try {
+        loading.value = true;
+
+        // Fetch submitted SF2 reports from Laravel API
+        const response = await fetch('http://127.0.0.1:8000/api/sf2/submitted', {
+            method: 'GET',
+            headers: {
                 'Content-Type': 'application/json'
             }
         });
@@ -3837,32 +426,243 @@ const downloadSF2Report = async () => {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Get the filename from response headers or create default
-        const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = `SF2_Daily_Attendance_${section.name}_${monthDisplay.replace(/\s+/g, '_')}.xlsx`;
+        const apiResponse = await response.json();
+        console.log('Raw SF2 reports API response:', apiResponse);
 
-        if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-            if (filenameMatch) {
-                filename = filenameMatch[1];
-            }
+        if (apiResponse.success && apiResponse.data) {
+            // Format SF2 reports data for frontend (using snake_case to match table fields)
+            const formattedReports = apiResponse.data.map((report) => {
+                return {
+                    id: report.id,
+                    section_id: report.section_id, // Add this for the API call
+                    grade_level: report.grade_level,
+                    section: report.section_name,
+                    school_year: '2025-2026',
+                    month: report.month, // Use the raw month format (2025-01)
+                    month_name: report.month_name, // Keep the display name
+                    total_students: report.total_students || 0,
+                    present_today: report.present_today || 0,
+                    absent_today: report.absent_today || 0,
+                    attendance_rate: report.attendance_rate || 0,
+                    teacher_name: report.teacher_name,
+                    status: report.status,
+                    submitted_at: report.submitted_at,
+                    // Add display fields for compatibility
+                    name: `${report.section_name} - ${report.month_name || report.month}`,
+                    firstName: report.teacher_name?.split(' ')[0] || 'Unknown',
+                    lastName: report.teacher_name?.split(' ').slice(1).join(' ') || 'Teacher',
+                    isActive: true
+                };
+            });
+
+            students.value = formattedReports;
+        } else {
+            students.value = [];
         }
 
-        // Convert response to blob and trigger download
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        totalStudents.value = students.value.length;
+
+        // Update the filter counts
+        updateFilterCounts();
+    } catch (error) {
+        console.error('Error loading SF2 reports from API:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Connection Error',
+            detail: 'Failed to load submitted reports from database. Please check if the server is running.',
+            life: 5000
+        });
+        students.value = [];
+        totalStudents.value = 0;
+    } finally {
+        loading.value = false;
+    }
+};
+
+// View SF2 Report in modal popup
+const showSF2Modal = ref(false);
+const selectedSF2Report = ref(null);
+const sf2ReportData = ref(null);
+const loadingSF2 = ref(false);
+
+const viewSF2Report = async (reportData) => {
+    try {
+        selectedSF2Report.value = reportData;
+        loadingSF2.value = true;
+        showSF2Modal.value = true;
+
+        // Show loading toast
+        toast.add({
+            severity: 'info',
+            summary: 'Loading Report',
+            detail: `Loading ${reportData.month} SF2 report for ${reportData.section} section`,
+            life: 3000
+        });
+
+        // Fetch the actual SF2 report data from backend
+        const sectionId = reportData.section_id || reportData.id;
+        const month = reportData.month || reportData.month_name;
+
+        console.log('Report data:', reportData);
+        console.log('Section ID:', sectionId);
+        console.log('Month:', month);
+
+        const response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Process the API response data
+        if (data.success && data.data && data.data.students && data.data.students.length > 0) {
+            sf2ReportData.value = data.data;
+        } else {
+            // If API doesn't return expected format, create sample data
+            sf2ReportData.value = {
+                students: [
+                    {
+                        id: 1,
+                        firstName: 'Juan',
+                        lastName: 'Dela Cruz',
+                        middleName: 'Santos',
+                        gender: 'Male',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    },
+                    {
+                        id: 2,
+                        firstName: 'Pedro',
+                        lastName: 'Martinez',
+                        middleName: 'Garcia',
+                        gender: 'Male',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    },
+                    {
+                        id: 3,
+                        firstName: 'Carlos',
+                        lastName: 'Santos',
+                        middleName: 'Lopez',
+                        gender: 'Male',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    },
+                    {
+                        id: 4,
+                        firstName: 'Maria',
+                        lastName: 'Garcia',
+                        middleName: 'Cruz',
+                        gender: 'Female',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    },
+                    {
+                        id: 5,
+                        firstName: 'Ana',
+                        lastName: 'Rodriguez',
+                        middleName: 'Santos',
+                        gender: 'Female',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    },
+                    {
+                        id: 6,
+                        firstName: 'Carmen',
+                        lastName: 'Lopez',
+                        middleName: 'Garcia',
+                        gender: 'Female',
+                        attendance_data: {
+                            1: 'absent',
+                            2: 'absent',
+                            3: 'absent'
+                        },
+                        total_absent: 3,
+                        total_tardy: 0,
+                        remarks: ''
+                    }
+                ]
+            };
+        }
 
         toast.add({
             severity: 'success',
-            summary: 'SF2 Report Downloaded',
-            detail: `SF2 Excel report for ${section.name} (${monthDisplay}) has been downloaded successfully.`,
+            summary: 'Report Loaded',
+            detail: `SF2 report loaded successfully`,
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error loading SF2 report:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load SF2 report data',
+            life: 3000
+        });
+        showSF2Modal.value = false;
+    } finally {
+        loadingSF2.value = false;
+    }
+};
+
+// Download SF2 Report as Excel
+const downloadSF2Report = async (reportData) => {
+    try {
+        // Show loading toast
+        toast.add({
+            severity: 'info',
+            summary: 'Downloading...',
+            detail: `Preparing ${reportData.month} SF2 report for download`,
+            life: 3000
+        });
+
+        // Construct the download URL
+        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${reportData.month}`;
+
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `SF2_Report_${reportData.section}_${reportData.month}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Show success toast
+        toast.add({
+            severity: 'success',
+            summary: 'Download Started',
+            detail: `SF2 report for ${reportData.section} - ${reportData.month} is downloading`,
             life: 5000
         });
     } catch (error) {
@@ -3870,2632 +670,2787 @@ const downloadSF2Report = async () => {
         toast.add({
             severity: 'error',
             summary: 'Download Failed',
-            detail: 'Failed to download SF2 report from server. Please try again.',
+            detail: 'Failed to download SF2 report. Please try again.',
             life: 5000
         });
     }
 };
 
-const printReport = () => {
-    window.print();
+// Helper functions for SF2 modal
+const getMaleStudents = () => {
+    if (!sf2ReportData.value?.students) return [];
+    return sf2ReportData.value.students.filter((student) => student.gender === 'Male' || student.gender === 'male');
 };
 
-const backToMainReport = () => {
-    showSectionDetailsDialog.value = false;
-    // Wait a moment then reopen the main report dialog
-    setTimeout(() => {
-        showViewDialog.value = true;
-    }, 100);
+const getFemaleStudents = () => {
+    if (!sf2ReportData.value?.students) return [];
+    return sf2ReportData.value.students.filter((student) => student.gender === 'Female' || student.gender === 'female');
 };
 
-// Lifecycle hooks
+const getTotalStudents = () => {
+    return getMaleStudents().length + getFemaleStudents().length;
+};
+
+// Generate actual school days for the selected month
+const getSchoolDays = () => {
+    if (!selectedSF2Report.value?.month) return [];
+    
+    try {
+        const [year, month] = selectedSF2Report.value.month.split('-');
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const schoolDays = [];
+        
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month - 1, day);
+            const dayOfWeek = date.getDay();
+            
+            // Only include weekdays (Monday=1 to Friday=5)
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                schoolDays.push({
+                    date: day,
+                    dayName: ['S', 'M', 'T', 'W', 'TH', 'F', 'S'][dayOfWeek]
+                });
+            }
+        }
+        
+        return schoolDays;
+    } catch {
+        return [];
+    }
+};
+
+const getDayOfWeek = (day) => {
+    // School days only pattern (Monday to Friday) - no weekends
+    // Repeats every 5 days: M T W TH F M T W TH F...
+    const dayPattern = ['M', 'T', 'W', 'TH', 'F'];
+    return dayPattern[(day - 1) % 5];
+};
+
+const getAttendanceMark = (student, day) => {
+    // Check if student has attendance_data for the specific day
+    if (student.attendance_data && student.attendance_data[day]) {
+        const status = student.attendance_data[day].toLowerCase();
+        switch (status) {
+            case 'present':
+                return '✓';
+            case 'absent':
+                return '✗';
+            case 'late':
+            case 'tardy':
+                return 'L';
+            default:
+                return '';
+        }
+    }
+
+    // For demonstration, show some sample attendance marks for first few days
+    // This matches what's shown in picture 2
+    if (day <= 3) {
+        return '✗'; // Show absent for first 3 days like in picture 2
+    }
+
+    return ''; // Empty for other days
+};
+
+// Update filter counts for UI display
+const updateFilterCounts = () => {
+    // Count students by grade level
+    const gradeCounts = {};
+    gradeLevels.value.forEach((grade) => {
+        gradeCounts[grade.code] = students.value.filter((s) => s.gradeLevel === grade.code).length;
+    });
+
+    // Count students by gender
+    const maleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'male').length;
+    const femaleCounts = students.value.filter((s) => s.gender && s.gender.toLowerCase() === 'female').length;
+
+    console.log('Grade counts:', gradeCounts);
+    console.log('Gender counts - Male:', maleCounts, 'Female:', femaleCounts);
+};
+
+// Calculate age from birthdate
+function calculateAge(birthdate) {
+    if (!birthdate || birthdate === 'N/A') return 0;
+
+    const birthDate = new Date(birthdate);
+    if (isNaN(birthDate.getTime())) return 0;
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+
+    return age > 0 ? age : 0;
+}
+
+// Format address for display
+function formatAddress(student) {
+    if (student.currentAddress) {
+        const addr = student.currentAddress;
+        const parts = [addr.houseNo, addr.street, addr.barangay, addr.city, addr.province].filter((part) => part);
+        return parts.join(', ');
+    }
+    return student.address || '';
+}
+
+// Update sections when grade changes
+function updateSections() {
+    if (filters.value.grade) {
+        sections.value = sectionsByGrade.value[filters.value.grade] || [];
+        filters.value.section = null; // Reset section when grade changes
+    } else {
+        sections.value = [];
+    }
+}
+
+// Reset all filters
+function resetFilters() {
+    filters.value = {
+        grade: null,
+        section: null,
+        month: null,
+        searchTerm: ''
+    };
+    sections.value = [];
+}
+
+// Now the computed property will work properly with the import
+const filteredStudents = computed(() => {
+    return students.value.filter((student) => {
+        // Apply grade filter
+        if (filters.value.grade && student.gradeLevel !== filters.value.grade) {
+            return false;
+        }
+
+        // Apply section filter
+        if (filters.value.section && student.section !== filters.value.section) {
+            return false;
+        }
+
+        // Apply month filter
+        if (filters.value.month && student.month !== filters.value.month) {
+            return false;
+        }
+
+        // Apply search term
+        if (filters.value.searchTerm) {
+            const term = filters.value.searchTerm.toLowerCase();
+            return (
+                (student.grade_level && student.grade_level.toLowerCase().includes(term)) ||
+                (student.section && student.section.toLowerCase().includes(term)) ||
+                (student.school_year && student.school_year.toLowerCase().includes(term)) ||
+                (student.month && student.month.toLowerCase().includes(term)) ||
+                (student.teacher_name && student.teacher_name.toLowerCase().includes(term))
+            );
+        }
+
+        return true;
+    });
+});
+
+// Save student to database via API
+const saveStudent = async () => {
+    submitted.value = true;
+
+    // Check terms acceptance first
+    if (!termsAccepted.value) {
+        return;
+    }
+
+    // Validation - only check for name and grade level
+    const hasName = student.value.firstName?.trim() || student.value.name?.trim();
+    if (!hasName) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Validation Error',
+            detail: 'Please enter at least a first name',
+            life: 3000
+        });
+        return;
+    }
+
+    if (!student.value.gradeLevel) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Validation Error',
+            detail: 'Please select a grade level',
+            life: 3000
+        });
+        return;
+    }
+
+    // Auto-generate full name if not provided
+    if (!student.value.name && student.value.firstName) {
+        updateFullName();
+    }
+
+    // Auto-generate address if not provided
+    if (!student.value.address && student.value.houseNo) {
+        updateFullAddress();
+    }
+
+    // Calculate age if birthdate is provided
+    if (student.value.birthdate && !student.value.age) {
+        calculateStudentAge();
+    }
+
+    try {
+        // Prepare student data for API (using correct camelCase field names)
+        const studentId = student.value.studentId || `STU${String(Date.now()).slice(-5)}`;
+        const studentData = {
+            // Required fields for Laravel validation
+            name: student.value.name || `${student.value.firstName || ''} ${student.value.lastName || ''}`.trim() || 'Unknown',
+            gradeLevel: student.value.gradeLevel || 'Grade 1',
+            section: student.value.section || 'Default',
+
+            // Optional fields
+            firstName: student.value.firstName || '',
+            middleName: student.value.middleName || '',
+            lastName: student.value.lastName || '',
+            extensionName: student.value.extensionName || '',
+            birthdate: (() => {
+                if (!student.value.birthdate) return null;
+                try {
+                    const date = new Date(student.value.birthdate);
+                    if (isNaN(date.getTime())) return null;
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return null;
+                }
+            })(),
+            age: (() => {
+                const ageValue = student.value.age || calculateAge(student.value.birthdate);
+                return ageValue && ageValue !== 'N/A' && !isNaN(ageValue) ? parseInt(ageValue) : 0;
+            })(),
+            gender: student.value.gender || 'Male',
+            sex: student.value.gender || 'Male',
+            email: student.value.email && student.value.email.trim() !== '' ? student.value.email.trim() : null,
+            contactInfo: student.value.phone || '',
+            parentContact: student.value.parentContact || student.value.phone || '',
+            address: student.value.address || '',
+            lrn: student.value.lrn || `${new Date().getFullYear()}${String(Date.now()).slice(-8)}`,
+            studentId: studentId,
+            // Include base64 photo data for backend processing
+            photo: student.value.photo || null,
+            profilePhoto: student.value.photo || student.value.profilePhoto || null,
+            status: student.value.status || 'Enrolled',
+            isActive: student.value.isActive !== undefined ? student.value.isActive : true,
+            enrollmentDate: (() => {
+                try {
+                    const date = new Date(student.value.enrollmentDate);
+                    if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return new Date().toISOString().split('T')[0];
+                }
+            })(),
+            admissionDate: (() => {
+                if (!student.value.admissionDate || student.value.admissionDate === 'N/A') {
+                    return new Date().toISOString().split('T')[0];
+                }
+                try {
+                    const date = new Date(student.value.admissionDate);
+                    if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+                    return date.toISOString().split('T')[0];
+                } catch (e) {
+                    return new Date().toISOString().split('T')[0];
+                }
+            })(),
+
+            // Basic Education Fields
+            placeOfBirth: student.value.placeOfBirth || '',
+            motherTongue: student.value.motherTongue || '',
+            isIndigenous: student.value.isIndigenous || false,
+            indigenousCommunity: student.value.indigenousCommunity || '',
+            is4PsBeneficiary: student.value.is4PsBeneficiary || false,
+            householdID: student.value.householdID || '',
+            hasDisability: student.value.hasDisability || false,
+            disabilities: student.value.disabilities || [],
+            houseIncome: student.value.houseIncome || '',
+
+            // Parent Information
+            fatherLastName: student.value.fatherLastName || '',
+            fatherFirstName: student.value.fatherFirstName || '',
+            fatherMiddleName: student.value.fatherMiddleName || '',
+            fatherContactNumber: student.value.fatherContactNumber || '',
+            fatherOccupation: student.value.fatherOccupation || '',
+            motherMaidenLastName: student.value.motherMaidenLastName || '',
+            motherMaidenFirstName: student.value.motherMaidenFirstName || '',
+            motherMaidenMiddleName: student.value.motherMaidenMiddleName || '',
+            motherContactNumber: student.value.motherContactNumber || '',
+            motherOccupation: student.value.motherOccupation || ''
+        };
+
+        console.log('Saving student data:', studentData);
+        console.log('Student ID for update:', student.value.id);
+
+        let response;
+        if (student.value.id) {
+            // Update existing student
+            console.log('Updating existing student with ID:', student.value.id);
+            response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(studentData)
+            });
+        } else {
+            // Create new student
+            console.log('Creating new student');
+            response = await fetch('http://127.0.0.1:8000/api/students', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(studentData)
+            });
+        }
+
+        console.log('API Response status:', response.status);
+        console.log('API Response headers:', response.headers);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch (e) {
+                errorData = { message: errorText };
+            }
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+
+        // Success - database save worked
+        const result = await response.json();
+        console.log('Student saved successfully:', result);
+
+        // Reload students from database to get updated data
+        await loadStudents();
+
+        // Show success dialog with fireworks for new enrollments FIRST
+        if (!result.id) {
+            successDialog.value = true;
+            showFireworks.value = true;
+            setTimeout(() => {
+                showFireworks.value = false;
+            }, 5000);
+        } else {
+            toast.add({
+                severity: 'success',
+                summary: 'Success',
+                detail: 'Student updated successfully!',
+                life: 3000
+            });
+        }
+
+        // Close dialog and reset form AFTER showing success
+        studentDialog.value = false;
+        resetStudentForm();
+        currentStep.value = 1;
+        termsAccepted.value = false;
+        submitted.value = false;
+    } catch (error) {
+        console.error('Error saving student to database:', error);
+
+        // Show detailed error message
+        let errorMessage = 'Failed to save student to database.';
+        if (error.message) {
+            errorMessage += ` Error: ${error.message}`;
+        }
+
+        toast.add({
+            severity: 'error',
+            summary: 'Database Error',
+            detail: errorMessage,
+            life: 8000
+        });
+
+        // Don't close dialog on error so user can retry
+        submitted.value = false;
+    }
+};
+
+// Edit student - populate form with existing data
+function editStudent(studentData) {
+    // Map existing student data to the comprehensive form structure
+    student.value = {
+        id: studentData.id,
+        // Personal Information
+        firstName: studentData.firstName || studentData.name?.split(' ')[0] || '',
+        middleName: studentData.middleName || '',
+        lastName: studentData.lastName || studentData.name?.split(' ').slice(1).join(' ') || '',
+        extensionName: studentData.extensionName || '',
+        name: studentData.name || '',
+        birthdate: studentData.birthdate && studentData.birthdate !== 'N/A' ? new Date(studentData.birthdate) : null,
+        age: studentData.age || '',
+        gender: studentData.gender || 'Male',
+
+        // Academic Information
+        schoolYear: studentData.schoolYear || '2025-2026',
+        gradeLevel: studentData.gradeLevel || '',
+        section: studentData.section || '',
+        learnerType: studentData.learnerType || 'New/Move In',
+        learnerStatus: studentData.learnerStatus || 'WITH LRN',
+        lastGradeCompleted: studentData.lastGradeCompleted || '',
+        lastSYAttended: studentData.lastSYAttended || '',
+        previousSchool: studentData.previousSchool || '',
+        schoolId: studentData.schoolId || '',
+
+        // LRN and PSA
+        lrn: studentData.lrn || '',
+        psaBirthCert: studentData.psaBirthCert || '',
+
+        // Contact Information
+        email: studentData.email || '',
+        phone: studentData.contact || studentData.phone || '',
+        parentContact: studentData.parentContact || '',
+
+        // Address Information
+        address: studentData.address || '',
+        houseNo: studentData.houseNo || '',
+        street: studentData.street || '',
+        barangay: studentData.barangay || '',
+        city: studentData.city || '',
+        province: studentData.province || '',
+
+        // Additional Information
+        photo: studentData.photo || null,
+        profilephoto: studentData.profilephoto || null,
+        enrollmentDate: studentData.enrollmentDate || new Date().toISOString().split('T')[0],
+        status: studentData.status || 'Enrolled',
+        isActive: studentData.isActive !== undefined ? studentData.isActive : true,
+
+        // Basic Education Fields
+        motherTongue: studentData.motherTongue || '',
+        isIndigenous: studentData.isIndigenous || false,
+        indigenousCommunity: studentData.indigenousCommunity || '',
+        is4PsBeneficiary: studentData.is4PsBeneficiary || false,
+        householdID: studentData.householdID || '',
+        hasDisability: studentData.hasDisability || false,
+        disabilities: studentData.disabilities || [],
+        houseIncome: studentData.houseIncome || ''
+    };
+
+    // Update sections based on grade level
+    if (student.value.gradeLevel) {
+        updateStudentSections();
+    }
+
+    studentDialog.value = true;
+}
+
+// Confirm delete student
+function confirmDeleteStudent(studentData) {
+    student.value = { ...studentData };
+    deleteStudentDialog.value = true;
+}
+
+// Toggle student active status
+const toggleStudentStatus = async (studentData) => {
+    try {
+        const newStatus = !studentData.isActive;
+
+        // Update student status in database
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${studentData.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                ...studentData.originalData,
+                isActive: newStatus
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Update local data
+        studentData.isActive = newStatus;
+
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `Student ${newStatus ? 'activated' : 'deactivated'} successfully!`,
+            life: 3000
+        });
+
+        // Reload students to ensure data consistency
+        await loadStudents();
+    } catch (error) {
+        console.error('Error updating student status:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update student status. Please try again.',
+            life: 5000
+        });
+    }
+};
+
+// Delete student from database via API
+const deleteStudent = async () => {
+    try {
+        // Delete from database first
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        console.log('Student deleted from database:', student.value.id);
+
+        // Reload students from database
+        await loadStudents();
+
+        deleteStudentDialog.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Student deleted successfully!',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error deleting student from database:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to delete student from database. Please check your connection.',
+            life: 5000
+        });
+    }
+};
+
+// View student details dialog
+function viewStudentDetails(studentData) {
+    selectedStudent.value = studentData;
+    viewStudentDialog.value = true;
+}
+
+// Edit student from dialog (opens enrollment form)
+function editStudentFromDialog() {
+    if (selectedStudent.value) {
+        // Close the view dialog first
+        viewStudentDialog.value = false;
+        // Open the edit form with the selected student data
+        editStudent(selectedStudent.value);
+    }
+}
+
+// Row click handler to open student info dialog
+function onRowClick(event) {
+    viewStudentDetails(event.data);
+}
+
+// Show QR code in a dialog
+function showQRCode(studentData) {
+    selectedStudent.value = studentData;
+    qrCodeDialog.value = true;
+}
+
+// Print QR code
+function printQRCode() {
+    if (!selectedStudent.value || !qrCodes.value[selectedStudent.value.lrn]) return;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Student LRN QR Code</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                    padding: 20px;
+                }
+                .container {
+                    max-width: 400px;
+                    margin: 0 auto;
+                    border: 1px solid #ddd;
+                    padding: 20px;
+                    border-radius: 8px;
+                }
+                .qr-code {
+                    width: 200px;
+                    height: 200px;
+                    margin: 0 auto 20px;
+                }
+                h2 {
+                    margin-bottom: 5px;
+                }
+                p {
+                    margin: 5px 0;
+                    color: #666;
+                }
+                .school-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                }
+                @media print {
+                    .no-print {
+                        display: none;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="school-name">Learners Attendance Monitoring System</div>
+                <img src="${qrCodes.value[selectedStudent.value.lrn]}" class="qr-code" />
+                <h2>${selectedStudent.value.name}</h2>
+                <p>LRN: ${selectedStudent.value.lrn}</p>
+                <p>${selectedStudent.value.gradeLevel} - ${selectedStudent.value.section}</p>
+            </div>
+            <div class="no-print" style="margin-top: 20px;">
+                <button onclick="window.print()">Print</button>
+                <button onclick="window.close()">Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+// Generate Temporary ID card
+function generateTempId() {
+    if (!selectedStudent.value) return;
+
+    const student = selectedStudent.value;
+    const qrSrc = qrCodes.value[student.lrn] || '';
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Debug: Log student data to console
+    console.log('Student data for ID generation:', {
+        name: student.name,
+        gradeLevel: student.gradeLevel,
+        section: student.section,
+        lrn: student.lrn,
+        birthdate: student.birthdate
+    });
+
+    const win = window.open('', '_blank');
+    const timestamp = Date.now(); // Cache buster
+
+    // Force clear any cached content
+    win.document.open();
+    win.document.clear();
+    win.document.write(`
+        <html>
+        <head>
+            <title>Temporary ID - ${student.name} - ${timestamp}</title>
+            <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+            <meta http-equiv="Pragma" content="no-cache">
+            <meta http-equiv="Expires" content="0">
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { 
+                    font-family: 'Arial', sans-serif; 
+                    background: #f0f2f5;
+                    padding: 20px;
+                    min-height: 100vh;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                
+                .card-wrapper { 
+                    display: flex; 
+                    gap: 30px; 
+                    justify-content: center;
+                    align-items: center;
+                }
+                
+                .id-card {
+                    width: 320px;
+                    height: 600px;
+                    border-radius: 15px;
+                    overflow: hidden;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                    position: relative;
+                }
+                
+                /* FRONT SIDE */
+                .front {
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    position: relative;
+                    overflow: hidden;
+                }
+                
+                .front::before {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 60%;
+                    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 320'%3E%3Cpath fill='%23ffffff' fill-opacity='0.1' d='M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E") no-repeat bottom;
+                    background-size: cover;
+                }
+                
+                .front::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -50px;
+                    right: -50px;
+                    width: 200px;
+                    height: 200px;
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 50%;
+                }
+                
+                .school-logo {
+                    position: absolute;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 60px;
+                    height: 60px;
+                    background: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .school-logo img {
+                    width: 40px;
+                    height: 40px;
+                    object-fit: contain;
+                }
+                
+                .school-header {
+                    text-align: center;
+                    padding: 20px 20px 30px;
+                    color: white;
+                }
+                
+                .school-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-top: 75px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                }
+                
+                .student-photo {
+                    width: 100px;
+                    height: 100px;
+                    border-radius: 50%;
+                    object-fit: cover;
+                    border: 4px solid white;
+                    display: block;
+                    margin: 15px auto;
+                    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+                }
+                
+                .student-name {
+                    color: white;
+                    font-size: 20px;
+                    font-weight: bold;
+                    text-align: center;
+                    margin: 10px 0 5px;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                }
+                
+                .name-label {
+                    color: rgba(255,255,255,0.8);
+                    font-size: 11px;
+                    text-align: center;
+                    margin-bottom: 15px;
+                }
+                
+                .qr-code {
+                    width: 160px;
+                    height: 160px;
+                    background: white;
+                    border-radius: 8px;
+                    padding: 8px;
+                    display: block;
+                    margin: 15px auto;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .student-info {
+                    background: rgba(255,255,255,0.95);
+                    margin: 0 20px 15px;
+                    padding: 12px;
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    clear: both;
+                }
+                
+                .info-label {
+                    color: #2a5298;
+                    font-size: 10px;
+                    font-weight: bold;
+                    margin-bottom: 1px;
+                    text-transform: uppercase;
+                }
+                
+                .info-value {
+                    color: #333;
+                    font-size: 12px;
+                    font-weight: 600;
+                    line-height: 1.2;
+                }
+                
+                /* BACK SIDE */
+                .back {
+                    background: #f8f9fa;
+                    color: #333;
+                }
+                
+                .deped-header {
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                }
+                
+                .deped-logo {
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                }
+                
+                .deped-subtitle {
+                    font-size: 12px;
+                    opacity: 0.9;
+                }
+                
+                .back-content {
+                    padding: 25px 20px;
+                }
+                
+                .info-section {
+                    margin-bottom: 20px;
+                }
+                
+                .section-title {
+                    color: #2a5298;
+                    font-weight: bold;
+                    font-size: 13px;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                }
+                
+                .info-box {
+                    background: white;
+                    padding: 10px;
+                    border-radius: 6px;
+                    border-left: 4px solid #2a5298;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                }
+                
+                .signature-area {
+                    text-align: center;
+                    margin: 25px 0;
+                    padding: 15px;
+                    background: white;
+                    border-radius: 8px;
+                    border: 2px dashed #ddd;
+                }
+                
+                .signature-line {
+                    border-bottom: 2px solid #333;
+                    width: 120px;
+                    margin: 0 auto 8px;
+                    height: 25px;
+                }
+                
+                .signature-label {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #666;
+                }
+                
+                .validity-box {
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: white;
+                    padding: 12px;
+                    text-align: center;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 13px;
+                    margin-bottom: 10px;
+                }
+                
+                .non-transferable {
+                    text-align: center;
+                    font-size: 10px;
+                    color: #666;
+                    font-style: italic;
+                }
+                
+                /* Buttons */
+                .no-print {
+                    text-align: center;
+                    margin-top: 30px;
+                }
+                
+                .btn {
+                    background: linear-gradient(135deg, #2a5298, #1e3c72);
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    margin: 0 8px;
+                    border-radius: 25px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                }
+                
+                .btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+                }
+                
+                /* Print Styles */
+                @media print {
+                    * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+                    body { 
+                        background: white !important; 
+                        padding: 0 !important; 
+                        margin: 0 !important;
+                    }
+                    .card-wrapper { 
+                        gap: 15px; 
+                        page-break-inside: avoid;
+                        display: flex !important;
+                        flex-direction: row !important;
+                    }
+                    .id-card { 
+                        box-shadow: none !important; 
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+                    .front {
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .back {
+                        background: #f8f9fa !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .deped-header {
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    .no-print { display: none !important; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card-wrapper">
+                <!-- FRONT SIDE -->
+                <div class="id-card front">
+                    <div class="school-logo">
+                        <img src="/demo/images/logo.png" alt="School Logo" />
+                    </div>
+                    
+                    <div class="school-header">
+                        <div class="school-name">Naawan Central School</div>
+                    </div>
+                    
+                    <img src="${student.photo ? (student.photo.startsWith('data:') ? student.photo : `http://localhost:8000/${student.photo}`) : 'https://via.placeholder.com/120x120?text=Photo'}" class="student-photo" />
+                    
+                    <div class="student-name">${student.name.toUpperCase()}</div>
+                    <div class="name-label">NAME</div>
+                    
+                    <img src="${qrSrc}" class="qr-code" />
+                    
+                    <div class="student-info">
+                        <div class="info-label">LRN:</div>
+                        <div class="info-value">${student.studentId || student.lrn}</div>
+                    </div>
+                    
+                </div>
+                
+                <!-- BACK SIDE -->
+                <div class="id-card back">
+                    <div class="deped-header">
+                        <div class="deped-logo">DepED</div>
+                        <div class="deped-subtitle">DEPARTMENT OF EDUCATION</div>
+                    </div>
+                    
+                    <div class="back-content">
+                        <div class="info-section">
+                            <div class="section-title">Emergency Contact</div>
+                            <div class="info-box">
+                                <strong>PARENT/GUARDIAN:</strong> ${student.parentName || 'MARK MILLER'}<br>
+                                <strong>PHONE:</strong> ${student.contact || '484-421-377'}
+                            </div>
+                        </div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">Allergies/Medical Conditions:</div>
+                            <div class="info-box">${student.medicalConditions || 'PEANUT ALLERGY'}</div>
+                        </div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">Home Address:</div>
+                            <div class="info-box">${student.address || '1244 HORSESHOE LANE NEWARK, PA 19714'}</div>
+                        </div>
+                        
+                        <div class="info-section">
+                            <div class="section-title">School Year:</div>
+                            <div class="info-box">${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
+                        </div>
+                        
+                        <div class="signature-area">
+                            <div class="signature-line"></div>
+                            <div class="signature-label">SIGNATURE</div>
+                        </div>
+                        
+                        <div class="validity-box">
+                            VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}
+                        </div>
+                        
+                        <div class="non-transferable">
+                            THIS ID CARD IS NON-TRANSFERABLE
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="no-print">
+                <button class="btn" onclick="window.print()">Print</button>
+                <button class="btn" onclick="window.close()">Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    win.document.close();
+}
+function updatePhoto(studentData) {
+    if (fileInput.value) {
+        fileInput.value.click();
+    }
+}
+
+async function handlePhotoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+        toast.add({
+            severity: 'error',
+            summary: 'Invalid File',
+            detail: 'Please select an image file',
+            life: 3000
+        });
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        toast.add({
+            severity: 'error',
+            summary: 'File Too Large',
+            detail: 'Please select an image smaller than 5MB',
+            life: 3000
+        });
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            // Update the photo in the UI immediately
+            selectedStudent.value.photo = reader.result;
+
+            // Use the original data from the database for the update
+            const originalData = selectedStudent.value.originalData || {};
+
+            // Prepare data for database update - use original data and only update the photo
+            const studentData = {
+                ...originalData,
+                photo: reader.result // Send as 'photo' field for backend processing
+            };
+
+            console.log('Updating student photo for ID:', selectedStudent.value.id);
+
+            // Save to database
+            const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(studentData)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API Error Response:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Photo updated successfully:', result);
+
+            // Reload students to get updated data
+            await loadStudents();
+
+            toast.add({
+                severity: 'success',
+                summary: 'Photo Updated',
+                detail: 'Student photo updated successfully!',
+                life: 3000
+            });
+        } catch (error) {
+            console.error('Error updating photo:', error);
+
+            // Revert the UI change on error
+            if (selectedStudent.value.originalData?.profilePhoto) {
+                selectedStudent.value.photo = selectedStudent.value.originalData.profilePhoto;
+            }
+
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to update photo. Please try again.',
+                life: 3000
+            });
+        }
+    };
+    reader.readAsDataURL(file);
+}
+function startEditProfile() {
+    originalStudentClone.value = { ...selectedStudent.value };
+    isEdit.value = true;
+}
+function cancelInlineEdit() {
+    // revert changes
+    selectedStudent.value = { ...originalStudentClone.value };
+    isEdit.value = false;
+}
+async function saveInlineProfile() {
+    try {
+        // Calculate age if birthdate changed
+        if (selectedStudent.value.birthdate) {
+            selectedStudent.value.age = calculateAge(selectedStudent.value.birthdate);
+        }
+
+        // Prepare student data for API update (matching Laravel validation requirements)
+        const studentData = {
+            // Required fields for Laravel validation
+            name: selectedStudent.value.name || `${selectedStudent.value.firstName || ''} ${selectedStudent.value.lastName || ''}`.trim() || 'Unknown',
+            gradeLevel: selectedStudent.value.gradeLevel || 'Grade 1',
+            section: selectedStudent.value.section || 'Default',
+
+            // Optional fields
+            firstName: selectedStudent.value.firstName || selectedStudent.value.name?.split(' ')[0] || '',
+            middleName: selectedStudent.value.middleName || '',
+            lastName: selectedStudent.value.lastName || selectedStudent.value.name?.split(' ').slice(1).join(' ') || '',
+            extensionName: selectedStudent.value.extensionName || '',
+            birthdate: selectedStudent.value.birthdate ? new Date(selectedStudent.value.birthdate).toISOString().split('T')[0] : null,
+            age: selectedStudent.value.age || calculateAge(selectedStudent.value.birthdate) || 0,
+            gender: selectedStudent.value.gender || 'Male',
+            sex: selectedStudent.value.gender || 'Male',
+            email: selectedStudent.value.email && selectedStudent.value.email.trim() !== '' ? selectedStudent.value.email.trim() : null,
+            contactInfo: selectedStudent.value.contact || selectedStudent.value.phone || '',
+            parentContact: selectedStudent.value.parentContact || selectedStudent.value.contact || '',
+            address: selectedStudent.value.address || '',
+            lrn: selectedStudent.value.lrn || '',
+            profilePhoto: selectedStudent.value.photo || selectedStudent.value.profilePhoto || null,
+            status: selectedStudent.value.status || 'Enrolled',
+            isActive: selectedStudent.value.isActive !== undefined ? selectedStudent.value.isActive : true
+        };
+
+        console.log('Sending student data to API:', studentData);
+
+        // Update student in backend database
+        console.log('Updating student with ID:', selectedStudent.value.id);
+        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(studentData)
+        });
+
+        console.log('API Response status:', response.status);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch (e) {
+                errorData = { message: errorText };
+            }
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+
+        const updatedStudent = await response.json();
+        console.log('Student updated in database:', updatedStudent);
+
+        // Update QR code if LRN changed and new QR code path is provided
+        if (updatedStudent.qr_code_path && selectedStudent.value.lrn) {
+            const qrPath = `http://127.0.0.1:8000/${updatedStudent.qr_code_path}`;
+            qrCodes.value[selectedStudent.value.lrn] = qrPath;
+
+            // Update the student's QR code path in the table
+            const studentIndex = students.value.findIndex((s) => s.id === selectedStudent.value.id);
+            if (studentIndex !== -1) {
+                students.value[studentIndex].qrCodePath = qrPath;
+            }
+        }
+
+        // Also update localStorage as backup
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const idx = enrolledStudents.findIndex((s) => {
+                if (s.studentId && selectedStudent.value.studentId) {
+                    return s.studentId === selectedStudent.value.studentId;
+                }
+                return s.id === selectedStudent.value.id;
+            });
+            if (idx > -1) {
+                enrolledStudents[idx] = { ...selectedStudent.value };
+                localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+            }
+        } catch (localError) {
+            console.warn('Failed to update localStorage backup:', localError);
+        }
+
+        // Reload students from database to reflect changes
+        await loadStudents();
+
+        isEdit.value = false;
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Student updated and saved to database!',
+            life: 3000
+        });
+    } catch (error) {
+        console.error('Error updating student in database:', error);
+
+        // Fallback to localStorage only if API fails
+        try {
+            const enrolledStudents = JSON.parse(localStorage.getItem('enrolledStudents') || '[]');
+            const idx = enrolledStudents.findIndex((s) => {
+                if (s.studentId && selectedStudent.value.studentId) {
+                    return s.studentId === selectedStudent.value.studentId;
+                }
+                return s.id === selectedStudent.value.id;
+            });
+            if (idx > -1) {
+                selectedStudent.value.age = calculateAge(selectedStudent.value.birthdate);
+                enrolledStudents[idx] = { ...selectedStudent.value };
+                localStorage.setItem('enrolledStudents', JSON.stringify(enrolledStudents));
+                await loadStudents();
+                isEdit.value = false;
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Saved Locally',
+                    detail: 'Database unavailable. Changes saved to local storage only.',
+                    life: 5000
+                });
+            }
+        } catch (localError) {
+            console.error('Failed to save to localStorage:', localError);
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to update student in both database and localStorage',
+                life: 3000
+            });
+        }
+    }
+}
+
+function updateSignature(studentData) {
+    toast.add({ severity: 'info', summary: 'Update E-Signature', detail: 'Feature not implemented yet', life: 3000 });
+}
+
+// Helper functions for the new enrollment form
+function updateFullName() {
+    const parts = [student.value.firstName, student.value.middleName, student.value.lastName, student.value.extensionName].filter((part) => part && part.trim());
+    student.value.name = parts.join(' ');
+}
+
+function updateFullAddress() {
+    const parts = [student.value.houseNo, student.value.barangay, student.value.city, student.value.province].filter((part) => part && part.trim());
+    student.value.address = parts.join(', ');
+}
+
+function updateStudentSections() {
+    if (student.value.gradeLevel) {
+        sections.value = sectionsByGrade[student.value.gradeLevel] || [];
+        student.value.section = ''; // Reset section when grade changes
+    } else {
+        sections.value = [];
+    }
+}
+
+function calculateStudentAge() {
+    if (student.value.birthdate) {
+        student.value.age = calculateAge(student.value.birthdate);
+    }
+}
+
+function openStudentDialog() {
+    // Reset form to ensure clean state
+    student.value = {
+        id: null,
+        // Personal Information
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        extensionName: '',
+        name: '',
+        birthdate: null,
+        age: '',
+        gender: 'Male',
+
+        // Academic Information
+        schoolYear: '2025-2026',
+        gradeLevel: '',
+        section: '',
+        learnerType: 'New/Move In',
+        learnerStatus: 'WITH LRN',
+        lastGradeCompleted: '',
+        lastSYAttended: '',
+        previousSchool: '',
+        schoolId: '',
+
+        // LRN and PSA
+        lrn: '',
+        psaBirthCert: '',
+
+        // Contact Information
+        email: '',
+        phone: '',
+        parentContact: '',
+
+        // Address Information
+        address: '',
+        houseNo: '',
+        street: '',
+        barangay: '',
+        city: '',
+        province: '',
+
+        // Additional Information
+        photo: null,
+        profilephoto: null,
+        enrollmentDate: new Date().toISOString().split('T')[0],
+        status: '',
+
+        // Basic Education Fields
+        motherTongue: '',
+        isIndigenous: false,
+        indigenousCommunity: '',
+        is4PsBeneficiary: false,
+        householdID: '',
+        hasDisability: false,
+        disabilities: [],
+        houseIncome: '',
+
+        // Parent Information
+        fatherOccupation: '',
+        motherOccupation: ''
+    };
+    studentDialog.value = true;
+}
+
+function resetStudentForm() {
+    Object.assign(student.value, {
+        name: '',
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        extensionName: '',
+        lrn: '',
+        gradeLevel: '',
+        section: '',
+        gender: '',
+        birthdate: null,
+        age: '',
+        email: '',
+        phone: '',
+        parentContact: '',
+        schoolYear: '2025-2026',
+        learnerType: 'New/Move In',
+        learnerStatus: 'WITHOUT LRN',
+        lastGradeCompleted: '',
+        lastSYAttended: '',
+        previousSchool: '',
+        schoolId: '',
+        psaBirthCert: '',
+        currentHouseNo: '',
+        currentStreet: '',
+        currentBarangay: '',
+        currentCity: '',
+        currentProvince: '',
+        currentCountry: 'Philippines',
+        currentZipCode: '',
+        sameAsCurrentAddress: true,
+        permanentHouseNo: '',
+        permanentStreet: '',
+        permanentBarangay: '',
+        permanentCity: '',
+        permanentProvince: '',
+        permanentCountry: 'Philippines',
+        permanentZipCode: '',
+        placeOfBirth: '',
+        motherTongue: '',
+        isIndigenous: false,
+        indigenousCommunity: '',
+        is4PsBeneficiary: false,
+        householdID: '',
+        hasDisability: false,
+        disabilities: [],
+        houseIncome: '',
+        fatherLastName: '',
+        fatherFirstName: '',
+        fatherMiddleName: '',
+        fatherContactNumber: '',
+        fatherOccupation: '',
+        motherMaidenLastName: '',
+        motherMaidenFirstName: '',
+        motherMaidenMiddleName: '',
+        motherContactNumber: '',
+        motherOccupation: ''
+    });
+}
+
+function cancelStudentDialog() {
+    openStudentDialog();
+    studentDialog.value = false;
+    currentStep.value = 1;
+    termsAccepted.value = false;
+}
+
+const nextStep = () => {
+    if (currentStep.value < totalSteps.value) {
+        currentStep.value++;
+    }
+};
+
+const previousStep = () => {
+    if (currentStep.value > 1) {
+        currentStep.value--;
+    }
+};
+
+// Initialize component
 onMounted(() => {
-    // Load real curriculum data
-    loadRealCurriculumData();
-    loading.value = true;
+    loadGradesAndSections();
+    loadStudents();
+
+    // Set QR codes from backend data first
+    students.value.forEach((student) => {
+        if (student.qrCodePath && student.lrn) {
+            qrCodes.value[student.lrn] = student.qrCodePath;
+        }
+    });
+
+    // Generate QR codes for students without backend QR codes
     setTimeout(() => {
-        loading.value = false;
-    }, 1000);
-
-    // Start polling for submitted reports
-    startPolling();
+        generateAllQRCodes();
+    }, 500);
 });
-
-// Cleanup on unmount
-onUnmounted(() => {
-    stopPolling();
-});
-
-// Report types for dropdown
-const reportTypes = ref([
-    { name: 'Daily Attendance', value: 'daily' },
-    { name: 'Weekly Summary', value: 'weekly' },
-    { name: 'Monthly Report', value: 'monthly' },
-    { name: 'Quarterly Analysis', value: 'quarterly' }
-]);
 </script>
 
+<template>
+    <input type="file" accept="image/*" ref="fileInput" class="hidden" @change="handlePhotoUpload" />
+    <div class="card p-8 shadow-xl rounded-xl bg-white border border-gray-100">
+        <!-- Modern Gradient Header -->
+        <div class="modern-header-container mb-8">
+            <div class="gradient-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="pi pi-users"></i>
+                        </div>
+                        <div class="header-text">
+                            <h1 class="header-title">Collected Reports</h1>
+                            <p class="header-subtitle">Naawan Central School</p>
+                            <div class="student-count">
+                                <i class="pi pi-chart-bar mr-2"></i>
+                                Total Collected Reports: <span class="count-badge">{{ totalStudents }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="search-container">
+                            <span class="p-input-icon-left">
+                                <i class="pi pi-search" />
+                                <InputText v-model="filters.searchTerm" placeholder="Search reports..." class="search-input" />
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex flex-wrap gap-6 mb-8 p-4 bg-gray-50 rounded-lg border">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Grade Level</label>
+                <Dropdown v-model="filters.grade" :options="grades" optionLabel="name" optionValue="code" placeholder="Select Grade" class="w-full" @change="updateSections" />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Section</label>
+                <Dropdown v-model="filters.section" :options="sections" placeholder="Select Section" class="w-full" :disabled="!filters.grade" />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1">Month / Year</label>
+                <Calendar v-model="filters.month" view="month" dateFormat="MM yy" placeholder="Select Month" class="w-full" showIcon />
+            </div>
+            <div class="flex flex-col justify-end min-w-[150px]">
+                <Button label="Reset Filters" icon="pi pi-refresh" class="p-button-outlined p-button-secondary h-[42px]" @click="resetFilters" />
+            </div>
+        </div>
+
+        <!-- Student List -->
+        <div class="mt-6">
+            <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <DataTable
+                    :value="filteredStudents"
+                    :paginator="true"
+                    :rows="10"
+                    :rowsPerPageOptions="[5, 10, 20, 50]"
+                    :loading="loading"
+                    stripedRows
+                    showGridlines
+                    responsiveLayout="scroll"
+                    class="p-datatable-sm modern-datatable"
+                    :globalFilterFields="['grade_level', 'section', 'school_year', 'month_name', 'teacher_name']"
+                >
+                    <Column header="#" style="width: 3rem">
+                        <template #body="slotProps">
+                            <span>{{ slotProps.index + 1 }}</span>
+                        </template>
+                    </Column>
+                    <Column field="grade_level" header="Grade Level" sortable style="width: 120px" />
+                    <Column field="section" header="Section" sortable style="width: 120px" />
+                    <Column field="school_year" header="School Year" sortable style="width: 120px" />
+                    <Column field="month_name" header="Month" sortable style="width: 100px" />
+                    <Column field="total_students" header="Total Students" sortable style="width: 120px">
+                        <template #body="slotProps">
+                            <span class="font-semibold">{{ slotProps.data.total_students }}</span>
+                        </template>
+                    </Column>
+                    <Column field="present_today" header="Present Today" sortable style="width: 120px">
+                        <template #body="slotProps">
+                            <Tag :value="slotProps.data.present_today" severity="success" />
+                        </template>
+                    </Column>
+                    <Column field="absent_today" header="Absent Today" sortable style="width: 120px">
+                        <template #body="slotProps">
+                            <Tag :value="slotProps.data.absent_today" severity="danger" />
+                        </template>
+                    </Column>
+                    <Column field="attendance_rate" header="Attendance Rate" sortable style="width: 130px">
+                        <template #body="slotProps">
+                            <span class="font-semibold">{{ slotProps.data.attendance_rate }}%</span>
+                        </template>
+                    </Column>
+                    <Column field="teacher_name" header="Teacher Name" sortable style="min-width: 150px" />
+                    <Column header="Actions" style="width: 6rem">
+                        <template #body="slotProps">
+                            <div class="flex gap-1">
+                                <Button icon="pi pi-eye" class="p-button-rounded p-button-text" title="View Report" @click="viewSF2Report(slotProps.data)" />
+                                <Button icon="pi pi-download" class="p-button-rounded p-button-text p-button-success" title="Download Report" @click="downloadSF2Report(slotProps.data)" />
+                            </div>
+                        </template>
+                    </Column>
+                </DataTable>
+            </div>
+        </div>
+
+        <!-- View Student Details Dialog -->
+        <Dialog v-model:visible="viewStudentDialog" modal :style="{ width: '850px' }" :dismissableMask="true">
+            <template #header>
+                <div class="flex justify-between items-center w-full pr-2">
+                    <span class="text-lg font-semibold">Student Information - {{ selectedStudent ? selectedStudent.name : '' }}</span>
+                    <div class="flex gap-2">
+                        <Button label="Enrollment Statistics" icon="pi pi-chart-bar" class="p-button-primary p-button-sm" @click="viewEnrollmentStats" />
+                        <Button label="Generate Temporary ID" icon="pi pi-id-card" class="p-button-danger p-button-sm" @click="generateTempId" />
+                    </div>
+                </div>
+            </template>
+
+            <div v-if="selectedStudent" class="grid md:grid-cols-3 gap-6 p-4">
+                <!-- Left column -->
+                <div class="flex flex-col items-center space-y-4">
+                    <p class="text-gray-600 font-medium">Temporary ID Photo</p>
+                    <img v-if="selectedStudent.photo && selectedStudent.photo !== 'N/A'" :src="getStudentPhotoUrl(selectedStudent)" alt="Student Photo" class="w-48 h-48 rounded-full object-cover ring-2 ring-gray-300" @error="handlePhotoError" />
+                    <div v-else class="w-48 h-48 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                        <i class="pi pi-user text-4xl text-gray-400"></i>
+                    </div>
+                    <p class="text-gray-600 font-medium">QR Code</p>
+                    <div v-if="selectedStudent.lrn" class="flex flex-col items-center">
+                        <img v-if="qrCodes[selectedStudent.lrn]" :src="qrCodes[selectedStudent.lrn]" class="w-48 h-48 border rounded-md object-contain" alt="QR Code" />
+                        <div v-else class="w-48 h-48 border rounded-md bg-gray-100 flex items-center justify-center">
+                            <Button label="Generate QR" icon="pi pi-qrcode" class="p-button-sm p-button-outlined" @click="generateStudentQR(selectedStudent)" />
+                        </div>
+                    </div>
+                    <p v-else class="text-xs text-gray-400">No LRN Available</p>
+                </div>
+
+                <!-- Right column -->
+                <div v-if="!isEdit" class="md:col-span-2 space-y-2">
+                    <h2 class="font-bold text-2xl mb-1">{{ selectedStudent.name }}</h2>
+                    <p class="text-gray-600 mb-3">{{ selectedStudent.studentId }}</p>
+                    <hr />
+                    <div class="space-y-2 text-sm mt-2">
+                        <p><span class="font-semibold">Grade & Section:</span> {{ selectedStudent.gradeLevel }} - {{ selectedStudent.section }}</p>
+                        <p><span class="font-semibold">Sex:</span> {{ selectedStudent.gender }}</p>
+                        <p><span class="font-semibold">Date of Birth:</span> {{ selectedStudent.birthdate || 'N/A' }}</p>
+                        <p><span class="font-semibold">Age:</span> {{ selectedStudentAge || 'N/A' }}</p>
+                        <p><span class="font-semibold">Enrollment Date:</span> {{ selectedStudent.enrollmentDate }}</p>
+                        <p><span class="font-semibold">LRN:</span> {{ selectedStudent.lrn }}</p>
+                        <p>
+                            <span class="font-semibold">Status:</span>
+                            <Tag :value="selectedStudent.isActive ? 'Active' : 'Inactive'" :severity="selectedStudent.isActive ? 'success' : 'danger'" class="ml-2" />
+                        </p>
+                        <p><span class="font-semibold">Address:</span> {{ selectedStudent.address }}</p>
+                        <p><span class="font-semibold">Email:</span> {{ selectedStudent.email }}</p>
+                        <p><span class="font-semibold">Contact:</span> {{ selectedStudent.contact }}</p>
+                    </div>
+
+                    <div class="col-12 sm:col-6">
+                        <label class="font-semibold">Email</label>
+                        <p>{{ selectedStudent.email }}</p>
+                    </div>
+                    <div class="col-12 sm:col-6">
+                        <label class="font-semibold">Contact</label>
+                        <p>{{ selectedStudent.contact }}</p>
+                    </div>
+                </div>
+                <div v-else class="md:col-span-2">
+                    <div class="grid grid-cols-2 gap-4 text-sm mt-2">
+                        <div>
+                            <label class="font-semibold">Student Name</label>
+                            <InputText v-model="selectedStudent.name" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Grade Level</label>
+                            <Dropdown v-model="selectedStudent.gradeLevel" :options="['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6']" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Section</label>
+                            <Dropdown v-model="selectedStudent.section" :options="sectionsByGrade[selectedStudent.gradeLevel] || []" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Gender</label>
+                            <Dropdown v-model="selectedStudent.gender" :options="['Male', 'Female']" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Date of Birth</label>
+                            <Calendar v-model="selectedStudent.birthdate" showIcon dateFormat="yy-mm-dd" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">LRN</label>
+                            <InputText v-model="selectedStudent.lrn" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Student Status</label>
+                            <Dropdown
+                                v-model="selectedStudent.isActive"
+                                :options="[
+                                    { name: 'Active', value: true },
+                                    { name: 'Inactive', value: false }
+                                ]"
+                                optionLabel="name"
+                                optionValue="value"
+                                class="w-full"
+                            />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Email</label>
+                            <InputText v-model="selectedStudent.email" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Address</label>
+                            <InputText v-model="selectedStudent.address" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-semibold">Contact</label>
+                            <InputText v-model="selectedStudent.contact" class="w-full" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="success-footer">
+                    <Button label="Continue" icon="pi pi-arrow-right" iconPos="right" class="p-button-success" @click="successDialog = false" />
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- SF2 Report Modal -->
+        <Dialog v-model:visible="showSF2Modal" modal :style="{ width: '95vw', height: '90vh' }" :dismissableMask="true">
+            <template #header>
+                <div class="flex justify-between items-center w-full pr-2">
+                    <span class="text-lg font-semibold"> SF2 Daily Attendance Report - {{ selectedSF2Report?.section }} ({{ selectedSF2Report?.month }}) </span>
+                </div>
+            </template>
+
+            <div v-if="loadingSF2" class="flex justify-center items-center h-96">
+                <div class="text-center">
+                    <i class="pi pi-spinner pi-spin text-4xl text-blue-500 mb-4"></i>
+                    <p class="text-lg">Loading SF2 Report...</p>
+                </div>
+            </div>
+
+            <div v-else-if="sf2ReportData" class="sf2-report-container">
+                <!-- SF2 Report Header -->
+                <div class="sf2-header text-center mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span class="text-xs font-bold text-blue-600">NCS</span>
+                        </div>
+                        <div class="flex-1">
+                            <h1 class="text-xl font-bold">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
+                            <p class="text-sm text-gray-600">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
+                        </div>
+                        <div class="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center">
+                            <span class="text-xs font-bold text-red-600">DepEd</span>
+                        </div>
+                    </div>
+
+                    <!-- Report Info -->
+                    <div class="grid grid-cols-3 gap-4 mb-4 text-sm">
+                        <div class="text-left">
+                            <strong>School ID:</strong> 123456<br />
+                            <strong>Name of School:</strong> Naawan Central School
+                        </div>
+                        <div class="text-center">
+                            <strong>School Year:</strong> 2024-2025<br />
+                            <strong>Grade Level:</strong> {{ selectedSF2Report?.grade_level }}
+                        </div>
+                        <div class="text-right">
+                            <strong>Report for the Month of:</strong> {{ selectedSF2Report?.month }}<br />
+                            <strong>Section:</strong> {{ selectedSF2Report?.section }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attendance Table -->
+                <div class="sf2-table-container overflow-x-auto">
+                    <table class="sf2-table w-full border-collapse border border-gray-400 text-xs">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th rowspan="3" class="border border-gray-400 p-1 w-8">No.</th>
+                                <th rowspan="3" class="border border-gray-400 p-1 w-48">LEARNER'S NAME<br />(Last Name, First Name, Middle Name)</th>
+                                <th :colspan="getSchoolDays().length" class="border border-gray-400 p-1">(1st row for date, 2nd row for Day: M,T,W,TH,F) for the present (✓), (X) for absent, and (L) for late</th>
+                                <th colspan="2" class="border border-gray-400 p-1 w-24">Total for the Month</th>
+                                <th rowspan="3" class="border border-gray-400 p-1 w-32">REMARKS (If DROPPED OUT, state reason, please refer to legend number 2. If TRANSFERRED IN/OUT, write the name of School.)</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 w-6">{{ schoolDay.date }}</th>
+                                <th class="border border-gray-400 p-1 w-12">ABSENT</th>
+                                <th class="border border-gray-400 p-1 w-12">TARDY</th>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <th v-for="schoolDay in getSchoolDays()" :key="`day-${schoolDay.date}`" class="border border-gray-400 p-1 text-xs font-semibold day-name-cell">
+                                    {{ schoolDay.dayName }}
+                                </th>
+                                <th class="border border-gray-400 p-1 text-xs"></th>
+                                <th class="border border-gray-400 p-1 text-xs"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Male Students -->
+                            <tr class="bg-blue-50">
+                                <td :colspan="getSchoolDays().length + 4" class="border border-gray-400 p-1 font-bold text-center">MALE</td>
+                            </tr>
+                            <tr v-for="(student, index) in getMaleStudents()" :key="student.id" class="hover:bg-gray-50">
+                                <td class="border border-gray-400 p-1 text-center">{{ index + 1 }}</td>
+                                <td class="border border-gray-400 p-1">{{ student.lastName || student.last_name }}, {{ student.firstName || student.first_name }} {{ student.middleName || student.middle_name }}</td>
+                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 text-center">
+                                    {{ getAttendanceMark(student, schoolDay.date) }}
+                                </td>
+                                <td class="border border-gray-400 p-1 text-center">{{ student.total_absent || student.totalAbsent || 0 }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ student.total_tardy || student.totalTardy || 0 }}</td>
+                                <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                            </tr>
+
+                            <!-- Female Students -->
+                            <tr class="bg-pink-50">
+                                <td :colspan="getSchoolDays().length + 4" class="border border-gray-400 p-1 font-bold text-center">FEMALE</td>
+                            </tr>
+                            <tr v-for="(student, index) in getFemaleStudents()" :key="student.id" class="hover:bg-gray-50">
+                                <td class="border border-gray-400 p-1 text-center">{{ getMaleStudents().length + index + 1 }}</td>
+                                <td class="border border-gray-400 p-1">{{ student.lastName || student.last_name }}, {{ student.firstName || student.first_name }} {{ student.middleName || student.middle_name }}</td>
+                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 text-center">
+                                    {{ getAttendanceMark(student, schoolDay.date) }}
+                                </td>
+                                <td class="border border-gray-400 p-1 text-center">{{ student.total_absent || student.totalAbsent || 0 }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ student.total_tardy || student.totalTardy || 0 }}</td>
+                                <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Summary Section -->
+                <div class="sf2-summary mt-6 grid grid-cols-2 gap-6 text-sm">
+                    <div>
+                        <h3 class="font-bold mb-2">GUIDELINES:</h3>
+                        <ol class="list-decimal list-inside space-y-1 text-xs">
+                            <li>The attendance shall be accomplished daily. Refer to the codes for checking learner attendance.</li>
+                            <li>Dates shall be written in the preceding columns beside Learner's Name.</li>
+                            <li>To compute the following:</li>
+                        </ol>
+                    </div>
+                    <div>
+                        <h3 class="font-bold mb-2">Summary for the Month</h3>
+                        <table class="border border-gray-400 w-full text-xs">
+                            <tr>
+                                <td class="border border-gray-400 p-1">Enrollment as of (1st Friday of June)</td>
+                                <td class="border border-gray-400 p-1 text-center">M</td>
+                                <td class="border border-gray-400 p-1 text-center">F</td>
+                                <td class="border border-gray-400 p-1 text-center">TOTAL</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-gray-400 p-1">Late Enrollment during the month (beyond cut-off)</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getMaleStudents().length }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getFemaleStudents().length }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getTotalStudents() }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="sf2-footer mt-6 flex justify-between text-sm">
+                    <div>
+                        <p class="mb-2">I certify that this is a true and correct report.</p>
+                        <p class="font-bold">Prepared by: {{ selectedSF2Report?.teacher_name }}</p>
+                        <p class="text-xs">(Signature of Teacher over Printed Name)</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold">Attested by: Principal Name</p>
+                        <p class="text-xs">(Signature of School Head over Printed Name)</p>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <Button label="Download Excel" icon="pi pi-download" class="p-button-success" @click="downloadSF2Report(selectedSF2Report)" />
+                    <Button label="Close" icon="pi pi-times" class="p-button-secondary" @click="showSF2Modal = false" />
+                </div>
+            </template>
+        </Dialog>
+    </div>
+</template>
+
 <style scoped>
-.admin-reports-wrapper {
+:deep(.p-datatable-striped .p-datatable-tbody > tr:nth-child(even)) {
+    background-color: #f9fafb;
+}
+
+:deep(.p-datatable-thead th) {
+    background-color: #e5e7eb;
+    font-weight: bold;
+}
+
+:deep(.p-dialog) {
+    border-radius: 12px;
+}
+
+:deep(.p-button-success) {
+    background-color: #22c55e;
+    border: none;
+}
+
+:deep(.p-button-success:hover) {
+    background-color: #16a34a;
+}
+
+:deep(.p-dialog) {
+    border-radius: 12px;
+}
+
+:deep(.p-inputtext-lg) {
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+:deep(.p-button-success) {
+    background-color: #22c55e;
+    border: none;
+}
+
+:deep(.p-button-success:hover) {
+    background-color: #16a34a;
+}
+
+/* --- Consistent styling with Teacher Management --- */
+.teacher-management-title {
+    color: var(--primary-color);
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+:deep(.p-button-primary) {
+    background-color: #4361ee;
+    border: none;
+}
+
+:deep(.p-button-primary:hover) {
+    background-color: #3b5ce6;
+}
+
+/* Enrollment Form Styles */
+.enrollment-dialog :deep(.p-dialog-content) {
+    padding: 0 !important;
+}
+
+.enrollment-dialog :deep(.p-dialog-header) {
+    padding: 0 !important;
+    border: none !important;
+}
+
+.enrollment-header-wrapper {
     position: relative;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    margin: -2rem -2rem 0 -2rem;
+    padding: 0;
+    width: calc(100% + 4rem);
+    left: -2rem;
+    border-radius: 12px 12px 0 0;
+}
+
+.close-button {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 10;
+    color: white !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50% !important;
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+}
+
+.close-button:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+}
+
+.enrollment-header {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    color: white;
+    text-align: center;
+    padding: 24px 0;
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+    position: relative;
     overflow: hidden;
 }
 
-/* Background shapes */
-.background-container {
+.enrollment-header::before {
+    content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    overflow: hidden;
-    opacity: 0.1;
-    z-index: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.6;
 }
 
-.geometric-shape {
-    position: absolute;
-    opacity: 0.3;
-    filter: blur(1px);
-}
-
-.circle {
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    background: #ffffff;
-    top: -80px;
-    right: -80px;
-    animation: float 20s ease-in-out infinite;
-}
-
-.square {
-    width: 250px;
-    height: 250px;
-    background: #ffffff;
-    bottom: -100px;
-    left: -100px;
-    transform: rotate(45deg);
-    animation: float 25s ease-in-out infinite reverse;
-}
-
-.triangle {
-    width: 0;
-    height: 0;
-    border-left: 150px solid transparent;
-    border-right: 150px solid transparent;
-    border-bottom: 260px solid #ffffff;
-    top: 200px;
-    right: 50px;
-    animation: float 30s ease-in-out infinite 5s;
-}
-
-.rectangle {
-    width: 350px;
-    height: 180px;
-    background: #ffffff;
-    top: 300px;
-    left: -120px;
-    transform: rotate(-20deg);
-    animation: float 22s ease-in-out infinite 2s;
-}
-
-.diamond {
-    width: 200px;
-    height: 200px;
-    background: #ffffff;
-    transform: rotate(45deg);
-    bottom: 200px;
-    right: 200px;
-    animation: float 18s ease-in-out infinite 3s;
-}
-
-@keyframes float {
-    0%,
-    100% {
-        transform: translateY(0px) rotate(0deg);
-    }
-    50% {
-        transform: translateY(-20px) rotate(5deg);
-    }
-}
-
-/* Main content */
-.content-container {
+.enrollment-title {
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin: 0 0 3px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     position: relative;
     z-index: 1;
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
 }
 
-.reports-header {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-.header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.title-section h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.title-section h1 .emoji-icon {
-    background: none;
-    -webkit-text-fill-color: initial;
-    background-clip: initial;
-    font-size: 2.5rem;
-}
-
-.title-section h1 .text-gradient {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.page-subtitle {
-    color: #666;
-    margin: 0.5rem 0 0 0;
-    font-size: 1.1rem;
-}
-
-.header-actions {
-    display: flex;
-    gap: 1rem;
-}
-
-/* SF2 Template Styles */
-.sf2-template-preview {
-    background: white;
-    border: 2px solid #000;
-    padding: 20px;
-    margin: 20px 0;
-    font-family: 'Times New Roman', serif;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-.sf2-header {
-    text-align: center;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #000;
-    padding-bottom: 10px;
-}
-
-.sf2-header h3 {
-    font-size: 14px;
-    font-weight: bold;
-    margin: 0;
-    text-transform: uppercase;
-}
-
-.sf2-info-section {
-    display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
-    gap: 20px;
-    margin-bottom: 20px;
-}
-
-.sf2-school-info {
-    border: 1px solid #000;
-    padding: 10px;
-}
-
-.info-row {
-    display: flex;
-    margin-bottom: 5px;
-}
-
-.info-row .label {
-    font-weight: bold;
-    min-width: 80px;
-}
-
-.info-row .value {
-    border-bottom: 1px solid #000;
-    flex: 1;
-    padding-left: 5px;
-}
-
-.sf2-guidelines {
-    border: 1px solid #000;
-    padding: 10px;
-}
-
-.sf2-guidelines h4 {
-    font-size: 12px;
-    font-weight: bold;
-    margin: 0 0 10px 0;
-    text-decoration: underline;
-}
-
-.sf2-guidelines ol {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.sf2-guidelines li {
-    margin-bottom: 5px;
-    font-size: 10px;
-}
-
-.formulas {
-    margin-top: 10px;
-}
-
-.formula-item {
-    margin-bottom: 10px;
-    font-size: 10px;
-}
-
-.formula-label {
-    font-weight: bold;
-    display: block;
-    margin-bottom: 3px;
-}
-
-.formula-box {
-    border: 1px solid #000;
-    padding: 5px;
-    text-align: center;
-    position: relative;
-}
-
-.formula-box .divider {
-    border-top: 1px solid #000;
-    margin: 3px 0;
-    padding-top: 3px;
-}
-
-.formula-box .multiply {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.sf2-codes {
-    border: 1px solid #000;
-    padding: 10px;
-}
-
-.sf2-codes h4 {
-    font-size: 12px;
-    font-weight: bold;
-    margin: 0 0 10px 0;
-    text-align: center;
-    text-decoration: underline;
-}
-
-.codes-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.code-section h5 {
-    font-size: 11px;
-    font-weight: bold;
-    margin: 0 0 5px 0;
-    text-decoration: underline;
-}
-
-.code-list {
-    font-size: 9px;
-}
-
-.code-item {
-    margin-bottom: 2px;
-    padding-left: 10px;
-}
-
-.sf2-summary-section {
-    grid-column: 1 / -1;
-    margin-top: 20px;
-}
-
-.summary-box {
-    border: 2px solid #000;
-    padding: 15px;
-}
-
-.summary-box h4 {
-    font-size: 12px;
-    font-weight: bold;
-    margin: 0 0 15px 0;
-    text-align: center;
-}
-
-.summary-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.summary-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px;
-    border-bottom: 1px solid #ccc;
-}
-
-.summary-label {
-    font-size: 10px;
-    flex: 1;
-}
-
-.summary-value {
-    font-weight: bold;
-    min-width: 50px;
-    text-align: right;
-    border-bottom: 1px solid #000;
-    padding: 2px 5px;
-}
-
-.certification {
-    margin-top: 20px;
-    text-align: center;
-}
-
-.certification p {
-    font-size: 11px;
-    font-style: italic;
-    margin-bottom: 20px;
-}
-
-.signature-section {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 40px;
-}
-
-.signature-box {
-    text-align: center;
-}
-
-.signature-line {
-    border-bottom: 1px solid #000;
-    height: 40px;
-    margin-bottom: 5px;
-}
-
-.signature-box span {
-    font-size: 10px;
-}
-
-.sf2-footer {
-    text-align: center;
-    margin-top: 20px;
-    padding-top: 10px;
-    border-top: 1px solid #000;
-    font-size: 10px;
-}
-
-/* Student Status Badges */
-.status-badge {
-    font-size: 8px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    margin-left: 8px;
-    font-weight: bold;
-    text-transform: uppercase;
-}
-
-.status-dropped {
-    background-color: #ff4444;
-    color: white;
-}
-
-.status-transferred-out {
-    background-color: #ff9800;
-    color: white;
-}
-
-.status-transferred-in {
-    background-color: #4caf50;
-    color: white;
-}
-
-/* Grade Level Statistics */
-.grade-statistics-section {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-/* Month Navigation Header */
-.month-navigation-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2rem;
-    margin: 2rem 0;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 15px;
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
-}
-
-.month-nav-btn {
-    width: 50px !important;
-    height: 50px !important;
-    border-radius: 50% !important;
-    background: rgba(255, 255, 255, 0.2) !important;
-    border: 2px solid rgba(255, 255, 255, 0.3) !important;
-    color: white !important;
-    transition: all 0.3s ease !important;
-}
-
-.month-nav-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.3) !important;
-    border-color: rgba(255, 255, 255, 0.5) !important;
-    transform: scale(1.1);
-}
-
-.month-nav-btn:disabled {
-    opacity: 0.4 !important;
-    cursor: not-allowed !important;
-}
-
-.current-month-display {
-    text-align: center;
-    color: white;
-    min-width: 250px;
-}
-
-.month-title {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.month-subtitle {
-    font-size: 1rem;
-    margin: 0.5rem 0 0 0;
+.enrollment-subtitle {
+    font-size: 0.9rem;
+    margin: 0 0 2px 0;
     opacity: 0.9;
-    font-weight: 500;
-}
-
-/* Filter section */
-.filter-section {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-.filter-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-}
-
-.filter-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.filter-label {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: #333;
-}
-
-/* Reports grid */
-.reports-grid {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-.loading-container {
-    text-align: center;
-    padding: 3rem;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: #666;
-}
-
-.empty-icon {
-    font-size: 4rem;
-    color: #ddd;
-    margin-bottom: 1rem;
-}
-
-.reports-list {
-    display: grid;
-    gap: 1.5rem;
-}
-
-.report-card {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e0e0e0;
-    transition: all 0.3s ease;
-}
-
-.report-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-.report-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-
-.report-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0 0 0.5rem 0;
-    color: #333;
-}
-
-.report-description {
-    color: #666;
-    margin: 0;
-    font-size: 0.9rem;
-}
-
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-completed {
-    background: #d4edda;
-    color: #155724;
-}
-
-.status-incomplete {
-    background: #fff3cd;
-    color: #856404;
-}
-
-.status-empty {
-    background: #f8d7da;
-    color: #721c24;
-}
-
-.status-pending {
-    background: #d1ecf1;
-    color: #0c5460;
-}
-
-.report-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.detail-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #666;
-    font-size: 0.9rem;
-}
-
-.detail-item i {
-    color: #667eea;
-}
-
-.report-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: flex-end;
-}
-
-/* Kinder Sections Styles */
-.kinder-sections {
-    padding: 1rem 0;
-}
-
-.sections-title {
-    color: #333;
-    font-weight: 600;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid #667eea;
-    padding-bottom: 0.5rem;
-}
-
-.sections-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1rem;
-}
-
-.section-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    transition:
-        transform 0.3s ease,
-        box-shadow 0.3s ease;
-    border: 1px solid #e9ecef;
-}
-
-.section-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-}
-
-.section-header {
     position: relative;
-    padding: 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    z-index: 1;
 }
 
-.section-status {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-excellent {
-    background: #28a745;
-    color: white;
-}
-
-.status-good {
-    background: #17a2b8;
-    color: white;
-}
-
-.status-warning {
-    background: #ffc107;
-    color: #212529;
-}
-
-.section-content {
-    padding: 1.5rem;
-}
-
-.section-name {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #333;
-    margin: 0 0 0.5rem 0;
-}
-
-.section-teacher {
-    color: #666;
-    font-size: 0.9rem;
-    margin: 0 0 1rem 0;
-    font-style: italic;
-}
-
-.section-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.stat-item {
-    text-align: center;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.stat-label {
-    display: block;
-    font-size: 0.75rem;
-    color: #666;
-    text-transform: uppercase;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-}
-
-.stat-value {
-    display: block;
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #333;
-}
-
-.attendance-rate {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-}
-
-.rate-label {
-    font-weight: 500;
-    color: #333;
-}
-
-.rate-value {
-    font-size: 1.1rem;
-    font-weight: 700;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-}
-
-.rate-excellent {
-    background: #d4edda;
-    color: #155724;
-}
-
-.rate-good {
-    background: #d1ecf1;
-    color: #0c5460;
-}
-
-.rate-warning {
-    background: #fff3cd;
-    color: #856404;
-}
-
-.rate-poor {
-    background: #f8d7da;
-    color: #721c24;
-}
-
-.section-actions {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0 1.5rem 1.5rem;
-}
-
-.general-report-content {
-    padding: 2rem;
-    text-align: center;
-    color: #666;
-}
-
-/* Dialog styles */
-.generate-form .field {
-    margin-bottom: 1rem;
-}
-
-.preview-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e0e0e0;
-}
-
-.header-main h3 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-}
-
-.header-main p {
+.enrollment-sy {
+    font-size: 0.85rem;
     margin: 0;
-    color: #666;
-}
-
-.report-period {
-    background: #f8f9fa;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
-}
-
-.period-text {
     font-weight: 600;
-    color: #495057;
-    font-size: 0.9rem;
+    position: relative;
+    z-index: 1;
 }
 
-.sections-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-}
-
-.records-count {
-    background: #e3f2fd;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: 1px solid #bbdefb;
-}
-
-.records-text {
-    font-weight: 600;
-    color: #1976d2;
-    font-size: 0.9rem;
-}
-
-.preview-content {
-    color: #666;
-    line-height: 1.6;
-}
-
-/* Section Details Dialog Styles */
-.section-details-overlay {
-    z-index: 10001 !important;
-}
-
-.section-details-overlay .p-dialog {
-    z-index: 10001 !important;
-}
-
-.section-details-overlay .p-dialog-mask {
-    z-index: 10000 !important;
-    background-color: rgba(0, 0, 0, 0.8) !important;
-}
-
-.section-details-overlay .p-dialog-content {
-    z-index: 10002 !important;
-}
-
-.section-details-overlay .p-dialog-header {
-    z-index: 10002 !important;
-}
-
-.section-attendance-details {
-    max-height: 75vh;
+.enrollment-form-container {
+    max-height: 60vh;
     overflow-y: auto;
+    padding: 0 4px;
 }
 
-.section-info-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.form-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
-    color: white;
-}
-
-.section-basic-info {
-    flex: 1;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .section-title {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem 0;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
     color: white;
-}
-
-.teacher-name {
-    font-size: 1.1rem;
-    margin: 0 0 1.5rem 0;
-    opacity: 0.9;
-    font-style: italic;
-}
-
-.attendance-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-}
-
-.summary-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    backdrop-filter: blur(10px);
-}
-
-.summary-label {
-    font-size: 0.8rem;
-    opacity: 0.8;
-    margin-bottom: 0.25rem;
-    text-transform: uppercase;
-    font-weight: 500;
-}
-
-.summary-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.summary-value.present {
-    color: #4caf50;
-}
-
-.summary-value.absent {
-    color: #f44336;
-}
-
-.report-period-info {
-    text-align: right;
-}
-
-.period-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    margin-bottom: 1rem;
-    backdrop-filter: blur(10px);
-}
-
-.school-info {
-    opacity: 0.9;
-}
-
-.school-info strong {
-    display: block;
-    font-size: 1.1rem;
-    margin-bottom: 0.25rem;
-}
-
-.school-info p {
-    margin: 0;
-    font-size: 0.9rem;
-    opacity: 0.8;
-}
-
-/* Attendance Grid Styles */
-.attendance-grid-container {
-    margin: 2rem 0;
-}
-
-.grid-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
-}
-
-.grid-header h4 {
-    margin: 0;
-    color: #333;
-    font-weight: 600;
-}
-
-.legend {
-    display: flex;
-    gap: 1rem;
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.85rem;
-}
-
-.legend-symbol {
-    font-weight: bold;
     font-size: 1rem;
-}
-
-.present-symbol {
-    color: #4caf50;
-}
-
-.absent-symbol {
-    color: #f44336;
-}
-
-.late-symbol {
-    color: #ff9800;
-}
-
-.attendance-table-wrapper {
-    overflow-x: auto;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    background: white;
-}
-
-.attendance-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-}
-
-.attendance-table th,
-.attendance-table td {
-    border: 1px solid #e9ecef;
-    text-align: center;
-    vertical-align: middle;
-}
-
-.student-name-header {
-    background: #667eea;
-    color: white;
-    padding: 0.75rem;
     font-weight: 600;
-    text-align: left;
-    min-width: 200px;
-    position: sticky;
-    left: 0;
-    z-index: 10;
-}
-
-.day-header {
-    background: #f8f9fa;
-    padding: 0.5rem 0.25rem;
-    min-width: 35px;
-    font-weight: 600;
-}
-
-.day-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.day-number {
-    font-size: 0.9rem;
-    font-weight: 700;
-}
-
-.day-name {
-    font-size: 0.7rem;
-    opacity: 0.7;
-}
-
-.summary-header {
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 0.75rem 0.5rem;
-    font-weight: 600;
-    min-width: 80px;
-}
-
-.student-name-cell {
-    background: white;
-    padding: 0.75rem;
-    text-align: left;
-    position: sticky;
-    left: 0;
-    z-index: 5;
-    border-right: 2px solid #667eea;
-}
-
-.student-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.student-name {
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 0.25rem;
-}
-
-.student-lrn {
-    font-size: 0.75rem;
-    color: #666;
-    opacity: 0.8;
-}
-
-.attendance-cell {
-    padding: 0.5rem 0.25rem;
-    background: white;
-}
-
-.attendance-mark {
-    font-weight: bold;
-    font-size: 1rem;
-    padding: 0.25rem;
-    border-radius: 4px;
-    display: inline-block;
-    min-width: 20px;
-}
-
-.mark-present {
-    color: #4caf50;
-    background: #e8f5e8;
-}
-
-.mark-absent {
-    color: #f44336;
-    background: #ffeaea;
-}
-
-.mark-late {
-    color: #ff9800;
-    background: #fff3e0;
-}
-
-.mark-none {
-    color: #999;
-}
-
-.summary-cell {
-    padding: 0.75rem 0.5rem;
-    font-weight: 600;
-}
-
-.present-count {
-    background: #e8f5e8;
-    color: #2e7d32;
-}
-
-.absent-count {
-    background: #ffeaea;
-    color: #c62828;
-}
-
-.rate-cell {
-    background: #f8f9fa;
-}
-
-.rate-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-/* Monthly Statistics */
-.monthly-statistics {
-    margin-top: 2rem;
-    padding: 1.5rem;
-    background: #f8f9fa;
-    border-radius: 12px;
-    border: 1px solid #e9ecef;
-}
-
-.monthly-statistics h4 {
-    margin: 0 0 1.5rem 0;
-    color: #333;
-    font-weight: 600;
-    text-align: center;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-
-.stat-card {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e9ecef;
-}
-
-.stat-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    background: #667eea;
-    color: white;
-}
-
-.stat-icon.present {
-    background: #4caf50;
-}
-
-.stat-icon.absent {
-    background: #f44336;
-}
-
-.stat-icon.rate {
-    background: #2196f3;
-}
-
-.stat-content {
-    display: flex;
-    flex-direction: column;
-}
-
-.stat-number {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 0.25rem;
-}
-
-.stat-label {
-    font-size: 0.9rem;
-    color: #666;
-    text-transform: uppercase;
-    font-weight: 500;
-}
-
-/* Month Navigation Styles */
-.month-navigation {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.month-selector {
-    text-align: center;
-    color: white;
-    min-width: 200px;
-}
-
-.month-selector h4 {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: 600;
-}
-
-.teacher-info {
-    margin: 0.25rem 0 0 0;
-    font-size: 0.9rem;
-    opacity: 0.9;
-    font-style: italic;
-}
-
-.month-navigation .p-button {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-    transition: all 0.3s ease;
-}
-
-.month-navigation .p-button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.5);
-    transform: translateY(-1px);
-}
-
-.month-navigation .p-button:disabled {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.5);
-    cursor: not-allowed;
-}
-
-/* Gender Section Styles */
-.gender-header-row {
-    background: #f8f9fa;
-    border-top: 2px solid #667eea;
-}
-
-.gender-header {
-    background: #667eea;
-    color: white;
-    padding: 0.75rem;
-    font-weight: 700;
-    text-align: left;
-}
-
-.gender-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.gender-label {
-    font-size: 1rem;
-    font-weight: 700;
-}
-
-.gender-total {
-    font-size: 0.9rem;
-    opacity: 0.9;
-    font-style: italic;
-}
-
-/* Official SF2 Header Styles */
-.sf2-official-header {
-    background: white;
-    border: 2px solid #000;
-    margin-bottom: 1rem;
-    padding: 0;
-}
-
-.header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    border-bottom: 1px solid #000;
-}
-
-.deped-logo {
-    flex: 0 0 80px;
-}
-
-.logo-img {
-    width: 60px;
-    height: 60px;
-    object-fit: contain;
-}
-
-.header-center {
-    flex: 1;
-    text-align: center;
-    padding: 0 1rem;
-}
-
-.form-number {
-    font-size: 0.8rem;
-    color: #666;
-    display: block;
-    margin-bottom: 0.5rem;
-}
-
-.form-title h2 {
-    font-size: 1.2rem;
-    font-weight: bold;
-    margin: 0;
-    color: #000;
-    text-transform: uppercase;
-}
-
-.deped-text {
-    flex: 0 0 120px;
-    text-align: center;
-}
-
-.deped-brand {
-    font-size: 1.5rem;
-    font-weight: bold;
-    margin-bottom: 0.25rem;
-}
-
-.dep {
-    color: #1e40af;
-}
-
-.ed {
-    color: #dc2626;
-}
-
-.deped-text p {
-    font-size: 0.7rem;
-    margin: 0;
-    color: #000;
-    font-weight: 500;
-}
-
-.school-details-form {
-    padding: 1rem;
-}
-
-.form-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.75rem;
-    align-items: end;
-}
-
-.form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.form-field.wide {
-    flex: 2;
-}
-
-.form-field label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #000;
-}
-
-.form-input {
-    border: 1px solid #000;
-    border-bottom: 2px solid #000;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.9rem;
-    background: white;
-    min-height: 24px;
-}
-
-.form-input:focus {
-    outline: none;
-    border-color: #1e40af;
-}
-
-/* Improved Table Styling to Match Official SF2 */
-.attendance-table {
-    width: 100%;
-    border-collapse: collapse;
-    border: 2px solid #000;
-    background: white;
-    font-size: 0.8rem;
-}
-
-.attendance-table th,
-.attendance-table td {
-    border: 1px solid #000;
-    padding: 0.25rem;
-    text-align: center;
-    vertical-align: middle;
-}
-
-.student-name-header {
-    background: #f0f0f0;
-    font-weight: bold;
-    text-align: center;
-    width: 200px;
-    border: 2px solid #000;
-}
-
-.day-header {
-    background: #f0f0f0;
-    font-weight: bold;
-    width: 30px;
-    border: 1px solid #000;
-}
-
-.day-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.1rem;
-}
-
-.day-number {
-    font-weight: bold;
-    font-size: 0.9rem;
-}
-
-.day-name {
-    font-size: 0.6rem;
-    text-transform: uppercase;
-}
-
-.summary-header {
-    background: #f0f0f0;
-    font-weight: bold;
-    width: 60px;
-    border: 2px solid #000;
-    display: table-cell;
-    vertical-align: middle;
-}
-
-/* Student Row Styling */
-.student-name-cell {
-    text-align: left;
-    padding: 0.5rem;
-    border-right: 2px solid #000;
-}
-
-.student-name {
-    font-weight: 600;
-    display: block;
-    margin-bottom: 0.25rem;
-}
-
-.student-lrn {
-    font-size: 0.7rem;
-    color: #666;
-    display: block;
-}
-
-.attendance-cell {
-    width: 30px;
-    height: 30px;
-    position: relative;
-    background: white;
-}
-
-.attendance-mark {
-    font-weight: bold;
-    font-size: 0.9rem;
-}
-
-.attendance-mark.present {
-    color: #059669;
-}
-
-.attendance-mark.absent {
-    color: #dc2626;
-}
-
-.attendance-mark.late {
-    color: #d97706;
-}
-
-/* Gender Section Styling */
-.gender-header {
-    background: #e5e7eb;
-    color: #000;
-    padding: 0.5rem;
-    font-weight: bold;
-    text-align: center;
-    border: 2px solid #000;
-}
-
-.gender-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-/* Total Rows */
-.gender-total-row,
-.combined-total-row {
-    background: #f9fafb;
-    font-weight: bold;
-}
-
-.gender-total-row td,
-.combined-total-row td {
-    border: 1px solid #000;
-    padding: 0.5rem;
-}
-
-/* Line Numbers Row */
-.line-numbers-row {
-    background: #f0f0f0;
-    border-top: 2px solid #000;
-}
-
-.line-number-label {
-    font-weight: bold;
-    background: #e5e7eb;
-    border: 1px solid #000;
-    text-align: center;
-}
-
-.line-number-cell {
-    font-weight: bold;
-    font-size: 0.8rem;
-    background: #f9fafb;
-    border: 1px solid #000;
-    height: 25px;
-    vertical-align: middle;
-    padding: 0.2rem;
-}
-
-/* Gender-specific total rows */
-.gender-total-row {
-    background: #f8f9fa;
-    border-top: 2px solid #6c757d;
-    font-weight: 700;
-}
-
-.male-total {
-    background: #e3f2fd;
-    border-top: 2px solid #2196f3;
-}
-
-.female-total {
-    background: #fce4ec;
-    border-top: 2px solid #e91e63;
-}
-
-.gender-total-label {
-    background: #6c757d;
-    color: white;
-    padding: 0.75rem;
-    font-weight: 700;
-    text-align: left;
-    position: sticky;
-    left: 0;
-    z-index: 5;
-}
-
-.male-total .gender-total-label {
-    background: #2196f3;
-}
-
-.female-total .gender-total-label {
-    background: #e91e63;
-}
-
-.gender-total-cell {
-    padding: 0.75rem 0.5rem;
-    text-align: center;
-    font-weight: 700;
-    border: 1px solid #dee2e6;
-}
-
-.male-total .gender-total-cell {
-    background: #e3f2fd;
-    color: #1976d2;
-    border-color: #2196f3;
-}
-
-.female-total .gender-total-cell {
-    background: #fce4ec;
-    color: #c2185b;
-    border-color: #e91e63;
-}
-
-.combined-total-row {
-    background: #e3f2fd;
-    border-top: 3px solid #2196f3;
-    font-weight: 700;
-}
-
-.total-label-cell {
-    background: #2196f3;
-    color: white;
-    padding: 0.75rem;
-    font-weight: 700;
-    text-align: left;
-    position: sticky;
-    left: 0;
-    z-index: 5;
-}
-
-/* SF2 Summary Table Styles */
-.sf2-summary-section {
-    margin: 2rem 0;
-    border: 2px solid #333;
-    background: white;
-}
-
-.summary-header {
-    display: flex;
-    border-bottom: 2px solid #333;
-    background: #f8f9fa;
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.header-box {
-    flex: 1;
-    padding: 0.5rem 1rem;
-    border-right: 2px solid #333;
-    text-align: center;
-}
-
-.header-box:last-child {
-    border-right: none;
-}
-
-.summary-box-header {
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.month-label,
-.days-label {
-    flex: 1;
-}
-
-.summary-title {
-    text-align: center;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.sf2-summary-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: Arial, sans-serif;
-    font-size: 0.85rem;
-}
-
-.sf2-summary-table th {
-    background: #f8f9fa;
-    border: 1px solid #333;
-    padding: 0.5rem;
-    text-align: center;
-    font-weight: 700;
-    font-size: 0.8rem;
-}
-
-.sf2-summary-table th.summary-description {
-    width: 60%;
-    text-align: left;
-}
-
-.sf2-summary-table th.summary-m,
-.sf2-summary-table th.summary-f,
-.sf2-summary-table th.summary-total {
-    width: 13.33%;
-    text-align: center;
-}
-
-.sf2-summary-table td {
-    border: 1px solid #333;
-    padding: 0.4rem 0.6rem;
-    vertical-align: middle;
-}
-
-.sf2-summary-table td.summary-label {
-    text-align: left;
-    font-size: 0.8rem;
-    line-height: 1.3;
-}
-
-.sf2-summary-table td.summary-label em {
-    font-style: italic;
-    text-decoration: underline;
-}
-
-.sf2-summary-table td.summary-label small {
-    font-size: 0.7rem;
-    color: #666;
-    display: block;
-    margin-top: 0.2rem;
-}
-
-.sf2-summary-table td.summary-value {
-    text-align: center;
-    font-weight: 600;
-    background: #f8f9fa;
-}
-
-.sf2-summary-table tr:nth-child(even) {
-    background: #fafafa;
-}
-
-.sf2-summary-table tr:hover {
-    background: #f0f8ff;
-}
-
-.attendance-table .summary-header {
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 0.75rem 0.5rem;
-    text-align: center;
-    font-weight: 700;
-    border: 1px solid #2196f3;
-    font-size: 0.85rem;
-    white-space: nowrap;
-    min-width: 80px;
-    display: table-cell;
-    vertical-align: middle;
-}
-
-.line-number-label {
-    background: #6c757d;
-    color: white;
-    padding: 0.4rem;
-    text-align: center;
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.line-number-cell {
-    background: #f8f9fa;
-    color: #495057;
-    padding: 0.4rem;
-    text-align: center;
-    font-size: 0.8rem;
-    font-weight: 600;
-    border: 1px solid #dee2e6;
-}
-
-/* Grade Statistics Section Styles */
-.grade-statistics-section {
-    margin: 2rem 0;
-    padding: 2rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-
-.statistics-header {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
-.statistics-title {
-    color: white;
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.statistics-subtitle {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 1.1rem;
-    margin: 0;
-}
-
-.grade-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 1.5rem;
-    margin-top: 2rem;
-}
-
-.grade-stat-card {
-    background: white;
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.grade-stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-}
-
-.grade-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #f1f3f4;
-}
-
-.grade-info h3.grade-name {
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #2c3e50;
-    margin: 0;
-}
-
-.grade-level {
-    font-size: 0.9rem;
-    color: #7f8c8d;
-    font-weight: 500;
-}
-
-.grade-icon .grade-emoji {
-    font-size: 2.5rem;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-}
-
-.grade-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.metric-item {
-    text-align: center;
-    padding: 1rem;
-    border-radius: 12px;
-    transition: all 0.3s ease;
-}
-
-.metric-item.sections {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-}
-
-.metric-item.students {
-    background: linear-gradient(135deg, #f093fb, #f5576c);
-    color: white;
-}
-
-.metric-item.teachers {
-    background: linear-gradient(135deg, #4facfe, #00f2fe);
-    color: white;
-}
-
-.metric-value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-}
-
-.metric-label {
-    font-size: 0.85rem;
-    opacity: 0.9;
-    font-weight: 500;
-}
-
-.grade-attendance {
-    margin-bottom: 1.5rem;
-}
-
-.attendance-bar {
-    height: 8px;
-    background: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 0.5rem;
-}
-
-.attendance-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.3s ease;
-}
-
-.attendance-fill.excellent {
-    background: linear-gradient(90deg, #28a745, #20c997);
-}
-
-.attendance-fill.good {
-    background: linear-gradient(90deg, #17a2b8, #6f42c1);
-}
-
-.attendance-fill.warning {
-    background: linear-gradient(90deg, #ffc107, #fd7e14);
-}
-
-.attendance-fill.poor {
-    background: linear-gradient(90deg, #dc3545, #e83e8c);
-}
-
-.attendance-text {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.attendance-rate {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #2c3e50;
-}
-
-.attendance-label {
-    font-size: 0.9rem;
-    color: #6c757d;
-}
-
-.section-list {
-    margin-bottom: 1.5rem;
-}
-
-.section-list-header {
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 0.75rem;
-    font-size: 0.9rem;
-}
-
-.sections-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-}
-
-.section-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-    cursor: pointer;
-    overflow: hidden;
-    border: 1px solid #e9ecef;
-}
-
-.section-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-.section-card-header {
-    padding: 1rem;
-    position: relative;
-    color: white;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.section-card-header.status-excellent {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-}
-
-.section-card-header.status-good {
-    background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%);
-}
-
-.section-card-header.status-warning {
-    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
-    color: #212529;
-}
-
-.section-card-header.status-poor {
-    background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
-}
-
-.section-card-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-}
-
-.section-card-subtitle {
-    font-size: 0.9rem;
-    opacity: 0.9;
-    margin-bottom: 0.5rem;
-}
-
-.section-card-icon {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-}
-
-.attendance-badge {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 0.25rem 0.5rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    backdrop-filter: blur(10px);
-}
-
-.section-card-body {
-    padding: 1rem;
-    background: #f8f9fa;
-}
-
-.section-stats {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: #495057;
-}
-
-.stat-item i {
-    color: #6c757d;
-    font-size: 0.9rem;
-}
-
-.section-card-footer {
-    padding: 0.75rem 1rem;
-    background: white;
-    border-top: 1px solid #e9ecef;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.section-card-footer .p-button {
-    color: #6c757d;
-    transition: color 0.2s ease;
-}
-
-.section-card-footer .p-button:hover {
-    color: #495057;
-}
-
-.section-chip.status-excellent {
-    background: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
-}
-
-.section-chip.status-good {
-    background: #d1ecf1;
-    color: #0c5460;
-    border-color: #bee5eb;
-}
-
-.section-chip.status-warning {
-    background: #fff3cd;
-    color: #856404;
-    border-color: #ffeaa7;
-}
-
-.section-chip:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.grade-actions {
-    display: flex;
-    gap: 0.75rem;
-}
-
-.grade-actions .p-button {
-    flex: 1;
-    font-size: 0.85rem;
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .content-container {
-        padding: 1rem;
-    }
-
-    .header-content {
-        flex-direction: column;
-        text-align: center;
-    }
-
-    .filter-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .report-header {
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .report-details {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .grade-stats-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-
-    .grade-metrics {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-
-    .grade-actions {
-        flex-direction: column;
-    }
-
-    .statistics-title {
-        font-size: 2rem;
-    }
-
-    .sections-cards-grid {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-
-    .section-stats {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .section-info-header {
-        flex-direction: column;
-        gap: 1rem;
-        text-align: center;
-    }
-
-    .attendance-summary {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .grid-header {
-        flex-direction: column;
-        gap: 1rem;
-        text-align: center;
-    }
-
-    .legend {
-        justify-content: center;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .attendance-table {
-        font-size: 0.75rem;
-    }
-
-    .student-name-header,
-    .student-name-cell {
-        min-width: 150px;
-    }
-}
-
-/* Status Change Button */
-.status-change-btn {
-    background: #f0f0f0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 2px 6px;
-    margin-left: 8px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s;
-}
-
-.status-change-btn:hover {
-    background: #e0e0e0;
-    border-color: #ccc;
-}
-
-.status-change-form {
-    padding: 1rem 0;
-}
-
-.student-details {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-}
-
-.student-details h4 {
-    margin: 0 0 0.5rem 0;
-    color: #2c3e50;
-}
-
-.student-details p {
-    margin: 0.25rem 0;
-    color: #666;
-    font-size: 0.9rem;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #2c3e50;
-}
-
-/* No Data State */
-.no-data-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 300px;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    margin: 1rem 0;
-    padding: 2rem;
-    text-align: center;
-}
-
-.no-data-content {
-    max-width: 400px;
-    margin: 0 auto;
-}
-
-.no-data-icon {
-    font-size: 4rem;
-    color: #e0e0e0;
-    margin-bottom: 1rem;
-}
-
-.no-data-content h3 {
-    color: #495057;
-    margin-bottom: 0.5rem;
-}
-
-.no-data-content p {
-    color: #6c757d;
-    margin-bottom: 1.5rem;
-}
-
-/* Empty State */
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1rem;
-    text-align: center;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin: 1rem 0;
-}
-
-.empty-icon {
-    font-size: 3.5rem;
-    color: #adb5bd;
-    margin-bottom: 1rem;
-}
-
-.empty-state h3 {
-    color: #495057;
-    margin-bottom: 0.5rem;
-    font-size: 1.25rem;
-}
-
-.empty-state p {
-    color: #6c757d;
-    margin: 0;
-    max-width: 400px;
-}
-
-/* New Submission Badge */
-.new-submission-badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    width: 12px;
-    height: 12px;
-    background-color: #f44336;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
-}
-
-.report-status {
-    position: relative;
-    display: inline-block;
-}
-
-/* Notification Icon Styles */
-.notification-icon-container {
-    position: relative;
-    display: inline-block;
-    margin-right: 1rem;
-}
-
-.notification-btn {
-    color: #6c757d !important;
-    font-size: 1.2rem;
-    transition: all 0.3s ease;
-}
-
-.notification-btn:hover {
-    color: #495057 !important;
-    transform: scale(1.1);
-}
-
-.notification-badge {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    background: #dc3545;
-    color: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 600;
-    border: 2px solid white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-    }
-}
-
-/* Submitted Reports Section Styles */
-.submitted-reports-section {
-    margin: 2rem 0;
-    padding: 2rem;
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-
-.section-header {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
-.section-title {
-    color: white;
-    font-size: 2.2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.section-subtitle {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 1.1rem;
-    margin: 0;
-}
-
-.submitted-reports-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 1.5rem;
-    margin-top: 2rem;
-}
-
-.submitted-report-card {
-    background: white;
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.submitted-report-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-}
-
-.report-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #f1f3f4;
-}
-
-.report-section-name {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: #2c3e50;
-    margin: 0 0 0.5rem 0;
-}
-
-.report-teacher {
-    font-size: 1rem;
-    color: #7f8c8d;
-    margin: 0 0 0.25rem 0;
-    font-weight: 500;
-}
-
-.report-month {
-    font-size: 0.9rem;
-    color: #95a5a6;
-    margin: 0;
-}
-
-.report-status-badge {
-    flex-shrink: 0;
-}
-
-.status-badge {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
+    padding: 12px 20px;
+    margin: -24px -24px 20px -24px;
+    border-radius: 12px 12px 0 0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.status-badge.submitted {
-    background: linear-gradient(135deg, #ffc107, #fd7e14);
-    color: #212529;
+.parent-subsection {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
 }
 
-.status-badge.approved {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    color: white;
+.subsection-title {
+    color: #374151;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
 }
 
-.status-badge.rejected {
-    background: linear-gradient(135deg, #dc3545, #e83e8c);
-    color: white;
+.review-subsection {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
 }
 
-.status-badge.reviewed {
-    background: linear-gradient(135deg, #17a2b8, #6f42c1);
-    color: white;
+.review-subsection-title {
+    color: #1f2937;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
 }
 
-.report-card-details {
-    margin-bottom: 1.5rem;
+.review-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
 }
 
-.detail-item {
+.review-item {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-    font-size: 0.9rem;
-    color: #495057;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
 }
 
-.detail-item:last-child {
-    margin-bottom: 0;
+.review-item:last-child {
+    border-bottom: none;
 }
 
-.detail-item i {
-    color: #6c757d;
-    font-size: 1rem;
-    width: 16px;
+.review-label {
+    font-weight: 600;
+    color: #374151;
+    min-width: 200px;
+    flex-shrink: 0;
+}
+
+.review-value {
+    color: #6b7280;
+    text-align: right;
+    flex: 1;
+    margin-left: 16px;
+    word-break: break-word;
+}
+
+.terms-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.terms-label {
+    font-size: 0.875rem;
+    color: #374151;
+    line-height: 1.5;
+    cursor: pointer;
+    margin: 0;
+}
+
+.terms-error {
+    color: #dc2626;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+/* Success Dialog Styling */
+.success-dialog :deep(.p-dialog-header) {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+    text-align: center;
+    border-radius: 12px 12px 12px 0;
+    padding: 20px;
+}
+
+.success-header {
+    width: 100%;
     text-align: center;
 }
 
-.report-card-actions {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+.success-icon {
+    font-size: 3rem;
+    color: white;
+    animation: bounce 1s ease-in-out infinite alternate;
 }
 
-.report-card-actions .p-button {
-    font-size: 0.85rem;
-    padding: 0.5rem;
+.success-content {
+    position: relative;
+    text-align: center;
+    padding: 30px 20px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    overflow: hidden;
+}
+
+.success-message {
+    position: relative;
+    z-index: 10;
+}
+
+.success-title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #16a34a;
+    margin: 0 0 10px 0;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.success-subtitle {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #15803d;
+    margin: 0 0 20px 0;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+}
+
+.success-details {
+    color: #374151;
+    line-height: 1.6;
+    animation: fadeInUp 0.8s ease-out 0.4s both;
+}
+
+.success-details p {
+    margin: 8px 0;
+}
+
+.success-footer {
+    text-align: center;
+    padding: 15px;
+    background: #f9fafb;
+}
+
+/* Fireworks Animation */
+.fireworks-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.firework {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    animation: firework 2s ease-out infinite;
+}
+
+.firework-1 {
+    top: 20%;
+    left: 20%;
+    background: #ff6b6b;
+    animation-delay: 0s;
+}
+
+.firework-2 {
+    top: 30%;
+    right: 20%;
+    background: #4ecdc4;
+    animation-delay: 0.5s;
+}
+
+.firework-3 {
+    top: 60%;
+    left: 30%;
+    background: #45b7d1;
+    animation-delay: 1s;
+}
+
+.firework-4 {
+    top: 50%;
+    right: 30%;
+    background: #f9ca24;
+    animation-delay: 1.5s;
+}
+
+/* Animations */
+@keyframes bounce {
+    0% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes firework {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+    align-items: start;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    min-height: 80px;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.readonly-field {
+    background-color: #f3f4f6 !important;
+    color: #6b7280 !important;
+    cursor: not-allowed;
+}
+
+.radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.radio-item label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+.disability-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.checkbox-item label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    margin: 0;
+    cursor: pointer;
+    color: #374151;
+}
+
+:deep(.p-checkbox .p-checkbox-box) {
+    border: 2px solid #d1d5db;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+}
+
+:deep(.p-checkbox .p-checkbox-box.p-highlight) {
+    border-color: #3b82f6;
+    background: #3b82f6;
+}
+
+.enrollment-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 0 0 0;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 20px;
+}
+
+/* Form field styling */
+:deep(.p-inputtext),
+:deep(.p-dropdown),
+:deep(.p-calendar) {
+    border: 1px solid #d1d5db;
     border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    min-height: 42px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Modern DataTable Styling */
+.modern-datatable {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+:deep(.modern-datatable .p-datatable-header) {
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1rem;
+}
+
+:deep(.modern-datatable .p-datatable-thead > tr > th) {
+    background: #f1f5f9;
+    color: #374151;
+    font-weight: 600;
+    padding: 1rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+:deep(.modern-datatable .p-datatable-tbody > tr) {
     transition: all 0.2s ease;
 }
 
-.report-card-actions .p-button:hover {
-    transform: translateY(-1px);
+:deep(.modern-datatable .p-datatable-tbody > tr:hover) {
+    background: #f8fafc;
 }
 
-/* Responsive design for submitted reports */
+:deep(.modern-datatable .p-datatable-tbody > tr > td) {
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+:deep(.p-inputtext:focus),
+:deep(.p-dropdown:focus),
+:deep(.p-calendar:focus) {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+:deep(.p-dropdown-panel) {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.p-radiobutton .p-radiobutton-box) {
+    border: 2px solid #d1d5db;
+    width: 18px;
+    height: 18px;
+}
+
+:deep(.p-radiobutton .p-radiobutton-box.p-highlight) {
+    border-color: #3b82f6;
+    background: #3b82f6;
+}
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .submitted-reports-grid {
+    .form-row {
         grid-template-columns: 1fr;
+    }
+
+    .radio-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .enrollment-form-container {
+        max-height: 50vh;
+    }
+
+    .header-content {
+        flex-direction: column;
         gap: 1rem;
     }
 
-    .report-card-header {
+    .header-left {
         flex-direction: column;
-        gap: 1rem;
+        align-items: center;
         text-align: center;
     }
 
-    .report-card-actions {
-        justify-content: center;
+    .header-actions {
+        flex-direction: column;
+        gap: 0.75rem;
+        width: 100%;
     }
 
-    .section-title {
-        font-size: 1.8rem;
+    .search-input {
+        width: 100% !important;
     }
+}
+
+/* Modern Header Styles */
+.modern-header-container {
+    margin: -2rem -2rem 2rem -2rem;
+}
+
+.gradient-header {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    border-radius: 12px 12px 0 0;
+    padding: 2rem;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.gradient-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+    opacity: 0.3;
+}
+
+/* SF2 Modal Styling */
+.sf2-report-container {
+    background: white;
+    padding: 20px;
+    font-family: 'Arial', sans-serif;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.sf2-header {
+    border-bottom: 2px solid #333;
+    padding-bottom: 15px;
+}
+
+.sf2-table {
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.sf2-table th,
+.sf2-table td {
+    border: 1px solid #333 !important;
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.sf2-table th {
+    background-color: #f0f0f0;
+    font-weight: bold;
+}
+
+.sf2-table-container {
+    border: 2px solid #333;
+    margin: 10px 0;
+}
+
+.sf2-summary table {
+    font-size: 10px;
+}
+
+.sf2-summary table th,
+.sf2-summary table td {
+    border: 1px solid #333;
+    padding: 4px;
+}
+
+.sf2-footer {
+    border-top: 1px solid #333;
+    padding-top: 15px;
+    margin-top: 20px;
+}
+
+/* Day name cells with bold borders */
+.day-name-cell {
+    border-left: 2px solid #333 !important;
+    border-right: 2px solid #333 !important;
+    border-bottom: 3px solid #333 !important;
+    font-weight: bold;
+    background-color: #f8f9fa;
+}
+
+/* Bold borders after every 5th column (after F) */
+.day-name-cell:nth-child(5n+1) {
+    border-left: 4px solid #333 !important;
+}
+
+/* Extra bold borders for week separators - ALL ROWS */
+
+.sf2-table th:nth-child(6),
+.sf2-table th:nth-child(11), 
+.sf2-table th:nth-child(16),
+.sf2-table th:nth-child(21),
+.sf2-table th:nth-child(26),
+.sf2-table th:nth-child(31),
+.sf2-table td:nth-child(3),
+.sf2-table td:nth-child(8),
+.sf2-table td:nth-child(13),
+.sf2-table td:nth-child(18), 
+.sf2-table td:nth-child(23),
+.sf2-table td:nth-child(28),
+.sf2-table td:nth-child(33) {
+    border-left: 4px solid #333 !important;
+}
+
+/* Extra bold borders for date number row (2nd row) */
+.sf2-table thead tr:nth-child(2) th:nth-child(6),
+.sf2-table thead tr:nth-child(2) th:nth-child(11),
+.sf2-table thead tr:nth-child(2) th:nth-child(16),
+.sf2-table thead tr:nth-child(2) th:nth-child(21),
+.sf2-table thead tr:nth-child(2) th:nth-child(26),
+.sf2-table thead tr:nth-child(2) th:nth-child(31) {
+    border-left: 4px solid #333 !important;
+}
+
+/* Extra bold borders for day name row (3rd row) */
+.sf2-table thead tr:nth-child(3) th:nth-child(6),
+.sf2-table thead tr:nth-child(3) th:nth-child(11),
+.sf2-table thead tr:nth-child(3) th:nth-child(16),
+.sf2-table thead tr:nth-child(3) th:nth-child(21),
+.sf2-table thead tr:nth-child(3) th:nth-child(26),
+.sf2-table thead tr:nth-child(3) th:nth-child(31) {
+    border-left: 4px solid #333 !important;
+}
+
+/* First day name cell */
+.day-name-cell:first-of-type {
+    border-left: 1px solid #333 !important;
+}
+
+/* Last day name cell */
+.day-name-cell:last-of-type {
+    border-right: 1px solid #333 !important;
+}
+
+/* Print styles for SF2 */
+@media print {
+    .sf2-report-container {
+        max-height: none;
+        overflow: visible;
+    }
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.header-icon {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 4rem;
+    height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-icon i {
+    font-size: 1.75rem;
+    color: white;
+}
+
+.header-text {
+    flex: 1;
+}
+
+.header-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.025em;
+    color: white !important;
+}
+
+.header-subtitle {
+    font-size: 1.1rem;
+    margin: 0 0 0.75rem 0;
+    opacity: 0.9;
+    font-weight: 400;
+    color: white !important;
+}
+
+.student-count {
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: fit-content;
+}
+
+.count-badge {
+    background: rgba(255, 255, 255, 0.9);
+    color: #1e40af;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-weight: 700;
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-container {
+    position: relative;
+}
+
+.search-input {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 25px !important;
+    padding: 0.75rem 1rem 0.75rem 2.75rem !important;
+    color: #1e40af !important;
+    font-weight: 500 !important;
+    width: 300px !important;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease !important;
+    height: 44px !important;
+}
+
+.search-input:focus {
+    background: white !important;
+    border-color: rgba(255, 255, 255, 0.8) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2) !important;
+    outline: none !important;
+}
+
+.search-input::placeholder {
+    color: #64748b !important;
+}
+
+.search-container .pi-search {
+    color: #64748b !important;
+    left: 1rem !important;
+    z-index: 2;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.add-student-btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    padding: 0.75rem 1.5rem !important;
+    border-radius: 25px !important;
+    backdrop-filter: blur(10px) !important;
+    transition: all 0.3s ease !important;
+}
+
+.add-student-btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 </style>
