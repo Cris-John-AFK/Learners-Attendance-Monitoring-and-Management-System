@@ -369,6 +369,12 @@ Route::prefix('teacher')->group(function () {
     Route::get('/profile', [TeacherAuthController::class, 'profile']);
 });
 
+// Geographic Attendance Analytics routes
+Route::prefix('geographic-attendance')->group(function () {
+    Route::get('/heatmap-data', [\App\Http\Controllers\API\GeographicAttendanceController::class, 'getGeographicAttendanceData']);
+    Route::get('/area-summary', [\App\Http\Controllers\API\GeographicAttendanceController::class, 'getAttendanceSummaryByArea']);
+});
+
 // Attendance Records routes (simplified direct database access)
 Route::prefix('attendance-records')->group(function () {
     Route::get('/section/{sectionId}', [\App\Http\Controllers\API\AttendanceRecordsController::class, 'getAttendanceRecords']);
@@ -414,12 +420,23 @@ Route::prefix('guardhouse')->group(function () {
     Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
     Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
     
+    // Scanner control routes (Admin functionality)
+    Route::post('/toggle-scanner', [GuardhouseController::class, 'toggleScanner']);
+    Route::get('/scanner-status', [GuardhouseController::class, 'getScannerStatus']);
+    
     // New routes for GuardHouse Reports Admin Page
     Route::get('/live-feed', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getLiveFeed']);
-    Route::post('/toggle-scanner', [App\Http\Controllers\API\GuardhouseReportsController::class, 'toggleScanner']);
     Route::post('/archive-session', [App\Http\Controllers\API\GuardhouseReportsController::class, 'archiveSession']);
     Route::get('/archived-sessions', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getArchivedSessions']);
     Route::get('/session-records/{sessionId}', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getSessionRecords']);
+});
+
+// School Calendar routes
+Route::prefix('calendar')->group(function () {
+    Route::get('/events', [App\Http\Controllers\API\SchoolCalendarController::class, 'index']);
+    Route::post('/events', [App\Http\Controllers\API\SchoolCalendarController::class, 'store']);
+    Route::put('/events/{id}', [App\Http\Controllers\API\SchoolCalendarController::class, 'update']);
+    Route::delete('/events/{id}', [App\Http\Controllers\API\SchoolCalendarController::class, 'destroy']);
 });
 
 // Smart Attendance Analytics Routes

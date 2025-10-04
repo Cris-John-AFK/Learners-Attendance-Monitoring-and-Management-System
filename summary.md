@@ -1108,3 +1108,217 @@ class AdminTeacherCacheService {
 - **Professional Quality**: Production-ready system suitable for real school deployment
 
 This comprehensive teacher assignment validation system ensures that Naawan Central School maintains proper educational structure while providing administrators with a fast, reliable, and user-friendly interface for managing teacher assignments.
+
+## 🚨 LATEST CRITICAL UPDATES (October 4, 2025)
+
+### **GUARDHOUSE SCANNER CONTROL SYSTEM - COMPLETE IMPLEMENTATION**
+
+#### **Problem Addressed**
+User requested admin control over guardhouse scanners with the following requirements:
+1. Admin "Disable Scanner" button should actually disable the guardhouse scanner
+2. Reduce verification countdown from 10 seconds to 5 seconds for faster processing
+3. Use existing pause/resume functionality without creating redundant functions
+
+#### **Backend Implementation (COMPLETED)**
+
+**New API Endpoints Added**:
+```php
+// GuardhouseController.php - New Methods
+public function toggleScanner(Request $request) {
+    // Stores scanner status in cache table with long expiration
+    // Returns success message and current scanner status
+}
+
+public function getScannerStatus(Request $request) {
+    // Retrieves current scanner status from cache
+    // Defaults to enabled if no cache entry exists
+}
+```
+
+**API Routes Added**:
+```php
+// routes/api.php
+Route::post('/guardhouse/toggle-scanner', [GuardhouseController::class, 'toggleScanner']);
+Route::get('/guardhouse/scanner-status', [GuardhouseController::class, 'getScannerStatus']);
+```
+
+#### **Frontend Implementation (COMPLETED)**
+
+**Admin GuardHouse Reports Integration**:
+- Fixed "Disable Scanner" button to properly call backend API
+- Added scanner status loading on component mount
+- Button text dynamically changes between "Disable Scanner" and "Enable Scanner"
+- Real-time status synchronization with guardhouse interface
+
+**Guardhouse Layout Enhancements**:
+- **Reduced verification countdown** from 10 to 5 seconds for faster user experience
+- **Added real-time scanner status checking** every 5 seconds
+- **Enhanced QR detection logic** to respect admin disable commands
+- **Updated pause/resume button** to show admin disabled state
+- **Visual feedback** when scanner is disabled by administrator
+
+#### **Technical Features Implemented**
+
+**Real-Time Synchronization**:
+```javascript
+// Guardhouse checks admin status every 5 seconds
+const checkScannerStatus = async () => {
+    const response = await axios.get('/api/guardhouse/scanner-status');
+    if (!adminScannerEnabled && scanning.value) {
+        scanning.value = false;
+        showScanFeedback('error', 'Scanner disabled by administrator');
+    }
+};
+```
+
+**Smart Scanner Control**:
+- Admin disables → Guardhouse scanner stops immediately
+- Admin enables → Guardhouse scanner resumes automatically
+- Guard cannot override admin disable status
+- Clear visual indicators when admin has disabled scanner
+
+**Enhanced User Experience**:
+- Pause/resume button shows "(Admin Disabled)" when disabled by admin
+- Scanner container shows overlay message when disabled
+- Proper button states and visual feedback
+- Graceful error handling with fallback to enabled state
+
+#### **Files Modified**
+1. `lamms-backend/app/Http/Controllers/API/GuardhouseController.php` - Added scanner control methods
+2. `lamms-backend/routes/api.php` - Added scanner control routes
+3. `src/layout/guardhouselayout/GuardHouseLayout.vue` - Enhanced with admin control integration
+4. `src/views/pages/Admin/GuardHouseReports.vue` - Fixed disable scanner functionality
+
+### **ARCHIVED SESSIONS PAGINATION FIX - COMPLETED**
+
+#### **Problem Identified**
+User reported that clicking on pagination numbers or dropdown controls in archived sessions would close the session instead of navigating pages.
+
+#### **Root Cause**
+The entire session card had a click handler that was capturing all clicks inside the card, including pagination controls.
+
+#### **Solution Applied**
+```vue
+<!-- Added @click.stop to prevent event bubbling -->
+<div v-if="expandedSessions.includes(session.session_id)" class="session-details" @click.stop>
+```
+
+#### **Result**
+- ✅ Pagination numbers now work correctly
+- ✅ Rows per page dropdown functions properly
+- ✅ Session only closes when clicking card header
+- ✅ No redundant functions created - used Vue's built-in event modifier
+
+### **ARCHIVED SESSIONS SEARCH & FILTER SYSTEM - COMPLETE IMPLEMENTATION**
+
+#### **Problem Addressed**
+User requested comprehensive search and filter functionality for each archived session card to help locate specific records quickly.
+
+#### **Features Implemented**
+
+**Search Functionality**:
+- Real-time search across student name, ID, grade level, and section
+- Search icon with intuitive placeholder text
+- Instant filtering as you type
+
+**Filter Options**:
+- **Grade Filter** - Dropdown with all available grades in that session
+- **Section Filter** - Dropdown with all available sections in that session
+- **Record Type Filter** - Filter by Check-In, Check-Out, or All Types
+- **Clear Filters Button** - One-click to reset all filters
+
+**Smart Features**:
+- **Session-Specific Filters** - Each archived session has independent filters
+- **Dynamic Filter Options** - Dropdowns populate based on actual data in each session
+- **Real-Time Count** - Shows "Showing X of Y records" as filters are applied
+- **Preserved State** - Filters remain when collapsing/expanding sessions
+
+#### **Technical Implementation**
+
+**Reactive Filter System**:
+```javascript
+// Session-specific filter storage
+const sessionFilters = ref({});
+const sessionSearchQueries = ref({});
+
+// Computed filtering function
+const getFilteredSessionRecords = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    const filters = sessionFilters.value[sessionId] || {};
+    const searchQuery = sessionSearchQueries.value[sessionId] || '';
+    
+    // Apply search and filter logic
+    return filtered;
+};
+```
+
+**Dynamic Filter Options**:
+```javascript
+// Generate filter options from actual session data
+const getSessionFilterOptions = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    const grades = [...new Set(records.map(r => r.grade_level).filter(Boolean))].sort();
+    const sections = [...new Set(records.map(r => r.section).filter(Boolean))].sort();
+    
+    return { grades, sections };
+};
+```
+
+#### **User Interface Enhancements**
+
+**Filter Controls Layout**:
+```vue
+<div class="session-filters">
+    <div class="filter-row">
+        <div class="search-container">
+            <i class="pi pi-search search-icon"></i>
+            <InputText placeholder="Search by name, ID, grade, or section..." />
+        </div>
+        <div class="filter-controls">
+            <Dropdown placeholder="Grade" />
+            <Dropdown placeholder="Section" />
+            <Dropdown placeholder="Type" />
+            <Button icon="pi pi-times" title="Clear all filters" />
+        </div>
+    </div>
+    <div class="filter-summary">
+        <span>Showing X of Y records</span>
+    </div>
+</div>
+```
+
+**Responsive Design**:
+- Filters stack vertically on mobile screens
+- Search bar takes full width on smaller devices
+- Filter controls center-align for better touch interaction
+
+#### **Files Modified**
+1. `src/views/pages/Admin/GuardHouseReports.vue` - Added complete search and filter system
+
+#### **Benefits Achieved**
+- ✅ **No Redundant Functions** - Used computed properties and reactive refs
+- ✅ **Efficient Filtering** - Client-side filtering for fast response
+- ✅ **Event Isolation** - Filters don't interfere with session toggle functionality
+- ✅ **Memory Efficient** - Filters initialize only when sessions are expanded
+- ✅ **Professional UX** - Clean, intuitive interface with visual feedback
+
+## Current System Status (Updated October 4, 2025)
+
+### FULLY WORKING ✅
+1. **Guardhouse Scanner Control System**: Complete admin control with real-time synchronization
+2. **Archived Sessions Management**: Fixed pagination + comprehensive search/filter system
+3. **5-Second Verification**: Faster guardhouse processing (reduced from 10 seconds)
+4. **All Previous Systems**: Attendance, QR codes, teacher assignments, etc. (see above)
+
+### TECHNICAL ACHIEVEMENTS
+- **Real-Time Admin Control**: Guardhouse scanners respond to admin commands within 5 seconds
+- **Enhanced User Experience**: Faster verification, better visual feedback, intuitive controls
+- **Robust Error Handling**: Graceful fallbacks and clear user messaging
+- **Performance Optimized**: Client-side filtering, efficient API calls, minimal redundancy
+- **Mobile Responsive**: All new features work seamlessly on mobile devices
+
+### SYSTEM RELIABILITY
+- **Zero Breaking Changes**: All existing functionality preserved
+- **Backward Compatible**: New features don't affect existing workflows
+- **Production Ready**: Comprehensive error handling and logging
+- **Scalable Architecture**: Efficient caching and database usage

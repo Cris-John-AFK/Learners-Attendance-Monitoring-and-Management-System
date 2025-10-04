@@ -47,8 +47,9 @@ const showVerificationModal = ref(false);
 const verificationStudent = ref(null);
 const verificationRecordType = ref('check-in');
 const isLoadingVerification = ref(false);
-const verificationCountdown = ref(10);
+const verificationCountdown = ref(5); // Reduced from 10 to 5 seconds
 let verificationTimer = null;
+const scannerEnabled = ref(true); // Track scanner status from admin
 
 // Stats
 const totalCheckins = computed(() => attendanceRecords.value.filter((record) => record.recordType === 'check-in').length);
@@ -57,6 +58,34 @@ const totalCheckouts = computed(() => attendanceRecords.value.filter((record) =>
 
 // Timer reference for cleanup
 const timeInterval = ref(null);
+
+// Check scanner status from admin
+const checkScannerStatus = async () => {
+    try {
+        const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/guardhouse/scanner-status`);
+        if (response.data.success) {
+            const adminScannerEnabled = response.data.scanner_enabled;
+            
+            // If admin disabled scanner, pause scanning
+            if (!adminScannerEnabled && scanning.value) {
+                scanning.value = false;
+                showScanFeedback('error', 'Scanner disabled by administrator');
+                console.log('Scanner disabled by admin');
+            }
+            // If admin enabled scanner and we're not scanning, resume
+            else if (adminScannerEnabled && !scanning.value && !cameraError.value && !showVerificationModal.value) {
+                scanning.value = true;
+                console.log('Scanner enabled by admin');
+            }
+            
+            scannerEnabled.value = adminScannerEnabled;
+        }
+    } catch (error) {
+        console.error('Error checking scanner status:', error);
+        // Default to enabled if we can't check status
+        scannerEnabled.value = true;
+    }
+};
 
 // Update time every second
 onMounted(async () => {
@@ -69,6 +98,12 @@ onMounted(async () => {
 
     // Load today's attendance records
     await loadTodayAttendanceRecords();
+    
+    // Check initial scanner status
+    await checkScannerStatus();
+    
+    // Check scanner status every 5 seconds
+    setInterval(checkScannerStatus, 5000);
 });
 
 // Load today's attendance records from the database
@@ -148,6 +183,15 @@ function isOutsideClicked(event) {
 const onDetect = async (detectedCodes) => {
     try {
         console.log('QR Code Detected:', detectedCodes);
+        
+        // Check if scanner is enabled by admin
+        if (!scannerEnabled.value) {
+            console.log('Scanner disabled by administrator, ignoring QR code');
+            showScanFeedback('error', 'Scanner is disabled by administrator');
+            scanning.value = false;
+            return;
+        }
+        
         if (detectedCodes.length > 0 && !isLoadingVerification.value) {
             // Pause scanning while processing to avoid multiple scans of the same code
             scanning.value = false;
@@ -166,9 +210,11 @@ const onDetect = async (detectedCodes) => {
         showScanFeedback('error', 'Error processing QR code');
         isLoadingVerification.value = false;
 
-        // Restart scanner after error
+        // Restart scanner after error only if enabled
         setTimeout(() => {
-            scanning.value = true;
+            if (scannerEnabled.value) {
+                scanning.value = true;
+            }
         }, 2000);
     }
 };
@@ -339,7 +385,7 @@ const onVerificationSkip = () => {
 
 // Countdown timer functions
 const startVerificationCountdown = () => {
-    verificationCountdown.value = 10;
+    verificationCountdown.value = 5; // Reduced from 10 to 5 seconds
     verificationTimer = setInterval(() => {
         verificationCountdown.value--;
         if (verificationCountdown.value <= 0) {
@@ -710,6 +756,22 @@ const submitGuestForm = () => {
     visitorType.value = 'learners';
 };
 
+// Toggle scanning function that respects admin settings
+const toggleScanning = () => {
+    if (!scannerEnabled.value) {
+        showScanFeedback('error', 'Scanner is disabled by administrator');
+        return;
+    }
+    
+    scanning.value = !scanning.value;
+    
+    if (scanning.value) {
+        console.log('Scanner resumed by guard');
+    } else {
+        console.log('Scanner paused by guard');
+    }
+};
+
 const logout = async () => {
     try {
         console.log('🚪 Guardhouse logging out...');
@@ -770,9 +832,16 @@ const logout = async () => {
                             <div class="section-header">
                                 <h2><i class="pi pi-camera"></i> QR Scanner</h2>
                                 <div class="scanner-actions">
-                                    <button @click="scanning = !scanning" class="action-button pause-button" :class="{ 'resume-state': !scanning }">
+                                    <button 
+                                        @click="toggleScanning" 
+                                        class="action-button pause-button" 
+                                        :class="{ 'resume-state': !scanning, 'disabled': !scannerEnabled }"
+                                        :disabled="!scannerEnabled"
+                                        :title="!scannerEnabled ? 'Scanner disabled by administrator' : ''"
+                                    >
                                         <i :class="scanning ? 'pi pi-pause' : 'pi pi-play'"></i>
                                         {{ scanning ? 'Pause' : 'Resume' }}
+                                        <span v-if="!scannerEnabled" class="admin-disabled"> (Admin Disabled)</span>
                                     </button>
                                     <button @click="manualCheckIn" class="action-button manual-button">
                                         <i class="pi pi-pencil"></i>
@@ -781,7 +850,7 @@ const logout = async () => {
                                 </div>
                             </div>
 
-                            <div class="scanner-container" :class="{ 'scanning-active': scanning }">
+                            <div class="scanner-container" :class="{ 'scanning-active': scanning, 'disabled': !scannerEnabled }">
                                 <!-- Show verification content when verifying student -->
                                 <div v-if="showVerificationModal && verificationStudent" class="verification-content">
                                     <div class="verification-header">
@@ -2581,5 +2650,45 @@ const logout = async () => {
     .footer-stats {
         gap: 0.5rem;
     }
+}
+
+/* Scanner disabled state styling */
+.action-button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+}
+
+.action-button.disabled:hover {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    transform: none !important;
+}
+
+.admin-disabled {
+    font-size: 0.7rem;
+    color: #dc3545;
+    font-weight: 600;
+}
+
+/* Scanner container when disabled */
+.scanner-container.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.scanner-container.disabled::after {
+    content: "Scanner Disabled by Administrator";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(220, 53, 69, 0.9);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    z-index: 10;
 }
 </style>
