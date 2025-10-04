@@ -10,20 +10,25 @@ use Carbon\Carbon;
 class GuardhouseReportsController extends Controller
 {
     /**
-     * Get live feed data for admin dashboard
+     * Get live feed data for admin dashboard with configurable limits
      */
     public function getLiveFeed(Request $request)
     {
         try {
             $today = Carbon::today()->toDateString();
+            $limit = $request->get('limit', 50); // Configurable limit, default 50
+            $maxLimit = 200; // Safety cap to prevent abuse
             
-            // Get today's check-ins
+            // Ensure limit doesn't exceed maximum
+            $limit = min($limit, $maxLimit);
+            
+            // Get today's check-ins with optimized query
             $checkIns = DB::table('guardhouse_attendance')
                 ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id')
                 ->where('guardhouse_attendance.date', $today)
                 ->where('guardhouse_attendance.record_type', 'check-in')
                 ->orderBy('guardhouse_attendance.timestamp', 'desc')
-                ->limit(20)
+                ->limit($limit)
                 ->select(
                     'guardhouse_attendance.id',
                     'guardhouse_attendance.student_id',
@@ -35,13 +40,13 @@ class GuardhouseReportsController extends Controller
                 )
                 ->get();
             
-            // Get today's check-outs
+            // Get today's check-outs with optimized query
             $checkOuts = DB::table('guardhouse_attendance')
                 ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id')
                 ->where('guardhouse_attendance.date', $today)
                 ->where('guardhouse_attendance.record_type', 'check-out')
                 ->orderBy('guardhouse_attendance.timestamp', 'desc')
-                ->limit(20)
+                ->limit($limit)
                 ->select(
                     'guardhouse_attendance.id',
                     'guardhouse_attendance.student_id',
@@ -53,10 +58,28 @@ class GuardhouseReportsController extends Controller
                 )
                 ->get();
             
+            // Get total counts for the day
+            $totalCheckIns = DB::table('guardhouse_attendance')
+                ->where('date', $today)
+                ->where('record_type', 'check-in')
+                ->count();
+                
+            $totalCheckOuts = DB::table('guardhouse_attendance')
+                ->where('date', $today)
+                ->where('record_type', 'check-out')
+                ->count();
+            
             return response()->json([
                 'success' => true,
                 'check_ins' => $checkIns,
-                'check_outs' => $checkOuts
+                'check_outs' => $checkOuts,
+                'stats' => [
+                    'total_check_ins' => $totalCheckIns,
+                    'total_check_outs' => $totalCheckOuts,
+                    'showing_check_ins' => $checkIns->count(),
+                    'showing_check_outs' => $checkOuts->count(),
+                    'limit_applied' => $limit
+                ]
             ]);
             
         } catch (\Exception $e) {
@@ -230,19 +253,73 @@ class GuardhouseReportsController extends Controller
     }
     
     /**
-     * Get records for a specific archived session
+     * Get records for a specific archived session with pagination and filtering
      */
     public function getSessionRecords(Request $request, $sessionId)
     {
         try {
-            $records = DB::table('guardhouse_archived_records')
-                ->where('session_id', $sessionId)
-                ->orderBy('timestamp', 'desc')
+            $page = $request->get('page', 1);
+            $limit = $request->get('limit', 50); // Default 50 records per page
+            $search = $request->get('search', '');
+            $grade = $request->get('grade', '');
+            $section = $request->get('section', '');
+            $recordType = $request->get('record_type', '');
+            
+            // Build query with filters
+            $query = DB::table('guardhouse_archived_records')
+                ->where('session_id', $sessionId);
+            
+            // Apply search filter
+            if (!empty($search)) {
+                $query->where(function($q) use ($search) {
+                    $q->where('student_name', 'ILIKE', "%{$search}%")
+                      ->orWhere('student_id', 'LIKE', "%{$search}%")
+                      ->orWhere('grade_level', 'ILIKE', "%{$search}%")
+                      ->orWhere('section', 'ILIKE', "%{$search}%");
+                });
+            }
+            
+            // Apply grade filter
+            if (!empty($grade)) {
+                $query->where('grade_level', $grade);
+            }
+            
+            // Apply section filter
+            if (!empty($section)) {
+                $query->where('section', $section);
+            }
+            
+            // Apply record type filter
+            if (!empty($recordType)) {
+                $query->where('record_type', $recordType);
+            }
+            
+            // Get total count for pagination
+            $total = $query->count();
+            
+            // Apply pagination
+            $offset = ($page - 1) * $limit;
+            $records = $query->orderBy('timestamp', 'desc')
+                ->limit($limit)
+                ->offset($offset)
                 ->get();
+            
+            // Calculate pagination info
+            $totalPages = ceil($total / $limit);
+            $hasMore = $page < $totalPages;
             
             return response()->json([
                 'success' => true,
-                'records' => $records
+                'records' => $records,
+                'pagination' => [
+                    'current_page' => (int)$page,
+                    'total_pages' => $totalPages,
+                    'total_records' => $total,
+                    'per_page' => (int)$limit,
+                    'has_more' => $hasMore,
+                    'from' => $offset + 1,
+                    'to' => min($offset + $limit, $total)
+                ]
             ]);
             
         } catch (\Exception $e) {
