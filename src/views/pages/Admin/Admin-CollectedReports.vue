@@ -691,14 +691,19 @@ const getTotalStudents = () => {
     return getMaleStudents().length + getFemaleStudents().length;
 };
 
-// Generate actual school days for the selected month
-const getSchoolDays = () => {
+// Generate fixed M-T-W-TH-F columns (always 5 weeks = 25 columns)
+const getFixedWeekdayColumns = () => {
     if (!selectedSF2Report.value?.month) return [];
     
     try {
         const [year, month] = selectedSF2Report.value.month.split('-');
+        const totalColumns = 25; // 5 weeks × 5 weekdays
+        const weekdays = ['M', 'T', 'W', 'TH', 'F'];
+        const columns = [];
+
+        // Create a map of actual school days from the month
         const daysInMonth = new Date(year, month, 0).getDate();
-        const schoolDays = [];
+        const actualSchoolDays = [];
         
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month - 1, day);
@@ -706,17 +711,55 @@ const getSchoolDays = () => {
             
             // Only include weekdays (Monday=1 to Friday=5)
             if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-                schoolDays.push({
+                actualSchoolDays.push({
                     date: day,
+                    dayOfWeek: dayOfWeek,
                     dayName: ['S', 'M', 'T', 'W', 'TH', 'F', 'S'][dayOfWeek]
                 });
             }
         }
-        
-        return schoolDays;
+
+        // Sort actual school days by date
+        actualSchoolDays.sort((a, b) => a.date - b.date);
+        let schoolDayIndex = 0;
+
+        // Generate 25 fixed columns with M-T-W-TH-F pattern
+        for (let i = 0; i < totalColumns; i++) {
+            const weekdayIndex = i % 5; // 0=M, 1=T, 2=W, 3=TH, 4=F
+            const weekdayName = weekdays[weekdayIndex];
+            const expectedDayOfWeek = weekdayIndex + 1; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+
+            // Find the next available date that matches this weekday
+            let hasDate = false;
+            let dateInfo = null;
+
+            if (schoolDayIndex < actualSchoolDays.length) {
+                const currentDay = actualSchoolDays[schoolDayIndex];
+                
+                // If this date matches the expected weekday
+                if (currentDay.dayOfWeek === expectedDayOfWeek) {
+                    hasDate = true;
+                    dateInfo = currentDay;
+                    schoolDayIndex++;
+                }
+            }
+
+            columns.push({
+                date: hasDate ? dateInfo.date : '',
+                dayName: weekdayName, // Always show the weekday letter (M, T, W, TH, F)
+                isEmpty: !hasDate
+            });
+        }
+
+        return columns;
     } catch {
         return [];
     }
+};
+
+// Keep the old function for backward compatibility but use the new logic
+const getSchoolDays = () => {
+    return getFixedWeekdayColumns();
 };
 
 const getDayOfWeek = (day) => {
