@@ -555,4 +555,85 @@ class GuardhouseController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Toggle scanner status (Admin function to enable/disable guardhouse scanner)
+     */
+    public function toggleScanner(Request $request)
+    {
+        try {
+            $enabled = $request->input('enabled', true);
+            
+            // Store scanner status in cache or database
+            // Using cache table for simplicity
+            $cacheKey = 'guardhouse_scanner_enabled';
+            
+            // Check if cache entry exists
+            $existingCache = DB::table('cache')->where('key', $cacheKey)->first();
+            
+            if ($existingCache) {
+                // Update existing cache entry
+                DB::table('cache')->where('key', $cacheKey)->update([
+                    'value' => serialize($enabled),
+                    'expiration' => Carbon::now()->addYears(1)->timestamp // Long expiration
+                ]);
+            } else {
+                // Create new cache entry
+                DB::table('cache')->insert([
+                    'key' => $cacheKey,
+                    'value' => serialize($enabled),
+                    'expiration' => Carbon::now()->addYears(1)->timestamp
+                ]);
+            }
+
+            Log::info('Scanner status toggled', [
+                'enabled' => $enabled,
+                'admin_action' => true,
+                'timestamp' => Carbon::now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $enabled ? 'Scanner enabled successfully' : 'Scanner disabled successfully',
+                'scanner_enabled' => $enabled
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('GuardhouseController@toggleScanner error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to toggle scanner status'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get current scanner status
+     */
+    public function getScannerStatus(Request $request)
+    {
+        try {
+            $cacheKey = 'guardhouse_scanner_enabled';
+            
+            $cache = DB::table('cache')->where('key', $cacheKey)->first();
+            
+            $enabled = true; // Default to enabled
+            if ($cache) {
+                $enabled = unserialize($cache->value);
+            }
+
+            return response()->json([
+                'success' => true,
+                'scanner_enabled' => $enabled
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('GuardhouseController@getScannerStatus error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get scanner status',
+                'scanner_enabled' => true // Default fallback
+            ], 500);
+        }
+    }
 }

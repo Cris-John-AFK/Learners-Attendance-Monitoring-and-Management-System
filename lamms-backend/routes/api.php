@@ -412,9 +412,12 @@ Route::prefix('guardhouse')->group(function () {
     Route::get('/historical-records', [GuardhouseController::class, 'getHistoricalRecords']);
     Route::get('/attendance-stats', [GuardhouseController::class, 'getAttendanceStats']);
     
+    // Scanner control routes (Admin functionality)
+    Route::post('/toggle-scanner', [GuardhouseController::class, 'toggleScanner']);
+    Route::get('/scanner-status', [GuardhouseController::class, 'getScannerStatus']);
+    
     // New routes for GuardHouse Reports Admin Page
     Route::get('/live-feed', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getLiveFeed']);
-    Route::post('/toggle-scanner', [App\Http\Controllers\API\GuardhouseReportsController::class, 'toggleScanner']);
     Route::post('/archive-session', [App\Http\Controllers\API\GuardhouseReportsController::class, 'archiveSession']);
     Route::get('/archived-sessions', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getArchivedSessions']);
     Route::get('/session-records/{sessionId}', [App\Http\Controllers\API\GuardhouseReportsController::class, 'getSessionRecords']);

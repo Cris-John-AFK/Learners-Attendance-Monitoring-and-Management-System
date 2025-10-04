@@ -183,38 +183,91 @@
                     </div>
 
                     <!-- Expanded Session Details -->
-                    <div v-if="expandedSessions.includes(session.session_id)" class="session-details">
+                    <div v-if="expandedSessions.includes(session.session_id)" class="session-details" @click.stop>
                         <div v-if="loadingSessionRecords[session.session_id]" class="loading-records">
                             <i class="pi pi-spin pi-spinner"></i>
                             Loading records...
                         </div>
                         
-                        <DataTable 
-                            v-else-if="sessionRecords[session.session_id]"
-                            :value="sessionRecords[session.session_id]" 
-                            :paginator="true" 
-                            :rows="5"
-                            responsiveLayout="scroll"
-                            class="session-records-table"
-                        >
-                            <Column field="student_id" header="Student ID" />
-                            <Column field="student_name" header="Name" />
-                            <Column field="grade_level" header="Grade" />
-                            <Column field="section" header="Section" />
-                            <Column field="record_type" header="Type">
-                                <template #body="slotProps">
-                                    <Tag 
-                                        :value="slotProps.data.record_type" 
-                                        :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'"
-                                    />
-                                </template>
-                            </Column>
-                            <Column field="timestamp" header="Time">
-                                <template #body="slotProps">
-                                    {{ formatTime(slotProps.data.timestamp) }}
-                                </template>
-                            </Column>
-                        </DataTable>
+                        <div v-else-if="sessionRecords[session.session_id]" class="session-content">
+                            <!-- Search and Filter Controls -->
+                            <div class="session-filters">
+                                <div class="filter-row">
+                                    <div class="search-container">
+                                        <i class="pi pi-search search-icon"></i>
+                                        <InputText 
+                                            v-model="sessionSearchQueries[session.session_id]"
+                                            placeholder="Search by name, ID, grade, or section..."
+                                            class="search-input"
+                                        />
+                                    </div>
+                                    <div class="filter-controls">
+                                        <Dropdown 
+                                            v-model="sessionFilters[session.session_id].grade"
+                                            :options="getSessionFilterOptions(session.session_id).grades"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            placeholder="Grade"
+                                            class="filter-dropdown"
+                                        />
+                                        <Dropdown 
+                                            v-model="sessionFilters[session.session_id].section"
+                                            :options="getSessionFilterOptions(session.session_id).sections"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            placeholder="Section"
+                                            class="filter-dropdown"
+                                        />
+                                        <Dropdown 
+                                            v-model="sessionFilters[session.session_id].recordType"
+                                            :options="recordTypeOptions"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            placeholder="Type"
+                                            class="filter-dropdown"
+                                        />
+                                        <Button 
+                                            icon="pi pi-times"
+                                            class="p-button-text p-button-sm clear-filters-btn"
+                                            @click="clearSessionFilters(session.session_id)"
+                                            title="Clear all filters"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="filter-summary">
+                                    <span class="total-records">
+                                        Showing {{ getFilteredSessionRecords(session.session_id).length }} of {{ sessionRecords[session.session_id].length }} records
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Data Table -->
+                            <DataTable 
+                                :value="getFilteredSessionRecords(session.session_id)" 
+                                :paginator="true" 
+                                :rows="5"
+                                responsiveLayout="scroll"
+                                class="session-records-table"
+                            >
+                                <Column field="student_id" header="Student ID" />
+                                <Column field="student_name" header="Name" />
+                                <Column field="grade_level" header="Grade" />
+                                <Column field="section" header="Section" />
+                                <Column field="record_type" header="Type">
+                                    <template #body="slotProps">
+                                        <Tag 
+                                            :value="slotProps.data.record_type" 
+                                            :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'"
+                                        />
+                                    </template>
+                                </Column>
+                                <Column field="timestamp" header="Time">
+                                    <template #body="slotProps">
+                                        {{ formatTime(slotProps.data.timestamp) }}
+                                    </template>
+                                </Column>
+                            </DataTable>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -250,6 +303,10 @@ const loadingSessionRecords = ref({});
 const currentTime = ref('');
 const loadingArchived = ref(false);
 
+// Session-specific filters
+const sessionFilters = ref({});
+const sessionSearchQueries = ref({});
+
 // Polling interval
 let pollingInterval = null;
 let timeInterval = null;
@@ -268,6 +325,63 @@ const totalStudentsToday = computed(() => {
 const hasActiveRecords = computed(() => 
     checkInRecords.value.length > 0 || checkOutRecords.value.length > 0
 );
+
+// Filter options
+const recordTypeOptions = [
+    { label: 'All Types', value: '' },
+    { label: 'Check-In', value: 'check-in' },
+    { label: 'Check-Out', value: 'check-out' }
+];
+
+// Get filtered records for a specific session
+const getFilteredSessionRecords = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    const filters = sessionFilters.value[sessionId] || {};
+    const searchQuery = sessionSearchQueries.value[sessionId] || '';
+    
+    let filtered = [...records];
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        filtered = filtered.filter(record => 
+            record.student_name?.toLowerCase().includes(query) ||
+            record.student_id?.toString().includes(query) ||
+            record.grade_level?.toLowerCase().includes(query) ||
+            record.section?.toLowerCase().includes(query)
+        );
+    }
+    
+    // Apply grade filter
+    if (filters.grade) {
+        filtered = filtered.filter(record => record.grade_level === filters.grade);
+    }
+    
+    // Apply section filter
+    if (filters.section) {
+        filtered = filtered.filter(record => record.section === filters.section);
+    }
+    
+    // Apply record type filter
+    if (filters.recordType) {
+        filtered = filtered.filter(record => record.record_type === filters.recordType);
+    }
+    
+    return filtered;
+};
+
+// Get unique values for filter options from session records
+const getSessionFilterOptions = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    
+    const grades = [...new Set(records.map(r => r.grade_level).filter(Boolean))].sort();
+    const sections = [...new Set(records.map(r => r.section).filter(Boolean))].sort();
+    
+    return {
+        grades: [{ label: 'All Grades', value: '' }, ...grades.map(g => ({ label: g, value: g }))],
+        sections: [{ label: 'All Sections', value: '' }, ...sections.map(s => ({ label: s, value: s }))]
+    };
+};
 
 // Methods
 const getInitials = (name) => {
@@ -319,6 +433,30 @@ const formatDateTime = (dateTimeStr) => {
     });
 };
 
+// Initialize filters for a session
+const initializeSessionFilters = (sessionId) => {
+    if (!sessionFilters.value[sessionId]) {
+        sessionFilters.value[sessionId] = {
+            grade: '',
+            section: '',
+            recordType: ''
+        };
+    }
+    if (!sessionSearchQueries.value[sessionId]) {
+        sessionSearchQueries.value[sessionId] = '';
+    }
+};
+
+// Clear all filters for a session
+const clearSessionFilters = (sessionId) => {
+    sessionFilters.value[sessionId] = {
+        grade: '',
+        section: '',
+        recordType: ''
+    };
+    sessionSearchQueries.value[sessionId] = '';
+};
+
 // Toggle session details
 const toggleSessionDetails = async (sessionId) => {
     const index = expandedSessions.value.indexOf(sessionId);
@@ -333,6 +471,9 @@ const toggleSessionDetails = async (sessionId) => {
         if (!sessionRecords.value[sessionId]) {
             await loadSessionRecords(sessionId);
         }
+        
+        // Initialize filters for this session
+        initializeSessionFilters(sessionId);
     }
 };
 
@@ -479,11 +620,26 @@ const loadArchivedRecords = async () => {
     }
 };
 
+// Load initial scanner status
+const loadScannerStatus = async () => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/guardhouse/scanner-status`);
+        if (response.data.success) {
+            scannerEnabled.value = response.data.scanner_enabled;
+        }
+    } catch (error) {
+        console.error('Error loading scanner status:', error);
+        // Default to enabled if we can't load status
+        scannerEnabled.value = true;
+    }
+};
+
 // Lifecycle
 onMounted(() => {
     // Initial load
     fetchLiveData();
     loadArchivedRecords();
+    loadScannerStatus();
     updateCurrentTime();
     
     // Set up polling for live data (every 5 seconds)
@@ -828,6 +984,84 @@ onUnmounted(() => {
     transform: translateX(30px);
 }
 
+/* Session Filters Styling */
+.session-filters {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+}
+
+.filter-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.search-container {
+    position: relative;
+    flex: 1;
+    min-width: 250px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    z-index: 1;
+}
+
+.search-input {
+    width: 100%;
+    padding-left: 2.5rem !important;
+}
+
+.filter-controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-dropdown {
+    min-width: 120px;
+}
+
+.clear-filters-btn {
+    color: #dc3545 !important;
+    padding: 0.5rem !important;
+}
+
+.clear-filters-btn:hover {
+    background-color: #f8d7da !important;
+}
+
+.filter-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.5rem;
+    border-top: 1px solid #dee2e6;
+}
+
+.total-records {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.session-content {
+    width: 100%;
+}
+
+.session-records-table {
+    margin-top: 0;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .feed-grid {
@@ -836,6 +1070,20 @@ onUnmounted(() => {
     
     .stats-bar {
         grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .filter-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    
+    .search-container {
+        min-width: auto;
+    }
+    
+    .filter-controls {
+        justify-content: center;
     }
 }
 
