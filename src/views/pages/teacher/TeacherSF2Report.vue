@@ -838,10 +838,10 @@ onMounted(() => {
                                 <!-- Regular attendance cells -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -849,7 +849,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -915,10 +916,10 @@ onMounted(() => {
                                 <!-- Regular attendance cells -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -926,7 +927,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -1340,8 +1342,22 @@ onMounted(() => {
     color: #7e22ce !important;
 }
 
-/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction - EXCLUDE absent cells */
-.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-absent) {
+/* Half-shaded tardy cell (diagonal triangle shading for Late Comer) */
+.tardy-half-shaded {
+    position: relative;
+    background: linear-gradient(to bottom right, #fbbf24 0%, #fbbf24 49%, transparent 50%, transparent 100%) !important;
+    color: #92400e !important;
+}
+
+.tardy-half-shaded .tardy-text {
+    position: relative;
+    z-index: 2;
+    font-weight: bold;
+    color: #92400e;
+}
+
+/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction - EXCLUDE absent and tardy cells */
+.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-absent):not(.tardy-half-shaded) {
     background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #9ca3af calc(50% - 0.4px), #9ca3af calc(50% + 0.4px), transparent calc(50% + 0.4px));
 }
 
@@ -1424,8 +1440,19 @@ onMounted(() => {
         color: black !important;
     }
 
-    /* Keep diagonal slash in print - EXCLUDE present and absent cells from slash */
-    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-present):not(.attendance-absent) {
+    /* Half-shaded tardy cells in print - maintain diagonal triangle shading */
+    .tardy-half-shaded {
+        background: linear-gradient(to bottom right, #d1d5db 0%, #d1d5db 49%, white 50%, white 100%) !important;
+        color: black !important;
+    }
+
+    .tardy-half-shaded .tardy-text {
+        color: black !important;
+        font-weight: bold !important;
+    }
+
+    /* Keep diagonal slash in print - EXCLUDE present, absent and tardy cells from slash */
+    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-present):not(.attendance-absent):not(.tardy-half-shaded) {
         background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #333 calc(50% - 0.4px), #333 calc(50% + 0.4px), transparent calc(50% + 0.4px)) !important;
     }
 
