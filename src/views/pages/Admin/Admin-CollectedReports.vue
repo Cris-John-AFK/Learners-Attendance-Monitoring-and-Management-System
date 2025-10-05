@@ -436,6 +436,7 @@ const loadStudents = async () => {
                     id: report.id,
                     section_id: report.section_id, // Add this for the API call
                     grade_level: report.grade_level,
+                    gradeLevel: report.grade_level, // Add camelCase version for filter compatibility
                     section: report.section_name,
                     school_year: '2025-2026',
                     month: report.month, // Use the raw month format (2025-01)
@@ -1195,8 +1196,10 @@ function resetFilters() {
 // Now the computed property will work properly with the import
 const filteredStudents = computed(() => {
     return students.value.filter((student) => {
-        // Apply grade filter
-        if (filters.value.grade && student.gradeLevel !== filters.value.grade) {
+        // Apply grade filter - check both grade_level and gradeLevel for compatibility
+        if (filters.value.grade && 
+            student.grade_level !== filters.value.grade && 
+            student.gradeLevel !== filters.value.grade) {
             return false;
         }
 
@@ -1205,9 +1208,49 @@ const filteredStudents = computed(() => {
             return false;
         }
 
-        // Apply month filter
-        if (filters.value.month && student.month !== filters.value.month) {
-            return false;
+        // Apply month filter - handle Date object from Calendar component
+        if (filters.value.month) {
+            let filterMatch = false;
+            
+            // If filter is a Date object (from Calendar component)
+            if (filters.value.month instanceof Date) {
+                const filterYear = filters.value.month.getFullYear();
+                const filterMonth = filters.value.month.getMonth() + 1; // getMonth() returns 0-11
+                const filterMonthName = filters.value.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                const filterMonthNameShort = filters.value.month.toLocaleDateString('en-US', { month: 'long' });
+                
+                // Check against various month formats in the data
+                const studentMonthName = student.month_name || student.month || '';
+                const studentMonth = student.month || '';
+                
+                // Debug logging
+                console.log('Month Filter Debug:', {
+                    filterYear,
+                    filterMonth,
+                    filterMonthName,
+                    filterMonthNameShort,
+                    studentMonthName,
+                    studentMonth,
+                    studentData: student
+                });
+                
+                // Match against different possible formats
+                filterMatch = 
+                    (studentMonthName.includes(filterYear.toString()) && studentMonthName.toLowerCase().includes(filterMonthNameShort.toLowerCase())) ||
+                    studentMonth === `${filterYear}-${filterMonth.toString().padStart(2, '0')}` ||
+                    studentMonthName.toLowerCase() === filterMonthName.toLowerCase();
+                    
+                console.log('Filter match result:', filterMatch);
+            } else {
+                // If filter is a string (fallback)
+                filterMatch = 
+                    student.month === filters.value.month || 
+                    student.month_name === filters.value.month;
+            }
+            
+            if (!filterMatch) {
+                return false;
+            }
         }
 
         // Apply search term
@@ -1218,6 +1261,7 @@ const filteredStudents = computed(() => {
                 (student.section && student.section.toLowerCase().includes(term)) ||
                 (student.school_year && student.school_year.toLowerCase().includes(term)) ||
                 (student.month && student.month.toLowerCase().includes(term)) ||
+                (student.month_name && student.month_name.toLowerCase().includes(term)) ||
                 (student.teacher_name && student.teacher_name.toLowerCase().includes(term))
             );
         }
@@ -2632,31 +2676,11 @@ onMounted(() => {
                             <span>{{ slotProps.index + 1 }}</span>
                         </template>
                     </Column>
-                    <Column field="grade_level" header="Grade Level" sortable style="width: 120px" />
-                    <Column field="section" header="Section" sortable style="width: 120px" />
-                    <Column field="school_year" header="School Year" sortable style="width: 120px" />
-                    <Column field="month_name" header="Month" sortable style="width: 100px" />
-                    <Column field="total_students" header="Total Students" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <span class="font-semibold">{{ slotProps.data.total_students }}</span>
-                        </template>
-                    </Column>
-                    <Column field="present_today" header="Present Today" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <Tag :value="slotProps.data.present_today" severity="success" />
-                        </template>
-                    </Column>
-                    <Column field="absent_today" header="Absent Today" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <Tag :value="slotProps.data.absent_today" severity="danger" />
-                        </template>
-                    </Column>
-                    <Column field="attendance_rate" header="Attendance Rate" sortable style="width: 130px">
-                        <template #body="slotProps">
-                            <span class="font-semibold">{{ slotProps.data.attendance_rate }}%</span>
-                        </template>
-                    </Column>
-                    <Column field="teacher_name" header="Teacher Name" sortable style="min-width: 150px" />
+                    <Column field="grade_level" header="Grade Level" sortable style="width: 140px" />
+                    <Column field="section" header="Section" sortable style="width: 140px" />
+                    <Column field="school_year" header="School Year" sortable style="width: 140px" />
+                    <Column field="month_name" header="Month" sortable style="width: 140px" />
+                    <Column field="teacher_name" header="Teacher Name" sortable style="width: 140px" />
                     <Column header="Actions" style="width: 6rem">
                         <template #body="slotProps">
                             <div class="flex gap-1">
