@@ -501,128 +501,226 @@ const viewSF2Report = async (reportData) => {
 
         // Fetch the actual SF2 report data from backend
         const sectionId = reportData.section_id || reportData.id;
-        const month = reportData.month || reportData.month_name;
+        let month = reportData.month || reportData.month_name;
+        
+        // Convert month name to YYYY-MM format if needed
+        if (month && !month.match(/^\d{4}-\d{2}$/)) {
+            // Handle month names like "September 2025", "September", "AUGUST 2025", etc.
+            const currentYear = new Date().getFullYear();
+            const monthMap = {
+                'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                'May': '05', 'June': '06', 'July': '07', 'August': '08',
+                'September': '09', 'October': '10', 'November': '11', 'December': '12',
+                // Handle uppercase versions
+                'JANUARY': '01', 'FEBRUARY': '02', 'MARCH': '03', 'APRIL': '04',
+                'MAY': '05', 'JUNE': '06', 'JULY': '07', 'AUGUST': '08',
+                'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
+            };
+            
+            // Extract month name and year
+            const parts = month.split(' ');
+            const monthName = parts[0];
+            const year = parts[1] || currentYear;
+            
+            if (monthMap[monthName]) {
+                month = `${year}-${monthMap[monthName]}`;
+            }
+        }
 
+        console.log('=== DEBUG SF2 VIEW ===');
         console.log('Report data:', reportData);
         console.log('Section ID:', sectionId);
-        console.log('Month:', month);
+        console.log('Section Name:', reportData.section || reportData.section_name);
+        console.log('Month (original):', reportData.month || reportData.month_name);
+        console.log('Month (converted):', month);
+        
+        // First, try to get the submitted report to see what section ID was actually used
+        try {
+            const submittedResponse = await fetch('http://127.0.0.1:8000/api/sf2/submitted');
+            if (submittedResponse.ok) {
+                const submittedReports = await submittedResponse.json();
+                console.log('All submitted reports:', submittedReports);
+                
+                // Find the matching report
+                const matchingReport = submittedReports.find(report => 
+                    (report.section_name === reportData.section || report.section_name === reportData.section_name) &&
+                    (report.month_name === reportData.month || report.month_name === reportData.month_name)
+                );
+                
+                if (matchingReport) {
+                    console.log('Found matching submitted report:', matchingReport);
+                    sectionId = matchingReport.section_id;
+                    console.log('Using section ID from submitted report:', sectionId);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching submitted reports:', error);
+        }
+        
+        console.log('Final API URL:', `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        console.log('=== ADMIN CALLING SAME API AS TEACHER ===');
+        console.log('If teacher uses section ID 2 for Matatag, admin should also use section ID 2');
+        console.log('If teacher gets real students, admin should get same students');
+        console.log('If teacher gets sample data, admin will also get sample data');
 
-        // Load submitted SF2 data with X marks
-        const response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
+        // First try to get the submitted SF2 data (exact data teacher submitted)
+        let response;
+        let usingSubmittedData = false;
+        
+        try {
+            // Try to get the exact submitted data first
+            response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
+            if (response.ok) {
+                usingSubmittedData = true;
+                console.log('Using submitted SF2 data (exact teacher submission)');
+            } else {
+                throw new Error('Submitted data not found');
+            }
+        } catch (error) {
+            console.log('Submitted data not available, falling back to live API');
+            // Fallback to live teacher API
+            response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        }
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            console.error('API Error:', response.status, response.statusText);
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
         }
 
         const data = await response.json();
 
+        console.log('API Response:', data);
+        console.log('Students in response:', data.data?.students);
+        console.log('Number of students:', data.data?.students?.length);
+        console.log('First student:', data.data?.students?.[0]);
+        console.log('Student names:', data.data?.students?.map(s => `${s.firstName} ${s.lastName}`));
+        
+        // Debug attendance data for first student
+        if (data.data?.students?.[0]) {
+            const firstStudent = data.data.students[0];
+            console.log('=== ATTENDANCE DATA DEBUG ===');
+            console.log('First student attendance_data:', firstStudent.attendance_data);
+            console.log('Sample attendance marks:');
+            Object.keys(firstStudent.attendance_data || {}).slice(0, 5).forEach(date => {
+                console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
+            });
+        }
+
         // Process the API response data
         if (data.success && data.data && data.data.students && data.data.students.length > 0) {
             sf2ReportData.value = data.data;
-        } else {
-            // If API doesn't return expected format, create sample data
-            sf2ReportData.value = {
-                students: [
-                    {
-                        id: 1,
-                        firstName: 'Juan',
-                        lastName: 'Dela Cruz',
-                        middleName: 'Santos',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 2,
-                        firstName: 'Pedro',
-                        lastName: 'Martinez',
-                        middleName: 'Garcia',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 3,
-                        firstName: 'Carlos',
-                        lastName: 'Santos',
-                        middleName: 'Lopez',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 4,
-                        firstName: 'Maria',
-                        lastName: 'Garcia',
-                        middleName: 'Cruz',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 5,
-                        firstName: 'Ana',
-                        lastName: 'Rodriguez',
-                        middleName: 'Santos',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 6,
-                        firstName: 'Carmen',
-                        lastName: 'Lopez',
-                        middleName: 'Garcia',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
+            
+            console.log('SF2 Data loaded:', sf2ReportData.value);
+            console.log('Students loaded:', sf2ReportData.value.students);
+            
+            // Check if we're getting sample data (fallback from backend)
+            const firstStudent = data.data.students[0];
+            const isSampleData = firstStudent && 
+                (firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') ||
+                (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
+            
+            if (isSampleData) {
+                console.warn('WARNING: Getting sample data from backend - trying alternative approach');
+                
+                // Try to get real students from students API and match by section name
+                try {
+                    const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
+                    if (studentsResponse.ok) {
+                        const studentsData = await studentsResponse.json();
+                        const sectionName = reportData.section || reportData.section_name;
+                        
+                        // Filter students by section name or look for specific students from teacher's view
+                        let realStudents = studentsData.filter(student => 
+                            student.section === sectionName || 
+                            student.current_section_name === sectionName ||
+                            student.gradeLevel === 'Grade 1' // Fallback for Matatag section
+                        );
+                        
+                        // Log all students to see what's available
+                        console.log('All students from API:', studentsData);
+                        console.log('Filtered students for section:', realStudents);
+                        
+                        if (realStudents.length > 0) {
+                            console.log('Found real students via alternative method:', realStudents);
+                            
+                            // Replace sample data with real students
+                            sf2ReportData.value.students = realStudents.map(student => ({
+                                id: student.id,
+                                name: `${student.lastName || student.last_name}, ${student.firstName || student.first_name} ${student.middleName || student.middle_name || ''}`,
+                                firstName: student.firstName || student.first_name,
+                                lastName: student.lastName || student.last_name,
+                                middleName: student.middleName || student.middle_name,
+                                gender: student.gender,
+                                attendance_data: {}, // Empty for now
+                                total_present: 0,
+                                total_absent: 0,
+                                attendance_rate: 0
+                            }));
+                            
+                            toast.add({
+                                severity: 'success',
+                                summary: 'Real Students Found',
+                                detail: `Found ${realStudents.length} real students via alternative method`,
+                                life: 4000
+                            });
+                        } else {
+                            toast.add({
+                                severity: 'warn',
+                                summary: 'Sample Data Only',
+                                detail: `No real students found for section ${sectionName} - showing sample data`,
+                                life: 6000
+                            });
+                        }
                     }
-                ]
+                } catch (error) {
+                    console.error('Error fetching real students:', error);
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Sample Data Only',
+                        life: 6000
+                    });
+                }
+            } else {
+                // Show detailed information about what data was loaded
+                const studentNames = data.data.students.map(s => `${s.firstName} ${s.lastName}`).join(', ');
+                const dataSource = usingSubmittedData ? 'SUBMITTED DATA' : 'LIVE API';
+                toast.add({
+                    severity: usingSubmittedData ? 'success' : 'info',
+                    summary: `SF2 Data Loaded (${dataSource})`,
+                    detail: usingSubmittedData ? 
+                        `Showing exact data teacher submitted: ${studentNames}` : 
+                        `Using live API data: ${studentNames}`,
+                    life: 8000
+                });
+            }
+        } else {
+            // Show warning that no real data was found
+            toast.add({
+                severity: 'warn',
+                summary: 'No SF2 Data Found',
+                detail: `No submitted SF2 report found for ${reportData.section} - ${month}`,
+                life: 5000
+            });
+            
+            // Set empty data structure
+            sf2ReportData.value = {
+                students: [],
+                days_in_month: [],
+                school_info: {
+                    school_name: 'Naawan Central School',
+                    school_id: '123456',
+                    grade_level: 'Grade 1',
+                    section: reportData.section || 'Unknown Section'
+                },
+                summary: {
+                    total_students: 0,
+                    total_male: 0,
+                    total_female: 0
+                }
             };
         }
-
-        toast.add({
-            severity: 'success',
-            summary: 'Report Loaded',
-            detail: `SF2 report loaded successfully`,
-            life: 3000
-        });
     } catch (error) {
         console.error('Error loading SF2 report:', error);
         toast.add({
@@ -648,8 +746,27 @@ const downloadSF2Report = async (reportData) => {
             life: 3000
         });
 
+        // Convert month format if needed (same logic as viewSF2Report)
+        let month = reportData.month || reportData.month_name;
+        if (month && !month.match(/^\d{4}-\d{2}$/)) {
+            const currentYear = new Date().getFullYear();
+            const monthMap = {
+                'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                'May': '05', 'June': '06', 'July': '07', 'August': '08',
+                'September': '09', 'October': '10', 'November': '11', 'December': '12'
+            };
+            
+            const parts = month.split(' ');
+            const monthName = parts[0];
+            const year = parts[1] || currentYear;
+            
+            if (monthMap[monthName]) {
+                month = `${year}-${monthMap[monthName]}`;
+            }
+        }
+
         // Construct the download URL
-        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${reportData.month}`;
+        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${month}`;
 
         // Create a temporary link and trigger download
         const link = document.createElement('a');
@@ -776,35 +893,69 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
         return '';
     }
 
+    // Debug logging for attendance data
+    console.log('Getting attendance mark for:', {
+        student: student.firstName + ' ' + student.lastName,
+        day: day,
+        attendance_data: student.attendance_data,
+        available_dates: student.attendance_data ? Object.keys(student.attendance_data) : 'No attendance data'
+    });
+
     // Check if student has attendance_data for the specific day
-    if (student.attendance_data && student.attendance_data[day]) {
-        const status = student.attendance_data[day].toLowerCase();
-        switch (status) {
-            case 'present':
-                return '✓';
-            case 'absent':
-                return '✗';
-            case 'late':
-            case 'tardy':
-                return 'L';
-            case 'excused':
-                return 'E';
-            default:
-                return '';
+    if (student.attendance_data) {
+        // Try different date formats that might be used
+        let status = null;
+        
+        // Try the day as-is (might be YYYY-MM-DD format)
+        if (student.attendance_data[day]) {
+            status = student.attendance_data[day];
+        }
+        // Try converting day number to date format
+        else if (typeof day === 'number' || !isNaN(day)) {
+            // If day is a number, try to find it in the attendance data
+            const dayNum = parseInt(day);
+            const dateKeys = Object.keys(student.attendance_data);
+            
+            // Look for a date that matches this day number
+            const matchingDate = dateKeys.find(dateKey => {
+                if (dateKey.includes('-')) {
+                    // Extract day from YYYY-MM-DD format
+                    const dateParts = dateKey.split('-');
+                    const dayPart = parseInt(dateParts[2]);
+                    return dayPart === dayNum;
+                }
+                return false;
+            });
+            
+            if (matchingDate) {
+                status = student.attendance_data[matchingDate];
+            }
+        }
+        
+        if (status) {
+            const statusLower = status.toLowerCase();
+            console.log('Found status:', statusLower, 'for day:', day);
+            
+            switch (statusLower) {
+                case 'present':
+                    return '✓';
+                case 'absent':
+                    return '✗';
+                case 'late':
+                case 'tardy':
+                    return 'L';
+                case 'excused':
+                    return 'E';
+                default:
+                    console.log('Unknown status:', statusLower);
+                    return '✗'; // Default to absent for unknown status
+            }
         }
     }
 
-    // For demonstration, show sample attendance marks for all school days
-    // Generate different patterns to show variety throughout the month
-    if (day <= 31) {
-        // Show different attendance patterns for all days
-        if (day === 1 || day === 4 || day === 11 || day === 18 || day === 25) return '✗'; // Absent
-        if (day === 5 || day === 12 || day === 19 || day === 26) return 'L'; // Late
-        if (day === 6 || day === 7 || day === 8 || day === 13 || day === 14 || day === 20 || day === 21 || day === 22 || day === 27 || day === 28 || day === 29) return '✓'; // Present
-        return '✗'; // Default to absent for demo
-    }
-
-    return ''; // Empty for invalid days
+    console.log('No attendance data found for day:', day, 'defaulting to absent');
+    // Default to absent if no attendance data found
+    return '✗';
 };
 
 // Helper function to get total value for empty columns

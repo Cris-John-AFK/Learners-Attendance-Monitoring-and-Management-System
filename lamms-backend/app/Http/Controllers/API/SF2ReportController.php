@@ -1757,48 +1757,87 @@ class SF2ReportController extends Controller
     public function getSubmittedReportData($sectionId, $month)
     {
         try {
-            Log::info("Admin fetching submitted SF2 data - START", [
+            Log::info("Admin fetching submitted SF2 data", [
                 'section_id' => $sectionId,
                 'month' => $month,
                 'request_url' => request()->url()
             ]);
-
-            // First, let's just return a simple response to test if the route works
+            
+            // Find the submitted report for this section and month
+            $submittedReport = \DB::table('submitted_sf2_reports')
+                ->where('section_id', $sectionId)
+                ->where('month', $month)
+                ->first();
+            
+            if (!$submittedReport) {
+                Log::info("No submitted SF2 report found, generating from current data", [
+                    'section_id' => $sectionId,
+                    'month' => $month
+                ]);
+                
+                // If no submitted report found, generate from current data
+                try {
+                    $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $sf2Data,
+                        'submission_info' => [
+                            'id' => null,
+                            'status' => 'not_submitted',
+                            'submitted_at' => null,
+                            'submitted_by' => null,
+                            'reviewed_at' => null,
+                            'reviewed_by' => null,
+                            'admin_notes' => null
+                        ],
+                        'message' => 'Generated from current data - no submission found'
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("Failed to generate SF2 data: " . $e->getMessage());
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No submitted SF2 report found and failed to generate current data',
+                        'error' => $e->getMessage()
+                    ], 404);
+                }
+            }
+            
+            // Parse the stored SF2 data
+            $sf2Data = json_decode($submittedReport->sf2_data, true);
+            
+            if (!$sf2Data) {
+                Log::error("Invalid SF2 data in submission", [
+                    'submission_id' => $submittedReport->id,
+                    'sf2_data_preview' => substr($submittedReport->sf2_data, 0, 200)
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid SF2 data in submission'
+                ], 500);
+            }
+            
+            Log::info("Successfully retrieved submitted SF2 data", [
+                'submission_id' => $submittedReport->id,
+                'student_count' => count($sf2Data['students'] ?? []),
+                'status' => $submittedReport->status
+            ]);
+            
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'section' => [
-                        'id' => $sectionId,
-                        'name' => 'Matatag',
-                        'grade_level' => 'Grade 1'
-                    ],
-                    'month' => $month,
-                    'month_name' => strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y')),
-                    'students' => $this->generateTestStudentsWithFullMonth($month),
-                    'days_in_month' => [
-                        ['date' => '2025-08-01', 'day' => '1', 'dayName' => 'Fri'],
-                        ['date' => '2025-08-02', 'day' => '2', 'dayName' => 'Sat'],
-                        ['date' => '2025-08-05', 'day' => '5', 'dayName' => 'Tue']
-                    ],
-                    'summary' => [
-                        'male' => ['enrollment' => 1, 'total_present' => 3, 'total_absent' => 0],
-                        'female' => ['enrollment' => 0, 'total_present' => 0, 'total_absent' => 0],
-                        'total' => ['enrollment' => 1, 'total_present' => 3, 'total_absent' => 0]
-                    ]
-                ],
+                'data' => $sf2Data,
                 'submission_info' => [
-                    'id' => null,
-                    'status' => 'test_data',
-                    'submitted_at' => null,
-                    'submitted_by' => null,
-                    'reviewed_at' => null,
-                    'reviewed_by' => null,
-                    'admin_notes' => null
+                    'id' => $submittedReport->id,
+                    'status' => $submittedReport->status,
+                    'submitted_at' => $submittedReport->submitted_at,
+                    'submitted_by' => $submittedReport->submitted_by,
+                    'reviewed_at' => $submittedReport->reviewed_at,
+                    'reviewed_by' => $submittedReport->reviewed_by,
+                    'admin_notes' => $submittedReport->admin_notes
                 ],
-                'message' => 'Test data - debugging 500 error'
+                'message' => 'Exact data teacher submitted'
             ]);
-
-            Log::info("Admin fetching submitted SF2 data - END");
             
         } catch (\Exception $e) {
             Log::error("Error in getSubmittedReportData: " . $e->getMessage(), [
