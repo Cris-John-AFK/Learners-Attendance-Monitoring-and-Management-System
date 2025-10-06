@@ -436,6 +436,7 @@ const loadStudents = async () => {
                     id: report.id,
                     section_id: report.section_id, // Add this for the API call
                     grade_level: report.grade_level,
+                    gradeLevel: report.grade_level, // Add camelCase version for filter compatibility
                     section: report.section_name,
                     school_year: '2025-2026',
                     month: report.month, // Use the raw month format (2025-01)
@@ -501,127 +502,226 @@ const viewSF2Report = async (reportData) => {
 
         // Fetch the actual SF2 report data from backend
         const sectionId = reportData.section_id || reportData.id;
-        const month = reportData.month || reportData.month_name;
+        let month = reportData.month || reportData.month_name;
+        
+        // Convert month name to YYYY-MM format if needed
+        if (month && !month.match(/^\d{4}-\d{2}$/)) {
+            // Handle month names like "September 2025", "September", "AUGUST 2025", etc.
+            const currentYear = new Date().getFullYear();
+            const monthMap = {
+                'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                'May': '05', 'June': '06', 'July': '07', 'August': '08',
+                'September': '09', 'October': '10', 'November': '11', 'December': '12',
+                // Handle uppercase versions
+                'JANUARY': '01', 'FEBRUARY': '02', 'MARCH': '03', 'APRIL': '04',
+                'MAY': '05', 'JUNE': '06', 'JULY': '07', 'AUGUST': '08',
+                'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
+            };
+            
+            // Extract month name and year
+            const parts = month.split(' ');
+            const monthName = parts[0];
+            const year = parts[1] || currentYear;
+            
+            if (monthMap[monthName]) {
+                month = `${year}-${monthMap[monthName]}`;
+            }
+        }
 
+        console.log('=== DEBUG SF2 VIEW ===');
         console.log('Report data:', reportData);
         console.log('Section ID:', sectionId);
-        console.log('Month:', month);
+        console.log('Section Name:', reportData.section || reportData.section_name);
+        console.log('Month (original):', reportData.month || reportData.month_name);
+        console.log('Month (converted):', month);
+        
+        // First, try to get the submitted report to see what section ID was actually used
+        try {
+            const submittedResponse = await fetch('http://127.0.0.1:8000/api/sf2/submitted');
+            if (submittedResponse.ok) {
+                const submittedReports = await submittedResponse.json();
+                console.log('All submitted reports:', submittedReports);
+                
+                // Find the matching report
+                const matchingReport = submittedReports.find(report => 
+                    (report.section_name === reportData.section || report.section_name === reportData.section_name) &&
+                    (report.month_name === reportData.month || report.month_name === reportData.month_name)
+                );
+                
+                if (matchingReport) {
+                    console.log('Found matching submitted report:', matchingReport);
+                    sectionId = matchingReport.section_id;
+                    console.log('Using section ID from submitted report:', sectionId);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching submitted reports:', error);
+        }
+        
+        console.log('Final API URL:', `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        console.log('=== ADMIN CALLING SAME API AS TEACHER ===');
+        console.log('If teacher uses section ID 2 for Matatag, admin should also use section ID 2');
+        console.log('If teacher gets real students, admin should get same students');
+        console.log('If teacher gets sample data, admin will also get sample data');
 
-        const response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        // First try to get the submitted SF2 data (exact data teacher submitted)
+        let response;
+        let usingSubmittedData = false;
+        
+        try {
+            // Try to get the exact submitted data first
+            response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
+            if (response.ok) {
+                usingSubmittedData = true;
+                console.log('Using submitted SF2 data (exact teacher submission)');
+            } else {
+                throw new Error('Submitted data not found');
+            }
+        } catch (error) {
+            console.log('Submitted data not available, falling back to live API');
+            // Fallback to live teacher API
+            response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        }
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            console.error('API Error:', response.status, response.statusText);
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
         }
 
         const data = await response.json();
 
+        console.log('API Response:', data);
+        console.log('Students in response:', data.data?.students);
+        console.log('Number of students:', data.data?.students?.length);
+        console.log('First student:', data.data?.students?.[0]);
+        console.log('Student names:', data.data?.students?.map(s => `${s.firstName} ${s.lastName}`));
+        
+        // Debug attendance data for first student
+        if (data.data?.students?.[0]) {
+            const firstStudent = data.data.students[0];
+            console.log('=== ATTENDANCE DATA DEBUG ===');
+            console.log('First student attendance_data:', firstStudent.attendance_data);
+            console.log('Sample attendance marks:');
+            Object.keys(firstStudent.attendance_data || {}).slice(0, 5).forEach(date => {
+                console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
+            });
+        }
+
         // Process the API response data
         if (data.success && data.data && data.data.students && data.data.students.length > 0) {
             sf2ReportData.value = data.data;
-        } else {
-            // If API doesn't return expected format, create sample data
-            sf2ReportData.value = {
-                students: [
-                    {
-                        id: 1,
-                        firstName: 'Juan',
-                        lastName: 'Dela Cruz',
-                        middleName: 'Santos',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 2,
-                        firstName: 'Pedro',
-                        lastName: 'Martinez',
-                        middleName: 'Garcia',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 3,
-                        firstName: 'Carlos',
-                        lastName: 'Santos',
-                        middleName: 'Lopez',
-                        gender: 'Male',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 4,
-                        firstName: 'Maria',
-                        lastName: 'Garcia',
-                        middleName: 'Cruz',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 5,
-                        firstName: 'Ana',
-                        lastName: 'Rodriguez',
-                        middleName: 'Santos',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
-                    },
-                    {
-                        id: 6,
-                        firstName: 'Carmen',
-                        lastName: 'Lopez',
-                        middleName: 'Garcia',
-                        gender: 'Female',
-                        attendance_data: {
-                            1: 'absent',
-                            2: 'absent',
-                            3: 'absent'
-                        },
-                        total_absent: 3,
-                        total_tardy: 0,
-                        remarks: ''
+            
+            console.log('SF2 Data loaded:', sf2ReportData.value);
+            console.log('Students loaded:', sf2ReportData.value.students);
+            
+            // Check if we're getting sample data (fallback from backend)
+            const firstStudent = data.data.students[0];
+            const isSampleData = firstStudent && 
+                (firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') ||
+                (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
+            
+            if (isSampleData) {
+                console.warn('WARNING: Getting sample data from backend - trying alternative approach');
+                
+                // Try to get real students from students API and match by section name
+                try {
+                    const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
+                    if (studentsResponse.ok) {
+                        const studentsData = await studentsResponse.json();
+                        const sectionName = reportData.section || reportData.section_name;
+                        
+                        // Filter students by section name or look for specific students from teacher's view
+                        let realStudents = studentsData.filter(student => 
+                            student.section === sectionName || 
+                            student.current_section_name === sectionName ||
+                            student.gradeLevel === 'Grade 1' // Fallback for Matatag section
+                        );
+                        
+                        // Log all students to see what's available
+                        console.log('All students from API:', studentsData);
+                        console.log('Filtered students for section:', realStudents);
+                        
+                        if (realStudents.length > 0) {
+                            console.log('Found real students via alternative method:', realStudents);
+                            
+                            // Replace sample data with real students
+                            sf2ReportData.value.students = realStudents.map(student => ({
+                                id: student.id,
+                                name: `${student.lastName || student.last_name}, ${student.firstName || student.first_name} ${student.middleName || student.middle_name || ''}`,
+                                firstName: student.firstName || student.first_name,
+                                lastName: student.lastName || student.last_name,
+                                middleName: student.middleName || student.middle_name,
+                                gender: student.gender,
+                                attendance_data: {}, // Empty for now
+                                total_present: 0,
+                                total_absent: 0,
+                                attendance_rate: 0
+                            }));
+                            
+                            toast.add({
+                                severity: 'success',
+                                summary: 'Real Students Found',
+                                detail: `Found ${realStudents.length} real students via alternative method`,
+                                life: 4000
+                            });
+                        } else {
+                            toast.add({
+                                severity: 'warn',
+                                summary: 'Sample Data Only',
+                                detail: `No real students found for section ${sectionName} - showing sample data`,
+                                life: 6000
+                            });
+                        }
                     }
-                ]
+                } catch (error) {
+                    console.error('Error fetching real students:', error);
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Sample Data Only',
+                        life: 6000
+                    });
+                }
+            } else {
+                // Show detailed information about what data was loaded
+                const studentNames = data.data.students.map(s => `${s.firstName} ${s.lastName}`).join(', ');
+                const dataSource = usingSubmittedData ? 'SUBMITTED DATA' : 'LIVE API';
+                toast.add({
+                    severity: usingSubmittedData ? 'success' : 'info',
+                    summary: `SF2 Data Loaded (${dataSource})`,
+                    detail: usingSubmittedData ? 
+                        `Showing exact data teacher submitted: ${studentNames}` : 
+                        `Using live API data: ${studentNames}`,
+                    life: 8000
+                });
+            }
+        } else {
+            // Show warning that no real data was found
+            toast.add({
+                severity: 'warn',
+                summary: 'No SF2 Data Found',
+                detail: `No submitted SF2 report found for ${reportData.section} - ${month}`,
+                life: 5000
+            });
+            
+            // Set empty data structure
+            sf2ReportData.value = {
+                students: [],
+                days_in_month: [],
+                school_info: {
+                    school_name: 'Naawan Central School',
+                    school_id: '123456',
+                    grade_level: 'Grade 1',
+                    section: reportData.section || 'Unknown Section'
+                },
+                summary: {
+                    total_students: 0,
+                    total_male: 0,
+                    total_female: 0
+                }
             };
         }
-
-        toast.add({
-            severity: 'success',
-            summary: 'Report Loaded',
-            detail: `SF2 report loaded successfully`,
-            life: 3000
-        });
     } catch (error) {
         console.error('Error loading SF2 report:', error);
         toast.add({
@@ -647,8 +747,27 @@ const downloadSF2Report = async (reportData) => {
             life: 3000
         });
 
+        // Convert month format if needed (same logic as viewSF2Report)
+        let month = reportData.month || reportData.month_name;
+        if (month && !month.match(/^\d{4}-\d{2}$/)) {
+            const currentYear = new Date().getFullYear();
+            const monthMap = {
+                'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                'May': '05', 'June': '06', 'July': '07', 'August': '08',
+                'September': '09', 'October': '10', 'November': '11', 'December': '12'
+            };
+            
+            const parts = month.split(' ');
+            const monthName = parts[0];
+            const year = parts[1] || currentYear;
+            
+            if (monthMap[monthName]) {
+                month = `${year}-${monthMap[monthName]}`;
+            }
+        }
+
         // Construct the download URL
-        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${reportData.month}`;
+        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${month}`;
 
         // Create a temporary link and trigger download
         const link = document.createElement('a');
@@ -691,32 +810,75 @@ const getTotalStudents = () => {
     return getMaleStudents().length + getFemaleStudents().length;
 };
 
-// Generate actual school days for the selected month
-const getSchoolDays = () => {
+// Generate fixed M-T-W-TH-F columns (always 5 weeks = 25 columns)
+const getFixedWeekdayColumns = () => {
     if (!selectedSF2Report.value?.month) return [];
-    
+
     try {
         const [year, month] = selectedSF2Report.value.month.split('-');
+        const totalColumns = 25; // 5 weeks × 5 weekdays
+        const weekdays = ['M', 'T', 'W', 'TH', 'F'];
+        const columns = [];
+
+        // Create a map of actual school days from the month
         const daysInMonth = new Date(year, month, 0).getDate();
-        const schoolDays = [];
-        
+        const actualSchoolDays = [];
+
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month - 1, day);
             const dayOfWeek = date.getDay();
-            
+
             // Only include weekdays (Monday=1 to Friday=5)
             if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-                schoolDays.push({
+                actualSchoolDays.push({
                     date: day,
+                    dayOfWeek: dayOfWeek,
                     dayName: ['S', 'M', 'T', 'W', 'TH', 'F', 'S'][dayOfWeek]
                 });
             }
         }
-        
-        return schoolDays;
+
+        // Sort actual school days by date
+        actualSchoolDays.sort((a, b) => a.date - b.date);
+        let schoolDayIndex = 0;
+
+        // Generate 25 fixed columns with M-T-W-TH-F pattern (calendar-week aligned)
+        for (let i = 0; i < totalColumns; i++) {
+            const weekdayIndex = i % 5; // 0=M, 1=T, 2=W, 3=TH, 4=F
+            const weekdayName = weekdays[weekdayIndex];
+            const expectedDayOfWeek = weekdayIndex + 1; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+
+            // Find the next available date that matches this weekday
+            let hasDate = false;
+            let dateInfo = null;
+
+            if (schoolDayIndex < actualSchoolDays.length) {
+                const currentDay = actualSchoolDays[schoolDayIndex];
+
+                // If this date matches the expected weekday
+                if (currentDay.dayOfWeek === expectedDayOfWeek) {
+                    hasDate = true;
+                    dateInfo = currentDay;
+                    schoolDayIndex++;
+                }
+            }
+
+            columns.push({
+                date: hasDate ? dateInfo.date : '',
+                dayName: weekdayName, // Always show the weekday letter (M, T, W, TH, F)
+                isEmpty: !hasDate
+            });
+        }
+
+        return columns;
     } catch {
         return [];
     }
+};
+
+// Keep the old function for backward compatibility but use the new logic
+const getSchoolDays = () => {
+    return getFixedWeekdayColumns();
 };
 
 const getDayOfWeek = (day) => {
@@ -726,30 +888,244 @@ const getDayOfWeek = (day) => {
     return dayPattern[(day - 1) % 5];
 };
 
-const getAttendanceMark = (student, day) => {
+const getAttendanceMark = (student, day, isEmpty = false) => {
+    // If this is an empty day column, return blank
+    if (isEmpty) {
+        return '';
+    }
+
+    // Debug logging for attendance data
+    console.log('Getting attendance mark for:', {
+        student: student.firstName + ' ' + student.lastName,
+        day: day,
+        attendance_data: student.attendance_data,
+        available_dates: student.attendance_data ? Object.keys(student.attendance_data) : 'No attendance data'
+    });
+
     // Check if student has attendance_data for the specific day
-    if (student.attendance_data && student.attendance_data[day]) {
-        const status = student.attendance_data[day].toLowerCase();
-        switch (status) {
-            case 'present':
-                return '✓';
-            case 'absent':
-                return '✗';
-            case 'late':
-            case 'tardy':
-                return 'L';
-            default:
-                return '';
+    if (student.attendance_data) {
+        // Try different date formats that might be used
+        let status = null;
+        
+        // Try the day as-is (might be YYYY-MM-DD format)
+        if (student.attendance_data[day]) {
+            status = student.attendance_data[day];
+        }
+        // Try converting day number to date format
+        else if (typeof day === 'number' || !isNaN(day)) {
+            // If day is a number, try to find it in the attendance data
+            const dayNum = parseInt(day);
+            const dateKeys = Object.keys(student.attendance_data);
+            
+            // Look for a date that matches this day number
+            const matchingDate = dateKeys.find(dateKey => {
+                if (dateKey.includes('-')) {
+                    // Extract day from YYYY-MM-DD format
+                    const dateParts = dateKey.split('-');
+                    const dayPart = parseInt(dateParts[2]);
+                    return dayPart === dayNum;
+                }
+                return false;
+            });
+            
+            if (matchingDate) {
+                status = student.attendance_data[matchingDate];
+            }
+        }
+        
+        if (status) {
+            const statusLower = status.toLowerCase();
+            console.log('Found status:', statusLower, 'for day:', day);
+            
+            switch (statusLower) {
+                case 'present':
+                    return '✓';
+                case 'absent':
+                    return '✗';
+                case 'late':
+                case 'tardy':
+                    return 'L';
+                case 'excused':
+                    return 'E';
+                default:
+                    console.log('Unknown status:', statusLower);
+                    return '✗'; // Default to absent for unknown status
+            }
         }
     }
 
-    // For demonstration, show some sample attendance marks for first few days
-    // This matches what's shown in picture 2
-    if (day <= 3) {
-        return '✗'; // Show absent for first 3 days like in picture 2
-    }
+    console.log('No attendance data found for day:', day, 'defaulting to absent');
+    // Default to absent if no attendance data found
+    return '✗';
+};
 
-    return ''; // Empty for other days
+// Helper function to get total value for empty columns
+const getTotalForDay = (isEmpty = false) => {
+    return isEmpty ? '' : '0';
+};
+
+// Calculate total present students for a specific day (Male students)
+const getMalePresentForDay = (day, isEmpty = false) => {
+    if (isEmpty) return '';
+    
+    const maleStudents = getMaleStudents();
+    let presentCount = 0;
+    
+    maleStudents.forEach(student => {
+        const mark = getAttendanceMark(student, day, false);
+        if (mark === '✓') {
+            presentCount++;
+        }
+    });
+    
+    return presentCount > 0 ? presentCount : '';
+};
+
+// Calculate total present students for a specific day (Female students)
+const getFemalePresentForDay = (day, isEmpty = false) => {
+    if (isEmpty) return '';
+    
+    const femaleStudents = getFemaleStudents();
+    let presentCount = 0;
+    
+    femaleStudents.forEach(student => {
+        const mark = getAttendanceMark(student, day, false);
+        if (mark === '✓') {
+            presentCount++;
+        }
+    });
+    
+    return presentCount > 0 ? presentCount : '';
+};
+
+// Calculate combined total present students for a specific day
+const getCombinedPresentForDay = (day, isEmpty = false) => {
+    if (isEmpty) return '';
+    
+    const malePresent = getMalePresentForDay(day, false);
+    const femalePresent = getFemalePresentForDay(day, false);
+    
+    const maleCount = typeof malePresent === 'number' ? malePresent : 0;
+    const femaleCount = typeof femalePresent === 'number' ? femalePresent : 0;
+    const total = maleCount + femaleCount;
+    
+    return total > 0 ? total : '';
+};
+
+// Calculate total present count for male students (for monthly total)
+const getMaleTotalPresent = () => {
+    const maleStudents = getMaleStudents();
+    let totalPresent = 0;
+    
+    const schoolDays = getSchoolDays();
+    schoolDays.forEach(schoolDay => {
+        if (!schoolDay.isEmpty) {
+            maleStudents.forEach(student => {
+                const mark = getAttendanceMark(student, schoolDay.date, false);
+                if (mark === '✓') {
+                    totalPresent++;
+                }
+            });
+        }
+    });
+    
+    return totalPresent;
+};
+
+// Calculate total present count for female students (for monthly total)
+const getFemaleTotalPresent = () => {
+    const femaleStudents = getFemaleStudents();
+    let totalPresent = 0;
+    
+    const schoolDays = getSchoolDays();
+    schoolDays.forEach(schoolDay => {
+        if (!schoolDay.isEmpty) {
+            femaleStudents.forEach(student => {
+                const mark = getAttendanceMark(student, schoolDay.date, false);
+                if (mark === '✓') {
+                    totalPresent++;
+                }
+            });
+        }
+    });
+    
+    return totalPresent;
+};
+
+// Calculate combined total present count (for monthly total)
+const getCombinedTotalPresent = () => {
+    return getMaleTotalPresent() + getFemaleTotalPresent();
+};
+
+// Format month display (convert 2025-08 to AUGUST 2025)
+const formatMonthDisplay = (monthValue) => {
+    if (!monthValue) return 'OCTOBER 2025';
+    
+    // If it's already in the correct format (like "AUGUST 2025"), return as is
+    if (monthValue.includes(' ') && monthValue.length > 10) {
+        return monthValue.toUpperCase();
+    }
+    
+    // If it's in YYYY-MM format (like "2025-08")
+    if (monthValue.includes('-') && monthValue.length === 7) {
+        const [year, month] = monthValue.split('-');
+        const monthNames = [
+            'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+            'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+        ];
+        const monthIndex = parseInt(month) - 1;
+        return `${monthNames[monthIndex]} ${year}`;
+    }
+    
+    // If it's just a month name, add current year
+    return `${monthValue.toUpperCase()} 2025`;
+};
+
+// Count actual attendance marks for a student
+const countAttendanceMarks = (student, markType) => {
+    if (!student) return 0;
+
+    let count = 0;
+    const schoolDays = getSchoolDays();
+
+    // Count marks only in non-empty columns
+    schoolDays.forEach((schoolDay) => {
+        if (!schoolDay.isEmpty && schoolDay.date) {
+            const mark = getAttendanceMark(student, schoolDay.date, false);
+
+            switch (markType) {
+                case 'absent':
+                    if (mark === '✗' || mark === 'X') count++;
+                    break;
+                case 'present':
+                    if (mark === '✓') count++;
+                    break;
+                case 'late':
+                    if (mark === 'L') count++;
+                    break;
+                case 'excused':
+                    if (mark === 'E') count++;
+                    break;
+            }
+        }
+    });
+
+    return count;
+};
+
+// Get total absent count for a student
+const getTotalAbsent = (student) => {
+    return countAttendanceMarks(student, 'absent');
+};
+
+// Get total present count for a student
+const getTotalPresent = (student) => {
+    return countAttendanceMarks(student, 'present');
+};
+
+// Get total late count for a student
+const getTotalLate = (student) => {
+    return countAttendanceMarks(student, 'late');
 };
 
 // Update filter counts for UI display
@@ -820,8 +1196,10 @@ function resetFilters() {
 // Now the computed property will work properly with the import
 const filteredStudents = computed(() => {
     return students.value.filter((student) => {
-        // Apply grade filter
-        if (filters.value.grade && student.gradeLevel !== filters.value.grade) {
+        // Apply grade filter - check both grade_level and gradeLevel for compatibility
+        if (filters.value.grade && 
+            student.grade_level !== filters.value.grade && 
+            student.gradeLevel !== filters.value.grade) {
             return false;
         }
 
@@ -830,9 +1208,49 @@ const filteredStudents = computed(() => {
             return false;
         }
 
-        // Apply month filter
-        if (filters.value.month && student.month !== filters.value.month) {
-            return false;
+        // Apply month filter - handle Date object from Calendar component
+        if (filters.value.month) {
+            let filterMatch = false;
+            
+            // If filter is a Date object (from Calendar component)
+            if (filters.value.month instanceof Date) {
+                const filterYear = filters.value.month.getFullYear();
+                const filterMonth = filters.value.month.getMonth() + 1; // getMonth() returns 0-11
+                const filterMonthName = filters.value.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                const filterMonthNameShort = filters.value.month.toLocaleDateString('en-US', { month: 'long' });
+                
+                // Check against various month formats in the data
+                const studentMonthName = student.month_name || student.month || '';
+                const studentMonth = student.month || '';
+                
+                // Debug logging
+                console.log('Month Filter Debug:', {
+                    filterYear,
+                    filterMonth,
+                    filterMonthName,
+                    filterMonthNameShort,
+                    studentMonthName,
+                    studentMonth,
+                    studentData: student
+                });
+                
+                // Match against different possible formats
+                filterMatch = 
+                    (studentMonthName.includes(filterYear.toString()) && studentMonthName.toLowerCase().includes(filterMonthNameShort.toLowerCase())) ||
+                    studentMonth === `${filterYear}-${filterMonth.toString().padStart(2, '0')}` ||
+                    studentMonthName.toLowerCase() === filterMonthName.toLowerCase();
+                    
+                console.log('Filter match result:', filterMatch);
+            } else {
+                // If filter is a string (fallback)
+                filterMatch = 
+                    student.month === filters.value.month || 
+                    student.month_name === filters.value.month;
+            }
+            
+            if (!filterMatch) {
+                return false;
+            }
         }
 
         // Apply search term
@@ -843,6 +1261,7 @@ const filteredStudents = computed(() => {
                 (student.section && student.section.toLowerCase().includes(term)) ||
                 (student.school_year && student.school_year.toLowerCase().includes(term)) ||
                 (student.month && student.month.toLowerCase().includes(term)) ||
+                (student.month_name && student.month_name.toLowerCase().includes(term)) ||
                 (student.teacher_name && student.teacher_name.toLowerCase().includes(term))
             );
         }
@@ -2257,31 +2676,11 @@ onMounted(() => {
                             <span>{{ slotProps.index + 1 }}</span>
                         </template>
                     </Column>
-                    <Column field="grade_level" header="Grade Level" sortable style="width: 120px" />
-                    <Column field="section" header="Section" sortable style="width: 120px" />
-                    <Column field="school_year" header="School Year" sortable style="width: 120px" />
-                    <Column field="month_name" header="Month" sortable style="width: 100px" />
-                    <Column field="total_students" header="Total Students" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <span class="font-semibold">{{ slotProps.data.total_students }}</span>
-                        </template>
-                    </Column>
-                    <Column field="present_today" header="Present Today" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <Tag :value="slotProps.data.present_today" severity="success" />
-                        </template>
-                    </Column>
-                    <Column field="absent_today" header="Absent Today" sortable style="width: 120px">
-                        <template #body="slotProps">
-                            <Tag :value="slotProps.data.absent_today" severity="danger" />
-                        </template>
-                    </Column>
-                    <Column field="attendance_rate" header="Attendance Rate" sortable style="width: 130px">
-                        <template #body="slotProps">
-                            <span class="font-semibold">{{ slotProps.data.attendance_rate }}%</span>
-                        </template>
-                    </Column>
-                    <Column field="teacher_name" header="Teacher Name" sortable style="min-width: 150px" />
+                    <Column field="grade_level" header="Grade Level" sortable style="width: 140px" />
+                    <Column field="section" header="Section" sortable style="width: 140px" />
+                    <Column field="school_year" header="School Year" sortable style="width: 140px" />
+                    <Column field="month_name" header="Month" sortable style="width: 140px" />
+                    <Column field="teacher_name" header="Teacher Name" sortable style="width: 140px" />
                     <Column header="Actions" style="width: 6rem">
                         <template #body="slotProps">
                             <div class="flex gap-1">
@@ -2434,32 +2833,62 @@ onMounted(() => {
             <div v-else-if="sf2ReportData" class="sf2-report-container">
                 <!-- SF2 Report Header -->
                 <div class="sf2-header text-center mb-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <div class="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span class="text-xs font-bold text-blue-600">NCS</span>
+                    <div class="flex justify-between items-start mb-6">
+                        <!-- Left Side: School Logo -->
+                        <div class="w-1/3 flex flex-col items-center">
+                            <img src="/demo/images/dep-ed-logo.png" alt="DepEd Seal" class="w-32 h-32 object-contain" />
                         </div>
-                        <div class="flex-1">
-                            <h1 class="text-xl font-bold">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
-                            <p class="text-sm text-gray-600">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
+
+                        <!-- Center Title -->
+                        <div class="w-1/3 text-center px-4">
+                            <h1 class="text-lg font-bold mb-2 leading-tight">School Form 2 (SF2) Daily Attendance Report of Learners</h1>
+                            <p class="text-xs text-gray-700 italic">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
                         </div>
-                        <div class="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center">
-                            <span class="text-xs font-bold text-red-600">DepEd</span>
+
+                        <!-- Right Side: DepEd Logo -->
+                        <div class="w-1/3 flex flex-col items-center">
+                            <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="w-32.3 h-32 object-contain" />
                         </div>
                     </div>
 
-                    <!-- Report Info -->
-                    <div class="grid grid-cols-3 gap-4 mb-4 text-sm">
-                        <div class="text-left">
-                            <strong>School ID:</strong> 123456<br />
-                            <strong>Name of School:</strong> Naawan Central School
+                    <!-- School Information Form Fields -->
+                    <div class="mb-6">
+                        <!-- First Row -->
+                        <div class="grid grid-cols-3 gap-6 mb-4 text-sm">
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">School ID:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">123456</div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">School Year:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">2024-2025</div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">Report for the Month of:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white font-bold">
+                                    {{ formatMonthDisplay(selectedSF2Report?.month) }}
+                                </div>
+                            </div>
                         </div>
-                        <div class="text-center">
-                            <strong>School Year:</strong> 2024-2025<br />
-                            <strong>Grade Level:</strong> {{ selectedSF2Report?.grade_level }}
-                        </div>
-                        <div class="text-right">
-                            <strong>Report for the Month of:</strong> {{ selectedSF2Report?.month }}<br />
-                            <strong>Section:</strong> {{ selectedSF2Report?.section }}
+
+                        <!-- Second Row -->
+                        <div class="grid grid-cols-3 gap-6 mb-6 text-sm">
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">Name of School:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">Naawan Central School</div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">Grade Level:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white">
+                                    {{ selectedSF2Report?.grade_level || 'Grade 1' }}
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="font-medium mr-2">Section:</span>
+                                <div class="border border-gray-800 flex-1 px-2 py-1 min-h-[24px] bg-white font-bold">
+                                    {{ selectedSF2Report?.section || 'Matatag' }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2476,12 +2905,12 @@ onMounted(() => {
                                 <th rowspan="3" class="border border-gray-400 p-1 w-32">REMARKS (If DROPPED OUT, state reason, please refer to legend number 2. If TRANSFERRED IN/OUT, write the name of School.)</th>
                             </tr>
                             <tr class="bg-gray-100">
-                                <th v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 w-6">{{ schoolDay.date }}</th>
+                                <th v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" :class="['border border-gray-400 p-1 w-6', schoolDay.isEmpty ? 'bg-gray-300' : '']">{{ schoolDay.date }}</th>
                                 <th class="border border-gray-400 p-1 w-12">ABSENT</th>
                                 <th class="border border-gray-400 p-1 w-12">TARDY</th>
                             </tr>
                             <tr class="bg-gray-100">
-                                <th v-for="schoolDay in getSchoolDays()" :key="`day-${schoolDay.date}`" class="border border-gray-400 p-1 text-xs font-semibold day-name-cell">
+                                <th v-for="schoolDay in getSchoolDays()" :key="`day-${schoolDay.date}`" :class="['border border-gray-400 p-1 text-xs font-semibold day-name-cell', schoolDay.isEmpty ? 'bg-gray-300' : '']">
                                     {{ schoolDay.dayName }}
                                 </th>
                                 <th class="border border-gray-400 p-1 text-xs"></th>
@@ -2496,12 +2925,24 @@ onMounted(() => {
                             <tr v-for="(student, index) in getMaleStudents()" :key="student.id" class="hover:bg-gray-50">
                                 <td class="border border-gray-400 p-1 text-center">{{ index + 1 }}</td>
                                 <td class="border border-gray-400 p-1">{{ student.lastName || student.last_name }}, {{ student.firstName || student.first_name }} {{ student.middleName || student.middle_name }}</td>
-                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 text-center">
-                                    {{ getAttendanceMark(student, schoolDay.date) }}
+                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" :class="['border border-gray-400 p-1 text-center', schoolDay.isEmpty ? 'bg-gray-300' : '']">
+                                    {{ getAttendanceMark(student, schoolDay.date, schoolDay.isEmpty) }}
                                 </td>
-                                <td class="border border-gray-400 p-1 text-center">{{ student.total_absent || student.totalAbsent || 0 }}</td>
-                                <td class="border border-gray-400 p-1 text-center">{{ student.total_tardy || student.totalTardy || 0 }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getTotalAbsent(student) }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getTotalLate(student) }}</td>
                                 <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                            </tr>
+
+                            <!-- MALE'S TOTAL PER DAY -->
+                            <tr class="bg-blue-100 font-bold">
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 font-bold">MALE | TOTAL Per Day</td>
+                                <td v-for="schoolDay in getSchoolDays()" :key="`male-total-${schoolDay.date}`" :class="['border border-gray-400 p-1 text-center', schoolDay.isEmpty ? 'bg-gray-300' : '']">
+                                    {{ getMalePresentForDay(schoolDay.date, schoolDay.isEmpty) }}
+                                </td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center font-bold">{{ getMaleTotalPresent() }}</td>
                             </tr>
 
                             <!-- Female Students -->
@@ -2511,42 +2952,194 @@ onMounted(() => {
                             <tr v-for="(student, index) in getFemaleStudents()" :key="student.id" class="hover:bg-gray-50">
                                 <td class="border border-gray-400 p-1 text-center">{{ getMaleStudents().length + index + 1 }}</td>
                                 <td class="border border-gray-400 p-1">{{ student.lastName || student.last_name }}, {{ student.firstName || student.first_name }} {{ student.middleName || student.middle_name }}</td>
-                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" class="border border-gray-400 p-1 text-center">
-                                    {{ getAttendanceMark(student, schoolDay.date) }}
+                                <td v-for="schoolDay in getSchoolDays()" :key="schoolDay.date" :class="['border border-gray-400 p-1 text-center', schoolDay.isEmpty ? 'bg-gray-300' : '']">
+                                    {{ getAttendanceMark(student, schoolDay.date, schoolDay.isEmpty) }}
                                 </td>
-                                <td class="border border-gray-400 p-1 text-center">{{ student.total_absent || student.totalAbsent || 0 }}</td>
-                                <td class="border border-gray-400 p-1 text-center">{{ student.total_tardy || student.totalTardy || 0 }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getTotalAbsent(student) }}</td>
+                                <td class="border border-gray-400 p-1 text-center">{{ getTotalLate(student) }}</td>
                                 <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                            </tr>
+
+                            <!-- FEMALE'S TOTAL PER DAY -->
+                            <tr class="bg-pink-100 font-bold">
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 font-bold">FEMALE | TOTAL Per Day</td>
+                                <td v-for="schoolDay in getSchoolDays()" :key="`female-total-${schoolDay.date}`" :class="['border border-gray-400 p-1 text-center', schoolDay.isEmpty ? 'bg-gray-300' : '']">
+                                    {{ getFemalePresentForDay(schoolDay.date, schoolDay.isEmpty) }}
+                                </td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center font-bold">{{ getFemaleTotalPresent() }}</td>
+                            </tr>
+
+                            <!-- Combined TOTAL PER DAY -->
+                            <tr class="bg-gray-200 font-bold">
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 font-bold">Combined TOTAL PER DAY</td>
+                                <td v-for="schoolDay in getSchoolDays()" :key="`combined-total-${schoolDay.date}`" :class="['border border-gray-400 p-1 text-center', schoolDay.isEmpty ? 'bg-gray-300' : '']">
+                                    {{ getCombinedPresentForDay(schoolDay.date, schoolDay.isEmpty) }}
+                                </td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center"></td>
+                                <td class="border border-gray-400 p-1 text-center font-bold">{{ getCombinedTotalPresent() }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
                 <!-- Summary Section -->
-                <div class="sf2-summary mt-6 grid grid-cols-2 gap-6 text-sm">
-                    <div>
-                        <h3 class="font-bold mb-2">GUIDELINES:</h3>
-                        <ol class="list-decimal list-inside space-y-1 text-xs">
-                            <li>The attendance shall be accomplished daily. Refer to the codes for checking learner attendance.</li>
+                <div class="sf2-summary mt-6 grid grid-cols-3 gap-4 text-xs">
+                    <!-- Left Column: Guidelines -->
+                    <div class="border border-gray-800 p-2">
+                        <h3 class="font-bold mb-2 text-center">GUIDELINES:</h3>
+                        <ol class="list-decimal list-inside space-y-1">
+                            <li>The attendance shall be accomplished daily. Refer to the codes for checking learners' attendance.</li>
                             <li>Dates shall be written in the preceding columns beside Learner's Name.</li>
                             <li>To compute the following:</li>
                         </ol>
+                        <div class="mt-2 space-y-1">
+                            <div class="flex items-center">
+                                <span class="mr-2">a. Percentage of Enrollment =</span>
+                                <div class="border-b border-gray-800 flex-1 text-center text-xs">Registered Learner as of End of the Month</div>
+                                <span class="ml-2">x 100</span>
+                            </div>
+                            <div class="text-center text-xs">Enrollment as of 1st Friday of June</div>
+
+                            <div class="flex items-center mt-2">
+                                <span class="mr-2">b. Average Daily Attendance =</span>
+                                <div class="border-b border-gray-800 flex-1 text-center text-xs">Total Daily Attendance</div>
+                            </div>
+                            <div class="text-center text-xs">Number of School Days during the month</div>
+
+                            <div class="flex items-center mt-2">
+                                <span class="mr-2">c. Percentage of Attendance for the month =</span>
+                                <div class="border-b border-gray-800 flex-1 text-center text-xs">Average daily attendance</div>
+                                <span class="ml-2">x 100</span>
+                            </div>
+                            <div class="text-center text-xs">Registered Learner as of End of the month</div>
+                        </div>
+
+                        <div class="mt-3 space-y-1">
+                            <p>
+                                4. Every End of the month, the class adviser will submit this form to the office of the principal for recording or summary take into the School Form 4. Once signed by the principal, this form should be returned to the
+                                adviser.
+                            </p>
+                            <p>5. The adviser will submit necessary intervention including but not limited to home visitation to learners that committed 5 consecutive days of absences or those with potentials of dropping out.</p>
+                            <p>6. Attendance performance of learner is expected to reflect in Form 137 and Form 138 every grading period.</p>
+                            <p class="font-bold">* Beginning of School Year cut-off report is every 1st Friday of School Calendar Days</p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="font-bold mb-2">Summary for the Month</h3>
-                        <table class="border border-gray-400 w-full text-xs">
-                            <tr>
-                                <td class="border border-gray-400 p-1">Enrollment as of (1st Friday of June)</td>
-                                <td class="border border-gray-400 p-1 text-center">M</td>
-                                <td class="border border-gray-400 p-1 text-center">F</td>
-                                <td class="border border-gray-400 p-1 text-center">TOTAL</td>
-                            </tr>
-                            <tr>
-                                <td class="border border-gray-400 p-1">Late Enrollment during the month (beyond cut-off)</td>
-                                <td class="border border-gray-400 p-1 text-center">{{ getMaleStudents().length }}</td>
-                                <td class="border border-gray-400 p-1 text-center">{{ getFemaleStudents().length }}</td>
-                                <td class="border border-gray-400 p-1 text-center">{{ getTotalStudents() }}</td>
-                            </tr>
+
+                    <!-- Middle Column: Codes for Checking Attendance -->
+                    <div class="border border-gray-800 p-2">
+                        <h3 class="font-bold mb-2 text-center">CODES FOR CHECKING ATTENDANCE</h3>
+                        <div class="space-y-1">
+                            <p><strong>(blank) - Present (✓) - Absent Tardy (half shaded) = Upper for Late Comer, Lower for Cutting Classes)</strong></p>
+
+                            <p class="font-bold mt-3">REASONS/CAUSES OF DROP OUTS</p>
+                            <p class="font-bold">Domestic Related Factors</p>
+                            <p>a.1 Had to help care of siblings</p>
+                            <p>a.2 Early marriage/pregnancy</p>
+                            <p>a.3 Frequent attitude toward schooling</p>
+                            <p>a.4 Family problems</p>
+
+                            <p class="font-bold mt-2">Individual Related Factors</p>
+                            <p>b.1 Illness</p>
+                            <p>b.2 Overage</p>
+                            <p>b.3 Death</p>
+                            <p>b.4 Drug Abuse</p>
+                            <p>b.5 Poor academic performance</p>
+                            <p>b.6 Lack of interest/disinterest</p>
+                            <p>b.7 Hunger/Malnutrition</p>
+                            <p>b.8 Child labor/child children</p>
+
+                            <p class="font-bold mt-2">c.1 Teacher Factor</p>
+                            <p>c.2 Physical condition of classroom</p>
+                            <p>c.3 Peer influence</p>
+                            <p>c.4 Geographic/Environmental</p>
+                            <p>c.5 Distance between home and school</p>
+                            <p>c.6 Armed conflict (incl. Tribal wars & conflicts)</p>
+                            <p>c.7 Calamities/Disasters</p>
+                            <p>c.8 Financial Related</p>
+                            <p>c.9 Child labor work</p>
+                            <p>f Others: _______</p>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Summary for the Month -->
+                    <div class="border border-gray-800 p-2">
+                        <h3 class="font-bold mb-2 text-center">Summary for the Month</h3>
+                        <table class="border border-gray-800 w-full">
+                            <thead>
+                                <tr>
+                                    <th class="border border-gray-800 p-1 text-left"></th>
+                                    <th class="border border-gray-800 p-1 text-center">M</th>
+                                    <th class="border border-gray-800 p-1 text-center">F</th>
+                                    <th class="border border-gray-800 p-1 text-center">TOTAL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Enrollment as of (1st Friday of June)</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getTotalStudents() }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Late Enrollment during the month (beyond cut-off)</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Registered Learner as of End of the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getTotalStudents() }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Percentage of Enrollment as of end of the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                    <td class="border border-gray-800 p-1 text-center">100%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Average Daily Attendance</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Percentage of Attendance for the month</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Number of students absent for 5 consecutive days or more</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Drop out</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Transferred out</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-800 p-1">Transferred in</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -3266,14 +3859,14 @@ onMounted(() => {
 }
 
 /* Bold borders after every 5th column (after F) */
-.day-name-cell:nth-child(5n+1) {
+.day-name-cell:nth-child(5n + 1) {
     border-left: 4px solid #333 !important;
 }
 
 /* Extra bold borders for week separators - ALL ROWS */
 
 .sf2-table th:nth-child(6),
-.sf2-table th:nth-child(11), 
+.sf2-table th:nth-child(11),
 .sf2-table th:nth-child(16),
 .sf2-table th:nth-child(21),
 .sf2-table th:nth-child(26),
@@ -3281,7 +3874,7 @@ onMounted(() => {
 .sf2-table td:nth-child(3),
 .sf2-table td:nth-child(8),
 .sf2-table td:nth-child(13),
-.sf2-table td:nth-child(18), 
+.sf2-table td:nth-child(18),
 .sf2-table td:nth-child(23),
 .sf2-table td:nth-child(28),
 .sf2-table td:nth-child(33) {

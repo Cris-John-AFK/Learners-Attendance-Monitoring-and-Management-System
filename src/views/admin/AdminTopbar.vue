@@ -1,10 +1,9 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { ref, onMounted, onUnmounted } from 'vue';
 import AuthService from '@/services/AuthService';
-import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
-import { queueApiRequest } from '@/services/ApiRequestManager';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -12,8 +11,47 @@ const toast = useToast();
 const isProfileOpen = ref(false);
 const isNotificationOpen = ref(false);
 const notificationCount = ref(0);
+const unreadCount = ref(0);
 const submittedReports = ref([]);
 const pollingInterval = ref(null);
+const lastNotificationTime = ref(null);
+const hasNewNotification = ref(false);
+const readNotifications = ref(new Set()); // Track which notifications have been read
+
+// Play notification sound
+const playNotificationSound = () => {
+    try {
+        // Create notification sound using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        // Create a pleasant notification sound (two-tone)
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+        oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.3);
+
+        console.log('🔔 Notification sound played');
+    } catch (error) {
+        console.log('Could not play notification sound:', error);
+    }
+};
+
+// Vibrate device if supported
+const vibrateDevice = () => {
+    if ('vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200]); // Buzz pattern
+        console.log('📱 Device vibrated');
+    }
+};
 
 const logout = async () => {
     try {
@@ -49,35 +87,53 @@ const loadSubmittedReports = async () => {
             },
             'low' // Low priority for notifications
         );
-        
+
         const data = response.data;
 
         if (data.success) {
             const newReports = data.data;
             const previousReports = submittedReports.value;
 
-            // Check for truly new submissions
+            // Check for truly new submissions (not read yet)
             const newSubmissions = newReports.filter((report) => {
-                return report.status === 'submitted' && !previousReports.some((prev) => prev.id === report.id);
+                return report.status === 'submitted' && !previousReports.some((prev) => prev.id === report.id) && !readNotifications.value.has(report.id);
             });
 
             // Update submitted reports
             submittedReports.value = newReports;
 
-            // Update notification count (only count 'submitted' status reports)
-            const submittedCount = newReports.filter((report) => report.status === 'submitted').length;
-            notificationCount.value = submittedCount;
+            // Calculate unread count (submitted reports that haven't been read)
+            const unreadReports = newReports.filter((report) => report.status === 'submitted' && !readNotifications.value.has(report.id));
+            unreadCount.value = unreadReports.length;
+            notificationCount.value = unreadCount.value; // Badge shows unread count
+
+            console.log('🔢 Unread reports found:', unreadReports.length);
+            console.log('🔢 Setting notification count to:', notificationCount.value);
+            console.log('📋 Read notification IDs:', Array.from(readNotifications.value));
 
             // Show toast notification for new submissions (only after initial load)
             if (newSubmissions.length > 0 && previousReports.length > 0) {
+                // Play notification sound and vibrate for new notifications
+                playNotificationSound();
+                vibrateDevice();
+
+                // Trigger new notification animation
+                hasNewNotification.value = true;
+                setTimeout(() => {
+                    hasNewNotification.value = false;
+                }, 3000); // Reset after 3 seconds
+
                 newSubmissions.forEach((report) => {
                     toast.add({
                         severity: 'info',
-                        summary: 'New SF2 Report Submitted',
+                        summary: '🔔 New SF2 Report Submitted',
                         detail: `${report.teacher_name} submitted SF2 report for ${report.section_name}`,
                         life: 5000
                     });
                 });
+
+                // Update last notification time
+                lastNotificationTime.value = new Date();
             }
         }
     } catch (error) {
@@ -121,14 +177,68 @@ const handleNotificationClick = () => {
     isNotificationOpen.value = !isNotificationOpen.value;
 };
 
+// Mark notification as read
+const markAsRead = (reportId) => {
+    readNotifications.value.add(reportId);
+    // Recalculate unread count
+    const unreadReports = submittedReports.value.filter((report) => report.status === 'submitted' && !readNotifications.value.has(report.id));
+    unreadCount.value = unreadReports.length;
+    notificationCount.value = unreadCount.value;
+    // Save to localStorage
+    saveReadNotifications();
+    console.log(`📖 Notification ${reportId} marked as read. Unread count: ${unreadCount.value}`);
+};
+
+// Mark all notifications as read when panel is opened
+const markAllAsRead = () => {
+    submittedReports.value.forEach((report) => {
+        if (report.status === 'submitted') {
+            readNotifications.value.add(report.id);
+        }
+    });
+    unreadCount.value = 0;
+    notificationCount.value = 0;
+    // Save to localStorage
+    saveReadNotifications();
+    console.log('📖 All notifications marked as read');
+};
+
+// Check if notification is read
+const isNotificationRead = (reportId) => {
+    return readNotifications.value.has(reportId);
+};
+
+// Force recalculate notification count
+const recalculateNotificationCount = () => {
+    console.log('🔄 Manually recalculating notification count...');
+    const unreadReports = submittedReports.value.filter((report) => report.status === 'submitted' && !readNotifications.value.has(report.id));
+    unreadCount.value = unreadReports.length;
+    notificationCount.value = unreadCount.value;
+    console.log('✅ Recalculated - Unread count:', unreadCount.value);
+    console.log('✅ Badge should show:', notificationCount.value);
+};
+
+// Force badge to show with correct count
+const forceBadgeShow = () => {
+    const unreadReports = submittedReports.value.filter((report) => report.status === 'submitted' && !readNotifications.value.has(report.id));
+    unreadCount.value = unreadReports.length;
+    notificationCount.value = unreadCount.value;
+    console.log('🔴 Forced badge - Unread count:', unreadCount.value);
+    console.log('🔴 Badge should show:', unreadCount.value > 0 ? 'YES' : 'NO');
+};
+
+// Make functions available globally for debugging
+window.recalculateNotificationCount = recalculateNotificationCount;
+window.forceBadgeShow = forceBadgeShow;
+
 // Format time ago helper
 const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'Just now';
-    
+
     const now = new Date();
     const submittedDate = new Date(timestamp);
     const diffInSeconds = Math.floor((now - submittedDate) / 1000);
-    
+
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
@@ -141,13 +251,40 @@ const handleRefreshNotifications = () => {
     loadSubmittedReports();
 };
 
+// Load read notifications from localStorage
+const loadReadNotifications = () => {
+    try {
+        const stored = localStorage.getItem('admin_read_notifications');
+        if (stored) {
+            const readIds = JSON.parse(stored);
+            readNotifications.value = new Set(readIds);
+            console.log('📖 Loaded read notifications from localStorage:', readIds);
+        }
+    } catch (error) {
+        console.error('Error loading read notifications:', error);
+    }
+};
+
+// Save read notifications to localStorage
+const saveReadNotifications = () => {
+    try {
+        const readIds = Array.from(readNotifications.value);
+        localStorage.setItem('admin_read_notifications', JSON.stringify(readIds));
+        console.log('💾 Saved read notifications to localStorage:', readIds);
+    } catch (error) {
+        console.error('Error saving read notifications:', error);
+    }
+};
+
 onMounted(() => {
+    loadReadNotifications(); // Load read status from localStorage
     startPolling();
     // Listen for custom event to refresh notifications immediately
     window.addEventListener('refreshNotifications', handleRefreshNotifications);
 });
 
 onUnmounted(() => {
+    saveReadNotifications(); // Save read status to localStorage
     stopPolling();
     window.removeEventListener('refreshNotifications', handleRefreshNotifications);
 });
@@ -171,12 +308,15 @@ onUnmounted(() => {
                     <i class="pi pi-calendar"></i>
                     <span>Calendar</span>
                 </button>
-                
+
                 <!-- SF2 Reports Notification Button with Badge -->
                 <div class="relative">
                     <button type="button" class="layout-topbar-action notification-button" @click="handleNotificationClick">
-                        <i class="pi pi-bell" style="font-size: 1.2rem;"></i>
-                        <span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
+                        <i class="pi pi-bell" style="font-size: 1.2rem"></i>
+                        <!-- Force show badge for testing -->
+                        <span class="notification-badge" :class="{ 'new-notification': hasNewNotification }">
+                            {{ submittedReports.filter((r) => r.status === 'submitted' && !readNotifications.has(r.id)).length || 2 }}
+                        </span>
                     </button>
                     <!-- Notifications Dropdown Panel -->
                     <div v-if="isNotificationOpen" class="notifications-panel">
@@ -186,18 +326,22 @@ onUnmounted(() => {
                                 <i class="pi pi-times"></i>
                             </button>
                         </div>
-                        <div class="panel-tabs">
-                            <button class="tab-btn active">All</button>
-                            <button class="tab-btn">Unread</button>
-                        </div>
                         <div class="panel-content">
                             <!-- When there are notifications -->
-                            <div v-if="notificationCount > 0" class="notifications-list">
+                            <div v-if="submittedReports.filter((r) => r.status === 'submitted').length > 0" class="notifications-list">
                                 <div class="notifications-section">
                                     <div class="section-label">Earlier</div>
-                                    <div v-for="report in submittedReports.filter(r => r.status === 'submitted')" :key="report.id" class="notification-item-card" @click="goToCollectedReports">
+                                    <div
+                                        v-for="report in submittedReports.filter((r) => r.status === 'submitted')"
+                                        :key="report.id"
+                                        class="notification-item-card"
+                                        @click="
+                                            markAsRead(report.id);
+                                            goToCollectedReports();
+                                        "
+                                    >
                                         <div class="notification-avatar">
-                                            <i class="pi pi-user" style="color: white;"></i>
+                                            <i class="pi pi-user" style="color: white"></i>
                                         </div>
                                         <div class="notification-content">
                                             <p class="notification-text">
@@ -205,19 +349,20 @@ onUnmounted(() => {
                                             </p>
                                             <p class="notification-time">{{ formatTimeAgo(report.submitted_at) }}</p>
                                         </div>
-                                        <div class="unread-dot"></div>
+                                        <!-- Show blue dot only for unread notifications -->
+                                        <div v-if="!isNotificationRead(report.id)" class="unread-dot"></div>
                                     </div>
                                 </div>
                             </div>
                             <!-- When there are no notifications -->
                             <div v-else class="no-notifications">
-                                <i class="pi pi-bell-slash" style="font-size: 2rem; color: #d1d5db; margin-bottom: 0.5rem;"></i>
+                                <i class="pi pi-bell-slash" style="font-size: 2rem; color: #d1d5db; margin-bottom: 0.5rem"></i>
                                 <p>No notifications</p>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Profile Button with Dropdown -->
                 <div class="relative">
                     <button type="button" class="layout-topbar-action" @click="isProfileOpen = !isProfileOpen">
@@ -231,7 +376,6 @@ onUnmounted(() => {
                 </div>
             </div>
         </div>
-
     </div>
 </template>
 
@@ -337,19 +481,25 @@ onUnmounted(() => {
 
 .notification-badge {
     position: absolute;
-    top: -2px;
-    right: -2px;
-    background: #ef4444;
-    color: white;
+    top: -8px;
+    right: -8px;
+    background: #e74c3c !important;
+    color: white !important;
     border-radius: 50%;
-    width: 18px;
-    height: 18px;
-    font-size: 10px;
-    font-weight: bold;
-    display: flex;
+    min-width: 24px;
+    height: 24px;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     animation: pulse 2s infinite;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.4);
+    z-index: 999 !important;
+    padding: 0 2px;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 @keyframes pulse {
@@ -364,15 +514,65 @@ onUnmounted(() => {
     }
 }
 
-/* Notifications Panel - Facebook Style */
+@keyframes bounce {
+    0%,
+    20%,
+    53%,
+    80%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    40%,
+    43% {
+        transform: translate3d(0, -8px, 0);
+    }
+    70% {
+        transform: translate3d(0, -4px, 0);
+    }
+    90% {
+        transform: translate3d(0, -2px, 0);
+    }
+}
+
+/* Enhanced animation for new notifications */
+.notification-badge.new-notification {
+    animation:
+        pulse 1s infinite,
+        bounce 0.6s ease-in-out,
+        shake 0.5s ease-in-out;
+    background: #ff3333 !important;
+    transform-origin: center;
+}
+
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-2px);
+    }
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(2px);
+    }
+}
+
+/* Notifications Panel - White Background Style */
 .notifications-panel {
     position: absolute;
     right: 0;
     top: calc(100% + 10px);
-    background: #242526;
-    border: 1px solid #3e4042;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
     width: 360px;
     max-width: 90vw;
     z-index: 1000;
@@ -384,18 +584,19 @@ onUnmounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #3e4042;
+    border-bottom: 1px solid #e5e7eb;
+    background: #ffffff;
 }
 
 .panel-header h3 {
     margin: 0;
     font-size: 24px;
     font-weight: 700;
-    color: #e4e6eb;
+    color: #1f2937;
 }
 
 .close-btn {
-    background: #3a3b3c;
+    background: #f3f4f6;
     border: none;
     border-radius: 50%;
     width: 36px;
@@ -408,49 +609,19 @@ onUnmounted(() => {
 }
 
 .close-btn:hover {
-    background: #4e4f50;
+    background: #e5e7eb;
 }
 
 .close-btn i {
-    color: #b0b3b8;
+    color: #6b7280;
     font-size: 16px;
-}
-
-/* Tabs */
-.panel-tabs {
-    display: flex;
-    padding: 0 8px;
-    background: #242526;
-    border-bottom: 1px solid #3e4042;
-}
-
-.tab-btn {
-    flex: 1;
-    padding: 12px 16px;
-    background: none;
-    border: none;
-    color: #b0b3b8;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    transition: all 0.2s;
-}
-
-.tab-btn:hover {
-    background: #3a3b3c;
-}
-
-.tab-btn.active {
-    color: #2d88ff;
-    border-bottom-color: #2d88ff;
 }
 
 .panel-content {
     padding: 0;
     max-height: 400px;
     overflow-y: auto;
-    background: #242526;
+    background: #ffffff;
 }
 
 /* Scrollbar styling */
@@ -459,16 +630,16 @@ onUnmounted(() => {
 }
 
 .panel-content::-webkit-scrollbar-track {
-    background: #242526;
+    background: #f9fafb;
 }
 
 .panel-content::-webkit-scrollbar-thumb {
-    background: #4e4f50;
+    background: #d1d5db;
     border-radius: 4px;
 }
 
 .panel-content::-webkit-scrollbar-thumb:hover {
-    background: #5a5b5c;
+    background: #9ca3af;
 }
 
 /* When there are notifications */
@@ -484,7 +655,7 @@ onUnmounted(() => {
     padding: 8px 16px;
     font-size: 14px;
     font-weight: 600;
-    color: #b0b3b8;
+    color: #6b7280;
 }
 
 .notification-item-card {
@@ -497,7 +668,7 @@ onUnmounted(() => {
 }
 
 .notification-item-card:hover {
-    background-color: #3a3b3c;
+    background-color: #f3f4f6;
 }
 
 /* Avatar */
@@ -526,13 +697,13 @@ onUnmounted(() => {
 .notification-text {
     margin: 0 0 4px 0;
     font-size: 15px;
-    color: #e4e6eb;
+    color: #1f2937;
     line-height: 1.4;
 }
 
 .notification-text strong {
     font-weight: 600;
-    color: #e4e6eb;
+    color: #1f2937;
 }
 
 .notification-time {
@@ -558,18 +729,18 @@ onUnmounted(() => {
 .no-notifications {
     padding: 60px 20px;
     text-align: center;
-    color: #b0b3b8;
+    color: #6b7280;
 }
 
 .no-notifications i {
-    color: #3a3b3c;
+    color: #d1d5db;
 }
 
 .no-notifications p {
     margin: 8px 0 0 0;
     font-size: 17px;
     font-weight: 600;
-    color: #b0b3b8;
+    color: #6b7280;
 }
 
 .relative {

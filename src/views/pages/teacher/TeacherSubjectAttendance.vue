@@ -1,7 +1,7 @@
 <script setup>
 import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
-import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
 import AttendanceEditDialog from '@/components/AttendanceEditDialog.vue';
+import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
@@ -376,8 +376,8 @@ const preloadData = async () => {
         if (!isCacheValid('sections')) {
             const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
             const sectionsData = await sectionsResponse.json();
-            dataCache.sections = sectionsData.sections || sectionsData || [];
-            dataCache.timestamp = Date.now();
+            permanentCache.sections = sectionsData.sections || sectionsData || [];
+            permanentCache.timestamp = Date.now();
             console.log('📦 Preloaded sections');
         } else {
             console.log('📦 Sections already cached');
@@ -400,9 +400,9 @@ const loadStudentsData = async () => {
         isLoadingStudents.value = true;
 
         // Check cache first
-        if (isCacheValid('students') && dataCache.students) {
+        if (isCacheValid('students') && permanentCache.students) {
             console.log('📦 Using cached student data');
-            students.value = dataCache.students;
+            students.value = permanentCache.students;
             await nextTick();
             calculateUnassignedStudents();
 
@@ -444,9 +444,9 @@ const loadStudentsData = async () => {
         try {
             // Check sections cache first
             let allSections;
-            if (isCacheValid('sections') && dataCache.sections) {
+            if (isCacheValid('sections') && permanentCache.sections) {
                 console.log('📦 Using cached sections data');
-                allSections = dataCache.sections;
+                allSections = permanentCache.sections;
             } else {
                 console.log('🔄 Fetching sections from database...');
                 const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
@@ -454,8 +454,8 @@ const loadStudentsData = async () => {
                 allSections = sectionsData.sections || sectionsData || [];
 
                 // Cache sections data
-                dataCache.sections = allSections;
-                dataCache.timestamp = Date.now();
+                permanentCache.sections = allSections;
+                permanentCache.timestamp = Date.now();
             }
 
             // Find homeroom section for this teacher
@@ -523,8 +523,8 @@ const loadStudentsData = async () => {
                 students.value = normalizedStudents;
 
                 // Cache student data
-                dataCache.students = normalizedStudents;
-                dataCache.timestamp = Date.now();
+                permanentCache.students = normalizedStudents;
+                permanentCache.timestamp = Date.now();
 
                 console.log('✅ Filtered and normalized', students.value.length, 'students for section', homeroomSection.name);
                 console.log(
@@ -3189,7 +3189,7 @@ const handleQuickAction = async (status) => {
     const { row, col } = hoveredSeat.value;
     const seat = seatPlan.value[row][col];
     console.log(`🎯 Quick action: ${status} for seat [${row}][${col}] with studentId: ${seat.studentId}`);
-    
+
     const student = students.value.find((s) => s.student_id === seat.studentId || s.id === seat.studentId);
     console.log(`🔍 Found student:`, student);
 
@@ -3216,12 +3216,12 @@ const handleQuickAction = async (status) => {
     // For Present/Absent, save immediately
     // Map status names to numeric values for visual display
     const statusMap = {
-        'Present': 1,
-        'Absent': 2,
-        'Late': 3,
-        'Excused': 4
+        Present: 1,
+        Absent: 2,
+        Late: 3,
+        Excused: 4
     };
-    
+
     seatPlan.value[row][col].status = statusMap[status] || 1;
     console.log(`✅ Set seat [${row}][${col}] status to ${statusMap[status]} (${status})`);
     clearHoveredSeat(); // Hide quick actions
@@ -4320,7 +4320,7 @@ const handleEditSave = (changes) => {
     console.log('Saving attendance changes:', changes);
     // Implement save logic here
     showEditDialog.value = false;
-    
+
     // Show success message
     toast.add({
         severity: 'success',
@@ -5284,14 +5284,7 @@ const titleRef = ref(null);
         />
 
         <!-- Attendance Edit Dialog -->
-        <AttendanceEditDialog
-            v-model="showEditDialog"
-            :session-data="editSessionData"
-            :subject-name="subjectName"
-            :section-name="'Sampaguita'"
-            @save="handleEditSave"
-            @close="handleEditClose"
-        />
+        <AttendanceEditDialog v-model="showEditDialog" :session-data="editSessionData" :subject-name="subjectName" :section-name="'Sampaguita'" @save="handleEditSave" @close="handleEditClose" />
 
         <!-- Seating Loading Overlay -->
         <div v-if="isLoadingSeating" class="seating-loading-overlay">

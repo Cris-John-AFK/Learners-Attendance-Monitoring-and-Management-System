@@ -302,7 +302,7 @@ const submitToAdmin = async () => {
     submitting.value = true;
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
-        
+
         // Use the simple working endpoint
         const response = await axios.post('http://127.0.0.1:8000/api/sf2/submit', {
             section_id: parseInt(sectionId),
@@ -317,7 +317,7 @@ const submitToAdmin = async () => {
                 detail: `SF2 report for ${reportData.value?.section?.name || 'Matatag'} has been submitted to admin`,
                 life: 5000
             });
-            
+
             // Optional: Redirect to dashboard after successful submission
             setTimeout(() => {
                 router.push('/teacher');
@@ -354,7 +354,7 @@ const getAttendanceMark = (status, dateString = null) => {
     if (dateString && isFutureDate(dateString)) {
         return '';
     }
-    
+
     switch (status) {
         case 'present':
             return ''; // Blank for present (only green background)
@@ -377,7 +377,7 @@ const getAttendanceColorClass = (mark, dateString = null) => {
     if (dateString && isFutureDate(dateString)) {
         return '';
     }
-    
+
     switch (mark) {
         case '': // Blank means present
         case '✓':
@@ -498,7 +498,7 @@ const openEditDialog = (student, date, day) => {
 };
 
 // Save attendance edit
-const saveAttendanceEdit = () => {
+const saveAttendanceEdit = async () => {
     if (!editingCell.value) return;
 
     const { student, date } = editingCell.value;
@@ -526,12 +526,27 @@ const saveAttendanceEdit = () => {
     }
     student.attendance_data[date] = status;
 
-    // TODO: Send update to backend API
-    // await axios.put(`/api/teacher/reports/sf2/update-attendance`, {
-    //     student_id: student.id,
-    //     date: date,
-    //     status: status
-    // });
+    // Send update to backend API
+    try {
+        await axios.post(`/api/teacher/reports/sf2/save-edit`, {
+            student_id: student.id,
+            date: date,
+            status: status,
+            section_id: sectionId,
+            month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
+        });
+
+        console.log('SF2 edit saved successfully');
+    } catch (error) {
+        console.error('Error saving SF2 edit:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Save Error',
+            detail: 'Failed to save attendance edit. Please try again.',
+            life: 5000
+        });
+        return; // Don't update UI if save failed
+    }
 
     toast.add({
         severity: 'success',
@@ -771,7 +786,7 @@ onMounted(() => {
                                 style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 2px solid #000"
                             >
                                 ABSENT
-                            </th>   
+                            </th>
                             <th
                                 class="border-2 border-gray-900 bg-gray-50 text-center font-bold"
                                 style="width: 60px; padding: 1px 1px; font-size: 6.5px; border-top: 2px solid #000; border-bottom: 2px solid #000; border-left: 2px solid #000; border-right: 1px solid #000"
@@ -795,36 +810,38 @@ onMounted(() => {
                                     v-if="dayAnnotations[col.date] && index === 0"
                                     :rowspan="maleStudents.length"
                                     class="border border-gray-900 bg-gray-200"
-                                    :style="{ 
-                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                    :style="{
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '',
                                         padding: '4px 0',
                                         verticalAlign: 'middle',
                                         textAlign: 'center',
                                         height: `${maleStudents.length * 20}px`
                                     }"
                                 >
-                                    <div :style="{ 
-                                        writingMode: 'vertical-rl', 
-                                        textOrientation: 'upright', 
-                                        fontSize: Math.min(14, Math.max(8, (maleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
-                                        color: '#991b1b', 
-                                        fontWeight: 'bold', 
-                                        letterSpacing: '-1px',
-                                        lineHeight: '1',
-                                        whiteSpace: 'nowrap',
-                                        margin: '0 auto',
-                                        display: 'inline-block'
-                                    }">
+                                    <div
+                                        :style="{
+                                            writingMode: 'vertical-rl',
+                                            textOrientation: 'upright',
+                                            fontSize: Math.min(14, Math.max(8, ((maleStudents.length * 20) / dayAnnotations[col.date].length) * 0.8)) + 'px',
+                                            color: '#991b1b',
+                                            fontWeight: 'bold',
+                                            letterSpacing: '-1px',
+                                            lineHeight: '1',
+                                            whiteSpace: 'nowrap',
+                                            margin: '0 auto',
+                                            display: 'inline-block'
+                                        }"
+                                    >
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
                                 <!-- Regular attendance cells -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -832,7 +849,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -870,36 +888,38 @@ onMounted(() => {
                                     v-if="dayAnnotations[col.date] && index === 0"
                                     :rowspan="femaleStudents.length"
                                     class="border border-gray-900 bg-gray-200"
-                                    :style="{ 
-                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '', 
+                                    :style="{
+                                        borderLeft: col.dayName === 'M' ? '2px solid #000' : '',
                                         padding: '4px 0',
                                         verticalAlign: 'middle',
                                         textAlign: 'center',
                                         height: `${femaleStudents.length * 20}px`
                                     }"
                                 >
-                                    <div :style="{ 
-                                        writingMode: 'vertical-rl', 
-                                        textOrientation: 'upright', 
-                                        fontSize: Math.min(14, Math.max(8, (femaleStudents.length * 20) / dayAnnotations[col.date].length * 0.8)) + 'px',
-                                        color: '#991b1b', 
-                                        fontWeight: 'bold', 
-                                        letterSpacing: '-1px',
-                                        lineHeight: '1',
-                                        whiteSpace: 'nowrap',
-                                        margin: '0 auto',
-                                        display: 'inline-block'
-                                    }">
+                                    <div
+                                        :style="{
+                                            writingMode: 'vertical-rl',
+                                            textOrientation: 'upright',
+                                            fontSize: Math.min(14, Math.max(8, ((femaleStudents.length * 20) / dayAnnotations[col.date].length) * 0.8)) + 'px',
+                                            color: '#991b1b',
+                                            fontWeight: 'bold',
+                                            letterSpacing: '-1px',
+                                            lineHeight: '1',
+                                            whiteSpace: 'nowrap',
+                                            margin: '0 auto',
+                                            display: 'inline-block'
+                                        }"
+                                    >
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
                                 <!-- Regular attendance cells -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative"
+                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -907,7 +927,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -1321,8 +1342,22 @@ onMounted(() => {
     color: #7e22ce !important;
 }
 
-/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction - EXCLUDE absent cells */
-.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-absent) {
+/* Half-shaded tardy cell (diagonal triangle shading for Late Comer) */
+.tardy-half-shaded {
+    position: relative;
+    background: linear-gradient(to bottom right, #fbbf24 0%, #fbbf24 49%, transparent 50%, transparent 100%) !important;
+    color: #92400e !important;
+}
+
+.tardy-half-shaded .tardy-text {
+    position: relative;
+    z-index: 2;
+    font-weight: bold;
+    color: #92400e;
+}
+
+/* Diagonal slash ONLY in cells with day numbers (not empty cells) - Backslash \ direction - EXCLUDE absent and tardy cells */
+.attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-absent):not(.tardy-half-shaded) {
     background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #9ca3af calc(50% - 0.4px), #9ca3af calc(50% + 0.4px), transparent calc(50% + 0.4px));
 }
 
@@ -1405,8 +1440,19 @@ onMounted(() => {
         color: black !important;
     }
 
-    /* Keep diagonal slash in print - EXCLUDE present and absent cells from slash */
-    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-present):not(.attendance-absent) {
+    /* Half-shaded tardy cells in print - maintain diagonal triangle shading */
+    .tardy-half-shaded {
+        background: linear-gradient(to bottom right, #d1d5db 0%, #d1d5db 49%, white 50%, white 100%) !important;
+        color: black !important;
+    }
+
+    .tardy-half-shaded .tardy-text {
+        color: black !important;
+        font-weight: bold !important;
+    }
+
+    /* Keep diagonal slash in print - EXCLUDE present, absent and tardy cells from slash */
+    .attendance-table-container tbody tr td.border.relative:not([colspan]):not(.bg-gray-100):not(.attendance-present):not(.attendance-absent):not(.tardy-half-shaded) {
         background-image: linear-gradient(to bottom right, transparent calc(50% - 0.4px), #333 calc(50% - 0.4px), #333 calc(50% + 0.4px), transparent calc(50% + 0.4px)) !important;
     }
 
