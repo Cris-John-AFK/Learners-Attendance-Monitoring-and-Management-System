@@ -705,11 +705,16 @@ class SF2ReportController extends Controller
                 
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
+               
+                
+                // Remarks column
+                $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
+                
                 $currentRow++;
                 $maleIndex++;
             }
             
-            // Add MALE TOTAL Per Day at exactly row 35 (A35)
+            // Add MALE TOTAL Per Day at existing row 35 (use existing template row)
             $this->addMaleTotalRow($worksheet, $maleStudents, 35);
             
             // Set FEMALE section to start directly at row 36 (no header)
@@ -731,6 +736,11 @@ class SF2ReportController extends Controller
                 $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
                 
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
+                
+             
+                
+                // Remarks column
+                $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
                 
                 $currentRow++;
                 $femaleIndex++;
@@ -1353,18 +1363,31 @@ class SF2ReportController extends Controller
         $worksheet->setCellValue('AI77', 0);
         $worksheet->setCellValue('AJ77', 0);
         
-        // Dropouts, transfers (would need status tracking)
-        $worksheet->setCellValue('AH79', 0); // Male dropouts
-        $worksheet->setCellValue('AI79', 0); // Female dropouts
-        $worksheet->setCellValue('AJ79', 0); // Total dropouts
+        // Calculate dropout and transfer statistics
+        $maleDropouts = $maleStudents->where('enrollment_status', 'dropped_out')->count();
+        $femaleDropouts = $femaleStudents->where('enrollment_status', 'dropped_out')->count();
+        $totalDropouts = $maleDropouts + $femaleDropouts;
         
-        $worksheet->setCellValue('AH81', 0); // Male transferred out
-        $worksheet->setCellValue('AI81', 0); // Female transferred out
-        $worksheet->setCellValue('AJ81', 0); // Total transferred out
+        $maleTransferredOut = $maleStudents->where('enrollment_status', 'transferred_out')->count();
+        $femaleTransferredOut = $femaleStudents->where('enrollment_status', 'transferred_out')->count();
+        $totalTransferredOut = $maleTransferredOut + $femaleTransferredOut;
         
-        $worksheet->setCellValue('AH83', 0); // Male transferred in
-        $worksheet->setCellValue('AI83', 0); // Female transferred in
-        $worksheet->setCellValue('AJ83', 0); // Total transferred in
+        $maleTransferredIn = $maleStudents->where('enrollment_status', 'transferred_in')->count();
+        $femaleTransferredIn = $femaleStudents->where('enrollment_status', 'transferred_in')->count();
+        $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
+        
+        // Dropouts, transfers with actual counts
+        $worksheet->setCellValue('AH79', $maleDropouts); // Male dropouts
+        $worksheet->setCellValue('AI79', $femaleDropouts); // Female dropouts
+        $worksheet->setCellValue('AJ79', $totalDropouts); // Total dropouts
+        
+        $worksheet->setCellValue('AH81', $maleTransferredOut); // Male transferred out
+        $worksheet->setCellValue('AI81', $femaleTransferredOut); // Female transferred out
+        $worksheet->setCellValue('AJ81', $totalTransferredOut); // Total transferred out
+        
+        $worksheet->setCellValue('AH83', $maleTransferredIn); // Male transferred in
+        $worksheet->setCellValue('AI83', $femaleTransferredIn); // Female transferred in
+        $worksheet->setCellValue('AJ83', $totalTransferredIn); // Total transferred in
     }
 
     /**
@@ -1388,24 +1411,46 @@ class SF2ReportController extends Controller
             $maleStudents = $students->where('gender', 'Male');
             $femaleStudents = $students->where('gender', 'Female');
             
+            // Count dropout and transfer statistics
+            $maleDropouts = $maleStudents->where('enrollment_status', 'dropped_out')->count();
+            $femaleDropouts = $femaleStudents->where('enrollment_status', 'dropped_out')->count();
+            $totalDropouts = $maleDropouts + $femaleDropouts;
+            
+            $maleTransferredOut = $maleStudents->where('enrollment_status', 'transferred_out')->count();
+            $femaleTransferredOut = $femaleStudents->where('enrollment_status', 'transferred_out')->count();
+            $totalTransferredOut = $maleTransferredOut + $femaleTransferredOut;
+            
+            $maleTransferredIn = $maleStudents->where('enrollment_status', 'transferred_in')->count();
+            $femaleTransferredIn = $femaleStudents->where('enrollment_status', 'transferred_in')->count();
+            $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
+            
             $summary = [
                 'male' => [
                     'enrollment' => $maleStudents->count(),
                     'total_present' => $maleStudents->sum('total_present'),
                     'total_absent' => $maleStudents->sum('total_absent'),
-                    'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0
+                    'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0,
+                    'dropouts' => $maleDropouts,
+                    'transferred_out' => $maleTransferredOut,
+                    'transferred_in' => $maleTransferredIn
                 ],
                 'female' => [
                     'enrollment' => $femaleStudents->count(),
                     'total_present' => $femaleStudents->sum('total_present'),
                     'total_absent' => $femaleStudents->sum('total_absent'),
-                    'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0
+                    'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0,
+                    'dropouts' => $femaleDropouts,
+                    'transferred_out' => $femaleTransferredOut,
+                    'transferred_in' => $femaleTransferredIn
                 ],
                 'total' => [
                     'enrollment' => $students->count(),
                     'total_present' => $students->sum('total_present'),
                     'total_absent' => $students->sum('total_absent'),
-                    'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
+                    'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0,
+                    'dropouts' => $totalDropouts,
+                    'transferred_out' => $totalTransferredOut,
+                    'transferred_in' => $totalTransferredIn
                 ]
             ];
             
@@ -1451,7 +1496,11 @@ class SF2ReportController extends Controller
                             'attendance_data' => $student->attendance_data,
                             'total_present' => $student->total_present,
                             'total_absent' => $student->total_absent,
-                            'attendance_rate' => $student->attendance_rate
+                            'attendance_rate' => $student->attendance_rate,
+                            'enrollment_status' => $student->enrollment_status ?? 'active',
+                            'dropout_reason' => $student->dropout_reason ?? null,
+                            'dropout_reason_category' => $student->dropout_reason_category ?? null,
+                            'status_effective_date' => $student->status_effective_date ?? null
                         ];
                     }),
                     'days_in_month' => $daysInMonth,
@@ -2188,6 +2237,71 @@ class SF2ReportController extends Controller
             default:
                 return '-';
         }
+    }
+
+    /**
+     * Generate remarks text for student based on status
+     */
+    private function getStudentRemarks($student)
+    {
+        if (!$student) return '-';
+        
+        // Check if student has dropout/transfer status
+        if ($student->enrollment_status === 'dropped_out' && $student->dropout_reason) {
+            // Map reason codes to full text as per DepEd guidelines
+            $reasonMap = [
+                'a1' => 'a.1 Had to take care of siblings',
+                'a2' => 'a.2 Early marriage/pregnancy', 
+                'a3' => 'a.3 Parents\' attitude toward schooling',
+                'a4' => 'a.4 Family problems',
+                'b1' => 'b.1 Illness',
+                'b2' => 'b.2 Disease', 
+                'b3' => 'b.3 Death',
+                'b4' => 'b.4 Disability',
+                'b5' => 'b.5 Poor academic performance',
+                'b6' => 'b.6 Disinterest/lack of ambitions',
+                'b7' => 'b.7 Hunger/Malnutrition',
+                'c1' => 'c.1 Teacher Factor',
+                'c2' => 'c.2 Physical condition of classroom',
+                'c3' => 'c.3 Peer Factor',
+                'd1' => 'd.1 Distance from home to school',
+                'd2' => 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+                'd3' => 'd.3 Calamities/disaster',
+                'd4' => 'd.4 Work-Related',
+                'd5' => 'd.5 Transferred/work'
+            ];
+            
+            $reasonText = $reasonMap[$student->dropout_reason] ?? $student->dropout_reason;
+            return "DROPPED OUT - {$reasonText}";
+        }
+        
+        if ($student->enrollment_status === 'transferred_out') {
+            $reasonMap = [
+                'a1' => 'a.1 Had to take care of siblings',
+                'a2' => 'a.2 Early marriage/pregnancy', 
+                'a3' => 'a.3 Parents\' attitude toward schooling',
+                'a4' => 'a.4 Family problems',
+                'b1' => 'b.1 Illness',
+                'b2' => 'b.2 Disease', 
+                'b4' => 'b.4 Disability',
+                'c1' => 'c.1 Teacher Factor',
+                'c2' => 'c.2 Physical condition of classroom',
+                'c3' => 'c.3 Peer Factor',
+                'd1' => 'd.1 Distance from home to school',
+                'd2' => 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+                'd3' => 'd.3 Calamities/disaster',
+                'd4' => 'd.4 Work-Related',
+                'd5' => 'd.5 Transferred/work'
+            ];
+            $reasonText = $reasonMap[$student->dropout_reason] ?? $student->dropout_reason;
+            return "TRANSFERRED OUT - {$reasonText}";
+        }
+        
+        if ($student->enrollment_status === 'transferred_in') {
+            return 'TRANSFERRED IN';
+        }
+        
+        return '-';
     }
 
     /**
