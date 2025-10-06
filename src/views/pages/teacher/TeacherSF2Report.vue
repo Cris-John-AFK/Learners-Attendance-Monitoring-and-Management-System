@@ -348,6 +348,68 @@ const isFutureDate = (dateString) => {
     return date > today; // October 2+ = true, October 1 = false
 };
 
+// Helper function to generate remarks based on student status
+const getStudentRemarks = (student) => {
+    if (!student) return '-';
+    
+    // Check if student has dropout/transfer status
+    if (student.enrollment_status === 'dropped_out' && student.dropout_reason) {
+        // Map reason codes to full text as per DepEd guidelines
+        const reasonMap = {
+            'a1': 'a.1 Had to take care of siblings',
+            'a2': 'a.2 Early marriage/pregnancy', 
+            'a3': 'a.3 Parents\' attitude toward schooling',
+            'a4': 'a.4 Family problems',
+            'b1': 'b.1 Illness',
+            'b2': 'b.2 Disease', 
+            'b3': 'b.3 Death',
+            'b4': 'b.4 Disability',
+            'b5': 'b.5 Poor academic performance',
+            'b6': 'b.6 Disinterest/lack of ambitions',
+            'b7': 'b.7 Hunger/Malnutrition',
+            'c1': 'c.1 Teacher Factor',
+            'c2': 'c.2 Physical condition of classroom',
+            'c3': 'c.3 Peer Factor',
+            'd1': 'd.1 Distance from home to school',
+            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            'd3': 'd.3 Calamities/disaster',
+            'd4': 'd.4 Work-Related',
+            'd5': 'd.5 Transferred/work'
+        };
+        
+        const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
+        return `DROPPED OUT - ${reasonText}`;
+    }
+    
+    if (student.enrollment_status === 'transferred_out') {
+        const reasonMap = {
+            'a1': 'a.1 Had to take care of siblings',
+            'a2': 'a.2 Early marriage/pregnancy', 
+            'a3': 'a.3 Parents\' attitude toward schooling',
+            'a4': 'a.4 Family problems',
+            'b1': 'b.1 Illness',
+            'b2': 'b.2 Disease', 
+            'b4': 'b.4 Disability',
+            'c1': 'c.1 Teacher Factor',
+            'c2': 'c.2 Physical condition of classroom',
+            'c3': 'c.3 Peer Factor',
+            'd1': 'd.1 Distance from home to school',
+            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            'd3': 'd.3 Calamities/disaster',
+            'd4': 'd.4 Work-Related',
+            'd5': 'd.5 Transferred/work'
+        };
+        const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
+        return `TRANSFERRED OUT - ${reasonText}`;
+    }
+    
+    if (student.enrollment_status === 'transferred_in') {
+        return 'TRANSFERRED IN';
+    }
+    
+    return '-';
+};
+
 // Get attendance mark for display - hide marks for future dates
 const getAttendanceMark = (status, dateString = null) => {
     // If date is in the future, return empty (will show slash only)
@@ -855,7 +917,7 @@ onMounted(() => {
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
+                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1;">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Male Daily Totals Row -->
                         <tr class="bg-gray-50" style="height: 20px">
@@ -933,7 +995,7 @@ onMounted(() => {
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-right: 2px solid #000">-</td>
+                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1;">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Female Daily Totals Row -->
                         <tr class="bg-gray-50" style="height: 20px">
@@ -1119,21 +1181,21 @@ onMounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Drop out</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.male?.dropouts || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.female?.dropouts || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.total?.dropouts || 0 }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Transferred out</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.male?.transferred_out || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.female?.transferred_out || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.total?.transferred_out || 0 }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Transferred in</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.male?.transferred_in || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.female?.transferred_in || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary?.total?.transferred_in || 0 }}</td>
                                 </tr>
                             </tbody>
                         </table>

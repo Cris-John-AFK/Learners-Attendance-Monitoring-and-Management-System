@@ -1,11 +1,13 @@
 <script setup>
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref, onUnmounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 
 const toast = useToast();
 const router = useRouter();
+const route = useRoute();
+const highlightedReportId = ref(null);
 const students = ref([]);
 const grades = ref([]);
 const loading = ref(true);
@@ -808,6 +810,68 @@ const getFemaleStudents = () => {
 
 const getTotalStudents = () => {
     return getMaleStudents().length + getFemaleStudents().length;
+};
+
+// Generate remarks text for student based on status
+const getStudentRemarks = (student) => {
+    if (!student) return '-';
+    
+    // Check if student has dropout/transfer status
+    if (student.enrollment_status === 'dropped_out' && student.dropout_reason) {
+        // Map reason codes to full text as per DepEd guidelines
+        const reasonMap = {
+            'a1': 'a.1 Had to take care of siblings',
+            'a2': 'a.2 Early marriage/pregnancy', 
+            'a3': 'a.3 Parents\' attitude toward schooling',
+            'a4': 'a.4 Family problems',
+            'b1': 'b.1 Illness',
+            'b2': 'b.2 Disease', 
+            'b3': 'b.3 Death',
+            'b4': 'b.4 Disability',
+            'b5': 'b.5 Poor academic performance',
+            'b6': 'b.6 Disinterest/lack of ambitions',
+            'b7': 'b.7 Hunger/Malnutrition',
+            'c1': 'c.1 Teacher Factor',
+            'c2': 'c.2 Physical condition of classroom',
+            'c3': 'c.3 Peer Factor',
+            'd1': 'd.1 Distance from home to school',
+            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            'd3': 'd.3 Calamities/disaster',
+            'd4': 'd.4 Work-Related',
+            'd5': 'd.5 Transferred/work'
+        };
+        
+        const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
+        return `DROPPED OUT - ${reasonText}`;
+    }
+    
+    if (student.enrollment_status === 'transferred_out') {
+        const reasonMap = {
+            'a1': 'a.1 Had to take care of siblings',
+            'a2': 'a.2 Early marriage/pregnancy', 
+            'a3': 'a.3 Parents\' attitude toward schooling',
+            'a4': 'a.4 Family problems',
+            'b1': 'b.1 Illness',
+            'b2': 'b.2 Disease', 
+            'b4': 'b.4 Disability',
+            'c1': 'c.1 Teacher Factor',
+            'c2': 'c.2 Physical condition of classroom',
+            'c3': 'c.3 Peer Factor',
+            'd1': 'd.1 Distance from home to school',
+            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            'd3': 'd.3 Calamities/disaster',
+            'd4': 'd.4 Work-Related',
+            'd5': 'd.5 Transferred/work'
+        };
+        const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
+        return `TRANSFERRED OUT - ${reasonText}`;
+    }
+    
+    if (student.enrollment_status === 'transferred_in') {
+        return 'TRANSFERRED IN';
+    }
+    
+    return '-';
 };
 
 // Generate fixed M-T-W-TH-F columns (always 5 weeks = 25 columns)
@@ -2586,7 +2650,54 @@ const previousStep = () => {
     }
 };
 
-// Initialize component
+// Get row class for highlighting
+const getRowClass = (data) => {
+    const classes = [];
+    
+    // Add data attribute for targeting
+    if (data.id) {
+        classes.push(`report-row-${data.id}`);
+    }
+    
+    // Add highlight class if this row is highlighted
+    if (highlightedReportId.value && data.id === highlightedReportId.value) {
+        classes.push('highlighted-row');
+    }
+    
+    return classes.join(' ');
+};
+
+// Highlight specific report row
+const highlightReport = (reportId) => {
+    highlightedReportId.value = reportId;
+    
+    // Scroll to the highlighted row
+    setTimeout(() => {
+        const rowElement = document.querySelector(`.report-row-${reportId}`);
+        if (rowElement) {
+            rowElement.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+            
+            // Add blink animation
+            rowElement.classList.add('highlight-blink');
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+                highlightedReportId.value = null;
+                rowElement.classList.remove('highlight-blink');
+            }, 3000);
+        }
+    }, 100);
+};
+
+// Handle highlight event from notification
+const handleHighlightEvent = (event) => {
+    const reportId = event.detail.reportId;
+    highlightReport(reportId);
+};
+
 onMounted(() => {
     loadGradesAndSections();
     loadStudents();
@@ -2602,6 +2713,21 @@ onMounted(() => {
     setTimeout(() => {
         generateAllQRCodes();
     }, 500);
+    
+    // Check for highlight query parameter
+    const highlightId = route.query.highlight;
+    if (highlightId) {
+        setTimeout(() => {
+            highlightReport(parseInt(highlightId));
+        }, 1000); // Wait for data to load
+    }
+    
+    // Listen for highlight events from notifications
+    window.addEventListener('highlightReport', handleHighlightEvent);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('highlightReport', handleHighlightEvent);
 });
 </script>
 
@@ -2670,6 +2796,7 @@ onMounted(() => {
                     responsiveLayout="scroll"
                     class="p-datatable-sm modern-datatable"
                     :globalFilterFields="['grade_level', 'section', 'school_year', 'month_name', 'teacher_name']"
+                    :rowClass="getRowClass"
                 >
                     <Column header="#" style="width: 3rem">
                         <template #body="slotProps">
@@ -2930,7 +3057,7 @@ onMounted(() => {
                                 </td>
                                 <td class="border border-gray-400 p-1 text-center">{{ getTotalAbsent(student) }}</td>
                                 <td class="border border-gray-400 p-1 text-center">{{ getTotalLate(student) }}</td>
-                                <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                                <td class="border border-gray-400 p-1">{{ getStudentRemarks(student) }}</td>
                             </tr>
 
                             <!-- MALE'S TOTAL PER DAY -->
@@ -2957,7 +3084,7 @@ onMounted(() => {
                                 </td>
                                 <td class="border border-gray-400 p-1 text-center">{{ getTotalAbsent(student) }}</td>
                                 <td class="border border-gray-400 p-1 text-center">{{ getTotalLate(student) }}</td>
-                                <td class="border border-gray-400 p-1">{{ student.remarks || '' }}</td>
+                                <td class="border border-gray-400 p-1">{{ getStudentRemarks(student) }}</td>
                             </tr>
 
                             <!-- FEMALE'S TOTAL PER DAY -->
@@ -3123,21 +3250,21 @@ onMounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Drop out</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.male?.dropouts || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.female?.dropouts || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.total?.dropouts || 0 }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Transferred out</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.male?.transferred_out || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.female?.transferred_out || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.total?.transferred_out || 0 }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Transferred in</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
-                                    <td class="border border-gray-800 p-1 text-center">0</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.male?.transferred_in || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.female?.transferred_in || 0 }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.total?.transferred_in || 0 }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -3990,6 +4117,27 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 1rem;
+}
+
+/* Notification Highlighting Styles */
+:deep(.highlighted-row) {
+    background-color: #fef3c7 !important;
+    border-left: 4px solid #f59e0b !important;
+}
+
+:deep(.highlight-blink) {
+    animation: highlight-blink 0.6s ease-in-out 3;
+}
+
+@keyframes highlight-blink {
+    0%, 100% {
+        background-color: #fef3c7;
+        transform: scale(1);
+    }
+    50% {
+        background-color: #fed7aa;
+        transform: scale(1.02);
+    }
 }
 
 .search-container {

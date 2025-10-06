@@ -77,18 +77,12 @@ const logout = async () => {
     }
 };
 
-// Load SF2 submitted reports using request manager
+// Load SF2 submitted reports directly
 const loadSubmittedReports = async () => {
     try {
-        const response = await queueApiRequest(
-            async () => {
-                const res = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
-                return { data: await res.json() };
-            },
-            'low' // Low priority for notifications
-        );
-
-        const data = response.data;
+        console.log('🔄 Loading submitted reports...');
+        const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
+        const data = await response.json();
 
         if (data.success) {
             const newReports = data.data;
@@ -161,10 +155,26 @@ const stopPolling = () => {
     }
 };
 
-// Navigate to collected reports page
-const goToCollectedReports = () => {
+// Navigate to collected reports page and highlight specific report
+const goToCollectedReports = (reportId = null) => {
     isNotificationOpen.value = false;
-    router.push('/admin-collected-reports');
+    
+    if (reportId) {
+        // Navigate with report ID to highlight
+        router.push({
+            path: '/admin-collected-reports',
+            query: { highlight: reportId }
+        });
+        
+        // Also emit event for immediate highlighting
+        setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('highlightReport', { 
+                detail: { reportId: reportId }
+            }));
+        }, 500); // Wait for page to load
+    } else {
+        router.push('/admin-collected-reports');
+    }
 };
 
 // Navigate to school calendar
@@ -227,9 +237,25 @@ const forceBadgeShow = () => {
     console.log('🔴 Badge should show:', unreadCount.value > 0 ? 'YES' : 'NO');
 };
 
+// Clear all read notifications for debugging
+const clearAllReadNotifications = () => {
+    readNotifications.value.clear();
+    localStorage.removeItem('admin_read_notifications');
+    loadSubmittedReports();
+    console.log('🗑️ Cleared all read notifications and refreshed');
+};
+
+// Force refresh notifications
+const forceRefreshNotifications = () => {
+    console.log('🔄 Force refreshing notifications...');
+    loadSubmittedReports();
+};
+
 // Make functions available globally for debugging
 window.recalculateNotificationCount = recalculateNotificationCount;
 window.forceBadgeShow = forceBadgeShow;
+window.clearAllReadNotifications = clearAllReadNotifications;
+window.forceRefreshNotifications = forceRefreshNotifications;
 
 // Format time ago helper
 const formatTimeAgo = (timestamp) => {
@@ -313,9 +339,13 @@ onUnmounted(() => {
                 <div class="relative">
                     <button type="button" class="layout-topbar-action notification-button" @click="handleNotificationClick">
                         <i class="pi pi-bell" style="font-size: 1.2rem"></i>
-                        <!-- Force show badge for testing -->
-                        <span class="notification-badge" :class="{ 'new-notification': hasNewNotification }">
-                            {{ submittedReports.filter((r) => r.status === 'submitted' && !readNotifications.has(r.id)).length || 2 }}
+                        <!-- Show badge with actual unread count -->
+                        <span 
+                            v-if="unreadCount > 0"
+                            class="notification-badge" 
+                            :class="{ 'new-notification': hasNewNotification }"
+                        >
+                            {{ unreadCount }}
                         </span>
                     </button>
                     <!-- Notifications Dropdown Panel -->
@@ -328,7 +358,7 @@ onUnmounted(() => {
                         </div>
                         <div class="panel-content">
                             <!-- When there are notifications -->
-                            <div v-if="submittedReports.filter((r) => r.status === 'submitted').length > 0" class="notifications-list">
+                            <div v-if="submittedReports.length > 0" class="notifications-list">
                                 <div class="notifications-section">
                                     <div class="section-label">Earlier</div>
                                     <div
@@ -337,7 +367,7 @@ onUnmounted(() => {
                                         class="notification-item-card"
                                         @click="
                                             markAsRead(report.id);
-                                            goToCollectedReports();
+                                            goToCollectedReports(report.id);
                                         "
                                     >
                                         <div class="notification-avatar">
