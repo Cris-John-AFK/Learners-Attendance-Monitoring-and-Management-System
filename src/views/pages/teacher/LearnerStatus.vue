@@ -20,6 +20,13 @@ const students = ref([]);
 const currentView = ref('section');
 const searchQuery = ref('');
 const isSectionAdviser = ref(false);
+
+// Filter states
+const selectedStatus = ref(null);
+const selectedSection = ref(null);
+const selectedGrade = ref(null);
+const availableSections = ref([]);
+const availableGrades = ref([]);
 const teacherId = ref(null);
 const showEditDialog = ref(false);
 const showHistoryDialog = ref(false);
@@ -53,9 +60,33 @@ const reasonOptions = computed(() => {
 });
 
 const filteredStudents = computed(() => {
-    if (!searchQuery.value) return students.value;
-    const query = searchQuery.value.toLowerCase();
-    return students.value.filter((s) => s.name.toLowerCase().includes(query) || s.student_id.toLowerCase().includes(query));
+    let filtered = students.value;
+
+    // Apply search filter
+    if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        filtered = filtered.filter((s) => 
+            s.name.toLowerCase().includes(query) || 
+            s.student_id.toLowerCase().includes(query)
+        );
+    }
+
+    // Apply status filter
+    if (selectedStatus.value) {
+        filtered = filtered.filter((s) => s.enrollment_status === selectedStatus.value);
+    }
+
+    // Apply section filter
+    if (selectedSection.value) {
+        filtered = filtered.filter((s) => s.section === selectedSection.value);
+    }
+
+    // Apply grade filter
+    if (selectedGrade.value) {
+        filtered = filtered.filter((s) => s.grade_level === selectedGrade.value);
+    }
+
+    return filtered;
 });
 
 const loadStudents = async () => {
@@ -69,6 +100,10 @@ const loadStudents = async () => {
             students.value = response.students;
             isSectionAdviser.value = response.is_section_adviser;
             console.log('Students loaded:', students.value.length, 'Section Adviser:', isSectionAdviser.value);
+            
+            // Extract unique sections and grades for filters
+            availableSections.value = [...new Set(students.value.map(s => s.section))].filter(Boolean).sort();
+            availableGrades.value = [...new Set(students.value.map(s => s.grade_level))].filter(Boolean).sort();
         } else {
             console.error('API returned success=false:', response);
             toast.add({ severity: 'error', summary: 'Error', detail: response.message || 'Failed to load students', life: 3000 });
@@ -171,21 +206,67 @@ onMounted(() => {
             <p class="text-gray-600">Manage student enrollment status</p>
         </div>
 
-        <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center gap-4 flex-wrap">
-            <div class="flex gap-2">
-                <Button
-                    v-for="view in viewOptions"
-                    :key="view.value"
-                    :label="view.label"
-                    :icon="view.icon"
-                    :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
-                    @click="
-                        currentView = view.value;
-                        loadStudents();
-                    "
-                />
+        <div class="bg-white p-4 rounded-lg shadow mb-4">
+            <div class="flex justify-between items-center gap-4 flex-wrap mb-4">
+                <div class="flex gap-2">
+                    <Button
+                        v-for="view in viewOptions"
+                        :key="view.value"
+                        :label="view.label"
+                        :icon="view.icon"
+                        :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
+                        @click="
+                            currentView = view.value;
+                            loadStudents();
+                        "
+                    />
+                </div>
+                <InputText v-model="searchQuery" placeholder="Search by name or ID..." class="w-64" />
             </div>
-            <InputText v-model="searchQuery" placeholder="Search..." class="w-64" />
+            
+            <!-- Filter Row -->
+            <div class="flex gap-3 items-center flex-wrap">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-semibold mb-2">Status</label>
+                    <Dropdown 
+                        v-model="selectedStatus" 
+                        :options="statusOptions" 
+                        optionLabel="label" 
+                        optionValue="value" 
+                        placeholder="All Statuses" 
+                        class="w-full" 
+                        :showClear="true"
+                    />
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-semibold mb-2">Grade</label>
+                    <Dropdown 
+                        v-model="selectedGrade" 
+                        :options="availableGrades" 
+                        placeholder="All Grades" 
+                        class="w-full" 
+                        :showClear="true"
+                    />
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-semibold mb-2">Section</label>
+                    <Dropdown 
+                        v-model="selectedSection" 
+                        :options="availableSections" 
+                        placeholder="All Sections" 
+                        class="w-full" 
+                        :showClear="true"
+                    />
+                </div>
+                <div class="flex items-end pb-1">
+                    <Button 
+                        label="Clear Filters" 
+                        icon="pi pi-filter-slash" 
+                        class="p-button-outlined p-button-secondary" 
+                        @click="selectedStatus = null; selectedGrade = null; selectedSection = null; searchQuery = ''"
+                    />
+                </div>
+            </div>
         </div>
 
         <div v-if="!isSectionAdviser" class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-4 rounded">
