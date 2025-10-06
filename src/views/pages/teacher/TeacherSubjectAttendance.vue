@@ -58,7 +58,7 @@ const getInitialSubjectInfo = () => {
             mathematics: 'Mathematics',
             science: 'Science'
         };
-        return { id, name: subjectNames[id] || 'Subject' };
+        return { id, name: subjectNames[id] || 'Loading...' };
     }
     return { id: '1', name: 'Mathematics' };
 };
@@ -68,8 +68,30 @@ const subjectName = ref(initialSubject.name);
 const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
 const teacherId = ref(null); // Will be set from authenticated teacher
-const currentDate = ref(new Date().toISOString().split('T')[0]);
+const currentDate = ref(new Date()); // Use Date object for DatePicker compatibility
 const currentDateTime = ref(new Date());
+
+// Computed property to get date string for API calls (using LOCAL timezone, NOT UTC)
+const currentDateString = computed(() => {
+    if (currentDate.value instanceof Date) {
+        // Use local timezone, NOT UTC to avoid date shifting
+        const year = currentDate.value.getFullYear();
+        const month = String(currentDate.value.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    return currentDate.value;
+});
+
+// Function to ensure date is always current
+const ensureCurrentDate = () => {
+    const today = new Date();
+    // Set to today's date, removing time component
+    today.setHours(0, 0, 0, 0);
+    currentDate.value = today;
+    console.log('✅ Date set to (LOCAL TIMEZONE):', currentDateString.value);
+    console.log('Current time:', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }));
+};
 
 // Loading states
 const isLoadingSeating = ref(false);
@@ -1336,46 +1358,34 @@ const onScannerError = (error) => {
 
 // Clean up invalid student assignments from seating arrangement
 const cleanupInvalidStudentAssignments = () => {
-    // Don't run cleanup if students aren't loaded yet
-    if (!students.value || students.value.length === 0) {
-        console.log('Skipping cleanup - no students loaded');
-        return;
-    }
-
-    let cleanedCount = 0;
-    const studentIds = students.value.map((s) => s.id);
-
-    console.log(
-        'Running cleanup - current students:',
-        students.value.map((s) => ({ id: s.id, name: s.name }))
-    );
-    console.log('Available student IDs:', studentIds);
-
-    seatPlan.value.forEach((row, rowIndex) => {
-        row.forEach((seat, colIndex) => {
-            if (seat.isOccupied && seat.studentId) {
-                const student = getStudentById(seat.studentId);
-                console.log(`Checking seat [${rowIndex}][${colIndex}] with studentId ${seat.studentId}:`, student ? 'FOUND' : 'NOT FOUND');
-
-                // Only remove if we're absolutely sure the student doesn't exist
-                // and we have a reasonable number of students loaded
-                if (!student && students.value.length > 0) {
-                    console.log(`Removing invalid student assignment: ${seat.studentId}`);
-                    // Clear the invalid assignment
-                    seat.isOccupied = false;
+    if (!students.value?.length) return;
+    
+    console.log('Running cleanup - current students:', students.value);
+    
+    const availableStudentIds = students.value.map(student => student.id);
+    console.log('Available student IDs:', availableStudentIds);
+    
+    let foundInvalid = false;
+    
+    for (let row = 0; row < seatPlan.value.length; row++) {
+        for (let col = 0; col < seatPlan.value[row].length; col++) {
+            const seat = seatPlan.value[row][col];
+            if (seat.studentId) {
+                const studentIdNumber = parseInt(seat.studentId.replace('NCS-2025-00', ''));
+                console.log(`Checking seat [${row}][${col}] with studentId ${seat.studentId}: ${availableStudentIds.includes(studentIdNumber) ? 'FOUND' : 'NOT FOUND'}`);
+                
+                if (!availableStudentIds.includes(studentIdNumber)) {
+                    console.log(`Removing invalid assignment: ${seat.studentId} from [${row}][${col}]`);
                     seat.studentId = null;
-                    seat.status = null;
-                    cleanedCount++;
-                } else if (!student) {
-                    console.log(`Keeping assignment for studentId ${seat.studentId} - students may not be fully loaded`);
+                    seat.studentName = '';
+                    foundInvalid = true;
                 }
             }
-        });
-    });
-
-    if (cleanedCount > 0) {
-        console.log(`Cleaned up ${cleanedCount} invalid student assignments from seating arrangement`);
-        // Recalculate unassigned students after cleanup
+        }
+    }
+    
+    if (foundInvalid) {
+        console.log('Found invalid assignments, updating counts');
         calculateUnassignedStudents();
     } else {
         console.log('No invalid assignments found during cleanup');
@@ -1440,7 +1450,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     const timestamp = new Date().toISOString();
 
     // Save to attendance records
-    const recordKey = `${seat.studentId}-${currentDate.value}`;
+    const recordKey = `${seat.studentId}-${currentDateString.value}`;
 
     if (status === 'Present' || status === 'Late') {
         // Remove from remarks panel if exists
@@ -1470,7 +1480,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     // Update attendance records
     attendanceRecords.value[recordKey] = {
         studentId: seat.studentId,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: remarks || '',
         timestamp
@@ -1481,7 +1491,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
     // Also update the cache to ensure our most recent changes persist across refreshes
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp,
@@ -1569,7 +1579,7 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
             section_id: sectionId.value,
             subject_id: resolvedSubjectId,
             teacher_id: teacherId.value,
-            date: currentDate.value,
+            date: currentDateString.value,
             attendance: [
                 {
                     student_id: studentId,
@@ -1873,7 +1883,7 @@ const fetchAttendanceHistory = async () => {
 
         // Get current day's records from localStorage first, as these are the most recent
         const todayRecords = {};
-        const today = currentDate.value;
+        const today = currentDateString.value;
         Object.keys(attendanceRecords.value).forEach((key) => {
             // Check if the record is for today
             if (key.includes(today)) {
@@ -1968,10 +1978,10 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
     const timestamp = new Date().toISOString();
 
     // Save to attendance records
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: remarks || '',
         timestamp
@@ -1984,10 +1994,10 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
         foundSeat.status = status;
 
         // Save attendance with remarks
-        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+        const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
         attendanceRecords.value[recordKey] = {
             studentId: currentStudent.value.id,
-            date: currentDate.value,
+            date: currentDateString.value,
             status,
             remarks: remarks || '',
             timestamp
@@ -2021,7 +2031,7 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
     // Update cache
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp,
@@ -2074,7 +2084,7 @@ const createAttendanceSession = async () => {
             teacherId: teacherId.value,
             sectionId: sectionId.value,
             subjectId: resolvedSubjectId,
-            date: currentDate.value,
+            date: currentDateString.value,
             startTime: new Date().toTimeString().split(' ')[0], // Current time in HH:MM:SS format
             type: 'regular',
             metadata: {}
@@ -2095,7 +2105,7 @@ const createAttendanceSession = async () => {
         });
 
         // Clear any cached attendance data for today
-        const today = currentDate.value;
+        const today = currentDateString.value;
         const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
         localStorage.removeItem(cacheKey);
         scannedStudents.value = [];
@@ -2157,7 +2167,7 @@ const calculateSessionStatistics = () => {
         late_count: lateCount,
         excused_count: excusedCount,
         attendance_rate: attendanceRate,
-        session_date: currentDate.value,
+        session_date: currentDateString.value,
         subject_name: subjectName.value || 'Subject',
         session_duration: sessionActive.value ? 'Active' : 'Completed'
     };
@@ -2231,10 +2241,16 @@ const completeAttendanceSession = async () => {
         const completionKey = `attendance_completion_${today}`;
         const completionData = {
             timestamp: new Date().toISOString(),
-            sessionData: response.summary
+            sessionData: {
+                ...response.summary,
+                subject_name: subjectName.value // Store the subject name when session was completed
+            }
         };
         localStorage.setItem(completionKey, JSON.stringify(completionData));
-        completedSessionData.value = response.summary;
+        completedSessionData.value = {
+            ...response.summary,
+            subject_name: subjectName.value
+        };
 
         // Add notification with correct method
         const methodNames = {
@@ -2428,7 +2444,7 @@ const resetAllAttendance = () => {
         });
 
         // Get the current date for filtering records
-        const today = currentDate.value;
+        const today = currentDateString.value;
 
         // Identify keys to remove (all records for today)
         const keysToRemove = [];
@@ -2501,7 +2517,7 @@ const decrementColumns = () => {
 const resolveSubjectDetails = async (subjectIdentifier) => {
     console.log(`🚀 Resolving subject details for identifier: ${subjectIdentifier}`);
 
-    if (subjectIdentifier && (subjectName.value === 'Subject' || subjectName.value === subjectIdentifier || isNaN(subjectIdentifier))) {
+    if (subjectIdentifier && (subjectName.value === 'Subject' || subjectName.value === 'Loading...' || subjectName.value === subjectIdentifier || isNaN(subjectIdentifier))) {
         const subjectDetails = await fetchSubjectDetails(subjectIdentifier);
         console.log(`📋 Received subject details:`, subjectDetails);
 
@@ -2608,7 +2624,9 @@ watch(
                 if (isNaN(matchedSubject)) {
                     await resolveSubjectDetails(matchedSubject);
                 } else {
-                    subjectName.value = formatSubjectName(matchedSubject);
+                    // For numeric IDs, set loading placeholder and fetch from API
+                    subjectName.value = 'Loading...';
+                    await resolveSubjectDetails(matchedSubject);
                 }
 
                 // Reinitialize component with new subject
@@ -2625,7 +2643,9 @@ watch(
             if (isNaN(matchedSubject)) {
                 await resolveSubjectDetails(matchedSubject);
             } else {
-                subjectName.value = formatSubjectName(matchedSubject);
+                // For numeric IDs, set loading placeholder and fetch from API
+                subjectName.value = 'Loading...';
+                await resolveSubjectDetails(matchedSubject);
             }
 
             loadSavedTemplates();
@@ -2643,6 +2663,9 @@ let refreshInterval = null;
 // Initialize component data and setup
 const initializeComponent = async () => {
     try {
+        // Ensure date is set to today
+        ensureCurrentDate();
+        
         // Subject info is already set during component creation, just log it
         console.log(`Initializing component for: ${subjectName.value} (ID: ${subjectId.value})`);
 
@@ -2772,8 +2795,14 @@ watchEffect(() => {
     if (newSubject.id !== subjectId.value) {
         subjectId.value = newSubject.id;
 
-        // Only update subject name if we don't have a resolved name yet
-        if (subjectName.value === 'Subject' || subjectName.value === 'Mathematics') {
+        // Only update subject name if we don't have a properly resolved name yet
+        // Don't overwrite resolved subject names (like "English") with generic placeholders
+        const hasResolvedName = subjectName.value !== 'Subject' 
+            && subjectName.value !== 'Mathematics'
+            && subjectName.value !== 'Loading...'
+            && isNaN(parseInt(subjectName.value)); // Current name is NOT a number
+        
+        if (!hasResolvedName) {
             subjectName.value = newSubject.name;
         }
 
@@ -2782,7 +2811,7 @@ watchEffect(() => {
         // Only reload students data if not currently initializing and teacher is available
         if (!isInitializing.value && teacherId.value) {
             console.log('Route change detected - reloading students data');
-            loadStudentsFromDatabase().catch(console.warn);
+            loadStudentsData().catch(console.warn);
         } else {
             console.log('Skipping route change reload - component is initializing');
         }
@@ -2815,7 +2844,7 @@ onMounted(async () => {
         loadSavedTemplates().catch(console.warn);
 
         // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
-        if (subjectId.value && (subjectName.value === 'Subject' || subjectName.value === subjectId.value || isNaN(subjectId.value))) {
+        if (subjectId.value && (subjectName.value === 'Subject' || subjectName.value === 'Loading...' || subjectName.value === subjectId.value || isNaN(subjectId.value))) {
             console.log(`Fetching subject details for identifier: ${subjectId.value}`);
             const subjectDetails = await fetchSubjectDetails(subjectId.value);
             console.log(`📋 Received subject details:`, subjectDetails);
@@ -2886,7 +2915,7 @@ const loadCachedAttendanceData = () => {
             }
         });
     });
-    const selectedDate = currentDate.value;
+    const selectedDate = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${selectedDate}`;
 
     try {
@@ -3306,7 +3335,7 @@ const setAttendanceStatus = (status) => {
     saveAttendanceWithRemarks(status);
 
     // Extra step to ensure changes are saved properly
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp: new Date().toISOString(),
@@ -3334,7 +3363,7 @@ const saveRemarks = () => {
     saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
 
     // Extra step to ensure changes are saved properly
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp: new Date().toISOString(),
@@ -3697,7 +3726,7 @@ const saveAttendanceStatus = async () => {
             student_id: student.id,
             status: pendingStatus.value.toLowerCase(), // Convert to lowercase for database
             remarks: attendanceRemarks.value || '',
-            date: currentDate.value
+            date: currentDateString.value
         };
 
         // Use the teacher attendance service to mark attendance
@@ -3820,7 +3849,7 @@ if (typeof window !== 'undefined') {
 // Load attendance data from database for today
 const loadTodayAttendanceFromDatabase = async () => {
     try {
-        const today = currentDate.value;
+        const today = currentDateString.value;
         console.log('Loading attendance from database for date:', today);
 
         // Validate required parameters before making API call
@@ -3986,10 +4015,10 @@ const markRollCallStatus = (status) => {
     }
 
     // Save attendance record
-    const recordKey = `${studentId}_${currentDate.value}`;
+    const recordKey = `${studentId}_${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: studentId,
-        date: currentDate.value,
+        date: currentDateString.value,
         status: status,
         time: new Date().toLocaleTimeString(),
         remarks: ''
@@ -4052,10 +4081,10 @@ const markRollCallAttendance = async (status) => {
     }
 
     // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: '',
         timestamp: new Date().toISOString()
@@ -4133,10 +4162,10 @@ const saveRollCallRemarks = () => {
     }
 
     // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status: pendingRollCallStatus.value,
         remarks: rollCallRemarks.value,
         timestamp: new Date().toISOString()
@@ -4214,11 +4243,17 @@ const saveCompletedSession = (sessionData) => {
 
     const completionData = {
         timestamp: new Date().toISOString(),
-        sessionData: sessionData
+        sessionData: {
+            ...sessionData,
+            subject_name: subjectName.value // Store the subject name when session was completed
+        }
     };
 
     localStorage.setItem(completionKey, JSON.stringify(completionData));
-    completedSessionData.value = sessionData;
+    completedSessionData.value = {
+        ...sessionData,
+        subject_name: subjectName.value
+    };
 
     // Add notification to the system with correct method
     const methodNames = {
@@ -4392,7 +4427,7 @@ const applyAttendanceStatusesToSeatPlan = () => {
     if (!attendanceRecords.value || Object.keys(attendanceRecords.value).length === 0) return;
 
     // Get today's date
-    const today = currentDate.value;
+    const today = currentDateString.value;
 
     // Group records by student ID to ensure we're using the most recent record for each student
     const studentLatestRecords = {};
@@ -5265,7 +5300,7 @@ const titleRef = ref(null);
         <!-- Attendance Completion Modal -->
         <AttendanceCompletionModal
             :visible="showCompletionModal"
-            :subject-name="subjectName"
+            :subject-name="completedSessionData?.subject_name || subjectName"
             :session-date="new Date().toLocaleDateString()"
             :session-data="completedSessionData"
             @close="handleModalClose"

@@ -1,0 +1,251 @@
+{
+	"info": {
+		"name": "LAMMS Shared Attendance API",
+		"description": "API endpoints for sharing student attendance data with groupmates",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get All Students with Attendance",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/students?date_from=2025-09-01&date_to=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"students"
+					],
+					"query": [
+						{
+							"key": "date_from",
+							"value": "2025-09-01",
+							"description": "Start date (YYYY-MM-DD)"
+						},
+						{
+							"key": "date_to",
+							"value": "2025-10-06",
+							"description": "End date (YYYY-MM-DD)"
+						},
+						{
+							"key": "section_id",
+							"value": "1",
+							"description": "Filter by section ID",
+							"disabled": true
+						},
+						{
+							"key": "grade_level",
+							"value": "Grade 1",
+							"description": "Filter by grade level",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Retrieve all students with their attendance records and statistics"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Specific Student Details",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/students/14?date_from=2025-07-01&date_to=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"students",
+						"14"
+					],
+					"query": [
+						{
+							"key": "date_from",
+							"value": "2025-07-01",
+							"description": "Start date (YYYY-MM-DD)"
+						},
+						{
+							"key": "date_to",
+							"value": "2025-10-06",
+							"description": "End date (YYYY-MM-DD)"
+						}
+					]
+				},
+				"description": "Get detailed information for a specific student including complete attendance history"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Attendance Summary Statistics",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/summary?date_from=2025-09-01&date_to=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"summary"
+					],
+					"query": [
+						{
+							"key": "date_from",
+							"value": "2025-09-01",
+							"description": "Start date"
+						},
+						{
+							"key": "date_to",
+							"value": "2025-10-06",
+							"description": "End date"
+						},
+						{
+							"key": "section_id",
+							"value": "1",
+							"description": "Filter by section",
+							"disabled": true
+						},
+						{
+							"key": "grade_level",
+							"value": "Grade 1",
+							"description": "Filter by grade",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Get overall attendance statistics and summary data"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Daily Attendance Report",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/daily?date=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"daily"
+					],
+					"query": [
+						{
+							"key": "date",
+							"value": "2025-10-06",
+							"description": "Date to retrieve (YYYY-MM-DD)"
+						},
+						{
+							"key": "section_id",
+							"value": "1",
+							"description": "Filter by section",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Get attendance records for a specific date"
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Students (Filtered by Section)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/students?section_id=1&date_from=2025-09-01&date_to=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"students"
+					],
+					"query": [
+						{
+							"key": "section_id",
+							"value": "1",
+							"description": "Section ID filter"
+						},
+						{
+							"key": "date_from",
+							"value": "2025-09-01"
+						},
+						{
+							"key": "date_to",
+							"value": "2025-10-06"
+						}
+					]
+				},
+				"description": "Get students filtered by specific section"
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Students (Filtered by Grade Level)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/shared/attendance/students?grade_level=Grade 1&date_from=2025-09-01&date_to=2025-10-06",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"shared",
+						"attendance",
+						"students"
+					],
+					"query": [
+						{
+							"key": "grade_level",
+							"value": "Grade 1",
+							"description": "Grade level filter"
+						},
+						{
+							"key": "date_from",
+							"value": "2025-09-01"
+						},
+						{
+							"key": "date_to",
+							"value": "2025-10-06"
+						}
+					]
+				},
+				"description": "Get students filtered by grade level"
+			},
+			"response": []
+		}
+	]
+}

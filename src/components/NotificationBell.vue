@@ -22,6 +22,7 @@
         <div 
             v-if="showDropdown" 
             class="notification-dropdown"
+            :class="{ 'full-panel': showFullPanel }"
             @click.stop
         >
             <div class="notification-header">
@@ -35,17 +36,37 @@
                 </button>
             </div>
 
+            <!-- Facebook-style Tabs -->
+            <div class="notification-tabs">
+                <button 
+                    class="tab-button" 
+                    :class="{ 'active': activeTab === 'all' }"
+                    @click="activeTab = 'all'"
+                >
+                    All
+                </button>
+                <button 
+                    class="tab-button" 
+                    :class="{ 'active': activeTab === 'unread' }"
+                    @click="activeTab = 'unread'"
+                >
+                    Unread
+                    <span v-if="notificationCount > 0" class="tab-badge">{{ notificationCount }}</span>
+                </button>
+            </div>
+
             <div class="notification-list">
                 <div 
-                    v-if="notifications.length === 0" 
+                    v-if="filteredNotifications.length === 0" 
                     class="no-notifications"
                 >
                     <i class="pi pi-bell-slash"></i>
-                    <p>No notifications</p>
+                    <p v-if="activeTab === 'unread'">No unread notifications</p>
+                    <p v-else>No notifications</p>
                 </div>
 
                 <div 
-                    v-for="notification in notifications" 
+                    v-for="notification in displayedNotifications" 
                     :key="notification.id"
                     class="notification-item"
                     :class="{ 'unread': !notification.read }"
@@ -80,9 +101,15 @@
                 </div>
             </div>
 
-            <div class="notification-footer" v-if="notifications.length > 3">
+            <div class="notification-footer" v-if="!showFullPanel && filteredNotifications.length > 5">
                 <button class="view-all-notifications" @click="viewAllNotifications">
                     View all notifications
+                </button>
+            </div>
+            
+            <div class="notification-footer" v-if="showFullPanel">
+                <button class="view-all-notifications" @click="showFullPanel = false">
+                    Show less
                 </button>
             </div>
         </div>
@@ -112,6 +139,8 @@ const emit = defineEmits(['notification-clicked', 'mark-all-read', 'remove-notif
 
 // State
 const showDropdown = ref(false);
+const activeTab = ref('all'); // 'all' or 'unread'
+const showFullPanel = ref(false); // Toggle between compact and full view
 
 // Computed
 const notificationCount = computed(() => {
@@ -122,6 +151,21 @@ const hasUnreadNotifications = computed(() => {
     return notificationCount.value > 0;
 });
 
+const filteredNotifications = computed(() => {
+    if (activeTab.value === 'unread') {
+        return props.notifications.filter(n => !n.read);
+    }
+    return props.notifications;
+});
+
+const displayedNotifications = computed(() => {
+    // Show only 5 in compact mode, all in full panel mode
+    if (!showFullPanel.value) {
+        return filteredNotifications.value.slice(0, 5);
+    }
+    return filteredNotifications.value;
+});
+
 // Methods
 const toggleDropdown = () => {
     showDropdown.value = !showDropdown.value;
@@ -129,6 +173,8 @@ const toggleDropdown = () => {
 
 const closeDropdown = () => {
     showDropdown.value = false;
+    showFullPanel.value = false; // Reset to compact mode
+    activeTab.value = 'all'; // Reset to all tab
 };
 
 const handleNotificationClick = (notification) => {
@@ -151,9 +197,8 @@ const removeNotification = (notificationId) => {
 };
 
 const viewAllNotifications = () => {
-    closeDropdown();
-    // Navigate to notifications page (you can create this route)
-    window.location.href = '/teacher/notifications';
+    // Toggle to full panel view instead of navigating
+    showFullPanel.value = true;
 };
 
 const formatTime = (timestamp) => {
@@ -328,6 +373,12 @@ onUnmounted(() => {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.notification-dropdown.full-panel {
+    width: 500px;
+    max-height: 600px;
 }
 
 .notification-header {
@@ -382,9 +433,62 @@ onUnmounted(() => {
     left: 100%;
 }
 
+/* Facebook-style Tabs */
+.notification-tabs {
+    display: flex;
+    border-bottom: 2px solid #e9ecef;
+    background: white;
+}
+
+.tab-button {
+    flex: 1;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 15px;
+    font-weight: 600;
+    color: #65676b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab-button:hover {
+    background: #f2f3f5;
+}
+
+.tab-button.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background: #e7f3ff;
+}
+
+.tab-badge {
+    background: #007bff;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .notification-list {
     max-height: 350px;
     overflow-y: auto;
+}
+
+.notification-dropdown.full-panel .notification-list {
+    max-height: 450px;
 }
 
 .no-notifications {
