@@ -181,7 +181,6 @@ const showStatusDialog = ref(false);
 
 // Attendance method selection
 const showAttendanceMethodModal = ref(false);
-const showRollCall = ref(false);
 const scanning = ref(false);
 const cameraError = ref(null);
 const currentStudentIndex = ref(0);
@@ -189,11 +188,6 @@ const currentStudent = ref(null);
 
 // Rename to avoid conflict
 const showAttendanceDialog = ref(false);
-
-// Add these refs if not already present
-const showRollCallRemarksDialog = ref(false);
-const rollCallRemarks = ref('');
-const pendingRollCallStatus = ref('');
 
 // Attendance Completion Modal state
 const showCompletionModal = ref(false);
@@ -1359,21 +1353,21 @@ const onScannerError = (error) => {
 // Clean up invalid student assignments from seating arrangement
 const cleanupInvalidStudentAssignments = () => {
     if (!students.value?.length) return;
-    
+
     console.log('Running cleanup - current students:', students.value);
-    
-    const availableStudentIds = students.value.map(student => student.id);
+
+    const availableStudentIds = students.value.map((student) => student.id);
     console.log('Available student IDs:', availableStudentIds);
-    
+
     let foundInvalid = false;
-    
+
     for (let row = 0; row < seatPlan.value.length; row++) {
         for (let col = 0; col < seatPlan.value[row].length; col++) {
             const seat = seatPlan.value[row][col];
             if (seat.studentId) {
                 const studentIdNumber = parseInt(seat.studentId.replace('NCS-2025-00', ''));
                 console.log(`Checking seat [${row}][${col}] with studentId ${seat.studentId}: ${availableStudentIds.includes(studentIdNumber) ? 'FOUND' : 'NOT FOUND'}`);
-                
+
                 if (!availableStudentIds.includes(studentIdNumber)) {
                     console.log(`Removing invalid assignment: ${seat.studentId} from [${row}][${col}]`);
                     seat.studentId = null;
@@ -1383,7 +1377,7 @@ const cleanupInvalidStudentAssignments = () => {
             }
         }
     }
-    
+
     if (foundInvalid) {
         console.log('Found invalid assignments, updating counts');
         calculateUnassignedStudents();
@@ -2255,8 +2249,7 @@ const completeAttendanceSession = async () => {
         // Add notification with correct method
         const methodNames = {
             qr: 'QR Code Scan',
-            seat_plan: 'Seat Plan',
-            roll_call: 'Roll Call'
+            seat_plan: 'Seat Plan'
         };
 
         const sessionSummaryWithMethod = {
@@ -2665,7 +2658,7 @@ const initializeComponent = async () => {
     try {
         // Ensure date is set to today
         ensureCurrentDate();
-        
+
         // Subject info is already set during component creation, just log it
         console.log(`Initializing component for: ${subjectName.value} (ID: ${subjectId.value})`);
 
@@ -2797,11 +2790,8 @@ watchEffect(() => {
 
         // Only update subject name if we don't have a properly resolved name yet
         // Don't overwrite resolved subject names (like "English") with generic placeholders
-        const hasResolvedName = subjectName.value !== 'Subject' 
-            && subjectName.value !== 'Mathematics'
-            && subjectName.value !== 'Loading...'
-            && isNaN(parseInt(subjectName.value)); // Current name is NOT a number
-        
+        const hasResolvedName = subjectName.value !== 'Subject' && subjectName.value !== 'Mathematics' && subjectName.value !== 'Loading...' && isNaN(parseInt(subjectName.value)); // Current name is NOT a number
+
         if (!hasResolvedName) {
             subjectName.value = newSubject.name;
         }
@@ -3078,26 +3068,6 @@ const allowDrop = (event) => {
     }
 };
 
-// Roll Call Methods
-const startRollCall = () => {
-    showRollCall.value = true;
-    showQRScanner.value = false;
-    showAttendanceMethodModal.value = false;
-
-    // Initialize roll call process
-    currentStudentIndex.value = 0;
-    if (students.value.length > 0) {
-        currentStudent.value = students.value[0];
-    }
-
-    toast.add({
-        severity: 'info',
-        summary: 'Roll Call Mode',
-        detail: 'Roll call mode started. Mark each student as they respond.',
-        life: 3000
-    });
-};
-
 // Clean up on component unmount
 onUnmounted(() => {
     // Preserve current assignments before unmounting
@@ -3282,32 +3252,40 @@ const handleQuickAction = async (status) => {
 const onReasonConfirmed = async (reasonData) => {
     if (!pendingAttendanceUpdate.value) return;
 
-    const { student, status, rowIndex, colIndex } = pendingAttendanceUpdate.value;
+    const { student, status, seat, rowIndex, colIndex, newStatus } = pendingAttendanceUpdate.value;
+    const finalStatus = newStatus || status;
 
-    // Update seat with status and reason
-    seatPlan.value[rowIndex][colIndex].status = status;
+    // Check if this is from roll call (has seat object) or seat plan (has rowIndex/colIndex)
+    if (seat) {
+        // Roll call - update the seat object and continue roll call
+        seat.status = finalStatus;
+        await processRollCallAttendance(finalStatus, reasonData.reason_notes || '', reasonData.reason_id);
+    } else if (rowIndex !== undefined && colIndex !== undefined) {
+        // Seat plan - update seat by coordinates
+        seatPlan.value[rowIndex][colIndex].status = finalStatus;
 
-    // Save to database with reason
-    try {
-        await saveAttendanceToDatabase(student.id, status, '', reasonData.reason_id, reasonData.reason_notes);
+        // Save to database with reason
+        try {
+            await saveAttendanceToDatabase(student.id, finalStatus, '', reasonData.reason_id, reasonData.reason_notes);
 
-        toast.add({
-            severity: 'success',
-            summary: 'Attendance Updated',
-            detail: `${student.name || student.firstName + ' ' + student.lastName} marked as ${status} - ${reasonData.reason_name}`,
-            life: 3000
-        });
-    } catch (error) {
-        console.error('Error saving attendance with reason:', error);
-        // Revert the change if save failed
-        seatPlan.value[rowIndex][colIndex].status = pendingAttendanceUpdate.value.previousStatus;
+            toast.add({
+                severity: 'success',
+                summary: 'Attendance Updated',
+                detail: `${student.name || student.firstName + ' ' + student.lastName} marked as ${finalStatus} - ${reasonData.reason_name}`,
+                life: 3000
+            });
+        } catch (error) {
+            console.error('Error saving attendance with reason:', error);
+            // Revert the change if save failed
+            seatPlan.value[rowIndex][colIndex].status = pendingAttendanceUpdate.value.previousStatus;
 
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to save attendance',
-            life: 3000
-        });
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to save attendance',
+                life: 3000
+            });
+        }
     }
 
     // Clear pending update
@@ -3376,7 +3354,6 @@ const saveRemarks = () => {
 const openAttendanceMethodDialog = () => {
     // Reset any previous selections
     showQRScanner.value = false;
-    showRollCall.value = false;
     scannedStudents.value = [];
 
     // Open the attendance method selection dialog
@@ -3992,111 +3969,6 @@ const processQRCode = async (qrData) => {
     }
 };
 
-// Add this function for the Roll Call feature
-const markRollCallStatus = (status) => {
-    if (!currentStudent.value) return;
-
-    // Mark student with the selected status
-    const student = currentStudent.value;
-    const studentId = student.id;
-
-    // Find if student is in a seat
-    let found = false;
-
-    // Search all seats
-    for (let i = 0; i < seatPlan.value.length && !found; i++) {
-        for (let j = 0; j < seatPlan.value[i].length && !found; j++) {
-            if (seatPlan.value[i][j].studentId === studentId) {
-                // Update seat status
-                seatPlan.value[i][j].status = status;
-                found = true;
-            }
-        }
-    }
-
-    // Save attendance record
-    const recordKey = `${studentId}_${currentDateString.value}`;
-    attendanceRecords.value[recordKey] = {
-        studentId: studentId,
-        date: currentDateString.value,
-        status: status,
-        time: new Date().toLocaleTimeString(),
-        remarks: ''
-    };
-
-    // Save to localStorage
-    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
-
-    // Show confirmation
-    toast.add({
-        severity: status === 'Present' ? 'success' : status === 'Absent' ? 'error' : 'warn',
-        summary: `Marked ${status}`,
-        detail: `${student.name} has been marked as ${status}`,
-        life: 2000
-    });
-
-    // Move to next student
-    if (currentStudentIndex.value < students.value.length - 1) {
-        currentStudentIndex.value++;
-        currentStudent.value = students.value[currentStudentIndex.value];
-    } else {
-        // End of roll call
-        toast.add({
-            severity: 'info',
-            summary: 'Roll Call Complete',
-            detail: 'All students have been processed',
-            life: 3000
-        });
-        showRollCall.value = false;
-    }
-};
-
-// Update the roll call attendance marking function
-const markRollCallAttendance = async (status) => {
-    if (!currentStudent.value) return;
-
-    // Check if session is active
-    if (!sessionActive.value) {
-        // Show confirmation dialog to start session
-        const confirmed = await showStartSessionConfirmation();
-        if (confirmed) {
-            await startAttendanceSession();
-        } else {
-            return;
-        }
-    }
-
-    // For Absent or Excused, show remarks dialog
-    if (status === 'Absent' || status === 'Excused') {
-        pendingRollCallStatus.value = status;
-        showRollCallRemarksDialog.value = true;
-        return;
-    }
-
-    // For Present or Late, mark directly
-    // Call the existing function from earlier in the file
-    const foundSeat = findSeatByStudentId(currentStudent.value.id);
-    if (foundSeat) {
-        foundSeat.status = status;
-    }
-
-    // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
-    attendanceRecords.value[recordKey] = {
-        studentId: currentStudent.value.id,
-        date: currentDateString.value,
-        status,
-        remarks: '',
-        timestamp: new Date().toISOString()
-    };
-
-    // Save to localStorage and database
-    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
-    saveAttendanceRecord(currentStudent.value.id, status, '');
-
-    nextStudent();
-};
-
 // Helper function to find seat by student ID
 const findSeatByStudentId = (studentId) => {
     for (let i = 0; i < seatPlan.value.length; i++) {
@@ -4109,86 +3981,6 @@ const findSeatByStudentId = (studentId) => {
     return null;
 };
 
-// Helper function to move to next student in roll call
-const nextStudent = async () => {
-    currentStudentIndex.value++;
-    if (currentStudentIndex.value < students.value.length) {
-        currentStudent.value = students.value[currentStudentIndex.value];
-    } else {
-        // End roll call and complete session
-        showRollCall.value = false;
-
-        try {
-            // Complete the session and show completion modal
-            const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-            saveCompletedSession(response.summary);
-            sessionActive.value = false;
-            currentSession.value = null;
-
-            toast.add({
-                severity: 'success',
-                summary: 'Roll Call Complete',
-                detail: 'All students processed and session completed',
-                life: 3000
-            });
-        } catch (error) {
-            console.error('Error completing session:', error);
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to complete session',
-                life: 3000
-            });
-        }
-    }
-};
-
-// Add function to save roll call remarks
-const saveRollCallRemarks = () => {
-    if (!rollCallRemarks.value.trim()) {
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Please enter remarks',
-            life: 3000
-        });
-        return;
-    }
-
-    // Save roll call attendance with remarks
-    const foundSeat = findSeatByStudentId(currentStudent.value.id);
-    if (foundSeat) {
-        foundSeat.status = pendingRollCallStatus.value;
-    }
-
-    // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
-    attendanceRecords.value[recordKey] = {
-        studentId: currentStudent.value.id,
-        date: currentDateString.value,
-        status: pendingRollCallStatus.value,
-        remarks: rollCallRemarks.value,
-        timestamp: new Date().toISOString()
-    };
-
-    // Update remarks panel if needed
-    if (pendingRollCallStatus.value === 'Absent' || pendingRollCallStatus.value === 'Excused') {
-        updateRemarksPanel(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
-    }
-
-    // Save to localStorage and database
-    localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords.value));
-    saveAttendanceRecord(currentStudent.value.id, pendingRollCallStatus.value, rollCallRemarks.value);
-
-    // Reset dialog values
-    showRollCallRemarksDialog.value = false;
-    rollCallRemarks.value = '';
-    pendingRollCallStatus.value = '';
-
-    nextStudent();
-};
-
-// Add this function for the updateRemarksPanel
 const updateRemarksPanel = (studentId, status, remarks) => {
     // Get the student
     const student = getStudentById(studentId);
@@ -4539,7 +4331,6 @@ onUnmounted(() => {
     // Close any open modals
     showCompletionModal.value = false;
     showQRScanner.value = false;
-    showRollCall.value = false;
     showAttendanceMethodModal.value = false;
     showStatusDialog.value = false;
     showRemarksDialog.value = false;
@@ -5123,54 +4914,9 @@ const titleRef = ref(null);
                 <div class="flex flex-col gap-4">
                     <Button icon="pi pi-users" label="Seat Plan" class="p-button-outlined" @click="selectSeatPlanMethod" />
 
-                    <Button icon="pi pi-list" label="Roll Call" class="p-button-outlined" @click="selectRollCallMethod" />
-
                     <Button icon="pi pi-qrcode" label="QR Code Scanner" class="p-button-outlined" @click="selectQRMethod" />
                 </div>
             </div>
-        </Dialog>
-
-        <!-- Roll Call Dialog -->
-        <Dialog v-model:visible="showRollCall" header="Roll Call" :modal="true" :closable="true" style="width: 500px">
-            <div v-if="currentStudent" class="p-4">
-                <div class="flex items-center mb-4">
-                    <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-800 font-bold mr-3">
-                        {{ getStudentInitials(currentStudent) }}
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-medium">{{ currentStudent.name }}</h3>
-                        <p class="text-gray-500 text-sm">ID: {{ currentStudent.id }}</p>
-                    </div>
-                </div>
-
-                <div class="flex gap-2 justify-center mt-4">
-                    <Button icon="pi pi-check-circle" label="Present" class="p-button-success" @click="markRollCallAttendance('Present')" />
-                    <Button icon="pi pi-times-circle" label="Absent" class="p-button-danger" @click="markRollCallAttendance('Absent')" />
-                    <Button icon="pi pi-clock" label="Late" style="background: #eab308; border-color: #eab308" @click="markRollCallAttendance('Late')" />
-                    <Button icon="pi pi-info-circle" label="Excused" style="background: #9333ea; border-color: #9333ea" @click="markRollCallAttendance('Excused')" />
-                </div>
-
-                <div class="flex justify-between mt-6">
-                    <p class="text-gray-500">{{ currentStudentIndex + 1 }} of {{ students.length }}</p>
-                    <div>
-                        <Button icon="pi pi-times" class="p-button-text" @click="showRollCall = false" label="Finish" />
-                    </div>
-                </div>
-            </div>
-        </Dialog>
-
-        <!-- Roll Call Remarks Dialog -->
-        <Dialog v-model:visible="showRollCallRemarksDialog" header="Enter Remarks" :modal="true" :style="{ width: '30vw', minWidth: '400px' }" :closeOnEscape="true" :dismissableMask="true">
-            <div class="p-fluid">
-                <div class="field">
-                    <label for="rollCallRemarks">Remarks</label>
-                    <Textarea id="rollCallRemarks" v-model="rollCallRemarks" rows="3" placeholder="Enter reason for absence/excuse" class="w-full" />
-                </div>
-            </div>
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showRollCallRemarksDialog = false" />
-                <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveRollCallRemarks" />
-            </template>
         </Dialog>
 
         <!-- Enhanced QR Scanner Dialog with Gate Log -->
