@@ -59,7 +59,12 @@
                     </div>
                     
                     <div class="notification-content">
-                        <div class="notification-title">{{ notification.title }}</div>
+                        <div class="notification-title">
+                            {{ notification.title }}
+                            <span v-if="notification.count && notification.count > 1" class="notification-count-badge">
+                                {{ notification.count }}+
+                            </span>
+                        </div>
                         <div class="notification-message">{{ notification.message }}</div>
                         <div class="notification-time">{{ formatTime(notification.timestamp) }}</div>
                     </div>
@@ -477,6 +482,36 @@ onUnmounted(() => {
     font-size: 14px;
     color: #212529;
     margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-count-badge {
+    background: linear-gradient(135deg, #ff4757, #ff3742);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(255, 71, 87, 0.3);
+    animation: pulse-count 2s infinite;
+}
+
+@keyframes pulse-count {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.9;
+    }
 }
 
 .notification-message {

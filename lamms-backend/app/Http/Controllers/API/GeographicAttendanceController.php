@@ -34,11 +34,13 @@ class GeographicAttendanceController extends Controller
             $query = DB::table('teacher_section_subject as tss')
                 ->join('student_section as ss', 'tss.section_id', '=', 'ss.section_id')
                 ->join('student_details as sd', 'ss.student_id', '=', 'sd.id')
-                ->leftJoin('attendance_records as ar', function($join) use ($startDate, $endDate) {
-                    $join->on('sd.id', '=', 'ar.student_id')
-                         ->whereBetween('ar.created_at', [$startDate, $endDate]);
+                ->leftJoin('attendance_records as ar', function($join) {
+                    $join->on('sd.id', '=', 'ar.student_id');
                 })
-                ->leftJoin('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->leftJoin('attendance_sessions as ases', function($join) use ($startDate, $endDate) {
+                    $join->on('ar.attendance_session_id', '=', 'ases.id')
+                         ->whereBetween('ases.session_date', [$startDate, $endDate]);
+                })
                 ->leftJoin('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                 ->where('tss.teacher_id', $teacherId)
                 ->where('tss.is_active', true)

@@ -25,9 +25,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import TeacherAuthService from '@/services/TeacherAuthService';
 
 // Import our new smart analytics services
+import AttendanceIndexingService from '@/services/AttendanceIndexingService';
 import CacheService from '@/services/CacheService';
 import SmartAnalyticsService from '@/services/SmartAnalyticsService';
-import AttendanceIndexingService from '@/services/AttendanceIndexingService';
 // Sticky notes service removed
 
 // Import new components
@@ -171,30 +171,25 @@ const MOCK_ATTENDANCE_CHART_DATA = {
 async function refreshDashboardData(forceRefresh = false) {
     // Check if we're already refreshing or too soon
     const now = Date.now();
-    if (!forceRefresh && lastRefreshTime.value && (now - lastRefreshTime.value) < MIN_REFRESH_INTERVAL) {
+    if (!forceRefresh && lastRefreshTime.value && now - lastRefreshTime.value < MIN_REFRESH_INTERVAL) {
         console.log('⏳ Skipping refresh - too soon since last refresh');
         return;
     }
-    
+
     console.log('🔄 Refreshing dashboard data...');
     lastRefreshTime.value = now;
-    
+
     // If we have indexed data, use it for instant update
     if (selectedSubject.value || viewType.value === 'all_students') {
-        const indexedData = AttendanceIndexingService.getIndexedData(
-            currentTeacher.value?.id,
-            selectedSubject.value?.sectionId,
-            selectedSubject.value?.id,
-            viewType.value
-        );
-        
+        const indexedData = AttendanceIndexingService.getIndexedData(currentTeacher.value?.id, selectedSubject.value?.sectionId, selectedSubject.value?.id, viewType.value);
+
         if (indexedData) {
             console.log('⚡ Using indexed data for instant refresh');
             processIndexedData(indexedData);
             return;
         }
     }
-    
+
     // Otherwise load fresh data
     await loadAttendanceData();
 }
@@ -419,19 +414,18 @@ onMounted(async () => {
         if (teacherSubjects.value?.length > 0) {
             console.log('📚 Starting data pre-indexing...');
             isIndexing.value = true;
-            
-            AttendanceIndexingService.preloadAllData(
-                currentTeacher.value.id,
-                teacherSubjects.value
-            ).then(result => {
-                console.log('✅ Pre-indexing complete:', result);
-                isIndexing.value = false;
-            }).catch(err => {
-                console.error('❌ Pre-indexing error:', err);
-                isIndexing.value = false;
-            });
+
+            AttendanceIndexingService.preloadAllData(currentTeacher.value.id, teacherSubjects.value)
+                .then((result) => {
+                    console.log('✅ Pre-indexing complete:', result);
+                    isIndexing.value = false;
+                })
+                .catch((err) => {
+                    console.error('❌ Pre-indexing error:', err);
+                    isIndexing.value = false;
+                });
         }
-        
+
         // Set up controlled auto-refresh with minimum interval
         refreshInterval = setInterval(() => {
             refreshDashboardData(false); // Only refresh if enough time has passed
@@ -565,9 +559,9 @@ function processIndexedData(indexedData) {
         console.warn('⚠️ No indexed data provided to processIndexedData');
         return;
     }
-    
+
     console.log('📦 Processing indexed data:', indexedData);
-    
+
     // Process summary data
     if (indexedData.summary) {
         attendanceSummary.value = {
@@ -581,10 +575,10 @@ function processIndexedData(indexedData) {
     } else {
         console.warn('⚠️ No summary data in indexed data');
     }
-    
+
     // Process students data - try multiple sources
     let studentsData = [];
-    
+
     if (indexedData.students && Array.isArray(indexedData.students) && indexedData.students.length > 0) {
         studentsData = indexedData.students;
         console.log('👥 Using students from indexed.students:', studentsData.length);
@@ -601,9 +595,9 @@ function processIndexedData(indexedData) {
         });
         return; // Don't clear existing data if indexed data is empty
     }
-    
+
     if (studentsData.length > 0) {
-        studentsWithAbsenceIssues.value = studentsData.map(student => ({
+        studentsWithAbsenceIssues.value = studentsData.map((student) => ({
             id: student.student_id || student.id,
             name: student.name || `${student.firstName} ${student.lastName}` || `${student.first_name} ${student.last_name}`,
             gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
@@ -616,7 +610,7 @@ function processIndexedData(indexedData) {
         }));
         console.log('✅ Processed students data successfully:', studentsWithAbsenceIssues.value.length);
     }
-    
+
     // Process trends data based on current chart view
     if (indexedData.trends && indexedData.trends[chartView.value]) {
         const trendsData = indexedData.trends[chartView.value];
@@ -760,17 +754,14 @@ async function loadAttendanceData() {
 // Load data for "All Subjects" view
 async function loadAllSubjectsData() {
     console.log('📚 Loading All Subjects attendance data');
-    
+
     try {
         // Get attendance summary for all students (viewType: 'all_students')
-        const summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(
-            currentTeacher.value.id,
-            {
-                period: 'week',
-                viewType: 'all_students', // This is the key difference
-                subjectId: null
-            }
-        );
+        const summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
+            period: 'week',
+            viewType: 'all_students', // This is the key difference
+            subjectId: null
+        });
 
         console.log('🔍 All Subjects Summary API called with:', {
             teacherId: currentTeacher.value.id,
@@ -790,7 +781,7 @@ async function loadAllSubjectsData() {
 
             // For "All Subjects", we get students from the summary response
             if (summaryResponse.data.students) {
-                studentsWithAbsenceIssues.value = summaryResponse.data.students.map(student => ({
+                studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
                     id: student.student_id || student.id,
                     name: student.name || `${student.first_name} ${student.last_name}`,
                     gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
@@ -950,7 +941,7 @@ function calculateAverageAttendance(totalStudents, attendanceRecords) {
 // Prepare chart data for attendance visualization using real database API
 async function prepareChartData() {
     if (!currentTeacher.value) return;
-    
+
     // Handle case where no subject is selected or "All Subjects" is selected
     if (!selectedSubject.value) return;
 
@@ -1011,7 +1002,7 @@ async function prepareChartData() {
             // Determine the correct viewType and subjectId based on selection
             let actualViewType = viewType.value;
             let actualSubjectId = null;
-            
+
             if (selectedSubject.value && selectedSubject.value.id === null) {
                 // "All Subjects" selected - use all_students view
                 actualViewType = 'all_students';
@@ -1368,20 +1359,15 @@ async function prepareCalendarData(student) {
 // Handle subject change with instant loading from index
 async function onSubjectChange() {
     console.log('🔄 Subject changed to:', selectedSubject.value?.name);
-    
+
     // Try to get indexed data first for instant switching
-    const indexedData = AttendanceIndexingService.getIndexedData(
-        currentTeacher.value?.id,
-        selectedSubject.value?.sectionId,
-        selectedSubject.value?.id,
-        viewType.value
-    );
-    
+    const indexedData = AttendanceIndexingService.getIndexedData(currentTeacher.value?.id, selectedSubject.value?.sectionId, selectedSubject.value?.id, viewType.value);
+
     if (indexedData) {
         console.log('⚡ Loading from index - instant!');
         processIndexedData(indexedData);
         await prepareChartData();
-        
+
         // Note: Prefetching can be added later for further optimization
     } else {
         // Fallback to loading fresh data
@@ -1389,16 +1375,10 @@ async function onSubjectChange() {
         try {
             await loadAttendanceData();
             await prepareChartData();
-            
+
             // Index this data for next time
             if (selectedSubject.value) {
-                AttendanceIndexingService.refreshSubjectData(
-                    currentTeacher.value?.id,
-                    selectedSubject.value.sectionId,
-                    selectedSubject.value.id,
-                    viewType.value,
-                    selectedSubject.value.name
-                );
+                AttendanceIndexingService.refreshSubjectData(currentTeacher.value?.id, selectedSubject.value.sectionId, selectedSubject.value.id, viewType.value, selectedSubject.value.name);
             }
         } finally {
             subjectLoading.value = false;
@@ -1409,15 +1389,10 @@ async function onSubjectChange() {
 // Handle view type change (subject-specific vs all students)
 async function onViewTypeChange() {
     console.log('🔄 View type changed to:', viewType.value);
-    
+
     // Try to get indexed data for the new view type
-    const indexedData = AttendanceIndexingService.getIndexedData(
-        currentTeacher.value?.id,
-        selectedSubject.value?.sectionId,
-        selectedSubject.value?.id,
-        viewType.value
-    );
-    
+    const indexedData = AttendanceIndexingService.getIndexedData(currentTeacher.value?.id, selectedSubject.value?.sectionId, selectedSubject.value?.id, viewType.value);
+
     if (indexedData) {
         console.log('⚡ Loading from index for view type:', viewType.value);
         processIndexedData(indexedData);
@@ -1426,30 +1401,19 @@ async function onViewTypeChange() {
         // Load fresh data for the new view type
         await loadAttendanceData();
         await prepareChartData();
-        
+
         // Index this data for next time
-        AttendanceIndexingService.refreshSubjectData(
-            currentTeacher.value?.id,
-            selectedSubject.value?.sectionId,
-            selectedSubject.value?.id,
-            viewType.value,
-            selectedSubject.value?.name || 'All Students'
-        );
+        AttendanceIndexingService.refreshSubjectData(currentTeacher.value?.id, selectedSubject.value?.sectionId, selectedSubject.value?.id, viewType.value, selectedSubject.value?.name || 'All Students');
     }
 }
 
 // Handle chart view change (daily/weekly/monthly)
 async function onChartViewChange() {
     console.log('📊 Chart view changed to:', chartView.value);
-    
+
     // Try to get indexed data for the new chart view
-    const indexedData = AttendanceIndexingService.getIndexedData(
-        currentTeacher.value?.id,
-        selectedSubject.value?.sectionId,
-        selectedSubject.value?.id,
-        viewType.value
-    );
-    
+    const indexedData = AttendanceIndexingService.getIndexedData(currentTeacher.value?.id, selectedSubject.value?.sectionId, selectedSubject.value?.id, viewType.value);
+
     if (indexedData && indexedData.trends && indexedData.trends[chartView.value]) {
         console.log('⚡ Using indexed chart data for:', chartView.value);
         const trendsData = indexedData.trends[chartView.value];
@@ -1786,26 +1750,17 @@ async function showStudentProfile(student) {
                                 <!-- View Type Selector -->
                                 <div>
                                     <label class="block text-xs font-medium text-gray-700 mb-1">View Type</label>
-                                    <SelectButton 
-                                        v-model="viewType" 
-                                        :options="viewTypeOptions" 
-                                        optionLabel="label" 
-                                        optionValue="value" 
-                                        class="text-xs w-full"
-                                        @change="onViewTypeChange"
-                                    />
+                                    <SelectButton v-model="viewType" :options="viewTypeOptions" optionLabel="label" optionValue="value" class="text-xs w-full" @change="onViewTypeChange" />
                                 </div>
-                                
+
                                 <!-- Subject Filter (Always Visible) -->
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-700 mb-1">
-                                        <i class="pi pi-book text-xs mr-1"></i>Subject Filter
-                                    </label>
-                                    <Dropdown 
-                                        v-model="selectedSubject" 
-                                        :options="[{ id: null, name: 'All Subjects' }, ...availableSubjects]" 
-                                        optionLabel="name" 
-                                        placeholder="Select Subject" 
+                                    <label class="block text-xs font-medium text-gray-700 mb-1"> <i class="pi pi-book text-xs mr-1"></i>Subject Filter </label>
+                                    <Dropdown
+                                        v-model="selectedSubject"
+                                        :options="[{ id: null, name: 'All Subjects' }, ...availableSubjects]"
+                                        optionLabel="name"
+                                        placeholder="Select Subject"
                                         class="w-full text-sm"
                                         :disabled="viewType === 'all_students'"
                                         @change="onSubjectChange"
@@ -1826,21 +1781,14 @@ async function showStudentProfile(student) {
                                         </template>
                                     </Dropdown>
                                 </div>
-                                
+
                                 <!-- Period Filter -->
                                 <div>
                                     <label class="block text-xs font-medium text-gray-700 mb-1">Period</label>
-                                    <SelectButton 
-                                        v-model="chartView" 
-                                        :options="chartViewOptions" 
-                                        optionLabel="label" 
-                                        optionValue="value" 
-                                        class="text-xs w-full"
-                                        @change="onChartViewChange"
-                                    />
+                                    <SelectButton v-model="chartView" :options="chartViewOptions" optionLabel="label" optionValue="value" class="text-xs w-full" @change="onChartViewChange" />
                                 </div>
                             </div>
-                            
+
                             <!-- Indexing Progress Indicator -->
                             <div v-if="isIndexing" class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                                 <div class="flex items-center">

@@ -101,9 +101,9 @@
                                 <i class="pi pi-home"></i>
                                 <span>Assign Section</span>
                             </button>
-                            <button class="action-btn add-subject-btn" @click="openAddSubjectsDialog(teacher)" title="Add Subject">
+                            <button class="action-btn add-subject-btn" @click="openAddSubjectsDialog(teacher)" :title="getSubjectButtonTitle(teacher)">
                                 <i class="pi pi-plus"></i>
-                                <span>Add Subject</span>
+                                <span>{{ getSubjectButtonText(teacher) }}</span>
                             </button>
                         </div>
                     </div>
@@ -269,16 +269,21 @@
             </div>
         </Dialog>
 
-        <!-- Assignment Wizard Dialog - Enhanced for Departmentalized Teachers -->
-        <Dialog v-model:visible="assignmentWizardDialog" modal :style="{ width: '900px' }" header="Assign Subject to Teacher" class="assignment-wizard-dialog">
+        <!-- Assignment Wizard Dialog - Dynamic for Primary and Departmentalized Teachers -->
+        <Dialog v-model:visible="assignmentWizardDialog" modal :style="{ width: '900px' }" :header="getSubjectButtonText(selectedTeacher) + ' - ' + (selectedTeacher?.first_name || '') + ' ' + (selectedTeacher?.last_name || '')" class="assignment-wizard-dialog">
             <div v-if="selectedTeacher && assignmentWizardMode === 'add-subjects'" class="assignment-wizard-content">
                 <div class="teacher-info mb-4">
-                    <h4>Assigning subject for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
-                    <p class="text-sm text-gray-600">Select section and subject for departmentalized teaching</p>
+                    <h4>{{ getSubjectButtonText(selectedTeacher) }} for: {{ selectedTeacher.first_name }} {{ selectedTeacher.last_name }}</h4>
+                    <p class="text-sm text-gray-600" v-if="isTeacherPrimary(selectedTeacher)">
+                        Adding subjects to {{ selectedTeacher.primary_assignment?.section?.name }} ({{ selectedTeacher.primary_assignment?.section?.grade?.name }})
+                    </p>
+                    <p class="text-sm text-gray-600" v-else>
+                        Select section and subject for departmentalized teaching
+                    </p>
                 </div>
 
-                <!-- Step 1: Select Section -->
-                <div class="section-selection mb-4">
+                <!-- Step 1: Select Section (Only for Departmentalized Teachers) -->
+                <div v-if="!isTeacherPrimary(selectedTeacher)" class="section-selection mb-4">
                     <h5><i class="pi pi-building mr-2"></i>Step 1: Select Section</h5>
                     <Dropdown
                         v-model="selectedSectionForSubjectAssignment"
@@ -288,6 +293,12 @@
                         class="w-full"
                         showClear
                     />
+                </div>
+
+                <!-- For Primary Teachers: Show selected section info -->
+                <div v-if="isTeacherPrimary(selectedTeacher) && selectedSectionForSubjectAssignment" class="selected-section-info mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h5 class="text-blue-800"><i class="pi pi-home mr-2"></i>Homeroom Section</h5>
+                    <p class="text-sm text-blue-600">{{ selectedSectionForSubjectAssignment.display_name }}</p>
                 </div>
 
                 <!-- Step 2: Select Subject -->
@@ -338,7 +349,7 @@
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="assignmentWizardDialog = false" />
                 <Button 
-                    label="Assign Subject Teacher" 
+                    :label="isTeacherPrimary(selectedTeacher) ? 'Add Subjects' : 'Assign Subject Teacher'" 
                     icon="pi pi-check" 
                     :disabled="!selectedSectionForSubjectAssignment || selectedSubjectsForAssignment.length === 0" 
                     @click="saveSubjectAssignments" 
@@ -1539,6 +1550,36 @@ const getTeacherHomeroomSection = (teacher) => {
     );
 };
 
+// Helper function to determine if teacher is primary (K-3) or departmentalized (4-6)
+const isTeacherPrimary = (teacher) => {
+    if (!teacher || !teacher.primary_assignment) {
+        return false; // Default to departmentalized if no homeroom
+    }
+    
+    const gradeName = teacher.primary_assignment.section?.grade?.name;
+    if (!gradeName) {
+        return false;
+    }
+    
+    // Primary grades: Kindergarten, Grade 1, Grade 2, Grade 3
+    const primaryGrades = ['Kindergarten', 'Kinder', 'Grade 1', 'Grade 2', 'Grade 3'];
+    return primaryGrades.some(g => gradeName.toLowerCase().includes(g.toLowerCase()));
+};
+
+// Get dynamic button text based on teacher type
+const getSubjectButtonText = (teacher) => {
+    return isTeacherPrimary(teacher) ? 'Add Subject' : 'Assign Subject Section';
+};
+
+// Get dynamic button title based on teacher type
+const getSubjectButtonTitle = (teacher) => {
+    if (isTeacherPrimary(teacher)) {
+        return 'Add subjects to this teacher\'s homeroom section';
+    } else {
+        return 'Assign subjects across multiple sections (departmentalized)';
+    }
+};
+
 const openAddSubjectsDialog = async (teacherData) => {
     if (!teacherData || !teacherData.id) {
         toast.add({
@@ -1560,18 +1601,45 @@ const openAddSubjectsDialog = async (teacherData) => {
         selectedSubjectsForAssignment.value = [];
 
         console.log(`Opening add-subjects dialog for teacher: ${teacherData.first_name} ${teacherData.last_name}`);
+        console.log('Teacher type:', isTeacherPrimary(teacherData) ? 'Primary (K-3)' : 'Departmentalized (4-6)');
 
-        // Load available sections for departmentalized assignment
-        await loadAllSectionsForSubjectAssignment();
-        
-        // Load available subjects for assignment
-        await loadSubjectsForAssignment();
+        // Check if teacher is primary (K-3) or departmentalized (4-6)
+        if (isTeacherPrimary(teacherData)) {
+            // PRIMARY TEACHERS (K-3): Skip section selection, use homeroom section
+            console.log('Primary teacher detected - using homeroom section directly');
+            
+            // Auto-select their homeroom section
+            if (teacherData.primary_assignment && teacherData.primary_assignment.section) {
+                selectedSectionForSubjectAssignment.value = {
+                    id: teacherData.primary_assignment.section.id,
+                    name: teacherData.primary_assignment.section.name,
+                    display_name: `${teacherData.primary_assignment.section.grade?.name || 'Grade ?'} - ${teacherData.primary_assignment.section.name}`
+                };
+                console.log('Auto-selected homeroom section:', selectedSectionForSubjectAssignment.value);
+            }
+            
+            // Load subjects for assignment
+            await loadSubjectsForAssignment();
+            
+            // Open the existing dialog (it will show Step 2 directly since section is pre-selected)
+            assignmentWizardDialog.value = true;
+        } else {
+            // DEPARTMENTALIZED TEACHERS (4-6): Show full dialog with section selection
+            console.log('Departmentalized teacher detected - showing section selection');
+            
+            // Load available sections for departmentalized assignment
+            await loadAllSectionsForSubjectAssignment();
+            
+            // Load available subjects for assignment
+            await loadSubjectsForAssignment();
+
+            // Open the dialog
+            assignmentWizardDialog.value = true;
+        }
 
         // Debug: Log teacher's current assignments for subject filtering
-        console.log('Teacher assignments:', selectedTeacher.value.active_assignments);
+        console.log('Teacher assignments:', selectedTeacher.value.subject_assignments);
 
-        // Open the dialog
-        assignmentWizardDialog.value = true;
     } catch (error) {
         console.error('Error opening add subjects dialog:', error);
         toast.add({

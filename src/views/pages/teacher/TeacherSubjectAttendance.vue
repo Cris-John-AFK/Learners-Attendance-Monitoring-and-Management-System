@@ -1,6 +1,7 @@
 <script setup>
 import AttendanceCompletionModal from '@/components/AttendanceCompletionModal.vue';
 import AttendanceReasonDialog from '@/components/AttendanceReasonDialog.vue';
+import AttendanceEditDialog from '@/components/AttendanceEditDialog.vue';
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { AttendanceService } from '@/router/service/Students';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
@@ -105,6 +106,10 @@ const showReasonDialog = ref(false);
 const reasonDialogType = ref('late'); // 'late' or 'excused'
 const pendingAttendanceUpdate = ref(null); // Store student info while dialog is open
 
+// Attendance Edit Dialog states
+const showEditDialog = ref(false);
+const editSessionData = ref(null);
+
 // Hover quick actions states
 const hoveredSeat = ref(null); // { row, col }
 const quickActionsPosition = ref({ top: 0, left: 0 });
@@ -112,6 +117,12 @@ const quickActionsPosition = ref({ top: 0, left: 0 });
 // Loading states
 const isCompletingSession = ref(false);
 const sessionCompletionProgress = ref(0);
+
+// Floating panel states
+const panelPosition = ref({ x: 20, y: 100 }); // Initial position
+const isMinimized = ref(false);
+const isDraggingPanel = ref(false);
+const dragOffset = ref({ x: 0, y: 0 });
 
 // Seating plan configuration
 const rows = ref(9);
@@ -321,6 +332,13 @@ const permanentCache = reactive({
     timestamp: null
 });
 
+// Simple data cache for temporary storage
+const dataCache = reactive({
+    students: null,
+    sections: null,
+    timestamp: null
+});
+
 // Request deduplication to prevent multiple identical API calls
 const pendingRequests = new Map();
 const CACHE_FOREVER = true; // Since teacher/section/students don't change during session
@@ -328,6 +346,16 @@ const CACHE_FOREVER = true; // Since teacher/section/students don't change durin
 // Check if permanent cache exists (load once, use forever)
 const isPermanentlyCached = (cacheKey) => {
     return permanentCache[cacheKey] !== null;
+};
+
+// Check if cache is valid (for dataCache)
+const isCacheValid = (cacheKey) => {
+    if (!dataCache[cacheKey] || !dataCache.timestamp) {
+        return false;
+    }
+    // Cache is valid for 5 minutes
+    const cacheAge = Date.now() - dataCache.timestamp;
+    return cacheAge < 5 * 60 * 1000; // 5 minutes in milliseconds
 };
 
 // Only clear cache on explicit user action (not automatic)
@@ -953,12 +981,57 @@ const autoAssignStudents = (method = null) => {
     toast.add({
         severity: 'success',
         summary: 'Students Auto-Assigned',
-        detail: `Successfully assigned ${studentIndex} students using ${methodLabel} order`,
         life: 3000
     });
 
     // Hide assignment options after successful assignment
     showAssignmentOptions.value = false;
+};
+
+// Floating Panel Drag Functions
+const startDragPanel = (event) => {
+    if (event.target.closest('.panel-btn') || event.target.closest('.floating-panel-content')) {
+        return; // Don't drag when clicking buttons or content
+    }
+
+    isDraggingPanel.value = true;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragOffset.value = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+    };
+
+    document.addEventListener('mousemove', dragPanel);
+    document.addEventListener('mouseup', stopDragPanel);
+    event.preventDefault();
+};
+
+const dragPanel = (event) => {
+    if (!isDraggingPanel.value) return;
+
+    const newX = event.clientX - dragOffset.value.x;
+    const newY = event.clientY - dragOffset.value.y;
+
+    // Keep panel within viewport bounds
+    const panelWidth = 320;
+    const panelHeight = isMinimized.value ? 50 : 400;
+    const maxX = window.innerWidth - panelWidth;
+    const maxY = window.innerHeight - panelHeight;
+
+    panelPosition.value = {
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+    };
+};
+
+const stopDragPanel = () => {
+    isDraggingPanel.value = false;
+    document.removeEventListener('mousemove', dragPanel);
+    document.removeEventListener('mouseup', stopDragPanel);
+};
+
+const toggleMinimize = () => {
+    isMinimized.value = !isMinimized.value;
 };
 
 // Get student initials
@@ -2260,17 +2333,32 @@ const markAllPresent = async () => {
         seatPlan.value.forEach((row) => {
             row.forEach((seat) => {
                 if (seat.isOccupied && seat.studentId) {
+                    // Find the student object to get the numeric ID
+                    const student = students.value.find((s) => s.student_id === seat.studentId || s.id === seat.studentId);
+                    if (!student) {
+                        console.error('Student not found for seat:', seat.studentId);
+                        return;
+                    }
+
                     // Update visual status
                     seat.status = 1; // Present status
 
-                    // Add to batch
+                    // Find Present status ID from attendanceStatuses
+                    const presentStatus = attendanceStatuses.value.find((status) => status.code === 'P' || status.name === 'Present' || status.id === 1);
+
+                    if (!presentStatus) {
+                        console.error('Present status not found in attendanceStatuses');
+                        return;
+                    }
+
+                    // Add to batch with correct IDs
                     attendanceData.push({
-                        student_id: seat.studentId,
-                        attendance_status_id: 1, // Present
+                        student_id: student.id, // Use numeric student.id, not student_id string
+                        attendance_status_id: presentStatus.id, // Use actual status ID from database
                         arrival_time: new Date().toTimeString().split(' ')[0],
                         remarks: null,
                         reason_id: null,
-                        marking_method: 'manual' // Valid value: manual, seat_plan, qr_code, facial_recognition
+                        marking_method: 'manual'
                     });
                 }
             });
@@ -2316,7 +2404,6 @@ const markAllPresent = async () => {
         console.error('Error marking all present:', error);
         console.error('Error response:', error.response?.data);
         console.error('Validation errors:', JSON.stringify(error.response?.data?.errors, null, 2));
-        console.error('Sent data:', attendanceData);
 
         const errorMsg = error.response?.data?.message || JSON.stringify(error.response?.data?.errors) || 'Failed to mark all students as present';
 
@@ -2414,7 +2501,7 @@ const decrementColumns = () => {
 const resolveSubjectDetails = async (subjectIdentifier) => {
     console.log(`🚀 Resolving subject details for identifier: ${subjectIdentifier}`);
 
-    if (subjectIdentifier && (subjectName.value === 'Subject' || isNaN(subjectIdentifier))) {
+    if (subjectIdentifier && (subjectName.value === 'Subject' || subjectName.value === subjectIdentifier || isNaN(subjectIdentifier))) {
         const subjectDetails = await fetchSubjectDetails(subjectIdentifier);
         console.log(`📋 Received subject details:`, subjectDetails);
 
@@ -2682,31 +2769,22 @@ const isInitializing = ref(false);
 // Watch for route changes to update subject info immediately
 watchEffect(() => {
     const newSubject = getInitialSubjectInfo();
-    if (newSubject.id !== subjectId.value || newSubject.name !== subjectName.value) {
+    if (newSubject.id !== subjectId.value) {
         subjectId.value = newSubject.id;
-        subjectName.value = newSubject.name;
-        console.log(`Route changed - Updated to: ${newSubject.name} (ID: ${newSubject.id})`);
+
+        // Only update subject name if we don't have a resolved name yet
+        if (subjectName.value === 'Subject' || subjectName.value === 'Mathematics') {
+            subjectName.value = newSubject.name;
+        }
+
+        console.log(`Route changed - Updated to: ${subjectName.value} (ID: ${newSubject.id})`);
 
         // Only reload students data if not currently initializing and teacher is available
-        if (teacherId.value && !isInitializing.value && !isLoadingStudents.value) {
-            console.log('Route change detected, reloading students data...');
-            // Only clear cache if subject actually changed, not on every route event
-            const currentSubjectFromRoute = route.params.subjectId;
-            if (currentSubjectFromRoute !== subjectId.value) {
-                console.log('Subject changed, clearing cache AND seating arrangement for fresh data');
-                clearCache();
-                pendingRequests.clear();
-                // CRITICAL: Clear seating arrangement to force reload for new subject
-                seatPlan.value = [];
-                console.log('🔄 CLEARED seating arrangement for subject change');
-            }
-            isLoadingSeating.value = true;
-            loadingMessage.value = 'Switching subjects...';
-            loadStudentsData();
-        } else if (isInitializing.value) {
+        if (!isInitializing.value && teacherId.value) {
+            console.log('Route change detected - reloading students data');
+            loadStudentsFromDatabase().catch(console.warn);
+        } else {
             console.log('Skipping route change reload - component is initializing');
-        } else if (isLoadingStudents.value) {
-            console.log('Skipping route change reload - students already loading');
         }
     }
 });
@@ -2737,7 +2815,7 @@ onMounted(async () => {
         loadSavedTemplates().catch(console.warn);
 
         // Fetch actual subject details if needed (handles both numeric IDs and string identifiers)
-        if (subjectId.value && (subjectName.value === 'Subject' || isNaN(subjectId.value))) {
+        if (subjectId.value && (subjectName.value === 'Subject' || subjectName.value === subjectId.value || isNaN(subjectId.value))) {
             console.log(`Fetching subject details for identifier: ${subjectId.value}`);
             const subjectDetails = await fetchSubjectDetails(subjectId.value);
             console.log(`📋 Received subject details:`, subjectDetails);
@@ -2746,22 +2824,15 @@ onMounted(async () => {
                 const newSubjectName = subjectDetails.name;
                 const newSubjectId = subjectDetails.id;
 
+                // Update reactive values - Vue will handle DOM updates automatically
                 subjectId.value = newSubjectId;
                 subjectName.value = newSubjectName;
                 resolvedSubjectId.value = newSubjectId; // Store the resolved ID
                 console.log(`✅ Updated subject to: ${newSubjectName} (ID: ${newSubjectId})`);
 
-                // Force Vue to update the DOM
+                // Force Vue reactivity update
                 await nextTick();
                 console.log(`🔄 DOM updated, current title should show: ${newSubjectName} Attendance`);
-
-                // Force multiple updates to ensure it stuck
-                setTimeout(() => {
-                    if (titleRef.value) {
-                        titleRef.value.textContent = `${newSubjectName} Attendance`;
-                        console.log(`🔄 Final title update: ${titleRef.value.textContent}`);
-                    }
-                }, 200);
             } else {
                 console.log(`❌ Failed to resolve subject ID for: ${subjectId.value}`);
             }
@@ -3117,9 +3188,15 @@ const handleQuickAction = async (status) => {
 
     const { row, col } = hoveredSeat.value;
     const seat = seatPlan.value[row][col];
-    const student = students.value.find((s) => s.id === seat.studentId);
+    console.log(`🎯 Quick action: ${status} for seat [${row}][${col}] with studentId: ${seat.studentId}`);
+    
+    const student = students.value.find((s) => s.student_id === seat.studentId || s.id === seat.studentId);
+    console.log(`🔍 Found student:`, student);
 
-    if (!student) return;
+    if (!student) {
+        console.error(`❌ Student not found for seat studentId: ${seat.studentId}`);
+        return;
+    }
 
     // For Late or Excused, show reason dialog
     if (status === 'Late' || status === 'Excused') {
@@ -3137,7 +3214,16 @@ const handleQuickAction = async (status) => {
     }
 
     // For Present/Absent, save immediately
-    seatPlan.value[row][col].status = status;
+    // Map status names to numeric values for visual display
+    const statusMap = {
+        'Present': 1,
+        'Absent': 2,
+        'Late': 3,
+        'Excused': 4
+    };
+    
+    seatPlan.value[row][col].status = statusMap[status] || 1;
+    console.log(`✅ Set seat [${row}][${col}] status to ${statusMap[status]} (${status})`);
     clearHoveredSeat(); // Hide quick actions
 
     try {
@@ -3653,18 +3739,26 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '', reasonI
             throw new Error('No active session found');
         }
 
-        // Map status names to attendance_status_id (assuming standard IDs)
-        const statusMapping = {
-            Present: 1,
-            Absent: 2,
-            Late: 3,
-            Excused: 4
-        };
+        // Find status ID from loaded attendanceStatuses
+        let attendanceStatusId;
+        const statusRecord = attendanceStatuses.value.find((s) => {
+            // Try multiple matching strategies
+            return (
+                s.name === status ||
+                s.code === status.charAt(0).toUpperCase() ||
+                (status === 'Present' && (s.code === 'P' || s.name === 'Present')) ||
+                (status === 'Absent' && (s.code === 'A' || s.name === 'Absent')) ||
+                (status === 'Late' && (s.code === 'L' || s.name === 'Late')) ||
+                (status === 'Excused' && (s.code === 'E' || s.name === 'Excused'))
+            );
+        });
 
-        const attendanceStatusId = statusMapping[status];
-        if (!attendanceStatusId) {
-            throw new Error(`Invalid status: ${status}`);
+        if (!statusRecord) {
+            console.error('Available attendance statuses:', attendanceStatuses.value);
+            throw new Error(`Status not found in database: ${status}`);
         }
+
+        attendanceStatusId = statusRecord.id;
 
         // Use session-based attendance API
         const attendanceData = {
@@ -4217,10 +4311,28 @@ const handleViewDetails = () => {
 
 const handleEditAttendance = () => {
     console.log('Edit attendance clicked');
-    // Navigate to attendance sessions page
-    router.push({
-        name: 'teacher-attendance-sessions'
+    editSessionData.value = completedSessionData.value;
+    showEditDialog.value = true;
+    showCompletionModal.value = false; // Close completion modal
+};
+
+const handleEditSave = (changes) => {
+    console.log('Saving attendance changes:', changes);
+    // Implement save logic here
+    showEditDialog.value = false;
+    
+    // Show success message
+    toast.add({
+        severity: 'success',
+        summary: 'Attendance Updated',
+        detail: `Updated ${changes.length} student records`,
+        life: 3000
     });
+};
+
+const handleEditClose = () => {
+    showEditDialog.value = false;
+    editSessionData.value = null;
 };
 
 const handleStartNewSession = async () => {
@@ -4788,7 +4900,6 @@ const titleRef = ref(null);
                                             ></i>
                                         </div>
                                         <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
-                                        <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ seat.studentId }}</div>
                                     </div>
                                     <div v-else-if="isEditMode" class="empty-seat">
                                         <i class="pi pi-plus text-gray-400"></i>
@@ -4803,33 +4914,49 @@ const titleRef = ref(null);
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Right side: Unassigned students panel - only visible in edit mode -->
-            <div v-if="isEditMode" class="side-panel">
-                <div class="unassigned-panel p-3 border rounded-lg bg-white h-full">
-                    <h3 class="text-lg font-medium mb-3">Unassigned Students</h3>
+        <!-- Floating Game-Style Unassigned Students Panel -->
+        <div v-if="isEditMode" class="floating-students-panel" :style="{ left: panelPosition.x + 'px', top: panelPosition.y + 'px' }" @mousedown="startDragPanel">
+            <div class="floating-panel-header" @mousedown="startDragPanel">
+                <div class="panel-title">
+                    <i class="pi pi-users"></i>
+                    <span>Unassigned Students</span>
+                </div>
+                <div class="panel-controls">
+                    <button class="panel-btn minimize-btn" @click="toggleMinimize">
+                        <i :class="isMinimized ? 'pi pi-window-maximize' : 'pi pi-window-minimize'"></i>
+                    </button>
+                </div>
+            </div>
 
-                    <div class="mb-3">
-                        <span class="p-input-icon-left w-full">
-                            <i class="pi pi-search" />
-                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
-                        </span>
-                    </div>
+            <div v-if="!isMinimized" class="floating-panel-content">
+                <div class="search-container">
+                    <span class="p-input-icon-left w-full">
+                        <i class="pi pi-search" />
+                        <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
+                    </span>
+                </div>
 
-                    <div v-if="filteredUnassignedStudents.length === 0" class="text-center py-4 text-gray-500">
-                        <p v-if="unassignedStudents.length === 0">All students have been assigned to seats.</p>
-                        <p v-else>No students match your search.</p>
-                    </div>
+                <div v-if="filteredUnassignedStudents.length === 0" class="empty-state">
+                    <i class="pi pi-check-circle"></i>
+                    <p v-if="unassignedStudents.length === 0">All students assigned!</p>
+                    <p v-else>No matches found</p>
+                </div>
 
-                    <div v-else class="unassigned-students-list">
-                        <div v-for="student in sortedUnassignedStudents" :key="student.id" class="student-card p-3 mb-2 bg-blue-50 rounded-lg border border-blue-200 shadow-sm" draggable="true" @dragstart="dragStudent(student)">
-                            <div class="student-info">
-                                <div class="student-initials bg-blue-500 text-white">
-                                    {{ getStudentInitials(student) }}
-                                </div>
-                                <div class="student-name">{{ student.name }}</div>
-                                <div v-if="showStudentIds" class="student-id text-xs text-gray-600">ID: {{ student.id }}</div>
+                <div v-else class="floating-students-list">
+                    <div v-for="student in sortedUnassignedStudents" :key="student.id" class="floating-student-card" draggable="true" @dragstart="dragStudent(student)">
+                        <div class="student-avatar">
+                            <div class="student-initials">
+                                {{ getStudentInitials(student) }}
                             </div>
+                        </div>
+                        <div class="student-details">
+                            <div class="student-name">{{ student.name }}</div>
+                            <div v-if="showStudentIds" class="student-id">ID: {{ student.id }}</div>
+                        </div>
+                        <div class="drag-handle">
+                            <i class="pi pi-arrows-alt"></i>
                         </div>
                     </div>
                 </div>
@@ -5156,6 +5283,16 @@ const titleRef = ref(null);
             @confirm="onReasonConfirmed"
         />
 
+        <!-- Attendance Edit Dialog -->
+        <AttendanceEditDialog
+            v-model="showEditDialog"
+            :session-data="editSessionData"
+            :subject-name="subjectName"
+            :section-name="'Sampaguita'"
+            @save="handleEditSave"
+            @close="handleEditClose"
+        />
+
         <!-- Seating Loading Overlay -->
         <div v-if="isLoadingSeating" class="seating-loading-overlay">
             <div class="loading-content">
@@ -5223,11 +5360,14 @@ const titleRef = ref(null);
     display: flex;
     gap: 1rem;
     width: 100%;
+    min-width: fit-content;
+    overflow-x: visible;
 }
 
 .main-content {
     flex: 3;
-    min-width: 0; /* Prevent flex item from overflowing */
+    min-width: fit-content; /* Allow content to determine minimum width */
+    overflow-x: visible;
 }
 
 .side-panel {
@@ -5369,10 +5509,11 @@ const titleRef = ref(null);
 /* Seat grid styles */
 .seating-grid-container {
     width: 100%;
-    overflow-x: auto;
+    overflow-x: visible;
     display: flex;
     justify-content: center;
-    padding: 1rem;
+    padding: 0.5rem;
+    min-width: fit-content;
 }
 
 .seating-grid {
@@ -5390,10 +5531,11 @@ const titleRef = ref(null);
 }
 
 .seat-container {
-    flex: 1;
-    min-width: 60px;
-    max-width: 120px;
-    aspect-ratio: 1/1;
+    flex: 0 0 auto; /* Don't grow or shrink, maintain fixed size */
+    width: 90px; /* Fixed width for consistent sizing */
+    height: 90px; /* Fixed height for consistent sizing */
+    min-width: 90px;
+    max-width: 90px;
 }
 
 .seat {
@@ -5405,9 +5547,11 @@ const titleRef = ref(null);
     justify-content: center;
     text-align: center;
     transition: all 0.2s ease;
-    aspect-ratio: 1/1;
     position: relative;
     overflow: visible;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #f9f9f9;
 }
 
 .student-info {
@@ -5426,6 +5570,19 @@ const titleRef = ref(null);
     justify-content: center;
     margin-bottom: 0.5rem;
     font-weight: bold;
+    font-size: 14px;
+}
+
+.student-name {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
+    color: #374151;
+    max-width: 80px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
 }
 
 .empty-seat {
@@ -6132,27 +6289,31 @@ const titleRef = ref(null);
     font-size: 14px;
     font-weight: 700;
     color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     position: relative;
-    padding: 4px 2px;
+    padding: 6px 4px;
     overflow: hidden;
+    min-height: 40px;
+    gap: 2px;
 }
 
 .quadrant i {
-    font-size: 20px;
-    margin-bottom: 1px;
+    font-size: 16px;
     display: block;
+    line-height: 1;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 .quadrant span {
-    font-size: 8px;
+    font-size: 7px;
     text-transform: uppercase;
-    letter-spacing: 0px;
+    letter-spacing: 0.5px;
     font-weight: 800;
     line-height: 1;
     display: block;
     word-break: keep-all;
     white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .quadrant:hover {
@@ -6184,20 +6345,238 @@ const titleRef = ref(null);
     border-bottom-right-radius: 12px;
 }
 
-/* Student Name Overlay - Hidden to not block quadrants */
+/* Student Name Overlay - Centered over quadrants */
 .student-name-overlay {
-    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    max-width: 80%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Animation */
-@keyframes fadeInScale {
+.floating-panel-content::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.floating-panel-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+@keyframes floatIn {
     from {
         opacity: 0;
-        transform: scale(0.9);
+        transform: translateY(-20px) scale(0.9);
     }
     to {
         opacity: 1;
-        transform: scale(1);
+        transform: translateY(0) scale(1);
     }
+}
+
+/* Floating Game-Style Panel */
+.floating-students-panel {
+    position: fixed;
+    width: 320px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+    animation: floatIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.floating-students-panel:hover {
+    box-shadow:
+        0 25px 50px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.floating-panel-header {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+    user-select: none;
+}
+
+.panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.panel-title i {
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.panel-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.panel-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: white;
+}
+
+.panel-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.floating-panel-content {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+}
+
+.search-container {
+    margin-bottom: 12px;
+}
+
+.search-container input {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 24px 16px;
+    color: #6b7280;
+}
+
+.empty-state i {
+    font-size: 32px;
+    margin-bottom: 8px;
+    color: #10b981;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.floating-students-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.floating-student-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    cursor: grab;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.floating-student-card:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+}
+
+.floating-student-card:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+}
+
+.student-avatar {
+    flex-shrink: 0;
+}
+
+.student-avatar .student-initials {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.student-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.student-details .student-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1f2937;
+    margin: 0;
+    line-height: 1.3;
+    word-wrap: break-word;
+}
+
+.student-details .student-id {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.drag-handle {
+    flex-shrink: 0;
+    color: #9ca3af;
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.floating-student-card:hover .drag-handle {
+    opacity: 1;
+    color: #6b7280;
 }
 </style>

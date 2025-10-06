@@ -27,7 +27,7 @@ class AttendanceSessionController extends Controller
             $subject = \App\Models\Subject::where('name', 'ILIKE', $requestData['subject_id'])
                 ->orWhere('code', 'ILIKE', $requestData['subject_id'])
                 ->first();
-            
+
             if ($subject) {
                 $requestData['subject_id'] = $subject->id;
                 Log::info('Converted subject identifier to ID in attendance session', [
@@ -120,9 +120,9 @@ class AttendanceSessionController extends Controller
     {
         try {
             $sessions = AttendanceSession::with([
-                'section', 
-                'subject', 
-                'attendanceRecords.student', 
+                'section',
+                'subject',
+                'attendanceRecords.student',
                 'attendanceRecords.attendanceStatus',
                 'attendanceRecords.attendanceReason'
             ])
@@ -163,7 +163,7 @@ class AttendanceSessionController extends Controller
 
         try {
             $session = AttendanceSession::findOrFail($sessionId);
-            
+
             if (!$session->isActive()) {
                 return response()->json(['error' => 'Session is not active'], 400);
             }
@@ -178,7 +178,7 @@ class AttendanceSessionController extends Controller
                         'reason_id' => $attendanceData['reason_id'] ?? null,
                         'reason_notes' => $attendanceData['reason_notes'] ?? null
                     ]);
-                    
+
                     $record = AttendanceRecord::updateOrCreate(
                         [
                             'attendance_session_id' => $session->id,
@@ -237,7 +237,7 @@ class AttendanceSessionController extends Controller
 
         try {
             $session = AttendanceSession::findOrFail($sessionId);
-            
+
             if (!$session->isActive()) {
                 return response()->json(['error' => 'Session is not active'], 400);
             }
@@ -260,7 +260,7 @@ class AttendanceSessionController extends Controller
             if (!$statusId) {
                 $arrivalTime = $request->arrival_time ? Carbon::createFromFormat('H:i:s', $request->arrival_time) : now();
                 $sessionStart = Carbon::createFromFormat('H:i:s', $session->session_start_time);
-                
+
                 // Default logic: Present if on time, Late if 15+ minutes late
                 if ($arrivalTime->diffInMinutes($sessionStart, false) > 15) {
                     $statusId = AttendanceStatus::where('code', 'L')->first()->id; // Late
@@ -299,9 +299,9 @@ class AttendanceSessionController extends Controller
     {
         try {
             $session = AttendanceSession::findOrFail($sessionId);
-            
+
             Log::info("Attempting to complete session {$sessionId}. Current status: {$session->status}");
-            
+
             // Check if session is already completed
             if ($session->status === 'completed') {
                 Log::info("Session {$sessionId} already completed");
@@ -321,30 +321,30 @@ class AttendanceSessionController extends Controller
             DB::transaction(function () use ($session, &$autoMarkedCount) {
                 // Double-check status within transaction to prevent race conditions
                 $currentSession = AttendanceSession::lockForUpdate()->find($session->id);
-                
+
                 if ($currentSession->status !== 'active') {
                     throw new \Exception("Session status changed during completion. Current status: {$currentSession->status}");
                 }
-                
+
                 // Auto-mark unmarked students as absent before completing
                 $autoMarkedCount = $this->autoMarkUnmarkedStudentsAsAbsent($currentSession);
-                
+
                 // Update session with completion data
                 $currentSession->update([
                     'status' => 'completed',
                     'session_end_time' => now()->format('H:i:s'),
                     'completed_at' => now()
                 ]);
-                
+
                 Log::info("Session {$session->id} completed successfully with transaction lock. Auto-marked {$autoMarkedCount} students as absent.");
             });
 
             // Refresh session to get updated data
             $session = $session->fresh();
-            
+
             // Generate session summary for the modal
             $summary = $this->generateSessionSummary($session);
-            
+
             // Create notification for session completion (async, non-blocking)
             Log::info("About to create notification for session {$session->id}");
             try {
@@ -364,7 +364,7 @@ class AttendanceSessionController extends Controller
             Log::error("Database error completing session {$sessionId}: " . $e->getMessage());
             Log::error("SQL Error Code: " . $e->getCode());
             Log::error("SQL Error Info: " . json_encode($e->errorInfo ?? []));
-            
+
             // Handle specific constraint violations
             if (str_contains($e->getMessage(), 'unique_active_session')) {
                 return response()->json([
@@ -373,16 +373,16 @@ class AttendanceSessionController extends Controller
                     'details' => config('app.debug') ? $e->getMessage() : 'Duplicate session detected'
                 ], 409); // Conflict status code
             }
-            
+
             return response()->json([
                 'error' => 'Database error occurred while completing session',
                 'details' => config('app.debug') ? $e->getMessage() : 'Please check server logs'
             ], 500);
-            
+
         } catch (\Exception $e) {
             Log::error("General error completing session {$sessionId}: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
-            
+
             // Handle session status change during completion
             if (str_contains($e->getMessage(), 'Session status changed during completion')) {
                 return response()->json([
@@ -391,7 +391,7 @@ class AttendanceSessionController extends Controller
                     'details' => $e->getMessage()
                 ], 409); // Conflict status code
             }
-            
+
             return response()->json([
                 'error' => 'Failed to complete session',
                 'details' => config('app.debug') ? $e->getMessage() : 'Please check server logs'
@@ -405,7 +405,7 @@ class AttendanceSessionController extends Controller
     private function generateSessionSummary($session)
     {
         $session->load(['section', 'subject', 'teacher', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus']);
-        
+
         // Get all students in the section for accurate counts
         $totalStudents = DB::table('student_details as sd')
             ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
@@ -415,9 +415,9 @@ class AttendanceSessionController extends Controller
                       ->orWhereNull('ss.is_active');
             })
             ->count();
-        
+
         $records = $session->attendanceRecords;
-        
+
         // Calculate attendance statistics
         $stats = [
             'total_students' => $totalStudents,
@@ -427,7 +427,7 @@ class AttendanceSessionController extends Controller
             'late' => $records->where('attendanceStatus.code', 'L')->count(),
             'excused' => $records->where('attendanceStatus.code', 'E')->count()
         ];
-        
+
         return [
             'session_id' => $session->id,
             'session_date' => $session->session_date,
@@ -474,11 +474,11 @@ class AttendanceSessionController extends Controller
                 })
                 ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.middleName')
                 ->get();
-            
+
             // Get attendance records
             $records = $session->attendanceRecords;
             $markedStudentIds = $records->pluck('student_id')->toArray();
-            
+
             // Calculate statistics
             $stats = [
                 'total_students' => $allStudents->count(),
@@ -621,7 +621,7 @@ class AttendanceSessionController extends Controller
 
                     $status = $record->attendanceStatus->code;
                     $studentStats[$studentId]['total_days']++;
-                    
+
                     switch ($status) {
                         case 'P': $studentStats[$studentId]['present']++; break;
                         case 'A': $studentStats[$studentId]['absent']++; break;
@@ -634,7 +634,7 @@ class AttendanceSessionController extends Controller
             // Calculate attendance rates
             foreach ($studentStats as &$stats) {
                 $attendedDays = $stats['present'] + $stats['late'];
-                $stats['attendance_rate'] = $stats['total_days'] > 0 ? 
+                $stats['attendance_rate'] = $stats['total_days'] > 0 ?
                     round(($attendedDays / $stats['total_days']) * 100, 2) : 0;
             }
 
@@ -670,7 +670,7 @@ class AttendanceSessionController extends Controller
 
         try {
             $originalSession = AttendanceSession::findOrFail($sessionId);
-            
+
             // Only allow editing of completed sessions
             if ($originalSession->status !== 'completed') {
                 return response()->json(['error' => 'Only completed sessions can be edited'], 400);
@@ -679,7 +679,7 @@ class AttendanceSessionController extends Controller
             DB::transaction(function () use ($request, $originalSession) {
                 // Mark original session as not current
                 $originalSession->update(['is_current_version' => false]);
-                
+
                 // Create new version of the session
                 $newSession = $originalSession->replicate();
                 $newSession->version = $originalSession->version + 1;
@@ -689,7 +689,7 @@ class AttendanceSessionController extends Controller
                 $newSession->edited_by_teacher_id = $originalSession->teacher_id; // TODO: Get from auth
                 $newSession->edited_at = now();
                 $newSession->is_current_version = true;
-                
+
                 // Apply session data changes if provided
                 if ($request->session_data) {
                     foreach ($request->session_data as $field => $value) {
@@ -698,9 +698,9 @@ class AttendanceSessionController extends Controller
                         }
                     }
                 }
-                
+
                 $newSession->save();
-                
+
                 // Log the edit in audit trail
                 $this->logAuditEvent('session', $newSession->id, 'edit', $originalSession->teacher_id, [
                     'original_session_id' => $originalSession->id,
@@ -708,12 +708,12 @@ class AttendanceSessionController extends Controller
                     'edit_reason' => $request->edit_reason,
                     'edit_notes' => $request->edit_notes
                 ]);
-                
+
                 // Handle attendance records editing if provided
                 if ($request->attendance_records) {
                     $this->editAttendanceRecords($newSession, $request->attendance_records, $request->edit_reason);
                 }
-                
+
                 // Update session statistics
                 $this->updateSessionStatistics($newSession);
             });
@@ -737,7 +737,7 @@ class AttendanceSessionController extends Controller
         try {
             $session = AttendanceSession::findOrFail($sessionId);
             $originalId = $session->original_session_id ?? $session->id;
-            
+
             // Get all versions of this session
             $versions = AttendanceSession::where(function($query) use ($originalId, $session) {
                 $query->where('id', $originalId)
@@ -746,14 +746,14 @@ class AttendanceSessionController extends Controller
             ->with(['teacher', 'editedByTeacher'])
             ->orderBy('version')
             ->get();
-            
+
             // Get detailed edit history
             $editHistory = DB::table('attendance_session_edits')
                 ->where('session_id', $originalId)
                 ->orWhereIn('session_id', $versions->pluck('id'))
                 ->orderBy('created_at', 'desc')
                 ->get();
-            
+
             return response()->json([
                 'original_session_id' => $originalId,
                 'current_version' => $versions->where('is_current_version', true)->first(),
@@ -779,14 +779,14 @@ class AttendanceSessionController extends Controller
                 if ($originalRecord) {
                     // Mark original as not current
                     $originalRecord->update(['is_current_version' => false]);
-                    
+
                     // Create new version
                     $newRecord = $originalRecord->replicate();
                     $newRecord->version = $originalRecord->version + 1;
                     $newRecord->original_record_id = $originalRecord->original_record_id ?? $originalRecord->id;
                     $newRecord->attendance_session_id = $session->id;
                     $newRecord->is_current_version = true;
-                    
+
                     // Apply changes
                     if (isset($recordData['attendance_status_id'])) {
                         $newRecord->attendance_status_id = $recordData['attendance_status_id'];
@@ -797,9 +797,9 @@ class AttendanceSessionController extends Controller
                     if (isset($recordData['remarks'])) {
                         $newRecord->remarks = $recordData['remarks'];
                     }
-                    
+
                     $newRecord->save();
-                    
+
                     // Log the change
                     $this->logAuditEvent('record', $newRecord->id, 'edit', $session->teacher_id, [
                         'original_record_id' => $originalRecord->id,
@@ -832,7 +832,7 @@ class AttendanceSessionController extends Controller
     {
         $records = $session->attendanceRecords()->where('is_current_version', true)->with('attendanceStatus')->get();
         $allStudents = Student::inSection($session->section_id)->active()->count();
-        
+
         $stats = [
             'total_students' => $allStudents,
             'marked_students' => $records->count(),
@@ -841,10 +841,10 @@ class AttendanceSessionController extends Controller
             'late_count' => $records->where('attendanceStatus.code', 'L')->count(),
             'excused_count' => $records->where('attendanceStatus.code', 'E')->count(),
         ];
-        
-        $stats['attendance_rate'] = $stats['total_students'] > 0 ? 
+
+        $stats['attendance_rate'] = $stats['total_students'] > 0 ?
             (($stats['present_count'] + $stats['late_count']) / $stats['total_students']) * 100 : 0;
-        
+
         // Update or create statistics record
         DB::table('attendance_session_stats')->updateOrInsert(
             ['session_id' => $session->id],
@@ -880,7 +880,7 @@ class AttendanceSessionController extends Controller
                     // Get attendance counts
                     $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)->get();
                     $statusCounts = $attendanceRecords->groupBy('attendance_status_id')->map->count();
-                    
+
                     return [
                         'id' => $session->id,
                         'session_date' => $session->session_date,
@@ -917,7 +917,7 @@ class AttendanceSessionController extends Controller
     {
         try {
             $session = AttendanceSession::with(['section', 'subject'])->findOrFail($sessionId);
-            
+
             $attendanceRecords = AttendanceRecord::with(['student', 'attendanceStatus', 'attendanceReason'])
                 ->where('attendance_session_id', $sessionId)
                 ->get();
@@ -1154,14 +1154,14 @@ class AttendanceSessionController extends Controller
             // Extract statistics from summary (they're nested under 'statistics' key)
             $stats = $summary['statistics'] ?? [];
             $subjectName = $summary['subject_name'] ?? 'Unknown Subject';
-            
+
             // Create compact notification message
             $presentCount = $stats['present'] ?? 0;
             $absentCount = $stats['absent'] ?? 0;
             $lateCount = $stats['late'] ?? 0;
-            
+
             $message = "{$subjectName} - {$presentCount} present, {$absentCount} absent";
-            
+
             // Insert notification using indexed user_id column
             DB::table('notifications')->insert([
                 'type' => 'session_completed',
@@ -1185,7 +1185,7 @@ class AttendanceSessionController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
-            
+
             Log::info("Notification created for completed session {$session->id} - {$message}");
         } catch (\Exception $e) {
             // Don't fail session completion if notification fails
@@ -1248,7 +1248,7 @@ class AttendanceSessionController extends Controller
             }
 
             DB::table('attendance_records')->insert($records);
-            
+
             Log::info("Auto-marked {$unmarkedStudents->count()} students as absent for session {$session->id}");
             return $unmarkedStudents->count();
 

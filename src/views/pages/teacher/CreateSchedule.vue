@@ -558,8 +558,8 @@ watch(() => scheduleForm.value.days, () => {
 
 // Auto-calculate end time when start time changes (Quality of Life improvement)
 watch(() => scheduleForm.value.start_time, (newStartTime, oldStartTime) => {
-    if (newStartTime && !scheduleForm.value.end_time) {
-        // Auto-set end time to 1 hour after start time
+    if (newStartTime) {
+        // Always auto-set end time to 1 hour after start time when start time changes
         const endTime = new Date(newStartTime);
         endTime.setHours(endTime.getHours() + 1);
         scheduleForm.value.end_time = endTime;

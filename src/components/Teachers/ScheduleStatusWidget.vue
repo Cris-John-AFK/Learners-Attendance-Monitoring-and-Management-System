@@ -31,9 +31,7 @@
             <div class="schedule-details">
                 <h4 class="subject-name">{{ calendarEvent.icon }} {{ calendarEvent.event_title }}</h4>
                 <p class="section-name">{{ formatEventType(calendarEvent.event_type) }}</p>
-                <div class="time-range event-badge">
-                    <i class="pi pi-info-circle mr-1"></i> No attendance required
-                </div>
+                <div class="time-range event-badge"><i class="pi pi-info-circle mr-1"></i> No attendance required</div>
             </div>
         </div>
 
@@ -70,8 +68,8 @@
 </template>
 
 <script setup>
-import ScheduleNotificationService from '@/services/ScheduleNotificationService';
 import api from '@/config/axios';
+import ScheduleNotificationService from '@/services/ScheduleNotificationService';
 import Button from 'primevue/button';
 import { useToast } from 'primevue/usetoast';
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -203,15 +201,15 @@ const checkCalendarEvent = async () => {
     try {
         const today = new Date().toISOString().split('T')[0];
         const response = await api.get('/api/calendar/events');
-        
+
         if (response.data.success && response.data.events) {
             // Find event for today
-            const todayEvent = response.data.events.find(event => {
+            const todayEvent = response.data.events.find((event) => {
                 const startDate = event.start_date.split('T')[0];
                 const endDate = event.end_date.split('T')[0];
                 return today >= startDate && today <= endDate && event.is_active;
             });
-            
+
             if (todayEvent) {
                 calendarEvent.value = {
                     event_title: todayEvent.title,
@@ -228,28 +226,29 @@ const checkCalendarEvent = async () => {
 
 const getEventIcon = (eventType) => {
     const icons = {
-        'holiday': '🎄',
-        'half_day': '⏰',
-        'early_dismissal': '🏠',
-        'no_classes': '📋',
-        'school_event': '🎉',
-        'teacher_training': '👨‍🏫',
-        'exam_day': '📝'
+        holiday: '🎄',
+        half_day: '⏰',
+        early_dismissal: '🏠',
+        no_classes: '📋',
+        school_event: '🎉',
+        teacher_training: '👨‍🏫',
+        exam_day: '📝'
     };
     return icons[eventType] || '📅';
 };
 
 const formatEventType = (eventType) => {
-    return eventType.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
+    return eventType
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
 };
 
 // Lifecycle
 onMounted(() => {
     // Check for calendar events first
     checkCalendarEvent();
-    
+
     // Initialize schedule notification service
     ScheduleNotificationService.initialize();
 
@@ -315,7 +314,7 @@ onUnmounted(() => {
     border-radius: 8px;
     padding: 1rem;
     text-align: center;
-    margin-bottom: 1rem;
+    margin-bottom: 4rem;
 }
 
 .status-header {

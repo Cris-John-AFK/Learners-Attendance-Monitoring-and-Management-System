@@ -125,7 +125,7 @@ class ScheduleNotificationService {
                 if (schedule.calendar_event?.has_event && schedule.calendar_event.affects_attendance) {
                     message += ` ${schedule.calendar_event.icon} ${schedule.calendar_event.event_title} - attendance not required`;
                 } else {
-                    message += ' Students without attendance will be marked absent.';
+                    message += ' Please ensure attendance is taken before the class ends.';
                 }
                 
                 this.sendNotification({
@@ -175,7 +175,7 @@ class ScheduleNotificationService {
     }
 
     /**
-     * Handle schedule end - automatically mark absent students
+     * Handle schedule end - log completion without auto-marking students
      */
     async handleScheduleEnd(schedule) {
         try {
@@ -188,102 +188,24 @@ class ScheduleNotificationService {
                 return; // Already processed, skip
             }
             
-            console.log('🏁 Schedule ended, checking for auto-absent marking:', schedule.subject_name);
+            console.log('🏁 Schedule ended:', schedule.subject_name);
             
-            // 🎯 CHECK FOR CALENDAR EVENT - Skip auto-marking if there's an event affecting attendance
-            if (schedule.calendar_event?.has_event && schedule.calendar_event.affects_attendance) {
-                console.log(`🎄 Holiday/Event detected: ${schedule.calendar_event.event_title} - Skipping auto-absent marking`);
-                this.processedScheduleEnds.add(scheduleEndKey);
-                return; // Don't mark students absent on holidays!
-            }
+            // Just send a simple notification that the class has ended
+            // No auto-marking of absent students as requested by instructor
+            this.sendNotification({
+                type: 'session_ended',
+                title: '🏁 Class Ended',
+                message: `${schedule.subject_name} in ${schedule.section_name} has ended.`,
+                schedule: schedule,
+                priority: 'info'
+            });
             
-            // Check if there's an active session for this schedule
-            const sessionResponse = await axios.get(`/api/schedule-notifications/schedule/${schedule.id}/active-session`);
-            
-            if (sessionResponse.data.has_session && sessionResponse.data.session) {
-                const session = sessionResponse.data.session;
-                console.log('📋 Found active session, marking unmarked students as absent:', session.id);
-                
-                // Call API to auto-mark absent students
-                const markAbsentResponse = await axios.post(`/api/attendance-sessions/${session.id}/auto-mark-absent`, {
-                    schedule_id: schedule.id,
-                    subject_id: schedule.subject_id,
-                    section_id: schedule.section_id
-                });
-                
-                if (markAbsentResponse.data.success) {
-                    const markedCount = markAbsentResponse.data.marked_absent_count || 0;
-                    
-                    // Send notification about auto-marking
-                    this.sendNotification({
-                        type: 'session_auto_completed',
-                        title: '✅ Session Auto-Completed',
-                        message: `${schedule.subject_name} session ended. ${markedCount} students automatically marked absent.`,
-                        schedule: schedule,
-                        priority: 'info'
-                    });
-                    
-                    console.log(`✅ Auto-marked ${markedCount} students as absent for ${schedule.subject_name}`);
-                } else {
-                    console.warn('⚠️ Failed to auto-mark absent students:', markAbsentResponse.data.message);
-                }
-            } else {
-                console.log('⚠️ No active session found - creating session and marking all students absent:', schedule.subject_name);
-                
-                // No session exists, create one automatically and mark all students absent
-                const today = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
-                const createSessionResponse = await axios.post('/api/schedule-notifications/auto-create-session', {
-                    schedule_id: schedule.id,
-                    teacher_id: schedule.teacher_id,
-                    subject_id: schedule.subject_id,
-                    section_id: schedule.section_id,
-                    schedule_date: today,
-                    start_time: schedule.start_time,
-                    end_time: schedule.end_time
-                });
-                
-                if (createSessionResponse.data.success) {
-                    const markedCount = createSessionResponse.data.marked_absent_count || 0;
-                    const allMarked = createSessionResponse.data.all_marked || false;
-                    
-                    // Send notification based on what happened
-                    if (markedCount > 0) {
-                        this.sendNotification({
-                            type: 'session_auto_created',
-                            title: '⚠️ Attendance Auto-Recorded',
-                            message: `${schedule.subject_name} ended. Auto-marked ${markedCount} unmarked student${markedCount > 1 ? 's' : ''} as absent.`,
-                            schedule: schedule,
-                            priority: 'warning'
-                        });
-                        console.log(`✅ Auto-marked ${markedCount} students as absent for ${schedule.subject_name}`);
-                    } else if (allMarked) {
-                        // All students already marked - no notification needed, just log
-                        console.log(`✅ ${schedule.subject_name} ended - all students already marked by teacher`);
-                    } else {
-                        // Session created but no students
-                        console.log(`✅ Session auto-completed for ${schedule.subject_name}`);
-                    }
-                    
-                    // Mark as processed to prevent duplicate attempts
-                    this.processedScheduleEnds.add(scheduleEndKey);
-                } else {
-                    throw new Error(createSessionResponse.data.message || 'Failed to create auto-session');
-                }
-            }
-            
-            // Mark as processed even if we found an active session (to prevent repeated checks)
+            // Mark as processed to prevent duplicate notifications
             this.processedScheduleEnds.add(scheduleEndKey);
+            
+            console.log(`✅ ${schedule.subject_name} ended - no auto-marking performed`);
         } catch (error) {
             console.error('❌ Error handling schedule end:', error);
-            
-            // Send error notification
-            this.sendNotification({
-                type: 'session_end_error',
-                title: '⚠️ Auto-Completion Failed',
-                message: `Failed to auto-mark absent students for ${schedule.subject_name}. Please check manually.`,
-                schedule: schedule,
-                priority: 'warning'
-            });
         }
     }
 
@@ -291,15 +213,18 @@ class ScheduleNotificationService {
      * Send notification (both browser and in-app)
      */
     sendNotification(notification) {
-        // Prevent duplicate notifications by checking if similar notification was sent recently
-        const recentNotifications = this.notifications.filter(n => 
-            n.type === notification.type && 
-            n.schedule?.subject_id === notification.schedule?.subject_id &&
-            Date.now() - new Date(n.timestamp).getTime() < 300000 // Within last 5 minutes
-        );
+        // Enhanced duplicate prevention for "No Active Session" notifications
+        const recentNotifications = this.notifications.filter(n => {
+            const typeMatch = n.type === notification.type;
+            const titleMatch = n.title === notification.title;
+            const subjectMatch = n.schedule?.subject_id === notification.schedule?.subject_id;
+            const recentTime = Date.now() - new Date(n.timestamp).getTime() < 60000; // Within last 1 minute (reduced from 5 minutes)
+            
+            return typeMatch && titleMatch && subjectMatch && recentTime;
+        });
         
         if (recentNotifications.length > 0) {
-            console.log('🚫 Skipping duplicate notification:', notification.title);
+            console.log('🚫 Skipping duplicate notification within 1 minute:', notification.title, 'for subject:', notification.schedule?.subject_name);
             return;
         }
         

@@ -170,7 +170,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import api from '@/config/axios';
+import { queueApiRequest } from '@/services/ApiRequestManager';
 import { useToast } from 'primevue/usetoast';
 
 const toast = useToast();
@@ -219,14 +219,19 @@ const filteredEvents = computed(() => {
 async function loadEvents() {
     loading.value = true;
     try {
-        const response = await api.get('/api/calendar/events');
-        console.log('📥 Load events response:', response.data);
-        console.log('📊 Events array:', response.data.events);
-        events.value = response.data.events;
+        const response = await queueApiRequest(
+            () => fetch('/api/calendar/events').then(res => res.json()),
+            'normal'
+        );
+        console.log('📥 Load events response:', response);
+        console.log('📊 Events array:', response.events);
+        events.value = response.events || [];
         console.log('✅ Events loaded, count:', events.value.length);
     } catch (error) {
         console.error('❌ Error loading events:', error);
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load calendar events', life: 3000 });
+        if (error.response?.status !== 429) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load calendar events', life: 3000 });
+        }
     } finally {
         loading.value = false;
     }

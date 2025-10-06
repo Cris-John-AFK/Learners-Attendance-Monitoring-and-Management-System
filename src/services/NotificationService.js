@@ -313,8 +313,8 @@ class NotificationService {
             if (response.ok) {
                 const result = await response.json();
                 if (result.success && result.data.notifications) {
-                    // Transform database notifications to match frontend format
-                    this.notifications = result.data.notifications.all.map(notification => ({
+                    // Transform database notifications to match frontend format and stack duplicates
+                    const rawNotifications = result.data.notifications.all.map(notification => ({
                         id: notification.id,
                         type: notification.type,
                         title: notification.title,
@@ -330,7 +330,10 @@ class NotificationService {
                         }
                     }));
                     
-                    console.log('Loaded notifications from database:', this.notifications.length);
+                    // Stack duplicate notifications from database
+                    this.notifications = this.stackDuplicateNotifications(rawNotifications);
+                    
+                    console.log('Loaded and stacked notifications from database:', this.notifications.length);
                 } else {
                     console.log('No notifications found in database response');
                     this.notifications = [];
@@ -472,16 +475,121 @@ class NotificationService {
     }
 
     /**
-     * Add a new notification programmatically
+     * Stack duplicate notifications from database load
+     */
+    stackDuplicateNotifications(notifications) {
+        const stackedNotifications = [];
+        
+        notifications.forEach(notification => {
+            // Find existing notification to stack with
+            const existingIndex = stackedNotifications.findIndex(existing => {
+                // For "No Active Session" notifications, match by subject name in message
+                if (notification.title === 'No Active Session' || notification.title.includes('No Active Session')) {
+                    const getSubjectFromMessage = (msg) => {
+                        const match = msg.match(/^(\w+)\s+is scheduled/);
+                        return match ? match[1] : null;
+                    };
+                    
+                    const existingSubject = getSubjectFromMessage(existing.message);
+                    const newSubject = getSubjectFromMessage(notification.message);
+                    
+                    const baseTitleMatch = existing.title.replace(/\s*\(\d+\+?\)/, '') === notification.title.replace(/\s*\(\d+\+?\)/, '');
+                    
+                    return existing.type === notification.type && baseTitleMatch && existingSubject === newSubject && existingSubject !== null;
+                }
+                
+                // Default matching
+                return existing.type === notification.type && 
+                       existing.title === notification.title &&
+                       existing.metadata?.subjectId === notification.metadata?.subjectId;
+            });
+            
+            if (existingIndex !== -1) {
+                // Stack with existing notification
+                const existing = stackedNotifications[existingIndex];
+                existing.count = (existing.count || 1) + 1;
+                
+                // Update message and title to show count
+                if (existing.count > 1) {
+                    const baseMessage = existing.message.replace(/ \(\d+\+?\)$/, '');
+                    existing.message = `${baseMessage} (${existing.count}+)`;
+                    
+                    if (!existing.title.includes('(')) {
+                        existing.title = `${existing.title} (${existing.count}+)`;
+                    } else {
+                        existing.title = existing.title.replace(/\(\d+\+?\)/, `(${existing.count}+)`);
+                    }
+                }
+                
+                // Keep the most recent timestamp
+                if (new Date(notification.timestamp) > new Date(existing.timestamp)) {
+                    existing.timestamp = notification.timestamp;
+                }
+            } else {
+                // Add as new notification
+                notification.count = 1;
+                stackedNotifications.push(notification);
+            }
+        });
+        
+        return stackedNotifications;
+    }
+
+    /**
+     * Add a new notification programmatically with enhanced stacking
      */
     addNotification(notification) {
-        // Check if we should stack this notification with an existing one
-        const existingNotificationIndex = this.notifications.findIndex(n => 
-            n.type === notification.type && 
-            n.title === notification.title &&
-            n.metadata?.subjectId === notification.metadata?.subjectId &&
-            n.metadata?.schedule_type === notification.metadata?.schedule_type
-        );
+        console.log('🔍 Adding notification:', {
+            title: notification.title,
+            type: notification.type,
+            message: notification.message?.substring(0, 50) + '...',
+            currentNotificationsCount: this.notifications.length
+        });
+        
+        // Enhanced stacking logic for better duplicate detection
+        const existingNotificationIndex = this.notifications.findIndex(n => {
+            // Basic type and title match
+            const typeMatch = n.type === notification.type;
+            const titleMatch = n.title === notification.title;
+            
+            // For schedule notifications, also match by subject/section
+            if (notification.type === 'schedule') {
+                const subjectMatch = n.metadata?.subjectId === notification.metadata?.subjectId;
+                const scheduleTypeMatch = n.metadata?.schedule_type === notification.metadata?.schedule_type;
+                return typeMatch && titleMatch && subjectMatch && scheduleTypeMatch;
+            }
+            
+            // For "No Active Session" notifications, match by subject name in message
+            if (notification.title === 'No Active Session' || notification.title.includes('No Active Session')) {
+                // Extract subject name from message for better matching
+                const getSubjectFromMessage = (msg) => {
+                    const match = msg.match(/^(\w+)\s+is scheduled/);
+                    return match ? match[1] : null;
+                };
+                
+                const existingSubject = getSubjectFromMessage(n.message);
+                const newSubject = getSubjectFromMessage(notification.message);
+                
+                // Also check if titles match (accounting for potential count modifications)
+                const baseTitleMatch = n.title.replace(/\s*\(\d+\+?\)/, '') === notification.title.replace(/\s*\(\d+\+?\)/, '');
+                
+                return typeMatch && baseTitleMatch && existingSubject === newSubject && existingSubject !== null;
+            }
+            
+            // Default matching for other notification types
+            return typeMatch && titleMatch && 
+                   n.metadata?.subjectId === notification.metadata?.subjectId &&
+                   n.metadata?.sectionId === notification.metadata?.sectionId;
+        });
+        
+        console.log('🔍 Existing notifications for comparison:', this.notifications.map(n => ({
+            title: n.title,
+            type: n.type,
+            message: n.message?.substring(0, 30) + '...',
+            count: n.count || 1
+        })));
+        
+        console.log('🔍 Found existing notification at index:', existingNotificationIndex);
         
         if (existingNotificationIndex !== -1) {
             // Update existing notification instead of creating a new one
@@ -492,17 +600,27 @@ class NotificationService {
             existingNotification.timestamp = notification.timestamp;
             existingNotification.created_at = notification.created_at;
             existingNotification.is_read = false; // Mark as unread since it's updated
+            existingNotification.read = false; // Ensure both read flags are set
             
             // Update the message to show count
             if (existingNotification.count > 1) {
-                const baseMessage = existingNotification.message.replace(/ \(\d+x\)$/, '');
-                existingNotification.message = `${baseMessage} (${existingNotification.count}x)`;
+                // Remove existing count from message first
+                const baseMessage = existingNotification.message.replace(/ \(\d+\+?\)$/, '');
+                existingNotification.message = `${baseMessage} (${existingNotification.count}+)`;
+                
+                // Update title to show it's stacked
+                if (!existingNotification.title.includes('(')) {
+                    existingNotification.title = `${existingNotification.title} (${existingNotification.count}+)`;
+                } else {
+                    existingNotification.title = existingNotification.title.replace(/\(\d+\+?\)/, `(${existingNotification.count}+)`);
+                }
             }
             
-            console.log('📚 Stacked notification:', notification.title, `(${existingNotification.count}x)`);
+            console.log('📚 Stacked notification:', notification.title, `(${existingNotification.count}+)`);
         } else {
             // Add new notification
             notification.count = 1;
+            notification.read = false; // Ensure read flag is set
             this.notifications.unshift(notification);
             
             console.log('📬 Added new notification:', notification.title);
@@ -518,7 +636,8 @@ class NotificationService {
             id: notification.id,
             type: notification.type,
             teacher_id: notification.teacher_id,
-            metadata: notification.metadata
+            metadata: notification.metadata,
+            count: notification.count || 1
         });
         
         // Notify listeners immediately

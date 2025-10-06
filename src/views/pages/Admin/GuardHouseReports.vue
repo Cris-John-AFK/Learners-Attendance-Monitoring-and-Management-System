@@ -288,24 +288,25 @@ import Column from 'primevue/column';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import axios from 'axios';
+import { queueApiRequest } from '@/services/ApiRequestManager';
 
 const toast = useToast();
 const API_BASE_URL = 'http://localhost:8000/api';
-
 // State
 const scannerEnabled = ref(true);
 const checkInRecords = ref([]);
 const checkOutRecords = ref([]);
 const archivedSessions = ref([]);
 const sessionRecords = ref({});
-const expandedSessions = ref([]);
+const sessionFilters = ref({});
+const sessionSearchQueries = ref({});
+const sessionPagination = ref({});
 const loadingSessionRecords = ref({});
+const expandedSessions = ref([]);
 const currentTime = ref('');
 const loadingArchived = ref(false);
 
-// Session-specific filters
-const sessionFilters = ref({});
-const sessionSearchQueries = ref({});
+// Session-specific filters initialized above
 
 // Polling interval
 let pollingInterval = null;
@@ -333,55 +334,7 @@ const recordTypeOptions = [
     { label: 'Check-Out', value: 'check-out' }
 ];
 
-// Get filtered records for a specific session
-const getFilteredSessionRecords = (sessionId) => {
-    const records = sessionRecords.value[sessionId] || [];
-    const filters = sessionFilters.value[sessionId] || {};
-    const searchQuery = sessionSearchQueries.value[sessionId] || '';
-    
-    let filtered = [...records];
-    
-    // Apply search filter
-    if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        filtered = filtered.filter(record => 
-            record.student_name?.toLowerCase().includes(query) ||
-            record.student_id?.toString().includes(query) ||
-            record.grade_level?.toLowerCase().includes(query) ||
-            record.section?.toLowerCase().includes(query)
-        );
-    }
-    
-    // Apply grade filter
-    if (filters.grade) {
-        filtered = filtered.filter(record => record.grade_level === filters.grade);
-    }
-    
-    // Apply section filter
-    if (filters.section) {
-        filtered = filtered.filter(record => record.section === filters.section);
-    }
-    
-    // Apply record type filter
-    if (filters.recordType) {
-        filtered = filtered.filter(record => record.record_type === filters.recordType);
-    }
-    
-    return filtered;
-};
-
-// Get unique values for filter options from session records
-const getSessionFilterOptions = (sessionId) => {
-    const records = sessionRecords.value[sessionId] || [];
-    
-    const grades = [...new Set(records.map(r => r.grade_level).filter(Boolean))].sort();
-    const sections = [...new Set(records.map(r => r.section).filter(Boolean))].sort();
-    
-    return {
-        grades: [{ label: 'All Grades', value: '' }, ...grades.map(g => ({ label: g, value: g }))],
-        sections: [{ label: 'All Sections', value: '' }, ...sections.map(s => ({ label: s, value: s }))]
-    };
-};
+// Filter functions are defined below with the other session functions
 
 // Methods
 const getInitials = (name) => {
@@ -455,6 +408,58 @@ const clearSessionFilters = (sessionId) => {
         recordType: ''
     };
     sessionSearchQueries.value[sessionId] = '';
+    // Reload records with cleared filters
+    loadSessionRecords(sessionId, 1, true);
+};
+
+// Get filtered session records for display
+const getFilteredSessionRecords = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    const filters = sessionFilters.value[sessionId] || {};
+    const searchQuery = sessionSearchQueries.value[sessionId] || '';
+    
+    let filtered = records;
+    
+    // Apply search filter
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filtered = filtered.filter(record => 
+            (record.student_name && record.student_name.toLowerCase().includes(query)) ||
+            (record.student_id && record.student_id.toString().includes(query)) ||
+            (record.grade_level && record.grade_level.toLowerCase().includes(query)) ||
+            (record.section && record.section.toLowerCase().includes(query))
+        );
+    }
+    
+    // Apply grade filter
+    if (filters.grade) {
+        filtered = filtered.filter(record => record.grade_level === filters.grade);
+    }
+    
+    // Apply section filter
+    if (filters.section) {
+        filtered = filtered.filter(record => record.section === filters.section);
+    }
+    
+    // Apply record type filter
+    if (filters.recordType) {
+        filtered = filtered.filter(record => record.record_type === filters.recordType);
+    }
+    
+    return filtered;
+};
+
+// Get filter options for a session
+const getSessionFilterOptions = (sessionId) => {
+    const records = sessionRecords.value[sessionId] || [];
+    
+    const grades = [...new Set(records.map(r => r.grade_level).filter(Boolean))].sort();
+    const sections = [...new Set(records.map(r => r.section).filter(Boolean))].sort();
+    
+    return {
+        grades: [{ label: 'All Grades', value: '' }, ...grades.map(grade => ({ label: grade, value: grade }))],
+        sections: [{ label: 'All Sections', value: '' }, ...sections.map(section => ({ label: section, value: section }))]
+    };
 };
 
 // Toggle session details
@@ -477,25 +482,88 @@ const toggleSessionDetails = async (sessionId) => {
     }
 };
 
-// Load records for a specific session
-const loadSessionRecords = async (sessionId) => {
+// Load records for a specific session with pagination and filters
+const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryCount = 0) => {
     loadingSessionRecords.value[sessionId] = true;
+    let shouldStopLoading = true;
     
     try {
-        const response = await axios.get(`${API_BASE_URL}/guardhouse/session-records/${sessionId}`);
+        const filters = sessionFilters.value[sessionId] || {};
+        const searchQuery = sessionSearchQueries.value[sessionId] || '';
+        
+        const params = {
+            page: page,
+            limit: 50, // Load 50 records per page
+            search: searchQuery,
+            grade: filters.grade || '',
+            section: filters.section || '',
+            record_type: filters.recordType || ''
+        };
+        
+        const response = await queueApiRequest(
+            () => axios.get(`${API_BASE_URL}/guardhouse/session-records/${sessionId}`, { params }),
+            'normal' // Normal priority for session records
+        );
+        
         if (response.data.success) {
-            sessionRecords.value[sessionId] = response.data.records;
+            if (resetData || page === 1) {
+                // Reset data for new search/filter or first page
+                sessionRecords.value[sessionId] = response.data.records;
+            } else {
+                // Append data for pagination (load more)
+                if (!sessionRecords.value[sessionId]) {
+                    sessionRecords.value[sessionId] = [];
+                }
+                sessionRecords.value[sessionId] = [
+                    ...sessionRecords.value[sessionId],
+                    ...response.data.records
+                ];
+            }
+            
+            // Store pagination info
+            sessionPagination.value[sessionId] = response.data.pagination;
         }
     } catch (error) {
         console.error('Error loading session records:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load session records',
-            life: 3000
-        });
+        
+        // Handle 429 (Too Many Requests) with retry logic
+        if (error.response?.status === 429 && retryCount < 3) {
+            const retryDelay = (retryCount + 1) * 2;
+            console.warn(`Rate limited loading session ${sessionId}, retrying in ${retryDelay} seconds...`);
+            shouldStopLoading = false; // Don't stop loading, we're retrying
+            
+            // Show a brief toast for the first retry
+            if (retryCount === 0) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Server Busy',
+                    detail: `Retrying to load session records in ${retryDelay} seconds...`,
+                    life: 2000
+                });
+            }
+            
+            setTimeout(() => {
+                loadSessionRecords(sessionId, page, resetData, retryCount + 1);
+            }, retryDelay * 1000); // Exponential backoff: 2s, 4s, 6s
+            return;
+        }
+        
+        // Only show error toast if it's not a rate limit issue or we've exhausted retries
+        if (error.response?.status !== 429 || retryCount >= 3) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: error.response?.status === 429 ? 
+                    'Server is busy, please try again later' : 
+                    'Failed to load session records',
+                life: 3000
+            });
+        }
     } finally {
-        loadingSessionRecords.value[sessionId] = false;
+        // Only set loading to false if we're not retrying
+        if (shouldStopLoading) {
+            loadingSessionRecords.value[sessionId] = false;
+        }
     }
 };
 
@@ -509,27 +577,30 @@ const updateCurrentTime = () => {
     });
 };
 
-// Fetch live data
+// Fetch live data using request manager
 const fetchLiveData = async () => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/guardhouse/live-feed`);
+        const response = await queueApiRequest(
+            () => axios.get(`${API_BASE_URL}/guardhouse/live-feed`),
+            'normal' // Normal priority for live data
+        );
+        
         if (response.data.success) {
-            // Update check-in records
-            const newCheckIns = response.data.check_ins || [];
-            checkInRecords.value = newCheckIns.slice(0, 20); // Keep last 20
-            
-            // Update check-out records
-            const newCheckOuts = response.data.check_outs || [];
-            checkOutRecords.value = newCheckOuts.slice(0, 20); // Keep last 20
+            checkInRecords.value = response.data.check_ins || [];
+            checkOutRecords.value = response.data.check_outs || [];
         }
     } catch (error) {
         console.error('Error fetching live data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Connection Error',
-            detail: 'Unable to fetch live data. Please check backend connection.',
-            life: 5000
-        });
+        
+        // Only show error for non-rate-limiting issues
+        if (error.response?.status !== 429) {
+            toast.add({
+                severity: 'error',
+                summary: 'Connection Error',
+                detail: 'Unable to fetch live data. Please check backend connection.',
+                life: 5000
+            });
+        }
     }
 };
 
@@ -599,22 +670,29 @@ const archiveCurrentSession = async () => {
     }
 };
 
-// Load archived sessions (date-based cards)
+// Load archived records using request manager
 const loadArchivedRecords = async () => {
     loadingArchived.value = true;
     try {
-        const response = await axios.get(`${API_BASE_URL}/guardhouse/archived-sessions`);
+        const response = await queueApiRequest(
+            () => axios.get(`${API_BASE_URL}/guardhouse/archived-sessions`),
+            'high' // High priority for initial data load
+        );
+        
         if (response.data.success) {
             archivedSessions.value = response.data.sessions || [];
+            console.log('Loaded archived sessions:', archivedSessions.value.length);
         }
     } catch (error) {
-        console.error('Error loading archived sessions:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load archived sessions',
-            life: 3000
-        });
+        console.error('Error loading archived records:', error);
+        if (error.response?.status !== 429) {
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Failed to load archived sessions',
+                life: 3000
+            });
+        }
     } finally {
         loadingArchived.value = false;
     }
@@ -642,10 +720,10 @@ onMounted(() => {
     loadScannerStatus();
     updateCurrentTime();
     
-    // Set up polling for live data (every 5 seconds)
-    pollingInterval = setInterval(fetchLiveData, 5000);
+    // Start polling for live data (reduced frequency to avoid 429 errors)
+    pollingInterval = setInterval(fetchLiveData, 45000); // Poll every 45 seconds
     
-    // Update time every second
+    // Start time updates
     timeInterval = setInterval(updateCurrentTime, 1000);
 });
 

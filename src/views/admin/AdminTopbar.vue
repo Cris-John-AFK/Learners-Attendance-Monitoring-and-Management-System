@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import AuthService from '@/services/AuthService';
 import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
+import { queueApiRequest } from '@/services/ApiRequestManager';
 
 const { toggleMenu } = useLayout();
 const router = useRouter();
@@ -38,11 +39,18 @@ const logout = async () => {
     }
 };
 
-// Load SF2 submitted reports
+// Load SF2 submitted reports using request manager
 const loadSubmittedReports = async () => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
-        const data = await response.json();
+        const response = await queueApiRequest(
+            async () => {
+                const res = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
+                return { data: await res.json() };
+            },
+            'low' // Low priority for notifications
+        );
+        
+        const data = response.data;
 
         if (data.success) {
             const newReports = data.data;
@@ -74,6 +82,10 @@ const loadSubmittedReports = async () => {
         }
     } catch (error) {
         console.error('Error loading submitted reports:', error);
+        // Don't show error toasts for rate limiting
+        if (error.response?.status !== 429) {
+            console.error('Failed to load submitted reports');
+        }
     }
 };
 
@@ -82,7 +94,7 @@ const startPolling = () => {
     loadSubmittedReports();
     pollingInterval.value = setInterval(() => {
         loadSubmittedReports();
-    }, 30000); // Poll every 30 seconds
+    }, 60000); // Poll every 60 seconds (reduced frequency)
 };
 
 // Stop polling

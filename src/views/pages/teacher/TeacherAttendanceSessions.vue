@@ -9,6 +9,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
@@ -35,8 +36,23 @@ const showReasonDialog = ref(false);
 const reasonDialogType = ref('late');
 const pendingStatusChange = ref(null);
 
+// Filter states
+const statusFilter = ref(null);
+const reasonFilter = ref(null);
+const searchFilter = ref('');
+const reasonFilterOptions = ref([{ label: 'All Reasons', value: null }]);
+
 // Status options for dropdowns
 const statusOptions = [
+    { label: 'Present', value: 'Present' },
+    { label: 'Absent', value: 'Absent' },
+    { label: 'Late', value: 'Late' },
+    { label: 'Excused', value: 'Excused' }
+];
+
+// Status filter options
+const statusFilterOptions = [
+    { label: 'All Statuses', value: null },
     { label: 'Present', value: 'Present' },
     { label: 'Absent', value: 'Absent' },
     { label: 'Late', value: 'Late' },
@@ -86,6 +102,34 @@ const sessionsByDate = computed(() => {
         grouped[date].push(session);
     });
     return grouped;
+});
+
+// Filtered students based on filters
+const filteredStudents = computed(() => {
+    let filtered = [...sessionStudents.value];
+
+    // Apply status filter
+    if (statusFilter.value) {
+        filtered = filtered.filter((student) => student.status === statusFilter.value);
+    }
+
+    // Apply reason filter
+    if (reasonFilter.value) {
+        filtered = filtered.filter((student) => student.reason_id === reasonFilter.value);
+    }
+
+    // Apply search filter
+    if (searchFilter.value) {
+        const search = searchFilter.value.toLowerCase();
+        filtered = filtered.filter((student) => student.name?.toLowerCase().includes(search) || student.student_id?.toLowerCase().includes(search) || `${student.first_name} ${student.last_name}`.toLowerCase().includes(search));
+    }
+
+    return filtered;
+});
+
+// Check if any filters are active
+const hasActiveFilters = computed(() => {
+    return statusFilter.value || reasonFilter.value || searchFilter.value;
 });
 
 // Initialize teacher data from authentication
@@ -392,6 +436,44 @@ const getAttendanceSummary = (session) => {
     return { total, present, absent, late, excused };
 };
 
+// Filter functions
+const loadReasons = async (statusType) => {
+    try {
+        const response = await fetch(`http://localhost:8000/api/attendance/reasons/${statusType.toLowerCase()}`);
+        const data = await response.json();
+        if (data.success) {
+            const reasons = data.reasons.map((reason) => ({
+                label: reason.reason_name,
+                value: reason.id
+            }));
+            reasonFilterOptions.value = [{ label: 'All Reasons', value: null }, ...reasons];
+        }
+    } catch (error) {
+        console.error('Failed to load reasons:', error);
+    }
+};
+
+const onStatusFilterChange = async () => {
+    if (statusFilter.value === 'Late' || statusFilter.value === 'Excused') {
+        await loadReasons(statusFilter.value);
+    } else {
+        reasonFilter.value = null;
+        reasonFilterOptions.value = [{ label: 'All Reasons', value: null }];
+    }
+};
+
+const clearFilters = () => {
+    statusFilter.value = null;
+    reasonFilter.value = null;
+    searchFilter.value = '';
+    reasonFilterOptions.value = [{ label: 'All Reasons', value: null }];
+};
+
+const getReasonName = (reasonId) => {
+    const reason = reasonFilterOptions.value.find((r) => r.value === reasonId);
+    return reason ? reason.label : 'Unknown';
+};
+
 // Listen for session completion notifications
 let unsubscribeNotifications = null;
 
@@ -560,6 +642,60 @@ onUnmounted(() => {
                     </div>
                 </div>
 
+                <!-- Filters Section -->
+                <div class="filters-section mb-4 p-4 bg-gray-50 rounded-lg border">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
+                        <!-- Status Filter -->
+                        <div class="filter-group">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="pi pi-filter mr-2 text-blue-600"></i>
+                                Filter by Status
+                            </label>
+                            <Dropdown v-model="statusFilter" :options="statusFilterOptions" optionLabel="label" optionValue="value" placeholder="All Statuses" class="w-full" @change="onStatusFilterChange" />
+                        </div>
+
+                        <!-- Reason Filter -->
+                        <div class="filter-group">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="pi pi-list mr-2 text-blue-600"></i>
+                                Filter by Reason
+                            </label>
+                            <Dropdown
+                                v-model="reasonFilter"
+                                :options="reasonFilterOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                placeholder="All Reasons"
+                                class="w-full"
+                                :disabled="!statusFilter || (statusFilter !== 'Late' && statusFilter !== 'Excused')"
+                            />
+                        </div>
+
+                        <!-- Search Filter -->
+                        <div class="filter-group">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="pi pi-search mr-2 text-blue-600"></i>
+                                Search Student
+                            </label>
+                            <InputText v-model="searchFilter" placeholder="Search by name or ID..." class="w-full" />
+                        </div>
+
+                        <!-- Clear Filters -->
+                        <div class="filter-group">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">&nbsp;</label>
+                            <Button label="Clear Filters" icon="pi pi-times" class="w-full p-button-outlined p-button-secondary" @click="clearFilters" :disabled="!hasActiveFilters" />
+                        </div>
+                    </div>
+
+                    <!-- Active Filters Display -->
+                    <div v-if="hasActiveFilters" class="active-filters flex items-center gap-2 pt-3 border-t border-gray-200">
+                        <span class="text-sm font-medium text-gray-600">Active Filters:</span>
+                        <Tag v-if="statusFilter" :value="`Status: ${statusFilter}`" severity="info" class="mr-1" />
+                        <Tag v-if="reasonFilter" :value="`Reason: ${getReasonName(reasonFilter)}`" severity="info" class="mr-1" />
+                        <Tag v-if="searchFilter" :value="`Search: ${searchFilter}`" severity="info" class="mr-1" />
+                    </div>
+                </div>
+
                 <!-- Bulk Actions -->
                 <div class="flex justify-between items-center mb-4 p-3 bg-blue-50 rounded-lg">
                     <div class="flex items-center gap-3">
@@ -571,7 +707,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Students Table -->
-                <DataTable :value="sessionStudents" v-model:selection="selectedStudents" dataKey="id" :paginator="true" :rows="10" class="p-datatable-sm" responsiveLayout="scroll">
+                <DataTable :value="filteredStudents" v-model:selection="selectedStudents" dataKey="id" :paginator="true" :rows="10" class="p-datatable-sm" responsiveLayout="scroll">
                     <Column selectionMode="multiple" headerStyle="width: 3rem"></Column>
 
                     <Column field="student_id" header="Student ID" sortable>

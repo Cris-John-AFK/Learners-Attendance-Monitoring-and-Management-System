@@ -15,6 +15,7 @@ const { layoutState, isSidebarActive } = useLayout();
 const router = useRouter();
 const outsideClickListener = ref(null);
 const scanning = ref(true); // Auto-start scanning
+const guardPaused = ref(false); // Track if guard manually paused scanner
 const attendanceRecords = ref([]);
 const guestAttendanceRecords = ref([]);
 const searchQuery = ref('');
@@ -69,11 +70,12 @@ const checkScannerStatus = async () => {
             // If admin disabled scanner, pause scanning
             if (!adminScannerEnabled && scanning.value) {
                 scanning.value = false;
+                guardPaused.value = false; // Reset guard pause when admin disables
                 showScanFeedback('error', 'Scanner disabled by administrator');
                 console.log('Scanner disabled by admin');
             }
-            // If admin enabled scanner and we're not scanning, resume
-            else if (adminScannerEnabled && !scanning.value && !cameraError.value && !showVerificationModal.value) {
+            // If admin enabled scanner and we're not scanning, resume ONLY if guard hasn't manually paused
+            else if (adminScannerEnabled && !scanning.value && !cameraError.value && !showVerificationModal.value && !guardPaused.value) {
                 scanning.value = true;
                 console.log('Scanner enabled by admin');
             }
@@ -758,6 +760,7 @@ const submitGuestForm = () => {
 
 // Toggle scanning function that respects admin settings
 const toggleScanning = () => {
+    // Only block if admin has explicitly disabled the scanner
     if (!scannerEnabled.value) {
         showScanFeedback('error', 'Scanner is disabled by administrator');
         return;
@@ -766,8 +769,10 @@ const toggleScanning = () => {
     scanning.value = !scanning.value;
     
     if (scanning.value) {
+        guardPaused.value = false; // Clear guard pause when resuming
         console.log('Scanner resumed by guard');
     } else {
+        guardPaused.value = true; // Set guard pause when pausing
         console.log('Scanner paused by guard');
     }
 };
