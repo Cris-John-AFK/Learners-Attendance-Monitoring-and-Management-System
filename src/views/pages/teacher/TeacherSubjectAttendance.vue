@@ -68,8 +68,30 @@ const subjectName = ref(initialSubject.name);
 const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
 const teacherId = ref(null); // Will be set from authenticated teacher
-const currentDate = ref(new Date().toISOString().split('T')[0]);
+const currentDate = ref(new Date()); // Use Date object for DatePicker compatibility
 const currentDateTime = ref(new Date());
+
+// Computed property to get date string for API calls (using LOCAL timezone, NOT UTC)
+const currentDateString = computed(() => {
+    if (currentDate.value instanceof Date) {
+        // Use local timezone, NOT UTC to avoid date shifting
+        const year = currentDate.value.getFullYear();
+        const month = String(currentDate.value.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    return currentDate.value;
+});
+
+// Function to ensure date is always current
+const ensureCurrentDate = () => {
+    const today = new Date();
+    // Set to today's date, removing time component
+    today.setHours(0, 0, 0, 0);
+    currentDate.value = today;
+    console.log('✅ Date set to (LOCAL TIMEZONE):', currentDateString.value);
+    console.log('Current time:', new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }));
+};
 
 // Loading states
 const isLoadingSeating = ref(false);
@@ -1428,7 +1450,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     const timestamp = new Date().toISOString();
 
     // Save to attendance records
-    const recordKey = `${seat.studentId}-${currentDate.value}`;
+    const recordKey = `${seat.studentId}-${currentDateString.value}`;
 
     if (status === 'Present' || status === 'Late') {
         // Remove from remarks panel if exists
@@ -1458,7 +1480,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     // Update attendance records
     attendanceRecords.value[recordKey] = {
         studentId: seat.studentId,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: remarks || '',
         timestamp
@@ -1469,7 +1491,7 @@ const saveAttendanceWithRemarks = async (status, remarks = '') => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
     // Also update the cache to ensure our most recent changes persist across refreshes
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp,
@@ -1557,7 +1579,7 @@ const saveAttendanceRecord = async (studentId, status, remarks = '') => {
             section_id: sectionId.value,
             subject_id: resolvedSubjectId,
             teacher_id: teacherId.value,
-            date: currentDate.value,
+            date: currentDateString.value,
             attendance: [
                 {
                     student_id: studentId,
@@ -1861,7 +1883,7 @@ const fetchAttendanceHistory = async () => {
 
         // Get current day's records from localStorage first, as these are the most recent
         const todayRecords = {};
-        const today = currentDate.value;
+        const today = currentDateString.value;
         Object.keys(attendanceRecords.value).forEach((key) => {
             // Check if the record is for today
             if (key.includes(today)) {
@@ -1956,10 +1978,10 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
     const timestamp = new Date().toISOString();
 
     // Save to attendance records
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: remarks || '',
         timestamp
@@ -1972,10 +1994,10 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
         foundSeat.status = status;
 
         // Save attendance with remarks
-        const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+        const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
         attendanceRecords.value[recordKey] = {
             studentId: currentStudent.value.id,
-            date: currentDate.value,
+            date: currentDateString.value,
             status,
             remarks: remarks || '',
             timestamp
@@ -2009,7 +2031,7 @@ const saveRollCallAttendanceWithRemarks = async (status, remarks = '') => {
     localStorage.setItem('remarksPanel', JSON.stringify(remarksPanel.value));
 
     // Update cache
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp,
@@ -2062,7 +2084,7 @@ const createAttendanceSession = async () => {
             teacherId: teacherId.value,
             sectionId: sectionId.value,
             subjectId: resolvedSubjectId,
-            date: currentDate.value,
+            date: currentDateString.value,
             startTime: new Date().toTimeString().split(' ')[0], // Current time in HH:MM:SS format
             type: 'regular',
             metadata: {}
@@ -2083,7 +2105,7 @@ const createAttendanceSession = async () => {
         });
 
         // Clear any cached attendance data for today
-        const today = currentDate.value;
+        const today = currentDateString.value;
         const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
         localStorage.removeItem(cacheKey);
         scannedStudents.value = [];
@@ -2145,7 +2167,7 @@ const calculateSessionStatistics = () => {
         late_count: lateCount,
         excused_count: excusedCount,
         attendance_rate: attendanceRate,
-        session_date: currentDate.value,
+        session_date: currentDateString.value,
         subject_name: subjectName.value || 'Subject',
         session_duration: sessionActive.value ? 'Active' : 'Completed'
     };
@@ -2422,7 +2444,7 @@ const resetAllAttendance = () => {
         });
 
         // Get the current date for filtering records
-        const today = currentDate.value;
+        const today = currentDateString.value;
 
         // Identify keys to remove (all records for today)
         const keysToRemove = [];
@@ -2641,6 +2663,9 @@ let refreshInterval = null;
 // Initialize component data and setup
 const initializeComponent = async () => {
     try {
+        // Ensure date is set to today
+        ensureCurrentDate();
+        
         // Subject info is already set during component creation, just log it
         console.log(`Initializing component for: ${subjectName.value} (ID: ${subjectId.value})`);
 
@@ -2890,7 +2915,7 @@ const loadCachedAttendanceData = () => {
             }
         });
     });
-    const selectedDate = currentDate.value;
+    const selectedDate = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${selectedDate}`;
 
     try {
@@ -3310,7 +3335,7 @@ const setAttendanceStatus = (status) => {
     saveAttendanceWithRemarks(status);
 
     // Extra step to ensure changes are saved properly
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp: new Date().toISOString(),
@@ -3338,7 +3363,7 @@ const saveRemarks = () => {
     saveAttendanceWithRemarks(pendingStatus.value, attendanceRemarks.value);
 
     // Extra step to ensure changes are saved properly
-    const today = currentDate.value;
+    const today = currentDateString.value;
     const cacheKey = `attendanceCache_${subjectId.value}_${today}`;
     const cacheData = {
         timestamp: new Date().toISOString(),
@@ -3701,7 +3726,7 @@ const saveAttendanceStatus = async () => {
             student_id: student.id,
             status: pendingStatus.value.toLowerCase(), // Convert to lowercase for database
             remarks: attendanceRemarks.value || '',
-            date: currentDate.value
+            date: currentDateString.value
         };
 
         // Use the teacher attendance service to mark attendance
@@ -3824,7 +3849,7 @@ if (typeof window !== 'undefined') {
 // Load attendance data from database for today
 const loadTodayAttendanceFromDatabase = async () => {
     try {
-        const today = currentDate.value;
+        const today = currentDateString.value;
         console.log('Loading attendance from database for date:', today);
 
         // Validate required parameters before making API call
@@ -3990,10 +4015,10 @@ const markRollCallStatus = (status) => {
     }
 
     // Save attendance record
-    const recordKey = `${studentId}_${currentDate.value}`;
+    const recordKey = `${studentId}_${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: studentId,
-        date: currentDate.value,
+        date: currentDateString.value,
         status: status,
         time: new Date().toLocaleTimeString(),
         remarks: ''
@@ -4056,10 +4081,10 @@ const markRollCallAttendance = async (status) => {
     }
 
     // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status,
         remarks: '',
         timestamp: new Date().toISOString()
@@ -4137,10 +4162,10 @@ const saveRollCallRemarks = () => {
     }
 
     // Save attendance record
-    const recordKey = `${currentStudent.value.id}-${currentDate.value}`;
+    const recordKey = `${currentStudent.value.id}-${currentDateString.value}`;
     attendanceRecords.value[recordKey] = {
         studentId: currentStudent.value.id,
-        date: currentDate.value,
+        date: currentDateString.value,
         status: pendingRollCallStatus.value,
         remarks: rollCallRemarks.value,
         timestamp: new Date().toISOString()
@@ -4402,7 +4427,7 @@ const applyAttendanceStatusesToSeatPlan = () => {
     if (!attendanceRecords.value || Object.keys(attendanceRecords.value).length === 0) return;
 
     // Get today's date
-    const today = currentDate.value;
+    const today = currentDateString.value;
 
     // Group records by student ID to ensure we're using the most recent record for each student
     const studentLatestRecords = {};
