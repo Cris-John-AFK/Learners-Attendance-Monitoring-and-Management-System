@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAMMS Shared API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .endpoint-section {
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .endpoint-header {
+            background: #f5f5f5;
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
+        }
+        
+        .endpoint-header:hover {
+            background: #e8e8e8;
+        }
+        
+        .endpoint-header h3 {
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .method-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .endpoint-body {
+            padding: 20px;
+            display: none;
+        }
+        
+        .endpoint-body.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.95em;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .response-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+            display: none;
+        }
+        
+        .response-container.show {
+            display: block;
+        }
+        
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .status-success {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .status-error {
+            background: #f44336;
+            color: white;
+        }
+        
+        .response-body {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 500px;
+        }
+        
+        .response-body pre {
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        
+        .copy-btn {
+            background: #666;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        
+        .copy-btn:hover {
+            background: #555;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .info-box strong {
+            color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 LAMMS Shared API Tester</h1>
+            <p>Test student attendance API endpoints for your groupmates</p>
+        </div>
+        
+        <div class="content">
+            <div class="info-box">
+                <strong>📌 Base URL:</strong> http://localhost:8000/api/shared/attendance<br>
+                <strong>📖 Documentation:</strong> See SHARED_API_DOCUMENTATION.md for complete details
+            </div>
+            
+            <!-- Endpoint 1: Get All Students -->
+            <div class="endpoint-section">
+                <div class="endpoint-header" onclick="toggleEndpoint('endpoint1')">
+                    <h3>1. Get All Students with Attendance</h3>
+                    <span class="method-badge">GET</span>
+                </div>
+                <div class="endpoint-body" id="endpoint1">
+                    <form onsubmit="testEndpoint(event, 'getAllStudents')">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date From:</label>
+                                <input type="date" name="date_from" value="2025-09-01">
+                            </div>
+                            <div class="form-group">
+                                <label>Date To:</label>
+                                <input type="date" name="date_to" value="2025-10-06">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Section ID (optional):</label>
+                                <input type="number" name="section_id" placeholder="Leave empty for all sections">
+                            </div>
+                            <div class="form-group">
+                                <label>Grade Level (optional):</label>
+                                <input type="text" name="grade_level" placeholder="e.g., Grade 1">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">🚀 Test API</button>
+                    </form>
+                    <div class="response-container" id="response-getAllStudents"></div>
+                </div>
+            </div>
+            
+            <!-- Endpoint 2: Get Specific Student -->
+            <div class="endpoint-section">
+                <div class="endpoint-header" onclick="toggleEndpoint('endpoint2')">
+                    <h3>2. Get Specific Student Details</h3>
+                    <span class="method-badge">GET</span>
+                </div>
+                <div class="endpoint-body" id="endpoint2">
+                    <form onsubmit="testEndpoint(event, 'getStudent')">
+                        <div class="form-group">
+                            <label>Student ID:</label>
+                            <input type="number" name="student_id" value="14" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date From:</label>
+                                <input type="date" name="date_from" value="2025-07-01">
+                            </div>
+                            <div class="form-group">
+                                <label>Date To:</label>
+                                <input type="date" name="date_to" value="2025-10-06">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">🚀 Test API</button>
+                    </form>
+                    <div class="response-container" id="response-getStudent"></div>
+                </div>
+            </div>
+            
+            <!-- Endpoint 3: Get Summary -->
+            <div class="endpoint-section">
+                <div class="endpoint-header" onclick="toggleEndpoint('endpoint3')">
+                    <h3>3. Get Attendance Summary Statistics</h3>
+                    <span class="method-badge">GET</span>
+                </div>
+                <div class="endpoint-body" id="endpoint3">
+                    <form onsubmit="testEndpoint(event, 'getSummary')">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date From:</label>
+                                <input type="date" name="date_from" value="2025-09-01">
+                            </div>
+                            <div class="form-group">
+                                <label>Date To:</label>
+                                <input type="date" name="date_to" value="2025-10-06">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">🚀 Test API</button>
+                    </form>
+                    <div class="response-container" id="response-getSummary"></div>
+                </div>
+            </div>
+            
+            <!-- Endpoint 4: Get Daily Attendance -->
+            <div class="endpoint-section">
+                <div class="endpoint-header" onclick="toggleEndpoint('endpoint4')">
+                    <h3>4. Get Daily Attendance Report</h3>
+                    <span class="method-badge">GET</span>
+                </div>
+                <div class="endpoint-body" id="endpoint4">
+                    <form onsubmit="testEndpoint(event, 'getDaily')">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date:</label>
+                                <input type="date" name="date" value="2025-10-06">
+                            </div>
+                            <div class="form-group">
+                                <label>Section ID (optional):</label>
+                                <input type="number" name="section_id" placeholder="Leave empty for all">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">🚀 Test API</button>
+                    </form>
+                    <div class="response-container" id="response-getDaily"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000/api/shared/attendance';
+        
+        function toggleEndpoint(id) {
+            const body = document.getElementById(id);
+            body.classList.toggle('active');
+        }
+        
+        async function testEndpoint(event, endpointType) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            const button = form.querySelector('button[type="submit"]');
+            const responseContainer = document.getElementById(`response-${endpointType}`);
+            
+            // Disable button and show loading
+            button.disabled = true;
+            button.innerHTML = '<span class="loading"></span> Loading...';
+            
+            try {
+                let url = BASE_URL;
+                const params = new URLSearchParams();
+                
+                // Build URL based on endpoint type
+                switch(endpointType) {
+                    case 'getAllStudents':
+                        url += '/students';
+                        if (formData.get('date_from')) params.append('date_from', formData.get('date_from'));
+                        if (formData.get('date_to')) params.append('date_to', formData.get('date_to'));
+                        if (formData.get('section_id')) params.append('section_id', formData.get('section_id'));
+                        if (formData.get('grade_level')) params.append('grade_level', formData.get('grade_level'));
+                        break;
+                        
+                    case 'getStudent':
+                        const studentId = formData.get('student_id');
+                        url += `/students/${studentId}`;
+                        if (formData.get('date_from')) params.append('date_from', formData.get('date_from'));
+                        if (formData.get('date_to')) params.append('date_to', formData.get('date_to'));
+                        break;
+                        
+                    case 'getSummary':
+                        url += '/summary';
+                        if (formData.get('date_from')) params.append('date_from', formData.get('date_from'));
+                        if (formData.get('date_to')) params.append('date_to', formData.get('date_to'));
+                        break;
+                        
+                    case 'getDaily':
+                        url += '/daily';
+                        if (formData.get('date')) params.append('date', formData.get('date'));
+                        if (formData.get('section_id')) params.append('section_id', formData.get('section_id'));
+                        break;
+                }
+                
+                // Append query parameters
+                const queryString = params.toString();
+                if (queryString) {
+                    url += '?' + queryString;
+                }
+                
+                console.log('Calling API:', url);
+                
+                // Make API call
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                // Display response
+                displayResponse(responseContainer, data, response.status, url);
+                
+            } catch (error) {
+                displayResponse(responseContainer, { error: error.message }, 500, '');
+            } finally {
+                // Re-enable button
+                button.disabled = false;
+                button.innerHTML = '🚀 Test API';
+            }
+        }
+        
+        function displayResponse(container, data, status, url) {
+            const isSuccess = status >= 200 && status < 300;
+            
+            container.innerHTML = `
+                <div class="response-header">
+                    <div>
+                        <span class="status-badge ${isSuccess ? 'status-success' : 'status-error'}">
+                            ${status} ${isSuccess ? 'Success' : 'Error'}
+                        </span>
+                        <small style="margin-left: 10px; color: #666;">${url}</small>
+                    </div>
+                    <button class="copy-btn" onclick="copyResponse(this)">📋 Copy</button>
+                </div>
+                <div class="response-body">
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+            
+            container.classList.add('show');
+        }
+        
+        function copyResponse(button) {
+            const pre = button.closest('.response-container').querySelector('pre');
+            const text = pre.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            });
+        }
+        
+        // Auto-open first endpoint
+        document.addEventListener('DOMContentLoaded', () => {
+            toggleEndpoint('endpoint1');
+        });
+    </script>
+</body>
+</html>
