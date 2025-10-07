@@ -69,11 +69,6 @@
                     </template>
                 </Column>
 
-                <Column field="affects_attendance" header="Affects Attendance" style="width: 150px">
-                    <template #body="{ data }">
-                        <Tag :value="data.affects_attendance ? 'Yes' : 'No'" :severity="data.affects_attendance ? 'danger' : 'info'" />
-                    </template>
-                </Column>
 
                 <Column header="Actions" style="width: 150px">
                     <template #body="{ data }">
@@ -128,12 +123,6 @@
                 </div>
 
                 <!-- Affects Attendance -->
-                <div class="field flex items-center gap-3">
-                    <Checkbox id="affects_attendance" v-model="eventForm.affects_attendance" :binary="true" />
-                    <label for="affects_attendance" class="font-semibold cursor-pointer">
-                        Prevent auto-absence marking (No attendance required)
-                    </label>
-                </div>
 
                 <!-- Half-Day Times (if applicable) -->
                 <div v-if="eventForm.event_type === 'half_day'" class="grid grid-cols-2 gap-4">
@@ -193,7 +182,6 @@ const eventForm = ref({
     start_date: null,
     end_date: null,
     event_type: 'holiday',
-    affects_attendance: true,
     modified_start_time: null,
     modified_end_time: null
 });
@@ -245,7 +233,6 @@ function openEventDialog() {
         start_date: null,
         end_date: null,
         event_type: 'holiday',
-        affects_attendance: true,
         modified_start_time: null,
         modified_end_time: null
     };
@@ -260,7 +247,6 @@ function editEvent(event) {
         start_date: new Date(event.start_date),
         end_date: new Date(event.end_date),
         event_type: event.event_type,
-        affects_attendance: event.affects_attendance,
         modified_start_time: event.modified_start_time ? new Date(`2000-01-01 ${event.modified_start_time}`) : null,
         modified_end_time: event.modified_end_time ? new Date(`2000-01-01 ${event.modified_end_time}`) : null
     };
@@ -282,12 +268,32 @@ async function saveEvent() {
 
         let response;
         if (editingEvent.value) {
-            response = await api.put(`/api/calendar/events/${editingEvent.value.id}`, payload);
-            console.log('✅ Update response:', response.data);
+            response = await queueApiRequest(
+                () => fetch(`/api/calendar/events/${editingEvent.value.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }).then(res => res.json()),
+                'normal'
+            );
+            console.log('✅ Update response:', response);
             toast.add({ severity: 'success', summary: 'Success', detail: 'Event updated and teachers notified!', life: 3000 });
         } else {
-            response = await api.post('/api/calendar/events', payload);
-            console.log('✅ Create response:', response.data);
+            response = await queueApiRequest(
+                () => fetch('/api/calendar/events', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }).then(res => res.json()),
+                'normal'
+            );
+            console.log('✅ Create response:', response);
             toast.add({ severity: 'success', summary: 'Success', detail: 'Event created and teachers notified!', life: 3000 });
         }
 

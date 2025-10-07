@@ -18,6 +18,8 @@ class GuardhouseController extends Controller
         try {
             $qrCode = $request->input('qr_code');
             
+            Log::info('QR Code verification attempt', ['qr_code' => $qrCode]);
+            
             if (!$qrCode) {
                 return response()->json([
                     'success' => false,
@@ -42,7 +44,10 @@ class GuardhouseController extends Controller
                 )
                 ->first();
 
+            Log::info('Student query result', ['student' => $student]);
+
             if (!$student) {
+                Log::warning('Student not found for QR code', ['qr_code' => $qrCode]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid QR code or student not found'
@@ -90,10 +95,48 @@ class GuardhouseController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('GuardhouseController@verifyQRCode error: ' . $e->getMessage());
+            Log::error('GuardhouseController@verifyQRCode error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'qr_code' => $qrCode ?? 'not_set'
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Server error occurred'
+                'message' => 'Server error occurred: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Test endpoint to check database connection
+     */
+    public function test()
+    {
+        try {
+            // Test QR codes table
+            $qrCount = DB::table('student_qr_codes')->count();
+            
+            // Test student_details table  
+            $studentCount = DB::table('student_details')->count();
+            
+            // Test specific QR code
+            $testQR = 'LAMMS_STUDENT_3240_1759843602_8rI4FJsW';
+            $qrExists = DB::table('student_qr_codes')
+                ->where('qr_code_data', $testQR)
+                ->where('is_active', true)
+                ->exists();
+                
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'qr_codes_count' => $qrCount,
+                    'students_count' => $studentCount,
+                    'test_qr_exists' => $qrExists
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -104,6 +147,8 @@ class GuardhouseController extends Controller
     public function recordAttendance(Request $request)
     {
         try {
+            Log::info('Recording attendance request', $request->all());
+            
             $request->validate([
                 'student_id' => 'required|integer',
                 'qr_code_data' => 'required|string',
@@ -142,17 +187,27 @@ class GuardhouseController extends Controller
                 ], 409);
             }
 
-            // Create attendance record
+            // Verify student exists before inserting
+            $studentExists = DB::table('student_details')->where('id', $studentId)->exists();
+            if (!$studentExists) {
+                Log::error('Student ID does not exist in student_details', ['student_id' => $studentId]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Student ID not found in database'
+                ], 404);
+            }
+
+            // Create attendance record with proper data types
             $attendanceId = DB::table('guardhouse_attendance')->insertGetId([
-                'student_id' => $studentId,
-                'qr_code_data' => $qrCodeData,
-                'record_type' => $recordType,
+                'student_id' => (int)$studentId,
+                'qr_code_data' => (string)$qrCodeData,
+                'record_type' => (string)$recordType,
                 'timestamp' => Carbon::now(),
-                'date' => Carbon::today(),
+                'date' => Carbon::today()->toDateString(),
                 'guard_name' => 'Bread Doe',
                 'guard_id' => 'G-12345',
-                'is_manual' => $isManual,
-                'notes' => $notes,
+                'is_manual' => (bool)$isManual,
+                'notes' => $notes ? (string)$notes : null,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now()
             ]);
@@ -199,10 +254,15 @@ class GuardhouseController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('GuardhouseController@recordAttendance error: ' . $e->getMessage());
+            Log::error('GuardhouseController@recordAttendance error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all(),
+                'student_id' => $studentId ?? 'not_set',
+                'student_exists' => isset($studentId) ? DB::table('student_details')->where('id', $studentId)->exists() : false
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Server error occurred'
+                'message' => 'Server error occurred: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -712,16 +712,46 @@ const loadScannerStatus = async () => {
     }
 };
 
+// Fast parallel loading function
+const loadAllDataParallel = async () => {
+    try {
+        console.log('🚀 Loading all data in parallel...');
+        const startTime = performance.now();
+        
+        // Execute all API calls in parallel for maximum speed
+        const [liveDataResult, archivedResult, scannerResult] = await Promise.allSettled([
+            fetchLiveData(),
+            loadArchivedRecords(), 
+            loadScannerStatus()
+        ]);
+        
+        const endTime = performance.now();
+        console.log(`⚡ All data loaded in ${(endTime - startTime).toFixed(1)}ms`);
+        
+        // Log any failures
+        if (liveDataResult.status === 'rejected') {
+            console.error('Live data failed:', liveDataResult.reason);
+        }
+        if (archivedResult.status === 'rejected') {
+            console.error('Archived data failed:', archivedResult.reason);
+        }
+        if (scannerResult.status === 'rejected') {
+            console.error('Scanner status failed:', scannerResult.reason);
+        }
+        
+    } catch (error) {
+        console.error('Error in parallel loading:', error);
+    }
+};
+
 // Lifecycle
 onMounted(() => {
-    // Initial load
-    fetchLiveData();
-    loadArchivedRecords();
-    loadScannerStatus();
+    // Fast parallel initial load
+    loadAllDataParallel();
     updateCurrentTime();
     
-    // Start polling for live data (reduced frequency to avoid 429 errors)
-    pollingInterval = setInterval(fetchLiveData, 45000); // Poll every 45 seconds
+    // Start polling for live data only (reduced frequency to avoid 429 errors)
+    pollingInterval = setInterval(fetchLiveData, 30000); // Poll every 30 seconds
     
     // Start time updates
     timeInterval = setInterval(updateCurrentTime, 1000);

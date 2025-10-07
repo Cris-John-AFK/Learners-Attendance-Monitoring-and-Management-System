@@ -411,6 +411,7 @@ Route::prefix('admin/attendance-analytics')->group(function () {
 
 // Guardhouse routes for attendance tracking
 Route::prefix('guardhouse')->group(function () {
+    Route::get('/test', [GuardhouseController::class, 'test']);
     Route::post('/verify-qr', [GuardhouseController::class, 'verifyQRCode']);
     Route::post('/record-attendance', [GuardhouseController::class, 'recordAttendance']);
     Route::get('/today-records', [GuardhouseController::class, 'getTodayRecords']);

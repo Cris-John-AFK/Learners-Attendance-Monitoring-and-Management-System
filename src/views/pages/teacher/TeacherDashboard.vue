@@ -78,14 +78,13 @@ const showCriticalAlert = ref(false);
 const currentDate = ref(new Date());
 const currentMonth = ref(new Date().getMonth());
 const currentYear = ref(new Date().getFullYear());
-
 // Calendar data for student profiles
 const calendarData = ref([]);
 const absentDays = ref([]);
 
-// Attendance threshold settings
-const WARNING_THRESHOLD = 3; // Yellow warning after 3 absences
-const CRITICAL_THRESHOLD = 5; // Red warning after 5 absences
+// Attendance threshold settings - Teacher-friendly
+const WARNING_THRESHOLD = 3; // Students missing 3-4 days need attention
+const CRITICAL_THRESHOLD = 5; // Students missing 5+ days need urgent action
 
 // Filter options
 const showOnlyAbsenceIssues = ref(false);
@@ -275,6 +274,22 @@ const initializeTeacherData = async () => {
 // Calendar day click handler
 const showDayDetailsDialog = ref(false);
 const selectedDayDetails = ref(null);
+
+// Get the first day of the month for calendar alignment
+function getFirstDayOfMonth() {
+    if (!currentYear.value || currentMonth.value === undefined) return 0;
+    return new Date(currentYear.value, currentMonth.value, 1).getDay();
+}
+
+// Calculate severity based on absence count
+function calculateSeverity(absences) {
+    if (absences >= CRITICAL_THRESHOLD) {
+        return 'critical';
+    } else if (absences >= WARNING_THRESHOLD) {
+        return 'warning';
+    }
+    return 'normal';
+}
 
 function handleCalendarDayClick(calDay) {
     if (!calDay.status) {
@@ -591,7 +606,7 @@ function processIndexedData(indexedData) {
             gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
             section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
             absences: student.total_absences || 0,
-            severity: student.severity || 'normal',
+            severity: calculateSeverity(student.total_absences || 0),
             attendanceRate: student.attendance_rate || 100,
             totalPresent: student.total_present || 0,
             totalLate: student.total_late || 0
@@ -698,26 +713,6 @@ async function loadAttendanceData() {
         }
 
         if (studentsResponse.success) {
-            // Use summary data if available, otherwise use basic student data
-            const summary = summaryResponse?.success
-                ? {
-                      totalStudents: summaryResponse.data.total_students || studentsResponse.count,
-                      averageAttendance: summaryResponse.data.average_attendance || 0,
-                      studentsWithWarning: summaryResponse.data.students_with_warning || 0,
-                      studentsWithCritical: summaryResponse.data.students_with_critical || 0,
-                      students: summaryResponse.data.students || []
-                  }
-                : {
-                      totalStudents: studentsResponse.count || 0,
-                      averageAttendance: 0,
-                      studentsWithWarning: 0,
-                      studentsWithCritical: 0,
-                      students: []
-                  };
-
-            // Cache the result
-            CacheService.set(cacheKey, { summary }, 2 * 60 * 1000);
-            attendanceSummary.value = summary;
 
             // Always show students from studentsResponse
             const studentsData = studentsResponse.students || [];
@@ -733,13 +728,35 @@ async function loadAttendanceData() {
                 gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
                 section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
                 absences: student.total_absences || 0,
-                severity: student.severity || 'normal',
+                severity: calculateSeverity(student.total_absences || 0),
                 attendanceRate: student.attendance_rate || 100,
                 totalPresent: student.total_present || 0,
                 totalLate: student.total_late || 0
             }));
 
+            // NOW calculate warning and critical counts from the processed student data
+            const warningCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'warning').length;
+            const criticalCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'critical').length;
+
+            // Set attendance summary with calculated counts
+            attendanceSummary.value = summaryResponse && summaryResponse.success
+                ? {
+                      totalStudents: summaryResponse.data.total_students || studentsResponse.count,
+                      averageAttendance: summaryResponse.data.average_attendance || 0,
+                      studentsWithWarning: warningCount,
+                      studentsWithCritical: criticalCount,
+                      students: summaryResponse.data.students || []
+                  }
+                : {
+                      totalStudents: studentsResponse.count || 0,
+                      averageAttendance: 0,
+                      studentsWithWarning: warningCount,
+                      studentsWithCritical: criticalCount,
+                      students: []
+                  };
+
             console.log('✅ Attendance data loaded. Students:', studentsWithAbsenceIssues.value.length);
+            console.log('📊 Warning count:', warningCount, 'Critical count:', criticalCount);
         }
     } catch (error) {
         console.error('Error loading attendance data:', error);
@@ -774,14 +791,6 @@ async function loadAllSubjectsData() {
         });
 
         if (summaryResponse.success && summaryResponse.data) {
-            attendanceSummary.value = {
-                totalStudents: summaryResponse.data.total_students || 0,
-                averageAttendance: summaryResponse.data.average_attendance || 0,
-                studentsWithWarning: summaryResponse.data.students_with_warning || 0,
-                studentsWithCritical: summaryResponse.data.students_with_critical || 0,
-                students: summaryResponse.data.students || []
-            };
-
             // For "All Subjects", we get students from the summary response
             if (summaryResponse.data.students) {
                 studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
@@ -790,7 +799,7 @@ async function loadAllSubjectsData() {
                     gradeLevel: student.grade_name || student.curriculum_grade?.grade_name || 'Unknown',
                     section: student.section_name || student.section || 'Unknown Section',
                     absences: student.total_absences || student.absence_count || 0,
-                    severity: student.severity || 'normal',
+                    severity: calculateSeverity(student.total_absences || student.absence_count || 0),
                     attendanceRate: student.attendance_rate || 100,
                     totalPresent: student.total_present || 0,
                     totalLate: student.total_late || 0
@@ -798,6 +807,18 @@ async function loadAllSubjectsData() {
             } else {
                 studentsWithAbsenceIssues.value = [];
             }
+
+            // Calculate warning and critical counts from processed student data
+            const warningCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'warning').length;
+            const criticalCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'critical').length;
+
+            attendanceSummary.value = {
+                totalStudents: summaryResponse.data.total_students || 0,
+                averageAttendance: summaryResponse.data.average_attendance || 0,
+                studentsWithWarning: warningCount,
+                studentsWithCritical: criticalCount,
+                students: summaryResponse.data.students || []
+            };
 
             console.log('✅ All Subjects data loaded. Students:', studentsWithAbsenceIssues.value.length);
         }
@@ -903,13 +924,7 @@ function analyzeAttendance(students, attendanceRecords) {
     studentsWithAbsenceIssues.value = students
         .map((student) => {
             const absences = absenceCount[student.id] || 0;
-            let severity = 'normal';
-
-            if (absences >= CRITICAL_THRESHOLD) {
-                severity = 'critical';
-            } else if (absences >= WARNING_THRESHOLD) {
-                severity = 'warning';
-            }
+            const severity = calculateSeverity(absences);
 
             return {
                 ...student,
@@ -1179,7 +1194,8 @@ async function prepareChartData() {
                             if (label) {
                                 label += ': ';
                             }
-                            label += context.parsed.y + ' students';
+                            // Use the actual dataset label instead of hardcoded "students"
+                            label += context.parsed.y;
                             return label;
                         }
                     }
@@ -1696,10 +1712,10 @@ async function showStudentProfile(student) {
                                 <div
                                     class="h-2.5 rounded-full transition-all duration-500"
                                     :class="{
-                                        'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                        'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                        'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                        'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 45
+                                        'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 85,
+                                        'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
+                                        'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                        'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 60
                                     }"
                                     :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
                                 ></div>
@@ -1707,13 +1723,13 @@ async function showStudentProfile(student) {
                             <span
                                 class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
                                 :class="{
-                                    'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 75,
-                                    'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                    'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 60 && (attendanceSummary?.averageAttendance || 0) >= 45,
-                                    'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 45
+                                    'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 85,
+                                    'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
+                                    'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
+                                    'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 60
                                 }"
                             >
-                                {{ (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 45 ? 'Fair' : 'Needs Attention' }}
+                                {{ (attendanceSummary?.averageAttendance || 0) >= 85 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Fair' : 'Needs Attention' }}
                             </span>
                         </div>
                     </div>
@@ -1723,7 +1739,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Warning ({{ WARNING_THRESHOLD }}+ absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Need Attention (3-4 absences)</div>
                             <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
                         </div>
                     </div>
@@ -1733,8 +1749,8 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">🚨 18+ Absences (Smart Detection)</div>
-                            <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsExceeding18 || criticalStudents.length || 0 }}</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Urgent Action (5+ absences)</div>
+                            <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
                         </div>
                     </div>
                 </div>
@@ -2104,7 +2120,7 @@ async function showStudentProfile(student) {
 
                     <div class="calendar-days grid grid-cols-7 gap-1">
                         <!-- Empty cells for days before the 1st of the month -->
-                        <div v-for="i in new Date(currentYear, currentMonth, 1).getDay()" :key="`empty-${i}`" class="h-10 w-10"></div>
+                        <div v-for="i in getFirstDayOfMonth()" :key="`empty-${i}`" class="h-10 w-10"></div>
 
                         <!-- Calendar days -->
                         <div
@@ -2346,6 +2362,24 @@ async function showStudentProfile(student) {
 
 .calendar-days {
     min-height: 240px;
+}
+
+/* Ensure calendar header and days are perfectly aligned */
+.calendar-header,
+.calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem; /* Same gap for both */
+    align-items: center;
+}
+
+.calendar-header > div,
+.calendar-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem; /* Fixed width */
+    height: 2.5rem; /* Fixed height */
 }
 
 .student-profile-dialog :deep(.p-dialog-content) {
