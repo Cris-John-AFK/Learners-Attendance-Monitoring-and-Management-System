@@ -162,9 +162,12 @@ const downloadAsPNG = async () => {
 }
 
 .qr-header {
-    text-align: center;
+    text-align: center !important;
     margin-bottom: 1rem;
-    width: 100%;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
 }
 
 .student-name {
@@ -172,12 +175,18 @@ const downloadAsPNG = async () => {
     font-size: 1.2rem;
     margin: 0 0 0.25rem 0;
     color: #333;
+    text-align: center !important;
+    width: 100% !important;
+    display: block !important;
 }
 
 .student-id {
     color: #666;
     font-size: 0.9rem;
     margin: 0;
+    text-align: center !important;
+    width: 100% !important;
+    display: block !important;
 }
 
 .qr-container {
@@ -253,11 +262,11 @@ const downloadAsPNG = async () => {
 
     /* Center card on page */
     .student-qr-code {
-        max-width: 600px;
-        width: 90%;
+        max-width: 700px;
+        width: 95%;
         height: auto;
         margin: 0 auto !important;
-        padding: 3rem;
+        padding: 2.5rem;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
@@ -313,11 +322,20 @@ const downloadAsPNG = async () => {
     }
 
     .student-name {
-        font-size: 2rem;
+        font-size: 1.6rem;
         font-weight: 700;
         color: #333;
         margin: 0 0 0.75rem 0;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
+        text-align: center !important;
+        width: 100% !important;
+        display: block !important;
+        line-height: 1.3 !important;
+        word-wrap: break-word !important;
+        hyphens: auto !important;
+        max-width: 400px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
     }
 
     .student-id {

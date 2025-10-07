@@ -1149,9 +1149,24 @@ const startQRScanner = async () => {
 
 const selectQRMethod = async () => {
     try {
-        await createAttendanceSession();
+        // If no active session, create new one
+        if (!sessionActive.value) {
+            await createAttendanceSession();
+        } else {
+            // Just change method for existing session
+            attendanceMethod.value = 'qr';
+            console.log('🔄 Changed method to QR Scanner for existing session');
+        }
+        
         showAttendanceMethodModal.value = false;
         await startQRScanner();
+        
+        toast.add({
+            severity: 'success',
+            summary: sessionActive.value ? 'Method Changed' : 'Session Started',
+            detail: 'QR Scanner is now active',
+            life: 2000
+        });
     } catch (error) {
         console.error('Error in selectQRMethod:', error);
         toast.add({
@@ -2062,9 +2077,28 @@ const startAttendanceSession = async () => {
     showAttendanceMethodModal.value = true;
 };
 
+// Clear QR scan data for fresh session
+const clearQRScanData = () => {
+    console.log('🧹 Clearing QR scan data for fresh session');
+    qrScanResults.value = [];
+    qrScanLog.value = [];
+};
+
+// Confirmation dialog utility
+const showConfirmDialog = (title, message, confirmLabel = 'Yes', cancelLabel = 'No') => {
+    return new Promise((resolve) => {
+        // Using browser's native confirm for now - can be enhanced with PrimeVue dialog later
+        const result = confirm(`${title}\n\n${message}`);
+        resolve(result);
+    });
+};
+
 // Create actual session after method selection
 const createAttendanceSession = async () => {
     try {
+        // Clear QR scan data when starting new session
+        clearQRScanData();
+        
         // Use resolved subject ID for session creation
         const resolvedSubjectId = getResolvedSubjectId();
 
@@ -2075,10 +2109,15 @@ const createAttendanceSession = async () => {
             date: currentDateString.value,
             startTime: new Date().toTimeString().split(' ')[0], // Current time in HH:MM:SS format
             type: 'regular',
-            metadata: {}
+            method: attendanceMethod.value === 'qr' ? 'QR Scanner' : 'Manual Entry',
+            metadata: {
+                attendanceMethod: attendanceMethod.value,
+                createdVia: attendanceMethod.value === 'qr' ? 'QR Code Scanner' : 'Manual Entry'
+            }
         };
 
         console.log('Creating session with data:', sessionData);
+        console.log('🎯 Session Method:', sessionData.method, '| Attendance Method:', attendanceMethod.value);
         const response = await AttendanceSessionService.createSession(sessionData);
         console.log('Session created:', response);
 
@@ -2163,16 +2202,66 @@ const calculateSessionStatistics = () => {
 
 // Method selection functions
 const selectSeatPlanMethod = async () => {
-    attendanceMethod.value = 'seat_plan'; // Set method to seat plan
-    await createAttendanceSession();
-    showAttendanceMethodModal.value = false;
+    try {
+        // If no active session, create new one
+        if (!sessionActive.value) {
+            attendanceMethod.value = 'seat_plan'; // Set method to seat plan
+            await createAttendanceSession();
+        } else {
+            // Just change method for existing session
+            attendanceMethod.value = 'seat_plan';
+            console.log('🔄 Changed method to Seat Plan for existing session');
+        }
+        
+        showAttendanceMethodModal.value = false;
+        
+        toast.add({
+            severity: 'success',
+            summary: sessionActive.value ? 'Method Changed' : 'Session Started',
+            detail: 'Seat Plan method is now active',
+            life: 2000
+        });
+    } catch (error) {
+        console.error('Error in selectSeatPlanMethod:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Method Error',
+            detail: 'Failed to set seat plan method: ' + error.message,
+            life: 3000
+        });
+    }
 };
 
 const selectRollCallMethod = async () => {
-    attendanceMethod.value = 'roll_call'; // Set method to roll call
-    await createAttendanceSession();
-    showAttendanceMethodModal.value = false;
-    startRollCall();
+    try {
+        // If no active session, create new one
+        if (!sessionActive.value) {
+            attendanceMethod.value = 'roll_call'; // Set method to roll call
+            await createAttendanceSession();
+        } else {
+            // Just change method for existing session
+            attendanceMethod.value = 'roll_call';
+            console.log('🔄 Changed method to Roll Call for existing session');
+        }
+        
+        showAttendanceMethodModal.value = false;
+        startRollCall();
+        
+        toast.add({
+            severity: 'success',
+            summary: sessionActive.value ? 'Method Changed' : 'Session Started',
+            detail: 'Roll Call method is now active',
+            life: 2000
+        });
+    } catch (error) {
+        console.error('Error in selectRollCallMethod:', error);
+        toast.add({
+            severity: 'error',
+            summary: 'Method Error',
+            detail: 'Failed to set roll call method: ' + error.message,
+            life: 3000
+        });
+    }
 };
 
 // Complete attendance session
@@ -2216,6 +2305,21 @@ const completeAttendanceSession = async () => {
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
+        
+        // Clear QR scan data and reset attendance method
+        clearQRScanData();
+        attendanceMethod.value = null;
+        
+        // Clear all student statuses from seating arrangement
+        seatPlan.value.forEach(row => {
+            row.forEach(seat => {
+                if (seat.student) {
+                    seat.status = null;
+                }
+            });
+        });
+        
+        console.log('🧹 Session completed - cleared all data for fresh start');
 
         // Step 4: Prepare modal data
         sessionCompletionProgress.value = 80;
@@ -3363,8 +3467,135 @@ const cameraInitialized = ref(false);
 
 const stopQRScanner = () => {
     console.log('Stopping QR scanner...');
+    console.log('🎯 Updating seating arrangement with QR scan results:', qrScanResults.value);
+    
+    // Update seating arrangement with QR scan results
+    qrScanResults.value.forEach(result => {
+        const seat = findSeatByStudentId(result.studentId);
+        if (seat) {
+            seat.status = result.status;
+            console.log(`✅ Updated seat for ${result.name}: ${result.status}`);
+        } else {
+            console.warn(`⚠️ No seat found for student ${result.name} (ID: ${result.studentId})`);
+        }
+    });
+    
+    // Force reactivity update
+    seatPlan.value = [...seatPlan.value];
+    
     scanning.value = false;
     showQRScanner.value = false;
+    
+    toast.add({
+        severity: 'success',
+        summary: 'Scanner Closed',
+        detail: `Updated ${qrScanResults.value.length} students in seating arrangement`,
+        life: 3000
+    });
+};
+
+const reopenQRScanner = () => {
+    console.log('🔄 Reopening QR scanner...');
+    showQRScanner.value = true;
+    scanning.value = true;
+    
+    toast.add({
+        severity: 'info',
+        summary: 'Scanner Reopened',
+        detail: 'QR scanner is ready to scan more students',
+        life: 2000
+    });
+};
+
+const changeAttendanceMethod = () => {
+    console.log('🔄 Changing attendance method...');
+    
+    // Close QR scanner if it's open
+    if (showQRScanner.value) {
+        stopQRScanner();
+    }
+    
+    // Show method selection modal
+    showAttendanceMethodModal.value = true;
+    
+    toast.add({
+        severity: 'info',
+        summary: 'Change Method',
+        detail: 'Select a new attendance method. Current progress will be preserved.',
+        life: 3000
+    });
+};
+
+const cancelAttendanceSession = async () => {
+    console.log('❌ Canceling attendance session...');
+    
+    // Show confirmation dialog
+    const confirmed = await showConfirmDialog(
+        'Cancel Session',
+        'Are you sure you want to cancel this attendance session? All progress will be lost.',
+        'Yes, Cancel Session',
+        'Keep Session'
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        // Close QR scanner if open
+        if (showQRScanner.value) {
+            scanning.value = false;
+            showQRScanner.value = false;
+        }
+        
+        // Cancel session on backend if it exists
+        if (currentSession.value?.id) {
+            try {
+                await AttendanceSessionService.cancelSession(currentSession.value.id);
+            } catch (error) {
+                console.warn('Backend cancel not available, proceeding with frontend cleanup:', error);
+            }
+        }
+        
+        // Reset all session data
+        sessionActive.value = false;
+        currentSession.value = null;
+        attendanceMethod.value = null;
+        
+        // Clear QR scan data
+        clearQRScanData();
+        
+        // Clear all student statuses from seating arrangement
+        seatPlan.value.forEach(row => {
+            row.forEach(seat => {
+                if (seat.student) {
+                    seat.status = null;
+                }
+            });
+        });
+        
+        // Force reactivity update
+        seatPlan.value = [...seatPlan.value];
+        
+        console.log('🧹 Session canceled - all data cleared');
+        
+        toast.add({
+            severity: 'warn',
+            summary: 'Session Canceled',
+            detail: 'Attendance session has been canceled. All progress has been cleared.',
+            life: 4000
+        });
+        
+    } catch (error) {
+        console.error('Error canceling session:', error);
+        
+        toast.add({
+            severity: 'error',
+            summary: 'Cancel Error',
+            detail: 'Failed to cancel session properly. Please try again.',
+            life: 3000
+        });
+    }
 };
 
 const onDetect = async (detectedCodes) => {
@@ -3456,22 +3687,52 @@ const onQRDecode = async (decodedText) => {
             if (parts.length >= 3) {
                 extractedStudentId = parseInt(parts[2]); // Extract student ID from position 2
                 console.log('Extracted student ID from LAMMS format:', extractedStudentId);
-                student = students.value.find((s) => s.id === extractedStudentId);
+                
+                // Try multiple matching strategies for LAMMS format
+                student = students.value.find((s) => 
+                    s.id === extractedStudentId || 
+                    s.studentId === extractedStudentId ||
+                    s.student_id === extractedStudentId ||
+                    parseInt(s.id) === extractedStudentId ||
+                    parseInt(s.studentId) === extractedStudentId ||
+                    parseInt(s.student_id) === extractedStudentId
+                );
             }
         }
 
         // Method 2: Direct numeric ID match
         if (!student && !isNaN(decodedText)) {
             const studentId = parseInt(decodedText);
-            student = students.value.find((s) => s.id === studentId);
+            student = students.value.find((s) => 
+                s.id === studentId || 
+                s.studentId === studentId ||
+                s.student_id === studentId ||
+                parseInt(s.id) === studentId ||
+                parseInt(s.studentId) === studentId ||
+                parseInt(s.student_id) === studentId
+            );
         }
 
         // Method 3: String match against student ID fields
         if (!student) {
-            student = students.value.find((s) => s.studentId?.toString() === decodedText || s.student_id?.toString() === decodedText);
+            student = students.value.find((s) => 
+                s.studentId?.toString() === decodedText || 
+                s.student_id?.toString() === decodedText ||
+                s.id?.toString() === decodedText
+            );
+        }
+
+        // Method 4: Partial ID match (for cases where QR contains partial student info)
+        if (!student && extractedStudentId) {
+            student = students.value.find((s) => {
+                const studentIdStr = s.studentId?.toString() || s.student_id?.toString() || s.id?.toString() || '';
+                return studentIdStr.includes(extractedStudentId.toString());
+            });
         }
 
         console.log('Found student:', student);
+        console.log('Debug - Extracted ID:', extractedStudentId);
+        console.log('Debug - Available student IDs:', students.value.map(s => ({ id: s.id, studentId: s.studentId, student_id: s.student_id })));
 
         if (student) {
             // Check if already scanned
@@ -3541,9 +3802,11 @@ const onQRDecode = async (decodedText) => {
             });
 
             toast.add({
-                severity: 'warn',
-                summary: 'Student Not Found',
-                detail: `No student found with QR code: ${decodedText}. Check student database.`,
+                severity: 'error',
+                summary: 'Student Not In This Class',
+                detail: extractedStudentId ? 
+                    `Student ID ${extractedStudentId} is not enrolled in this section. Please check if they belong to a different class.` :
+                    `QR code "${decodedText}" does not match any student in this class.`,
                 life: 5000
             });
         }
@@ -4567,6 +4830,36 @@ const titleRef = ref(null);
 
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
 
+            <!-- Change Method button - shows when session is active -->
+            <Button 
+                icon="pi pi-sync" 
+                label="Change Method" 
+                class="p-button-help" 
+                @click="changeAttendanceMethod" 
+                v-if="sessionActive"
+                :disabled="isCompletingSession"
+            />
+
+            <!-- Reopen Scanner button - only shows when QR session is active but scanner is closed -->
+            <Button 
+                icon="pi pi-qrcode" 
+                label="Reopen Scanner" 
+                class="p-button-info" 
+                @click="reopenQRScanner" 
+                v-if="sessionActive && attendanceMethod === 'qr' && !showQRScanner"
+                :disabled="isCompletingSession"
+            />
+
+            <!-- Cancel Session button - shows when session is active -->
+            <Button 
+                icon="pi pi-times" 
+                label="Cancel Session" 
+                class="p-button-danger p-button-outlined" 
+                @click="cancelAttendanceSession" 
+                v-if="sessionActive"
+                :disabled="isCompletingSession"
+            />
+
             <Button
                 :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
                 :label="isCompletingSession ? 'Completing...' : 'Complete Session'"
@@ -4914,11 +5207,11 @@ const titleRef = ref(null);
         </Dialog>
 
         <!-- Enhanced QR Scanner Dialog with Gate Log -->
-        <Dialog v-model:visible="showQRScanner" modal header="QR Code Attendance Scanner" :style="{ width: '80vw', height: '80vh' }" :closable="false">
-            <div class="qr-scanner-layout grid">
-                <!-- Camera Section -->
-                <div class="col-6">
-                    <div class="qr-camera-section">
+        <Dialog v-model:visible="showQRScanner" modal header="QR Code Attendance Scanner" :style="{ width: '95vw', height: '85vh' }" :closable="false">
+            <div class="qr-scanner-layout" style="display: flex; gap: 1.5rem; height: calc(85vh - 120px); min-height: 500px;">
+                <!-- Camera Section (Left Side) -->
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+                    <div class="qr-camera-section" style="flex: 1; display: flex; flex-direction: column;">
                         <h4 class="text-lg font-semibold mb-3">Camera Feed</h4>
 
                         <div v-if="cameraError" class="text-center p-4 border-2 border-dashed border-red-300 rounded-lg">
@@ -4927,9 +5220,9 @@ const titleRef = ref(null);
                             <Button label="Try Again" icon="pi pi-refresh" @click="initializeCamera" />
                         </div>
 
-                        <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden">
-                            <QrcodeStream v-if="scanning" @decode="onQRDecode" @detect="onQRDetect" @init="onCameraInit" @error="onCameraError" class="qr-scanner w-full h-64" />
-                            <div v-if="!scanning" class="scanner-paused h-64 bg-gray-100 flex flex-column align-items-center justify-content-center">
+                        <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden" style="flex: 1; min-height: 300px;">
+                            <QrcodeStream v-if="scanning" @decode="onQRDecode" @detect="onQRDetect" @init="onCameraInit" @error="onCameraError" class="qr-scanner w-full" style="height: 100%;" />
+                            <div v-if="!scanning" class="scanner-paused bg-gray-100 flex flex-column align-items-center justify-content-center" style="height: 100%;">
                                 <i class="pi pi-pause-circle text-4xl mb-2"></i>
                                 <p>Scanner Paused - Click Resume to start scanning</p>
                             </div>
@@ -4950,21 +5243,48 @@ const titleRef = ref(null);
                     </div>
                 </div>
 
-                <!-- Results & Log Section -->
-                <div class="col-6">
-                    <div class="qr-results-section">
-                        <!-- Scan Results -->
+                <!-- Results & Log Section (Right Side) -->
+                <div style="flex: 1; min-width: 0; border-left: 2px solid #e5e7eb; padding-left: 1.5rem; display: flex; flex-direction: column;">
+                    <div class="qr-results-section" style="flex: 1; display: flex; flex-direction: column;">
+                        <!-- Enhanced Scanned Students Panel -->
                         <div class="mb-4">
-                            <h4 class="text-lg font-semibold mb-3">Attendance Results ({{ qrScanResults.length }})</h4>
-                            <div class="max-h-32 overflow-y-auto border rounded-lg">
-                                <div v-if="qrScanResults.length === 0" class="p-3 text-center text-gray-500">No students scanned yet</div>
-                                <div v-for="result in qrScanResults" :key="result.id" class="flex justify-content-between align-items-center p-2 border-bottom-1 surface-border">
-                                    <div>
-                                        <div class="font-semibold">{{ result.name }}</div>
-                                        <div class="text-sm text-gray-600">ID: {{ result.studentId }}</div>
-                                    </div>
-                                    <Tag :value="result.status" :severity="getStatusSeverity(result.status)" />
+                            <div class="flex justify-content-between align-items-center mb-3">
+                                <h4 class="text-lg font-semibold">📱 Scanned Students ({{ qrScanResults.length }})</h4>
+                                <Badge v-if="qrScanResults.length > 0" :value="qrScanResults.length" severity="success" />
+                            </div>
+                            
+                            <div class="max-h-40 overflow-y-auto border rounded-lg bg-white">
+                                <div v-if="qrScanResults.length === 0" class="p-4 text-center text-gray-500">
+                                    <i class="pi pi-qrcode text-3xl mb-2 block"></i>
+                                    <p>No students scanned yet</p>
+                                    <small>Students will appear here when they scan their QR codes</small>
                                 </div>
+                                
+                                <div v-for="result in qrScanResults" :key="result.id" class="p-3 border-bottom-1 surface-border hover:bg-gray-50 transition-colors">
+                                    <div class="flex justify-content-between align-items-start">
+                                        <div class="flex-1">
+                                            <div class="font-semibold text-primary">{{ result.name }}</div>
+                                            <div class="text-sm text-gray-600 mt-1">
+                                                <i class="pi pi-id-card mr-1"></i>ID: {{ result.studentId }}
+                                            </div>
+                                            <div class="text-xs text-gray-500 mt-1">
+                                                <i class="pi pi-clock mr-1"></i>Scanned: {{ new Date(result.scannedAt).toLocaleTimeString() }}
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-column align-items-end">
+                                            <Tag :value="result.status" :severity="getStatusSeverity(result.status)" class="mb-1" />
+                                            <i class="pi pi-check-circle text-green-500 text-sm"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Quick Stats -->
+                            <div v-if="qrScanResults.length > 0" class="mt-2 p-2 bg-green-50 border border-green-200 rounded text-center">
+                                <small class="text-green-700">
+                                    <i class="pi pi-check mr-1"></i>
+                                    {{ qrScanResults.length }} student{{ qrScanResults.length !== 1 ? 's' : '' }} marked present via QR scan
+                                </small>
                             </div>
                         </div>
 

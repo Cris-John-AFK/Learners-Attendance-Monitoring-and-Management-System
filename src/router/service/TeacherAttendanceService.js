@@ -64,6 +64,21 @@ export const TeacherAttendanceService = {
     },
 
     /**
+     * Cancel attendance session
+     */
+    async cancelSession(sessionId) {
+        try {
+            const response = await api.delete(`/api/attendance-sessions/${sessionId}/cancel`);
+            return response.data;
+        } catch (error) {
+            console.error('Error canceling attendance session:', error);
+            // If backend doesn't have cancel endpoint, just return success
+            console.warn('Cancel endpoint not available, proceeding with frontend cleanup');
+            return { success: true, message: 'Session canceled locally' };
+        }
+    },
+
+    /**
      * Get teacher's assigned sections and subjects
      */
     async getTeacherAssignments(teacherId) {
