@@ -234,7 +234,7 @@ const initializeTeacherData = async () => {
             const assignments = TeacherAuthService.getAssignments();
             const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
 
-            availableSubjects.value = uniqueSubjects.map((subject) => {
+            const processedSubjects = uniqueSubjects.map((subject) => {
                 // Find the assignment for this subject to get the correct section ID
                 const assignment = assignments.find((a) => a.subject_id === subject.id);
                 // Safe access to sections array with fallback
@@ -249,6 +249,10 @@ const initializeTeacherData = async () => {
                     assignment: assignment
                 };
             });
+
+            // Set BOTH for indexing to work!
+            teacherSubjects.value = processedSubjects;
+            availableSubjects.value = processedSubjects;
 
             // Set default selected subject
             if (availableSubjects.value.length > 0) {
@@ -407,29 +411,13 @@ onMounted(async () => {
         // Prepare chart data which includes setting up chart options
         await prepareChartData();
 
-        // Batch load remaining dashboard data efficiently
-        await Promise.all([loadSmartAnalytics(), loadCriticalStudents()]);
+        // Background indexing DISABLED - causes 220+ requests!
+        // Subjects will load on-demand when user switches
+        console.log('📌 On-demand loading enabled - subjects load when selected');
 
-        // Pre-load and index all subjects' data for instant switching
-        if (teacherSubjects.value?.length > 0) {
-            console.log('📚 Starting data pre-indexing...');
-            isIndexing.value = true;
-
-            AttendanceIndexingService.preloadAllData(currentTeacher.value.id, teacherSubjects.value)
-                .then((result) => {
-                    console.log('✅ Pre-indexing complete:', result);
-                    isIndexing.value = false;
-                })
-                .catch((err) => {
-                    console.error('❌ Pre-indexing error:', err);
-                    isIndexing.value = false;
-                });
-        }
-
-        // Set up controlled auto-refresh with minimum interval
-        refreshInterval = setInterval(() => {
-            refreshDashboardData(false); // Only refresh if enough time has passed
-        }, MIN_REFRESH_INTERVAL); // Check every minute
+        // Load analytics in background (non-blocking)
+        loadSmartAnalytics().catch((err) => console.warn('Analytics failed (non-critical):', err));
+        loadCriticalStudents().catch((err) => console.warn('Critical students failed (non-critical):', err));
     } catch (error) {
         console.error('Error in onMounted:', error);
     } finally {
@@ -685,48 +673,63 @@ async function loadAttendanceData() {
 
         console.log('🌐 Fetching fresh attendance data...');
 
-        // Batch API calls for better performance
-        const [studentsResponse, summaryResponse] = await Promise.all([
-            TeacherAttendanceService.getStudentsForTeacherSubject(params.teacherId, params.sectionId, params.subjectId),
-            AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
+        // Check indexed data first for instant loading
+        const indexedData = AttendanceIndexingService.getIndexedData(params.teacherId, params.sectionId, params.subjectId, viewType.value);
+        if (indexedData) {
+            console.log('⚡ Using indexed data (instant load)');
+            attendanceSummary.value = indexedData.summary;
+            studentsWithAbsenceIssues.value = indexedData.students || [];
+            return;
+        }
+
+        // Get students first (required)
+        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(params.teacherId, params.sectionId, params.subjectId);
+
+        // Try to get summary (optional)
+        let summaryResponse = null;
+        try {
+            summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
                 period: 'week',
-                viewType: 'all_students', // Make it general, not subject-specific
-                subjectId: null // No subject filtering
-            }).then((result) => {
-                console.log('🔍 Attendance Summary API called with:', {
-                    teacherId: currentTeacher.value.id,
-                    period: 'week',
-                    viewType: 'all_students',
-                    subjectId: null
-                });
-                console.log('📊 Attendance Summary API response:', result);
-                return result;
-            })
-        ]);
+                viewType: 'all_students',
+                subjectId: null
+            });
+        } catch (err) {
+            console.warn('⚠️ Summary API failed (non-critical):', err.message);
+        }
 
-        if (studentsResponse.success && summaryResponse.success) {
-            const summary = {
-                totalStudents: summaryResponse.data.total_students,
-                averageAttendance: summaryResponse.data.average_attendance,
-                studentsWithWarning: summaryResponse.data.students_with_warning,
-                studentsWithCritical: summaryResponse.data.students_with_critical,
-                students: summaryResponse.data.students || []
-            };
+        if (studentsResponse.success) {
+            // Use summary data if available, otherwise use basic student data
+            const summary = summaryResponse?.success
+                ? {
+                      totalStudents: summaryResponse.data.total_students || studentsResponse.count,
+                      averageAttendance: summaryResponse.data.average_attendance || 0,
+                      studentsWithWarning: summaryResponse.data.students_with_warning || 0,
+                      studentsWithCritical: summaryResponse.data.students_with_critical || 0,
+                      students: summaryResponse.data.students || []
+                  }
+                : {
+                      totalStudents: studentsResponse.count || 0,
+                      averageAttendance: 0,
+                      studentsWithWarning: 0,
+                      studentsWithCritical: 0,
+                      students: []
+                  };
 
-            // Cache the result for 2 minutes
+            // Cache the result
             CacheService.set(cacheKey, { summary }, 2 * 60 * 1000);
-
             attendanceSummary.value = summary;
 
-            // Update studentsWithAbsenceIssues for the template
-            // Use summary students if available, otherwise fall back to studentsResponse
-            const studentsData = summaryResponse.data.students && summaryResponse.data.students.length > 0 ? summaryResponse.data.students : studentsResponse.data || [];
-
-            console.log('📋 Students data for display:', studentsData);
+            // Always show students from studentsResponse
+            const studentsData = studentsResponse.students || [];
+            
+            // DEBUG: Log first student to see actual data structure
+            if (studentsData.length > 0) {
+                console.log('🔍 DEBUG First Student Data:', JSON.stringify(studentsData[0], null, 2));
+            }
 
             studentsWithAbsenceIssues.value = studentsData.map((student) => ({
                 id: student.student_id || student.id,
-                name: student.name || `${student.firstName} ${student.lastName}`,
+                name: student.name || `${student.first_name || student.firstName} ${student.last_name || student.lastName}`,
                 gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
                 section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
                 absences: student.total_absences || 0,
@@ -736,7 +739,7 @@ async function loadAttendanceData() {
                 totalLate: student.total_late || 0
             }));
 
-            console.log('✅ Attendance data loaded and cached. Students:', studentsWithAbsenceIssues.value.length);
+            console.log('✅ Attendance data loaded. Students:', studentsWithAbsenceIssues.value.length);
         }
     } catch (error) {
         console.error('Error loading attendance data:', error);
@@ -784,9 +787,9 @@ async function loadAllSubjectsData() {
                 studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
                     id: student.student_id || student.id,
                     name: student.name || `${student.first_name} ${student.last_name}`,
-                    gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+                    gradeLevel: student.grade_name || student.curriculum_grade?.grade_name || 'Unknown',
                     section: student.section_name || student.section || 'Unknown Section',
-                    absences: student.total_absences || 0,
+                    absences: student.total_absences || student.absence_count || 0,
                     severity: student.severity || 'normal',
                     attendanceRate: student.attendance_rate || 100,
                     totalPresent: student.total_present || 0,

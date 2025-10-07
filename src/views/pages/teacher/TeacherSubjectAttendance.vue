@@ -879,13 +879,8 @@ const formatSubjectName = (id) => {
 const initializeSeatPlan = () => {
     console.log(`Initializing seat plan with ${rows.value} rows and ${columns.value} columns`);
 
-    // If we have students, use optimal grid size for up to 50 students
-    if (students.value.length > 0 && (rows.value * columns.value < students.value.length || rows.value * columns.value > students.value.length + 15)) {
-        const optimal = calculateOptimalGridSize(students.value.length);
-        console.log(`Adjusting to optimal grid size: ${optimal.rows}x${optimal.columns} for ${students.value.length} students`);
-        rows.value = optimal.rows;
-        columns.value = optimal.columns;
-    }
+    // AUTO-OPTIMIZATION DISABLED - Let user choose any grid size they want!
+    // Teachers should have full control over classroom layout
 
     seatPlan.value = [];
     for (let i = 0; i < rows.value; i++) {
@@ -1356,7 +1351,7 @@ const cleanupInvalidStudentAssignments = () => {
 
     console.log('Running cleanup - current students:', students.value);
 
-    const availableStudentIds = students.value.map((student) => student.id);
+    const availableStudentIds = students.value.map((student) => student.studentId || student.id);
     console.log('Available student IDs:', availableStudentIds);
 
     let foundInvalid = false;
@@ -1365,10 +1360,9 @@ const cleanupInvalidStudentAssignments = () => {
         for (let col = 0; col < seatPlan.value[row].length; col++) {
             const seat = seatPlan.value[row][col];
             if (seat.studentId) {
-                const studentIdNumber = parseInt(seat.studentId.replace('NCS-2025-00', ''));
-                console.log(`Checking seat [${row}][${col}] with studentId ${seat.studentId}: ${availableStudentIds.includes(studentIdNumber) ? 'FOUND' : 'NOT FOUND'}`);
+                console.log(`Checking seat [${row}][${col}] with studentId ${seat.studentId}: ${availableStudentIds.includes(seat.studentId) ? 'FOUND' : 'NOT FOUND'}`);
 
-                if (!availableStudentIds.includes(studentIdNumber)) {
+                if (!availableStudentIds.includes(seat.studentId)) {
                     console.log(`Removing invalid assignment: ${seat.studentId} from [${row}][${col}]`);
                     seat.studentId = null;
                     seat.studentName = '';
@@ -4602,8 +4596,8 @@ const titleRef = ref(null);
                                 <label for="rows" class="mr-1 whitespace-nowrap">Rows:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementRows" :disabled="rows <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="rows" v-model="rows" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
-                                    <Button icon="pi pi-plus" @click="incrementRows" :disabled="rows >= 10" class="p-button-secondary p-button-sm" />
+                                    <InputNumber id="rows" v-model="rows" :min="1" :max="9" @change="updateGridSize" class="w-20" :showButtons="false" />
+                                    <Button icon="pi pi-plus" @click="incrementRows" :disabled="rows >= 9" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
 
@@ -4611,8 +4605,8 @@ const titleRef = ref(null);
                                 <label for="columns" class="mr-1 whitespace-nowrap">Columns:</label>
                                 <div class="p-inputgroup">
                                     <Button icon="pi pi-minus" @click="decrementColumns" :disabled="columns <= 1" class="p-button-secondary p-button-sm" />
-                                    <InputNumber id="columns" v-model="columns" :min="1" :max="10" @change="updateGridSize" class="w-20" :showButtons="false" />
-                                    <Button icon="pi pi-plus" @click="incrementColumns" :disabled="columns >= 10" class="p-button-secondary p-button-sm" />
+                                    <InputNumber id="columns" v-model="columns" :min="1" :max="9" @change="updateGridSize" class="w-20" :showButtons="false" />
+                                    <Button icon="pi pi-plus" @click="incrementColumns" :disabled="columns >= 9" class="p-button-secondary p-button-sm" />
                                 </div>
                             </div>
                         </div>

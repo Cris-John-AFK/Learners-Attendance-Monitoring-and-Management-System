@@ -10,22 +10,13 @@
 
         <!-- Modern Action Bar -->
         <div class="action-bar">
-            <Button 
-                label="Print All QR Codes" 
-                icon="pi pi-print" 
-                @click="printQRCodes"
-                class="print-button"
-            />
-            
+            <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" class="print-button" />
+
             <div class="search-wrapper">
                 <span class="search-icon">
                     <i class="pi pi-search"></i>
                 </span>
-                <InputText 
-                    v-model="searchQuery" 
-                    placeholder="Search students by name or ID..." 
-                    class="search-input"
-                />
+                <InputText v-model="searchQuery" placeholder="Search students by name or ID..." class="search-input" />
                 <span v-if="searchQuery" class="clear-search" @click="searchQuery = ''">
                     <i class="pi pi-times"></i>
                 </span>
@@ -40,14 +31,14 @@
 
         <!-- Modern QR code grid with animations -->
         <transition-group v-else name="card-list" tag="div" class="qrcode-grid">
-            <div 
-                v-for="(student, index) in filteredStudents" 
-                :key="student.id" 
-                class="qrcode-item print-page"
-                :style="{ animationDelay: `${index * 0.05}s` }"
-            >
-                <StudentQRCode 
-                    :studentId="student.id" 
+            <div v-for="(student, index) in filteredStudents" :key="student.id" class="qrcode-item print-page" :style="{ animationDelay: `${index * 0.05}s` }">
+                <StudentQRCode
+                    :ref="
+                        (el) => {
+                            if (el) qrCardRefs[index] = el;
+                        }
+                    "
+                    :studentId="student.id"
                     :studentName="student.full_name || student.name || `${student.first_name} ${student.last_name}` || `Student ${student.id}`"
                     :section="student.section_name || 'N/A'"
                     :grade="student.grade_level || 'N/A'"
@@ -69,8 +60,6 @@
 
 <script setup>
 import StudentQRCode from '@/components/StudentQRCode.vue';
-import { AttendanceService } from '@/router/service/Attendance';
-import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 // Import teacher authentication service (alternative approach)
 import TeacherAuthServiceDefault from '@/services/TeacherAuthService.js';
@@ -80,19 +69,21 @@ import { computed, onMounted, ref } from 'vue';
 const students = ref([]);
 const loading = ref(true);
 const searchQuery = ref('');
+const downloadingAll = ref(false);
+const qrCardRefs = ref([]);
 
 // Load students on component mount
 onMounted(async () => {
     try {
         loading.value = true;
-        
+
         // Get the logged-in teacher's ID from authentication
         let teacherId;
-        
+
         try {
             const teacherData = TeacherAuthServiceDefault.getTeacherData();
             console.log('Raw teacher data from auth service:', teacherData);
-            
+
             // Check different possible data structures
             let actualTeacherId = null;
             if (teacherData) {
@@ -104,7 +95,7 @@ onMounted(async () => {
                     actualTeacherId = teacherData.user.id;
                 }
             }
-            
+
             if (!actualTeacherId) {
                 console.error('No authenticated teacher ID found in data structure');
                 // Fallback to Teacher ID 1 for testing (Maria Santos)
@@ -120,48 +111,42 @@ onMounted(async () => {
             teacherId = 1;
             console.log('Using fallback teacher ID due to auth error:', teacherId);
         }
-        
+
         // Load teacher's assigned students instead of hardcoded Grade 3
         console.log(`Calling getTeacherAssignments for teacher ID: ${teacherId}`);
         const assignmentsResponse = await TeacherAttendanceService.getTeacherAssignments(teacherId);
         console.log('Assignments API response:', assignmentsResponse);
-        
+
         // Extract assignments from the response object
         const assignments = assignmentsResponse?.assignments || assignmentsResponse || [];
         console.log('Extracted assignments array:', assignments);
-        
+
         if (assignments && assignments.length > 0) {
             // Get all students from all teacher's assignments
             const allStudents = [];
-            
+
             for (const assignment of assignments) {
                 console.log('Processing assignment:', assignment);
-                const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(
-                    teacherId, 
-                    assignment.section_id, 
-                    assignment.subject_id
-                );
+                const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId, assignment.section_id, assignment.subject_id);
                 console.log(`Students for section ${assignment.section_id}, subject ${assignment.subject_id}:`, studentsResponse);
-                
+
                 // Extract students from the response object
                 const studentsData = studentsResponse?.students || studentsResponse || [];
                 console.log('Extracted students array:', studentsData);
-                
+
                 if (studentsData && studentsData.length > 0) {
                     // Add students with section info
-                    studentsData.forEach(student => {
+                    studentsData.forEach((student) => {
                         student.section_name = assignment.section_name;
                         student.subject_name = assignment.subject_name;
                     });
                     allStudents.push(...studentsData);
                 }
             }
-            
+
             // Remove duplicates (same student in multiple subjects)
-            const uniqueStudents = allStudents.filter((student, index, self) => 
-                index === self.findIndex(s => s.id === student.id)
-            );
-            
+            const uniqueStudents = allStudents.filter((student, index, self) => index === self.findIndex((s) => s.id === student.id));
+
             students.value = uniqueStudents;
             console.log(`Loaded ${uniqueStudents.length} students for teacher ${teacherId} QR codes`);
             console.log('Student data structure:', uniqueStudents);
@@ -184,10 +169,7 @@ const filteredStudents = computed(() => {
     const query = searchQuery.value.toLowerCase();
     return students.value.filter((student) => {
         const studentName = student.full_name || student.name || `${student.first_name} ${student.last_name}` || '';
-        return studentName.toLowerCase().includes(query) || 
-               student.id.toString().includes(query) ||
-               (student.first_name && student.first_name.toLowerCase().includes(query)) ||
-               (student.last_name && student.last_name.toLowerCase().includes(query));
+        return studentName.toLowerCase().includes(query) || student.id.toString().includes(query) || (student.first_name && student.first_name.toLowerCase().includes(query)) || (student.last_name && student.last_name.toLowerCase().includes(query));
     });
 });
 
@@ -196,19 +178,23 @@ const printQRCodes = () => {
     window.print();
 };
 
-// Regenerate all QR codes
-const regenerateQRCodes = async () => {
+// Download all QR codes as PNG files
+const downloadAllQRCodes = async () => {
     try {
-        loading.value = true;
-        for (const student of students.value) {
-            await QRCodeAPIService.generateQRCode(student.id);
+        downloadingAll.value = true;
+
+        for (let i = 0; i < filteredStudents.value.length; i++) {
+            const qrCard = qrCardRefs.value[i];
+            if (qrCard && qrCard.downloadAsPNG) {
+                await qrCard.downloadAsPNG();
+                // Wait a bit between downloads to avoid overwhelming the browser
+                await new Promise((resolve) => setTimeout(resolve, 500));
+            }
         }
-        // Force refresh of the component
-        students.value = [...students.value];
     } catch (error) {
-        console.error('Error regenerating QR codes:', error);
+        console.error('Error downloading all QR codes:', error);
     } finally {
-        loading.value = false;
+        downloadingAll.value = false;
     }
 };
 </script>
@@ -263,6 +249,25 @@ const regenerateQRCodes = async () => {
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     animation: slideDown 0.6s ease-out 0.1s backwards;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.download-all-button {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    border: none !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+}
+
+.download-all-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4) !important;
 }
 
 .print-button {
@@ -425,7 +430,8 @@ const regenerateQRCodes = async () => {
 }
 
 @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
         transform: scale(1);
     }
     50% {
@@ -475,13 +481,14 @@ const regenerateQRCodes = async () => {
     .layout-sidebar,
     .layout-menu,
     header,
-    [class*="topbar"],
-    [class*="sidebar"] {
+    [class*='topbar'],
+    [class*='sidebar'] {
         display: none !important;
     }
 
     /* Reset page to white */
-    html, body {
+    html,
+    body {
         margin: 0 !important;
         padding: 0 !important;
         background: white !important;

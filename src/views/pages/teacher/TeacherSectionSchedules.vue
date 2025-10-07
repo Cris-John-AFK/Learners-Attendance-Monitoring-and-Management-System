@@ -508,25 +508,31 @@ const loadTeacherAssignments = async (teacherId) => {
         console.log('Teacher data for assignments:', teacherData);
         
         if (teacherData?.assignments) {
-            teacherAssignments.value = teacherData.assignments.map((assignment) => {
-                // Get subject and section info from assignment or section object
-                const subjectName = assignment.subject_name 
-                    || assignment.subject?.name 
-                    || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
-                
-                const sectionName = assignment.section_name 
-                    || assignment.section?.name 
-                    || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
-                
-                return {
-                    id: `${assignment.section_id}_${assignment.subject_id}`,
-                    section_id: assignment.section_id,
-                    subject_id: assignment.subject_id,
-                    section_name: sectionName,
-                    subject_name: subjectName,
-                    hasSchedule: false // Will be updated below
-                };
-            });
+            teacherAssignments.value = teacherData.assignments
+                // Filter out homeroom assignments - homeroom is not a subject that needs scheduling
+                .filter((assignment) => {
+                    const subjectName = assignment.subject_name || assignment.subject?.name || '';
+                    return subjectName.toLowerCase() !== 'homeroom';
+                })
+                .map((assignment) => {
+                    // Get subject and section info from assignment or section object
+                    const subjectName = assignment.subject_name 
+                        || assignment.subject?.name 
+                        || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
+                    
+                    const sectionName = assignment.section_name 
+                        || assignment.section?.name 
+                        || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
+                    
+                    return {
+                        id: `${assignment.section_id}_${assignment.subject_id}`,
+                        section_id: assignment.section_id,
+                        subject_id: assignment.subject_id,
+                        section_name: sectionName,
+                        subject_name: subjectName,
+                        hasSchedule: false // Will be updated below
+                    };
+                });
 
             // Mark assignments that have schedules
             teacherAssignments.value.forEach((assignment) => {

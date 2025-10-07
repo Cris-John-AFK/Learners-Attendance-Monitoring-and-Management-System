@@ -5,7 +5,7 @@
             <h2 class="school-name">Naawan Central School</h2>
             <p class="school-subtitle">Student Identification</p>
         </div>
-        
+
         <div class="qr-header">
             <h3 class="student-name">{{ studentName }}</h3>
             <p class="student-id">ID: {{ studentId }}</p>
@@ -14,7 +14,7 @@
                 <p class="detail-item"><strong>Grade:</strong> {{ grade }}</p>
             </div>
         </div>
-        
+
         <div class="qr-container">
             <div v-if="loading" class="qr-loading">
                 <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
@@ -28,38 +28,16 @@
             </div>
             <div v-else class="qr-error">
                 <p>No QR code available</p>
-                <Button 
-                    label="Generate QR Code" 
-                    icon="pi pi-qrcode" 
-                    @click="generateQRCode"
-                    class="p-button-sm p-button-outlined"
-                />
+                <Button label="Generate QR Code" icon="pi pi-qrcode" @click="generateQRCode" class="p-button-sm p-button-outlined" />
             </div>
         </div>
 
         <div class="qr-actions">
             <div class="download-buttons">
-                <Button 
-                    label="PNG" 
-                    icon="pi pi-download" 
-                    @click="downloadAsPNG"
-                    class="p-button-sm"
-                    :disabled="!hasQRCode"
-                />
-                <Button 
-                    label="SVG" 
-                    icon="pi pi-download" 
-                    @click="downloadAsSVG"
-                    class="p-button-sm p-button-outlined"
-                    :disabled="!hasQRCode"
-                />
+                <Button label="PNG" icon="pi pi-download" @click="downloadAsPNG" class="p-button-sm" :disabled="!hasQRCode" />
+                <Button label="SVG" icon="pi pi-download" @click="downloadAsSVG" class="p-button-sm p-button-outlined" :disabled="!hasQRCode" />
             </div>
-            <Button 
-                label="Regenerate" 
-                icon="pi pi-refresh" 
-                @click="generateQRCode"
-                class="p-button-sm p-button-secondary"
-            />
+            <Button label="Regenerate" icon="pi pi-refresh" @click="generateQRCode" class="p-button-sm p-button-secondary" />
         </div>
     </div>
 </template>
@@ -67,7 +45,7 @@
 <script setup>
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import QrcodeVue from 'qrcode.vue';
-import { ref, onMounted, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps({
     studentId: {
@@ -113,7 +91,7 @@ const loadQRCode = async () => {
     try {
         loading.value = true;
         const response = await QRCodeAPIService.getStudentQRCode(props.studentId);
-        
+
         if (response.has_qr_code) {
             qrData.value = response.qr_code_data;
             qrImageUrl.value = QRCodeAPIService.getQRCodeImageURL(props.studentId);
@@ -130,7 +108,7 @@ const generateQRCode = async () => {
     try {
         loading.value = true;
         const response = await QRCodeAPIService.generateQRCode(props.studentId);
-        
+
         if (response.success) {
             qrData.value = response.qr_code_data;
             qrImageUrl.value = QRCodeAPIService.getQRCodeImageURL(props.studentId);
@@ -173,7 +151,9 @@ const downloadAsPNG = async () => {
     margin: 0 auto;
     background-color: white;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+        transform 0.2s,
+        box-shadow 0.2s;
 }
 
 .student-qr-code:hover {
@@ -294,7 +274,7 @@ const downloadAsPNG = async () => {
         text-align: center;
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
-        border-bottom: 3px solid #2196F3;
+        border-bottom: 3px solid #2196f3;
         width: 100%;
         display: flex;
         flex-direction: column;
@@ -313,7 +293,7 @@ const downloadAsPNG = async () => {
     .school-name {
         font-size: 2rem;
         font-weight: 800;
-        color: #2196F3;
+        color: #2196f3;
         margin: 0 0 0.5rem 0;
         letter-spacing: 1px;
     }
@@ -368,7 +348,7 @@ const downloadAsPNG = async () => {
     }
 
     .detail-item strong {
-        color: #2196F3;
+        color: #2196f3;
         font-weight: 700;
         display: inline-block;
         min-width: 100px;
@@ -380,7 +360,7 @@ const downloadAsPNG = async () => {
         height: 350px;
         padding: 1.5rem;
         background: white;
-        border: 5px solid #2196F3;
+        border: 5px solid #2196f3;
         border-radius: 15px;
         display: flex;
         align-items: center;
@@ -397,7 +377,7 @@ const downloadAsPNG = async () => {
 
     /* Footer instruction */
     .student-qr-code::after {
-        content: "Scan this QR code for attendance tracking";
+        content: 'Scan this QR code for attendance tracking';
         display: block;
         text-align: center;
         font-size: 1rem;

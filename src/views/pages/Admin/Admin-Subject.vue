@@ -69,7 +69,14 @@ const loadSubjects = async () => {
         console.log('Received subjects from API:', data);
 
         if (Array.isArray(data)) {
-            subjects.value = data;
+            // Clear existing subjects first to prevent duplicates
+            subjects.value = [];
+            // Use Map to ensure unique subjects by ID
+            const uniqueSubjects = new Map();
+            data.forEach(subject => {
+                uniqueSubjects.set(subject.id, subject);
+            });
+            subjects.value = Array.from(uniqueSubjects.values());
             console.log('Subjects updated successfully:', subjects.value.length, 'subjects loaded');
         } else {
             console.error('API returned non-array data:', data);
