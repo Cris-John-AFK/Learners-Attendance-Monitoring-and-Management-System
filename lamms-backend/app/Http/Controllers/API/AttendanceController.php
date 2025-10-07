@@ -704,13 +704,41 @@ class AttendanceController extends Controller
                 'student_ids' => $students->pluck('id')->toArray()
             ]);
 
-            $studentsData = $students->map(function ($student) {
+            $studentsData = $students->map(function ($student) use ($sectionId) {
+                // Get grade info from section relationship
+                $sectionPivot = DB::table('student_section')
+                    ->where('student_id', $student->id)
+                    ->where('section_id', $sectionId)
+                    ->first();
+                
+                $gradeInfo = null;
+                if ($sectionPivot) {
+                    $section = DB::table('sections as s')
+                        ->join('curriculum_grade as cg', 's.curriculum_grade_id', '=', 'cg.id')
+                        ->join('grades as g', 'cg.grade_id', '=', 'g.id')
+                        ->where('s.id', $sectionId)
+                        ->select('g.name as grade_name')
+                        ->first();
+                    
+                    $gradeInfo = $section;
+                }
+                
+                // Get absence count from attendance records
+                $absenceCount = DB::table('attendance_records as ar')
+                    ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                    ->where('ar.student_id', $student->id)
+                    ->where('ast.code', 'A')
+                    ->count();
+                
                 return [
                     'id' => $student->id,
                     'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
                     'firstName' => $student->firstName,
                     'lastName' => $student->lastName,
-                    'studentId' => $student->studentId ?? $student->student_id
+                    'studentId' => $student->studentId ?? $student->student_id,
+                    'grade_name' => $gradeInfo ? $gradeInfo->grade_name : null,
+                    'total_absences' => $absenceCount,
+                    'absence_count' => $absenceCount
                 ];
             });
 

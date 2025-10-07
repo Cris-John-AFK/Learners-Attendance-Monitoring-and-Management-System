@@ -26,9 +26,18 @@ class SubjectController extends Controller
                 return response()->json(['error' => 'Subjects table does not exist'], 500);
             }
 
-            $subjects = Subject::all();
+            // Get all subjects and deduplicate by name in PHP
+            $allSubjects = Subject::all();
+            $uniqueNames = [];
+            $subjects = $allSubjects->filter(function($subject) use (&$uniqueNames) {
+                if (!in_array($subject->name, $uniqueNames)) {
+                    $uniqueNames[] = $subject->name;
+                    return true;
+                }
+                return false;
+            })->values();
 
-            Log::info('Found ' . $subjects->count() . ' subjects');
+            Log::info('Found ' . $subjects->count() . ' unique subjects');
 
             return response()->json($subjects);
         } catch (\PDOException $e) {

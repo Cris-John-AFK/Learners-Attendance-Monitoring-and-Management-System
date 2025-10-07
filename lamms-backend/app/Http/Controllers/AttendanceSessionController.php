@@ -55,8 +55,8 @@ class AttendanceSessionController extends Controller
                          ->where('ss.is_active', '=', 1);
                 })
                 ->join('sections as s', 'ss.section_id', '=', 's.id')
-                ->whereIn('sd.enrollment_status', ['active', 'enrolled'])
-                ->orWhereNull('sd.enrollment_status')
+                ->leftJoin('curriculum_grade as cg', 's.curriculum_grade_id', '=', 'cg.id')
+                ->leftJoin('grades as g', 'cg.grade_id', '=', 'g.id')
                 ->select([
                     'sd.id',
                     'sd.firstName as first_name',
@@ -67,7 +67,11 @@ class AttendanceSessionController extends Controller
                     'sd.gender',
                     'sd.age',
                     'sd.status',
-                    's.name as section_name'
+                    's.name as section_name',
+                    'g.name as grade_name',
+                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar 
+                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id 
+                             WHERE ar.student_id = sd.id AND ast.code = \'A\') as total_absences')
                 ])
                 ->distinct()
                 ->orderBy('sd.lastName')

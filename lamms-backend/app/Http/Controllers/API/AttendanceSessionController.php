@@ -422,10 +422,10 @@ class AttendanceSessionController extends Controller
         $stats = [
             'total_students' => $totalStudents,
             'marked_students' => $records->count(),
-            'present' => $records->where('attendanceStatus.code', 'P')->count(),
-            'absent' => $records->where('attendanceStatus.code', 'A')->count(),
-            'late' => $records->where('attendanceStatus.code', 'L')->count(),
-            'excused' => $records->where('attendanceStatus.code', 'E')->count()
+            'present' => $records->filter(fn($r) => $r->attendanceStatus->code === 'P')->count(),
+            'absent' => $records->filter(fn($r) => $r->attendanceStatus->code === 'A')->count(),
+            'late' => $records->filter(fn($r) => $r->attendanceStatus->code === 'L')->count(),
+            'excused' => $records->filter(fn($r) => $r->attendanceStatus->code === 'E')->count()
         ];
 
         return [
@@ -484,10 +484,10 @@ class AttendanceSessionController extends Controller
                 'total_students' => $allStudents->count(),
                 'marked_students' => $records->count(),
                 'unmarked_students' => $allStudents->count() - $records->count(),
-                'present' => $records->whereIn('attendanceStatus.code', ['P'])->count(),
-                'absent' => $records->whereIn('attendanceStatus.code', ['A'])->count(),
-                'late' => $records->whereIn('attendanceStatus.code', ['L'])->count(),
-                'excused' => $records->whereIn('attendanceStatus.code', ['E'])->count()
+                'present' => $records->filter(fn($r) => $r->attendanceStatus->code === 'P')->count(),
+                'absent' => $records->filter(fn($r) => $r->attendanceStatus->code === 'A')->count(),
+                'late' => $records->filter(fn($r) => $r->attendanceStatus->code === 'L')->count(),
+                'excused' => $records->filter(fn($r) => $r->attendanceStatus->code === 'E')->count()
             ];
 
             // Get unmarked students
