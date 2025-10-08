@@ -378,9 +378,9 @@ function getExistingPlan(student) {
 }
 
 function calculateConsecutiveAbsences(student) {
-    // Simulate calculating consecutive absences
-    // In real implementation, this would analyze recent attendance records
-    return Math.floor(Math.random() * 4); // 0-3 consecutive days
+    // Use real consecutive absence data if available, otherwise return 0
+    // This should come from actual attendance records, not fake data
+    return student.consecutive_absences || 0;
 }
 
 // Computed properties for student categorization
@@ -415,7 +415,8 @@ const studentsNeedingAttention = computed(() => {
             riskLevel: getRiskLevel(student),
             riskFactors: getRiskFactors(student),
             attendancePlan: getExistingPlan(student),
-            consecutive_absences: student.consecutive_absences || calculateConsecutiveAbsences(student)
+            // Only show consecutive absences if there are actual recent sessions (not old seeded data)
+            consecutive_absences: (student.recent_absences > 0) ? (student.consecutive_absences || 0) : 0
         }))
         .sort((a, b) => (b.recent_absences || 0) - (a.recent_absences || 0));
 
@@ -1273,7 +1274,7 @@ function generateAttendanceReportHTML(student, currentDate) {
 }
 
 // Expanded groups state
-const expandedGroups = ref({ critical: true, high: false, medium: false });
+const expandedGroups = ref({ critical: false, high: false, medium: false });
 
 // Grouped students computed property
 const groupedStudents = computed(() => {

@@ -68,8 +68,7 @@ class AttendanceSummaryController extends Controller
                 ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
                 ->where('tss.teacher_id', $teacherId)
                 ->where('tss.is_active', true)
-                ->where('ss.is_active', 1) // PostgreSQL: use 1 instead of true
-                ->where('sd.current_status', 'active');
+                ->where('ss.is_active', 1); // PostgreSQL: use 1 instead of true
 
             // CRITICAL: For subject-specific view, only get students assigned to that specific subject
             if ($viewType === 'subject') {
@@ -368,8 +367,7 @@ class AttendanceSummaryController extends Controller
                     ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
                     ->where('tss.teacher_id', $teacherId)
                     ->where('tss.is_active', true)
-                    ->where('ss.is_active', true)
-                    ->where('sd.current_status', 'active');
+                    ->where('ss.is_active', true);
 
                 if ($viewType === 'subject') {
                     if ($subjectId === null) {

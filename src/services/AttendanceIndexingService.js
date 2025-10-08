@@ -24,22 +24,24 @@ class AttendanceIndexingService {
      * Pre-load and index all attendance data for a teacher
      * This creates a complete cache of all subjects' data
      */
-    static async preloadAllData(teacherId, teacherSubjects) {
-        console.log('📚 Pre-loading attendance data for all subjects...');
+    static async preloadAllData(teacherId, teacherSubjects, skipCurrentSubjectId = null) {
+        console.log('📚 Pre-loading attendance data for other subjects (background)...');
         const startTime = Date.now();
         
         try {
             // Create promises for parallel loading
             const loadPromises = [];
             
-            // Add "All Students" view
-            loadPromises.push(
-                this.loadSubjectData(teacherId, null, null, 'all_students')
-            );
+            // Add "All Students" view (only if not current)
+            if (skipCurrentSubjectId !== null) {
+                loadPromises.push(
+                    this.loadSubjectData(teacherId, null, null, 'all_students')
+                );
+            }
 
-            // Load data for each subject
+            // Load data for each subject (skip the current one - it's already loaded!)
             for (const subject of teacherSubjects) {
-                if (subject && subject.id) {
+                if (subject && subject.id && subject.id !== skipCurrentSubjectId) {
                     loadPromises.push(
                         this.loadSubjectData(
                             teacherId, 

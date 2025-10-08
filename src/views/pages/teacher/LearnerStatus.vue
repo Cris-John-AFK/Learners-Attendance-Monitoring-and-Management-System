@@ -176,6 +176,21 @@ const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+const getFullReasonDescription = (reasonCode, reasonCategory, status) => {
+    if (!reasonCode || !reasonCategory || !status) return reasonCode;
+    
+    const options = LearnerStatusService.getReasonOptions();
+    const statusReasons = options[status] || [];
+    
+    // Find the category
+    const category = statusReasons.find(cat => cat.category === reasonCategory);
+    if (!category) return reasonCode;
+    
+    // Find the specific reason
+    const reason = category.reasons.find(r => r.value === reasonCode);
+    return reason ? reason.label : reasonCode;
+};
+
 onMounted(() => {
     console.log('LearnerStatus component mounted');
     const teacherData = TeacherAuthService.getTeacherData();
@@ -337,7 +352,7 @@ onMounted(() => {
                         <span class="text-sm text-gray-600">{{ formatDate(record.effective_date) }}</span>
                     </div>
                     <p class="text-sm"><strong>By:</strong> {{ record.changed_by }}</p>
-                    <p v-if="record.reason" class="text-sm"><strong>Reason:</strong> {{ record.reason }}</p>
+                    <p v-if="record.reason" class="text-sm"><strong>Reason:</strong> {{ getFullReasonDescription(record.reason, record.reason_category, record.previous_status === 'active' ? record.new_status : record.previous_status) }}</p>
                     <small class="text-gray-500">{{ record.changed_at }}</small>
                 </div>
             </div>

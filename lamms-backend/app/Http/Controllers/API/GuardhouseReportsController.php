@@ -22,7 +22,16 @@ class GuardhouseReportsController extends Controller
             // Ensure limit doesn't exceed maximum
             $limit = min($limit, $maxLimit);
             
-            // Get today's check-ins with optimized query
+            // Cache key for today's data (cache for 30 seconds for live updates)
+            $cacheKey = "guardhouse_live_feed_{$today}_{$limit}";
+            
+            // Try to get from cache first
+            $cachedData = cache($cacheKey);
+            if ($cachedData) {
+                return response()->json($cachedData);
+            }
+            
+            // Get today's check-ins with ultra-optimized query
             $checkIns = DB::table('guardhouse_attendance')
                 ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id')
                 ->where('guardhouse_attendance.date', $today)
@@ -32,7 +41,7 @@ class GuardhouseReportsController extends Controller
                 ->select(
                     'guardhouse_attendance.id',
                     'guardhouse_attendance.student_id',
-                    DB::raw('CONCAT(student_details."firstName", \' \', student_details."lastName") as student_name'),
+                    DB::raw('student_details."firstName" || \' \' || student_details."lastName" as student_name'),
                     'student_details.gradeLevel as grade_level',
                     'student_details.section',
                     'guardhouse_attendance.timestamp',
@@ -40,7 +49,7 @@ class GuardhouseReportsController extends Controller
                 )
                 ->get();
             
-            // Get today's check-outs with optimized query
+            // Get today's check-outs with ultra-optimized query
             $checkOuts = DB::table('guardhouse_attendance')
                 ->join('student_details', 'guardhouse_attendance.student_id', '=', 'student_details.id')
                 ->where('guardhouse_attendance.date', $today)
@@ -50,7 +59,7 @@ class GuardhouseReportsController extends Controller
                 ->select(
                     'guardhouse_attendance.id',
                     'guardhouse_attendance.student_id',
-                    DB::raw('CONCAT(student_details."firstName", \' \', student_details."lastName") as student_name'),
+                    DB::raw('student_details."firstName" || \' \' || student_details."lastName" as student_name'),
                     'student_details.gradeLevel as grade_level',
                     'student_details.section',
                     'guardhouse_attendance.timestamp',
@@ -58,18 +67,19 @@ class GuardhouseReportsController extends Controller
                 )
                 ->get();
             
-            // Get total counts for the day
-            $totalCheckIns = DB::table('guardhouse_attendance')
+            // Get total counts for the day with single optimized query
+            $counts = DB::table('guardhouse_attendance')
                 ->where('date', $today)
-                ->where('record_type', 'check-in')
-                ->count();
+                ->selectRaw('
+                    COUNT(CASE WHEN record_type = \'check-in\' THEN 1 END) as total_check_ins,
+                    COUNT(CASE WHEN record_type = \'check-out\' THEN 1 END) as total_check_outs
+                ')
+                ->first();
                 
-            $totalCheckOuts = DB::table('guardhouse_attendance')
-                ->where('date', $today)
-                ->where('record_type', 'check-out')
-                ->count();
+            $totalCheckIns = $counts->total_check_ins ?? 0;
+            $totalCheckOuts = $counts->total_check_outs ?? 0;
             
-            return response()->json([
+            $responseData = [
                 'success' => true,
                 'check_ins' => $checkIns,
                 'check_outs' => $checkOuts,
@@ -80,7 +90,12 @@ class GuardhouseReportsController extends Controller
                     'showing_check_outs' => $checkOuts->count(),
                     'limit_applied' => $limit
                 ]
-            ]);
+            ];
+            
+            // Cache the response for 30 seconds
+            cache([$cacheKey => $responseData], now()->addSeconds(30));
+            
+            return response()->json($responseData);
             
         } catch (\Exception $e) {
             return response()->json([

@@ -267,6 +267,11 @@ const initializeForm = async () => {
             }
             
             teacherAssignments.value = teacherData.assignments
+                .filter(a => {
+                    // Filter out homeroom - homeroom is not a schedulable subject
+                    const subjectName = a.subject_name || a.subjectName || a.subject?.name || '';
+                    return subjectName.toLowerCase() !== 'homeroom';
+                })
                 .map(a => {
                     // Try different field name variations
                     const subjectName = a.subject_name || a.subjectName || a.subject?.name || 'Unknown Subject';

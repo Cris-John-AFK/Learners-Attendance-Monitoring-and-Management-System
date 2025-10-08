@@ -367,10 +367,6 @@ onUnmounted(() => {
                             <label>Time:</label>
                             <span class="session-time">{{ selectedSession.time }}</span>
                         </div>
-                        <div class="info-item">
-                            <label>Method:</label>
-                            <span class="attendance-method">{{ selectedSession.method }}</span>
-                        </div>
                     </div>
                 </div>
 
