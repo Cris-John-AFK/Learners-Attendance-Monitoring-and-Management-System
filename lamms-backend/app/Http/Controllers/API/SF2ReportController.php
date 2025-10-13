@@ -155,9 +155,23 @@ class SF2ReportController extends Controller
      */
     private function getStudentsWithAttendance($section, $month)
     {
-        $students = $section->students()->orderBy('gender')->orderBy('lastName')->get();
+        // Always try section name approach first (more reliable)
+        $students = Student::where('section', $section->name)
+                         ->orderBy('gender')
+                         ->orderBy('name')
+                         ->get();
+                         
+        Log::info("Found " . $students->count() . " students using section name '{$section->name}'");
         
-        // If no students found in section, use sample data for testing
+        // If no students found using section name, try pivot table relationship
+        if ($students->isEmpty()) {
+            Log::info("No students found using section name for section {$section->id}, trying pivot table approach");
+            
+            $students = $section->students()->orderBy('gender')->orderBy('name')->get();
+            Log::info("Found " . $students->count() . " students using pivot table");
+        }
+        
+        // If still no students found, use sample data for testing
         if ($students->isEmpty()) {
             Log::info("No students found in section {$section->id}, using sample data");
             
@@ -679,14 +693,43 @@ class SF2ReportController extends Controller
             $maleStudents = $students->where('gender', 'Male');
             $femaleStudents = $students->where('gender', 'Female');
             
-            // Student data should start after the day headers (rows 11-12)
-            // Row 13 will be the MALE header, students start at row 14
-            $currentRow = 13;
+            // Template has predefined positions for total rows
+            $templateMaleTotalRow = 35;
+            $templateFemaleTotalRow = 61; 
+            $templateCombinedTotalRow = 62;
             
-            // Add MALE section header at row 13
-            $worksheet->setCellValue("A{$currentRow}", "MALE");
-            $worksheet->setCellValue("B{$currentRow}", "(Last Name, First Name, Middle Name)");
-            $currentRow++;
+            // Calculate how many additional rows we need to insert
+            $maleStudentCount = $maleStudents->count();
+            $femaleStudentCount = $femaleStudents->count();
+            
+            // Template assumes certain number of students - calculate excess
+            $templateMaleCapacity = 21; // Rows 14-34 = 21 male students
+            $templateFemaleCapacity = 25; // Rows 36-60 = 25 female students
+            
+            $maleExcess = max(0, $maleStudentCount - $templateMaleCapacity);
+            $femaleExcess = max(0, $femaleStudentCount - $templateFemaleCapacity);
+            
+            // Insert additional rows for male students if needed
+            if ($maleExcess > 0) {
+                Log::info("Inserting {$maleExcess} additional rows for male students before row {$templateMaleTotalRow}");
+                $worksheet->insertNewRowBefore($templateMaleTotalRow, $maleExcess);
+                
+                // Update all subsequent row positions
+                $templateFemaleTotalRow += $maleExcess;
+                $templateCombinedTotalRow += $maleExcess;
+            }
+            
+            // Insert additional rows for female students if needed  
+            if ($femaleExcess > 0) {
+                Log::info("Inserting {$femaleExcess} additional rows for female students before row {$templateFemaleTotalRow}");
+                $worksheet->insertNewRowBefore($templateFemaleTotalRow, $femaleExcess);
+                
+                // Update subsequent row positions
+                $templateCombinedTotalRow += $femaleExcess;
+            }
+            
+            // Now populate students starting from template positions
+            $currentRow = 14; // Male students start at row 14
             
             // Male students section
             $maleIndex = 1;
@@ -705,8 +748,6 @@ class SF2ReportController extends Controller
                 
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
-               
-                
                 // Remarks column
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
                 
@@ -714,14 +755,15 @@ class SF2ReportController extends Controller
                 $maleIndex++;
             }
             
-            // Add MALE TOTAL Per Day at existing row 35 (use existing template row)
-            $this->addMaleTotalRow($worksheet, $maleStudents, 35);
+            // Male total row is now at its preserved position
+            $maleTotalRow = $templateMaleTotalRow + $maleExcess;
+            $this->addMaleTotalRow($worksheet, $maleStudents, $maleTotalRow);
             
-            // Set FEMALE section to start directly at row 36 (no header)
-            $currentRow = 36;
+            // Female students start at row 36 + any male excess
+            $currentRow = 36 + $maleExcess;
             
             // Female students section - start numbering from 1
-            $femaleIndex = 1; // Start female numbering from 1
+            $femaleIndex = 1;
             foreach ($femaleStudents as $student) {
                 // Column A: Student number
                 $worksheet->setCellValue("A{$currentRow}", $femaleIndex);
@@ -737,8 +779,6 @@ class SF2ReportController extends Controller
                 
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
                 
-             
-                
                 // Remarks column
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
                 
@@ -746,19 +786,22 @@ class SF2ReportController extends Controller
                 $femaleIndex++;
             }
             
-            // Add FEMALE TOTAL Per Day at existing row 60 (use existing template row)
-            $this->addFemaleTotalRow($worksheet, $femaleStudents, 61);
+            // Total rows are now at their preserved positions
+            $femaleTotalRow = $templateFemaleTotalRow + $maleExcess + $femaleExcess;
+            $combinedTotalRow = $templateCombinedTotalRow + $maleExcess + $femaleExcess;
             
-            // Add Combined TOTAL PER DAY at existing row 61 (use existing template row)
-            $this->addCombinedTotalRow($worksheet, $students, 62);
+            $this->addFemaleTotalRow($worksheet, $femaleStudents, $femaleTotalRow);
+            $this->addCombinedTotalRow($worksheet, $students, $combinedTotalRow);
             
             // Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
             $this->applyCenterAlignmentToSummaryColumns($worksheet);
             
             // Apply vertical text and center alignment to total rows
-            $this->applyVerticalTextToTotalRows($worksheet);
+            $this->applyVerticalTextToTotalRows($worksheet, $maleTotalRow, $femaleTotalRow, $combinedTotalRow);
             
-            Log::info("Successfully populated " . count($students) . " students in SF2 format with all totals");
+            Log::info("Successfully populated " . count($students) . " students in SF2 format");
+            Log::info("Male Total Row: {$maleTotalRow}, Female Total Row: {$femaleTotalRow}, Combined Total Row: {$combinedTotalRow}");
+            Log::info("Inserted {$maleExcess} male rows and {$femaleExcess} female rows");
             
         } catch (\Exception $e) {
             Log::error("Error populating student data: " . $e->getMessage());
@@ -766,14 +809,14 @@ class SF2ReportController extends Controller
     }
     
     /**
-     * Add MALE TOTAL Per Day row at exactly row 35 (A35)
+     * Add MALE TOTAL Per Day row at dynamic position
      */
     private function addMaleTotalRow($worksheet, $maleStudents, $row)
     {
         try {
             Log::info("Adding MALE TOTAL Per Day at row {$row}");
             
-            // Set exactly at A35: "MALE | TOTAL Per Day"
+            // Set at dynamic row: "MALE | TOTAL Per Day"
             $worksheet->setCellValue("A{$row}", "MALE | TOTAL Per Day");
             
             // Get the month from the first student's attendance data to calculate daily totals
@@ -819,15 +862,15 @@ class SF2ReportController extends Controller
     }
     
     /**
-     * Add FEMALE TOTAL Per Day row at specified position
+     * Add FEMALE TOTAL Per Day row at dynamic position
      */
     private function addFemaleTotalRow($worksheet, $femaleStudents, $row)
     {
         try {
             Log::info("Adding FEMALE TOTAL Per Day at row {$row}");
             
-            // Don't overwrite the existing "FEMALE | TOTAL Per Day" text - it's already in the template
-            // Just populate the daily totals and summary columns
+            // Set at dynamic row: "FEMALE | TOTAL Per Day"
+            $worksheet->setCellValue("A{$row}", "FEMALE | TOTAL Per Day");
             
             // Get the month from the first student's attendance data to calculate daily totals
             if ($femaleStudents->count() > 0) {
@@ -870,15 +913,15 @@ class SF2ReportController extends Controller
     }
     
     /**
-     * Add Combined TOTAL PER DAY row at specified position
+     * Add Combined TOTAL PER DAY row at dynamic position
      */
     private function addCombinedTotalRow($worksheet, $allStudents, $row)
     {
         try {
             Log::info("Adding Combined TOTAL PER DAY at row {$row}");
             
-            // Don't overwrite the existing "Combined TOTAL PER DAY" text - it's already in the template
-            // Just populate the daily totals and summary columns
+            // Set at dynamic row: "Combined TOTAL PER DAY"
+            $worksheet->setCellValue("A{$row}", "Combined TOTAL PER DAY");
             
             // Get the month from the first student's attendance data to calculate daily totals
             if ($allStudents->count() > 0) {
@@ -2353,35 +2396,35 @@ class SF2ReportController extends Controller
     /**
      * Apply vertical text and center alignment to total rows
      */
-    private function applyVerticalTextToTotalRows($worksheet)
+    private function applyVerticalTextToTotalRows($worksheet, $maleTotalRow, $femaleTotalRow, $combinedTotalRow)
     {
         try {
-            Log::info("Applying center alignment to total rows");
+            Log::info("Applying center alignment to total rows - Male: {$maleTotalRow}, Female: {$femaleTotalRow}, Combined: {$combinedTotalRow}");
             
             // Define the daily attendance columns (D to AB for days 1-31)
             $dailyColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
             
-            // Apply center alignment to MALE TOTAL row (row 35)
+            // Apply center alignment to MALE TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
-                $cell = "{$column}35";
+                $cell = "{$column}{$maleTotalRow}";
                 $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
                 $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
             
-            // Apply center alignment to FEMALE TOTAL row (row 61)
+            // Apply center alignment to FEMALE TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
-                $cell = "{$column}61";
+                $cell = "{$column}{$femaleTotalRow}";
                 $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
                 $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
             
-            // Apply center alignment to Combined TOTAL row (row 62)
+            // Apply center alignment to Combined TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
-                $cell = "{$column}62";
+                $cell = "{$column}{$combinedTotalRow}";
                 $worksheet->getStyle($cell)->getAlignment()->setWrapText(true);
                 $worksheet->getStyle($cell)->getAlignment()->setTextRotation(255); // Vertical text
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);

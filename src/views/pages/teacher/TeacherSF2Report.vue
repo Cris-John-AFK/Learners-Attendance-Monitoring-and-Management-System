@@ -351,62 +351,62 @@ const isFutureDate = (dateString) => {
 // Helper function to generate remarks based on student status
 const getStudentRemarks = (student) => {
     if (!student) return '-';
-    
+
     // Check if student has dropout/transfer status
     if (student.enrollment_status === 'dropped_out' && student.dropout_reason) {
         // Map reason codes to full text as per DepEd guidelines
         const reasonMap = {
-            'a1': 'a.1 Had to take care of siblings',
-            'a2': 'a.2 Early marriage/pregnancy', 
-            'a3': 'a.3 Parents\' attitude toward schooling',
-            'a4': 'a.4 Family problems',
-            'b1': 'b.1 Illness',
-            'b2': 'b.2 Disease', 
-            'b3': 'b.3 Death',
-            'b4': 'b.4 Disability',
-            'b5': 'b.5 Poor academic performance',
-            'b6': 'b.6 Disinterest/lack of ambitions',
-            'b7': 'b.7 Hunger/Malnutrition',
-            'c1': 'c.1 Teacher Factor',
-            'c2': 'c.2 Physical condition of classroom',
-            'c3': 'c.3 Peer Factor',
-            'd1': 'd.1 Distance from home to school',
-            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
-            'd3': 'd.3 Calamities/disaster',
-            'd4': 'd.4 Work-Related',
-            'd5': 'd.5 Transferred/work'
+            a1: 'a.1 Had to take care of siblings',
+            a2: 'a.2 Early marriage/pregnancy',
+            a3: "a.3 Parents' attitude toward schooling",
+            a4: 'a.4 Family problems',
+            b1: 'b.1 Illness',
+            b2: 'b.2 Disease',
+            b3: 'b.3 Death',
+            b4: 'b.4 Disability',
+            b5: 'b.5 Poor academic performance',
+            b6: 'b.6 Disinterest/lack of ambitions',
+            b7: 'b.7 Hunger/Malnutrition',
+            c1: 'c.1 Teacher Factor',
+            c2: 'c.2 Physical condition of classroom',
+            c3: 'c.3 Peer Factor',
+            d1: 'd.1 Distance from home to school',
+            d2: 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            d3: 'd.3 Calamities/disaster',
+            d4: 'd.4 Work-Related',
+            d5: 'd.5 Transferred/work'
         };
-        
+
         const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
         return `DROPPED OUT - ${reasonText}`;
     }
-    
+
     if (student.enrollment_status === 'transferred_out') {
         const reasonMap = {
-            'a1': 'a.1 Had to take care of siblings',
-            'a2': 'a.2 Early marriage/pregnancy', 
-            'a3': 'a.3 Parents\' attitude toward schooling',
-            'a4': 'a.4 Family problems',
-            'b1': 'b.1 Illness',
-            'b2': 'b.2 Disease', 
-            'b4': 'b.4 Disability',
-            'c1': 'c.1 Teacher Factor',
-            'c2': 'c.2 Physical condition of classroom',
-            'c3': 'c.3 Peer Factor',
-            'd1': 'd.1 Distance from home to school',
-            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
-            'd3': 'd.3 Calamities/disaster',
-            'd4': 'd.4 Work-Related',
-            'd5': 'd.5 Transferred/work'
+            a1: 'a.1 Had to take care of siblings',
+            a2: 'a.2 Early marriage/pregnancy',
+            a3: "a.3 Parents' attitude toward schooling",
+            a4: 'a.4 Family problems',
+            b1: 'b.1 Illness',
+            b2: 'b.2 Disease',
+            b4: 'b.4 Disability',
+            c1: 'c.1 Teacher Factor',
+            c2: 'c.2 Physical condition of classroom',
+            c3: 'c.3 Peer Factor',
+            d1: 'd.1 Distance from home to school',
+            d2: 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            d3: 'd.3 Calamities/disaster',
+            d4: 'd.4 Work-Related',
+            d5: 'd.5 Transferred/work'
         };
         const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
         return `TRANSFERRED OUT - ${reasonText}`;
     }
-    
+
     if (student.enrollment_status === 'transferred_in') {
         return 'TRANSFERRED IN';
     }
-    
+
     return '-';
 };
 
@@ -917,7 +917,7 @@ onMounted(() => {
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
-                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1;">{{ getStudentRemarks(student) }}</td>
+                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Male Daily Totals Row -->
                         <tr class="bg-gray-50" style="height: 20px">
@@ -995,7 +995,7 @@ onMounted(() => {
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
-                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1;">{{ getStudentRemarks(student) }}</td>
+                            <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Female Daily Totals Row -->
                         <tr class="bg-gray-50" style="height: 20px">
@@ -1576,28 +1576,101 @@ onMounted(() => {
         height: auto !important;
     }
 
-    /* Attendance table print optimization */
+    /* Fix the large blank space between header and table */
+    .sf2-report-card .mb-6 {
+        margin-bottom: 4px !important;
+    }
+
+    .sf2-report-card .mb-8 {
+        margin-bottom: 4px !important;
+    }
+
+    /* Specifically target the attendance table container */
+    .attendance-table-container.mb-8 {
+        margin-bottom: 4px !important;
+        margin-top: 0px !important;
+    }
+
+    /* Remove any extra spacing from school info section */
+    .sf2-report-card > div:nth-child(3) {
+        margin-bottom: 0px !important;
+    }
+
+    /* Attendance table print optimization - make more compact */
     .attendance-table-container {
         overflow: visible !important;
-        page-break-inside: avoid;
+        page-break-inside: auto !important;
+        margin-bottom: 2px !important;
     }
 
     .attendance-table-container table {
-        font-size: 7px !important;
+        font-size: 6px !important;
         width: 100% !important;
-        page-break-inside: avoid;
+        page-break-inside: auto !important;
     }
 
     .attendance-table-container th,
     .attendance-table-container td {
-        padding: 1px 2px !important;
-        font-size: 7px !important;
+        padding: 0.5px 1px !important;
+        font-size: 6px !important;
+        line-height: 1 !important;
     }
 
-    /* Summary section - allow page break if needed */
+    /* Force summary section to stay on same page */
     .grid {
-        page-break-inside: auto !important;
+        page-break-inside: avoid !important;
+        page-break-before: avoid !important;
         overflow: visible !important;
+        margin-top: 2px !important;
+    }
+
+    /* Compact summary section spacing */
+    .grid.gap-6 {
+        gap: 2px !important;
+    }
+
+    .mt-8 {
+        margin-top: 2px !important;
+    }
+
+    /* Make summary section more compact */
+    .grid h3 {
+        font-size: 8px !important;
+        margin-bottom: 1px !important;
+    }
+
+    .grid p {
+        font-size: 5px !important;
+        margin: 0.5px 0 !important;
+        line-height: 1.1 !important;
+    }
+
+    .grid .space-y-2 > * + * {
+        margin-top: 1px !important;
+    }
+
+    .grid .space-y-1 > * + * {
+        margin-top: 0.5px !important;
+    }
+
+    /* Compact summary table */
+    .grid table {
+        font-size: 5px !important;
+    }
+
+    .grid table th,
+    .grid table td {
+        padding: 1px !important;
+        font-size: 5px !important;
+    }
+
+    /* Remove extra padding from grid columns */
+    .grid .p-3 {
+        padding: 4px !important;
+    }
+
+    .grid .p-2 {
+        padding: 2px !important;
     }
 
     /* Reduce margins and padding for compact print */
