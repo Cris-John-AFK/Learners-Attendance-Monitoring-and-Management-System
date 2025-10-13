@@ -13,7 +13,15 @@ const model = ref([
         separator: true
     },
     {
-        label: 'Subjects',
+        label: 'Homeroom Subjects',
+        icon: 'pi pi-fw pi-home',
+        items: []
+    },
+    {
+        separator: true
+    },
+    {
+        label: 'Other Subjects',
         icon: 'pi pi-fw pi-briefcase',
         items: []
     },
@@ -92,52 +100,65 @@ onMounted(async () => {
         try {
             const response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/assignments`);
             const assignments = await response.json();
-            const assignmentsArray = Array.isArray(assignments) ? assignments : (assignments.assignments || []);
-            
-            console.log('📋 Menu: Loaded assignments:', assignmentsArray);
+            const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];
 
-            // Extract subjects from assignments (exclude homeroom)
-            const subjects = [];
-            assignmentsArray.forEach(assignment => {
-                if (assignment.subject_name && assignment.subject_name.toLowerCase() !== 'homeroom') {
-                    subjects.push({
+            console.log('📋 Menu: Loaded assignments:', assignmentsArray);
+            
+            // Debug: Log first assignment to see data structure
+            if (assignmentsArray.length > 0) {
+                console.log('📋 Menu: First assignment structure:', JSON.stringify(assignmentsArray[0], null, 2));
+            }
+
+            // Find teacher's homeroom section first
+            const homeroomAssignment = assignmentsArray.find(assignment => 
+                !assignment.subject_id && assignment.is_primary
+            );
+            const homeroomSectionName = homeroomAssignment?.section?.name || homeroomAssignment?.section_name;
+            
+            console.log('📋 Menu: Teacher homeroom section:', homeroomSectionName);
+            
+            // Separate homeroom subjects from other subjects
+            const homeroomSubjects = [];
+            const otherSubjects = [];
+            
+            assignmentsArray.forEach((assignment) => {
+                if (assignment.subject_id && assignment.subject_name) {
+                    const subjectData = {
                         id: assignment.subject_id || assignment.id,
                         name: assignment.subject_name,
-                        sectionName: assignment.section_name,
-                        grade: 'Kindergarten' // Default for Ana Cruz
-                    });
+                        sectionName: assignment.section_name || assignment.section?.name,
+                        grade: assignment.section?.grade_level || 'Unknown Grade',
+                        sectionId: assignment.section_id
+                    };
+                    
+                    // If this subject is taught in the teacher's homeroom section, it's a homeroom subject
+                    const subjectSectionName = assignment.section_name || assignment.section?.name;
+                    if (subjectSectionName === homeroomSectionName) {
+                        homeroomSubjects.push(subjectData);
+                    } else {
+                        otherSubjects.push(subjectData);
+                    }
                 }
             });
 
-            console.log('📋 Menu: Extracted subjects:', subjects);
+            console.log('📋 Menu: Homeroom subjects:', homeroomSubjects);
+            console.log('📋 Menu: Other subjects:', otherSubjects);
 
-            if (subjects && subjects.length > 0) {
-                // Check if this is a homeroom teacher (all subjects in same section)
-                const allSameSections = subjects.every(s => s.sectionName === subjects[0].sectionName);
-                
-                const subjectMenuItems = subjects.map((subject) => {
+            // Process homeroom subjects
+            if (homeroomSubjects && homeroomSubjects.length > 0) {
+                const homeroomMenuItems = homeroomSubjects.map((subject) => {
                     let displayLabel = subject.name;
-                    
+
                     // Shorten common subject names
                     if (subject.name === 'Mother Tongue-Based Multilingual Education') {
                         displayLabel = 'Mother Tongue';
                     } else if (subject.name === 'Physical Education') {
                         displayLabel = 'PE';
                     }
-                    
-                    // Only show section info for departmental teachers (teaching multiple sections)
-                    if (!allSameSections && subject.sectionName && subject.sectionName !== 'Unknown Section') {
-                        // Format grade level for display (Kindergarten -> K, Grade 1 -> 1, etc.)
-                        let gradeDisplay = subject.grade;
-                        if (gradeDisplay) {
-                            if (gradeDisplay.toLowerCase().includes('kindergarten') || gradeDisplay.toLowerCase().includes('kinder')) {
-                                gradeDisplay = 'K';
-                            } else if (gradeDisplay.toLowerCase().includes('grade')) {
-                                const gradeNumber = gradeDisplay.match(/\d+/);
-                                gradeDisplay = gradeNumber ? gradeNumber[0] : gradeDisplay;
-                            }
-                        }
-                        displayLabel = `${displayLabel} (${gradeDisplay}-${subject.sectionName})`;
+
+                    // Add section info for clarity
+                    if (subject.sectionName) {
+                        displayLabel = `${displayLabel} (${subject.sectionName})`;
                     }
 
                     return {
@@ -145,8 +166,8 @@ onMounted(async () => {
                         icon: 'pi pi-fw pi-book',
                         to: {
                             name: 'subject-attendance',
-                            params: { 
-                                subjectId: subject.id 
+                            params: {
+                                subjectId: subject.id
                             },
                             query: {
                                 sectionName: subject.sectionName,
@@ -156,13 +177,70 @@ onMounted(async () => {
                     };
                 });
 
-                // Update the Subjects section
-                const subjectsIndex = model.value.findIndex((item) => item.label === 'Subjects');
-                if (subjectsIndex !== -1) {
-                    model.value[subjectsIndex].items = subjectMenuItems;
+                // Update the Homeroom Subjects section
+                const homeroomIndex = model.value.findIndex((item) => item.label === 'Homeroom Subjects');
+                if (homeroomIndex !== -1) {
+                    model.value[homeroomIndex].items = homeroomMenuItems;
                 }
-                
-                console.log('📋 Menu: Updated subjects menu with', subjectMenuItems.length, 'items');
+
+                console.log('📋 Menu: Updated homeroom subjects menu with', homeroomMenuItems.length, 'items');
+            }
+
+            // Process other subjects
+            if (otherSubjects && otherSubjects.length > 0) {
+                // Check if this is a departmental teacher (teaching multiple sections)
+                const allSameSections = otherSubjects.every((s) => s.sectionName === otherSubjects[0].sectionName);
+
+                const otherSubjectMenuItems = otherSubjects.map((subject) => {
+                    let displayLabel = subject.name;
+
+                    // Shorten common subject names
+                    if (subject.name === 'Mother Tongue-Based Multilingual Education') {
+                        displayLabel = 'Mother Tongue';
+                    } else if (subject.name === 'Physical Education') {
+                        displayLabel = 'PE';
+                    }
+
+                    // Always show section info for other subjects to distinguish them
+                    if (subject.sectionName && subject.sectionName !== 'Unknown Section') {
+                        // Format grade level for display (Kindergarten -> K, Grade 1 -> 1, etc.)
+                        let gradeDisplay = subject.grade;
+                        if (gradeDisplay && gradeDisplay !== 'Unknown Grade') {
+                            if (gradeDisplay.toLowerCase().includes('kindergarten') || gradeDisplay.toLowerCase().includes('kinder')) {
+                                gradeDisplay = 'K';
+                            } else if (gradeDisplay.toLowerCase().includes('grade')) {
+                                const gradeNumber = gradeDisplay.match(/\d+/);
+                                gradeDisplay = gradeNumber ? gradeNumber[0] : gradeDisplay;
+                            }
+                            displayLabel = `${displayLabel} (${gradeDisplay}-${subject.sectionName})`;
+                        } else {
+                            displayLabel = `${displayLabel} (${subject.sectionName})`;
+                        }
+                    }
+
+                    return {
+                        label: displayLabel,
+                        icon: 'pi pi-fw pi-book',
+                        to: {
+                            name: 'subject-attendance',
+                            params: {
+                                subjectId: subject.id
+                            },
+                            query: {
+                                sectionName: subject.sectionName,
+                                teacherId: teacherId
+                            }
+                        }
+                    };
+                });
+
+                // Update the Other Subjects section
+                const otherSubjectsIndex = model.value.findIndex((item) => item.label === 'Other Subjects');
+                if (otherSubjectsIndex !== -1) {
+                    model.value[otherSubjectsIndex].items = otherSubjectMenuItems;
+                }
+
+                console.log('📋 Menu: Updated other subjects menu with', otherSubjectMenuItems.length, 'items');
             }
         } catch (apiError) {
             console.error('Error loading assignments from API:', apiError);

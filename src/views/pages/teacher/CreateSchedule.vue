@@ -65,23 +65,38 @@
                         <label for="days">Days of Week</label>
                         <div class="custom-days-selector" :class="{ 'p-invalid': errors.days }">
                             <!-- Select All -->
-                            <div class="day-option select-all-option">
+                            <div class="day-option select-all-option" v-if="availableDaysCount > 0">
                                 <Checkbox 
-                                    :modelValue="scheduleForm.days.length === weekdays.length" 
+                                    :modelValue="scheduleForm.days.length === availableDaysCount" 
                                     @update:modelValue="selectAllDays" 
                                     binary 
                                     inputId="select-all"
                                 />
-                                <label for="select-all" class="ml-2 cursor-pointer font-semibold" @click="selectAllDays">Select All</label>
+                                <label for="select-all" class="ml-2 cursor-pointer font-semibold" @click="selectAllDays">
+                                    Select All Available ({{ availableDaysCount }} days)
+                                </label>
                             </div>
                             <!-- Individual Days -->
-                            <div v-for="day in weekdays" :key="day.value" class="day-option">
+                            <div v-for="day in availableWeekdays" :key="day.value" class="day-option" :class="{ 'day-disabled': day.isDisabled }">
                                 <Checkbox 
                                     v-model="scheduleForm.days" 
                                     :value="day.value" 
                                     :inputId="day.value"
+                                    :disabled="day.isDisabled"
                                 />
-                                <label :for="day.value" class="ml-2 cursor-pointer">{{ day.label }}</label>
+                                <label :for="day.value" class="ml-2" :class="{ 'cursor-pointer': !day.isDisabled, 'cursor-not-allowed text-gray-400': day.isDisabled }">
+                                    {{ day.label }}
+                                    <span v-if="day.isAlreadyScheduled" class="text-xs text-orange-600 ml-1">(Already Scheduled)</span>
+                                </label>
+                            </div>
+                            
+                            <!-- No Available Days Message -->
+                            <div v-if="availableDaysCount === 0 && assignment" class="day-option">
+                                <div class="text-center text-gray-500 py-4">
+                                    <i class="pi pi-check-circle text-green-500 text-2xl mb-2"></i>
+                                    <p class="font-semibold">All days are already scheduled!</p>
+                                    <p class="text-sm">{{ assignment.subject_name }} has schedules for all weekdays.</p>
+                                </div>
                             </div>
                         </div>
                         <small v-if="errors.days" class="p-error">{{ errors.days }}</small>
@@ -186,6 +201,7 @@ const isAssignmentFromRoute = ref(false);
 const saving = ref(false);
 const conflictWarning = ref('');
 const suggestedSlots = ref([]);
+const existingScheduledDays = ref([]);
 
 const scheduleForm = ref({
     days: [], // Changed from 'day' to 'days' for multiple selection
@@ -209,6 +225,18 @@ const isFormValid = computed(() => {
            scheduleForm.value.start_time && 
            scheduleForm.value.end_time &&
            Object.keys(errors.value).length === 0;
+});
+
+const availableWeekdays = computed(() => {
+    return weekdays.value.map(day => ({
+        ...day,
+        isDisabled: existingScheduledDays.value.includes(day.value),
+        isAlreadyScheduled: existingScheduledDays.value.includes(day.value)
+    }));
+});
+
+const availableDaysCount = computed(() => {
+    return availableWeekdays.value.filter(day => !day.isDisabled).length;
 });
 
 // Methods
@@ -288,12 +316,26 @@ const initializeForm = async () => {
                     };
                 })
                 .filter(assignment => {
-                    // Filter out assignments that already have schedules
-                    const hasSchedule = existingSchedules.some(schedule => 
+                    // Only filter out assignments that have schedules for ALL weekdays
+                    const assignmentSchedules = existingSchedules.filter(schedule => 
                         schedule.section_id == assignment.section_id && 
                         schedule.subject_id == assignment.subject_id
                     );
-                    return !hasSchedule;
+                    
+                    // Get unique days that are already scheduled
+                    const scheduledDays = [...new Set(assignmentSchedules.map(s => s.day))];
+                    const allWeekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                    
+                    // Only exclude if ALL weekdays are scheduled
+                    const hasAllDaysScheduled = allWeekdays.every(day => scheduledDays.includes(day));
+                    
+                    console.log(`📅 ${assignment.subject_name} - ${assignment.section_name}:`, {
+                        scheduledDays,
+                        hasAllDaysScheduled,
+                        willBeIncluded: !hasAllDaysScheduled
+                    });
+                    
+                    return !hasAllDaysScheduled;
                 });
                 
             console.log('📋 Available assignments (filtered):', teacherAssignments.value);
@@ -322,6 +364,8 @@ const initializeForm = async () => {
     // Mark that assignment came from route
     if (assignment.value) {
         isAssignmentFromRoute.value = true;
+        // Load existing schedules for this assignment
+        await loadExistingSchedulesForAssignment(assignment.value);
     }
     
     console.log('📝 Creating schedule for assignment:', assignment.value);
@@ -522,16 +566,53 @@ const saveSchedule = async () => {
 };
 
 const selectAllDays = () => {
-    if (scheduleForm.value.days.length === weekdays.value.length) {
-        // Deselect all
+    const availableDays = availableWeekdays.value.filter(day => !day.isDisabled);
+    const availableDayValues = availableDays.map(day => day.value);
+    
+    if (scheduleForm.value.days.length === availableDayValues.length) {
+        // Deselect all available days
         scheduleForm.value.days = [];
     } else {
-        // Select all
-        scheduleForm.value.days = weekdays.value.map(day => day.value);
+        // Select all available days (excluding already scheduled ones)
+        scheduleForm.value.days = availableDayValues;
     }
 };
 
-const onAssignmentChange = () => {
+const loadExistingSchedulesForAssignment = async (assignmentData) => {
+    if (!assignmentData) {
+        existingScheduledDays.value = [];
+        return;
+    }
+    
+    try {
+        const teacherData = TeacherAuthService.getTeacherData();
+        const teacherId = teacherData?.teacher?.id || teacherData?.id;
+        const schedulesResponse = await SubjectScheduleService.getTeacherSchedules(teacherId);
+        const existingSchedules = schedulesResponse.data || [];
+        
+        // Find schedules for this specific assignment
+        const assignmentSchedules = existingSchedules.filter(schedule => 
+            schedule.section_id == assignmentData.section_id && 
+            schedule.subject_id == assignmentData.subject_id
+        );
+        
+        // Get the days that are already scheduled
+        existingScheduledDays.value = [...new Set(assignmentSchedules.map(s => s.day))];
+        
+        console.log(`📅 ${assignmentData.subject_name} existing scheduled days:`, existingScheduledDays.value);
+        
+        // Clear any selected days that are already scheduled
+        scheduleForm.value.days = scheduleForm.value.days.filter(day => 
+            !existingScheduledDays.value.includes(day)
+        );
+        
+    } catch (error) {
+        console.error('Error loading existing schedules:', error);
+        existingScheduledDays.value = [];
+    }
+};
+
+const onAssignmentChange = async () => {
     if (selectedAssignmentOption.value) {
         assignment.value = {
             subject_name: selectedAssignmentOption.value.subject_name,
@@ -540,6 +621,9 @@ const onAssignmentChange = () => {
             subject_id: selectedAssignmentOption.value.subject_id
         };
         console.log('✅ Assignment selected:', assignment.value);
+        
+        // Load existing schedules for this assignment
+        await loadExistingSchedulesForAssignment(assignment.value);
     }
 };
 
@@ -612,6 +696,15 @@ onMounted(() => {
 
 .day-option label {
     margin-bottom: 0;
+}
+
+.day-option.day-disabled {
+    opacity: 0.6;
+    background-color: #f9fafb;
+}
+
+.day-option.day-disabled:hover {
+    background-color: #f9fafb;
 }
 
 .create-schedule-container {

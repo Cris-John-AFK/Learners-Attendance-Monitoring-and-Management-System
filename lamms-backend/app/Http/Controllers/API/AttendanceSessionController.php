@@ -298,7 +298,7 @@ class AttendanceSessionController extends Controller
     public function completeSession($sessionId)
     {
         try {
-            $session = AttendanceSession::findOrFail($sessionId);
+            $session = AttendanceSession::with('section')->findOrFail($sessionId);
 
             Log::info("Attempting to complete session {$sessionId}. Current status: {$session->status}");
 
@@ -406,7 +406,7 @@ class AttendanceSessionController extends Controller
     {
         $session->load(['section', 'subject', 'teacher', 'attendanceRecords.student', 'attendanceRecords.attendanceStatus']);
 
-        // Get all students in the section for accurate counts
+        // Get all ENROLLED students in the section for accurate counts (exclude dropped-out)
         $totalStudents = DB::table('student_details as sd')
             ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
             ->where('ss.section_id', $session->section_id)
@@ -414,11 +414,26 @@ class AttendanceSessionController extends Controller
                 $query->where('ss.is_active', true)
                       ->orWhereNull('ss.is_active');
             })
+            // CRITICAL: Only count enrolled students, exclude dropped-out students
+            ->where(function($query) {
+                $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                      ->orWhereNull('sd.enrollment_status');
+            })
+            ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
             ->count();
 
-        $records = $session->attendanceRecords;
+        // Filter attendance records to exclude dropped-out students
+        $allRecords = $session->attendanceRecords;
+        $records = $allRecords->filter(function($record) {
+            $student = $record->student;
+            if (!$student) return false;
+            
+            // Exclude dropped-out students from display
+            $excludedStatuses = ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'];
+            return !in_array($student->enrollment_status, $excludedStatuses);
+        });
 
-        // Calculate attendance statistics
+        // Calculate attendance statistics ONLY for enrolled students
         $stats = [
             'total_students' => $totalStudents,
             'marked_students' => $records->count(),
@@ -450,12 +465,150 @@ class AttendanceSessionController extends Controller
         ];
     }
 
+
+    /**
+     * Clean up existing sessions by removing dropped-out student records
+     */
+    public function cleanupExistingSession($sessionId)
+    {
+        try {
+            // Get attendance records for dropped-out students in this session
+            $droppedOutRecords = DB::table('attendance_records as ar')
+                ->join('student_details as sd', 'ar.student_id', '=', 'sd.id')
+                ->where('ar.attendance_session_id', $sessionId)
+                ->whereIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
+                ->select('ar.id', 'sd.firstName', 'sd.lastName', 'sd.enrollment_status')
+                ->get();
+            
+            if ($droppedOutRecords->count() > 0) {
+                // Delete the attendance records
+                $recordIds = $droppedOutRecords->pluck('id')->toArray();
+                DB::table('attendance_records')->whereIn('id', $recordIds)->delete();
+                
+                Log::info("🧹 Cleaned up existing session - removed dropped-out students", [
+                    'session_id' => $sessionId,
+                    'removed_records' => $droppedOutRecords->count(),
+                    'students' => $droppedOutRecords->map(function($record) {
+                        return $record->firstName . ' ' . $record->lastName . ' (' . $record->enrollment_status . ')';
+                    })->toArray()
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Cleaned up session - removed dropped-out students',
+                    'removed_count' => $droppedOutRecords->count()
+                ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'No dropped-out students found in this session',
+                'removed_count' => 0
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error cleaning up existing session: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to cleanup session'], 500);
+        }
+    }
+
+    /**
+     * Auto-cleanup dropped-out students from session when viewing summary
+     */
+    private function autoCleanupDroppedOutStudents($sessionId)
+    {
+        try {
+            // Get attendance records for dropped-out students in this session
+            $droppedOutRecords = DB::table('attendance_records as ar')
+                ->join('student_details as sd', 'ar.student_id', '=', 'sd.id')
+                ->where('ar.attendance_session_id', $sessionId)
+                ->whereIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
+                ->select('ar.id', 'sd.firstName', 'sd.lastName', 'sd.enrollment_status')
+                ->get();
+            
+            if ($droppedOutRecords->count() > 0) {
+                // Delete the attendance records
+                $recordIds = $droppedOutRecords->pluck('id')->toArray();
+                DB::table('attendance_records')->whereIn('id', $recordIds)->delete();
+                
+                Log::info("🧹 AUTO-CLEANUP: Removed dropped-out students from session", [
+                    'session_id' => $sessionId,
+                    'removed_records' => $droppedOutRecords->count(),
+                    'students' => $droppedOutRecords->map(function($record) {
+                        return $record->firstName . ' ' . $record->lastName . ' (' . $record->enrollment_status . ')';
+                    })->toArray()
+                ]);
+                
+                return $droppedOutRecords->count();
+            }
+            
+            return 0;
+            
+        } catch (\Exception $e) {
+            Log::error('Error in auto-cleanup: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Clean up ALL sessions by removing dropped-out students (for immediate deployment)
+     */
+    public function cleanupAllSessions()
+    {
+        try {
+            // Get all attendance records for dropped-out students
+            $droppedOutRecords = DB::table('attendance_records as ar')
+                ->join('student_details as sd', 'ar.student_id', '=', 'sd.id')
+                ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                ->whereIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
+                ->select('ar.id', 'sd.firstName', 'sd.lastName', 'sd.enrollment_status', 'ases.id as session_id')
+                ->get();
+            
+            if ($droppedOutRecords->count() > 0) {
+                // Delete all the attendance records
+                $recordIds = $droppedOutRecords->pluck('id')->toArray();
+                DB::table('attendance_records')->whereIn('id', $recordIds)->delete();
+                
+                // Group by session for logging
+                $sessionGroups = $droppedOutRecords->groupBy('session_id');
+                
+                Log::info("🧹 GLOBAL CLEANUP: Removed dropped-out students from ALL sessions", [
+                    'total_removed_records' => $droppedOutRecords->count(),
+                    'affected_sessions' => $sessionGroups->count(),
+                    'students_removed' => $droppedOutRecords->map(function($record) {
+                        return $record->firstName . ' ' . $record->lastName . ' (' . $record->enrollment_status . ')';
+                    })->unique()->values()->toArray()
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Successfully cleaned up all sessions',
+                    'removed_records' => $droppedOutRecords->count(),
+                    'affected_sessions' => $sessionGroups->count()
+                ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'No dropped-out students found in any sessions',
+                'removed_records' => 0,
+                'affected_sessions' => 0
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error in global cleanup: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to cleanup all sessions'], 500);
+        }
+    }
+
     /**
      * Get session attendance summary
      */
     public function getSessionSummary($sessionId)
     {
         try {
+            // DON'T delete records - just filter them out in the display
+            
             $session = AttendanceSession::with([
                 'section',
                 'subject',
@@ -464,7 +617,7 @@ class AttendanceSessionController extends Controller
                 'attendanceRecords.attendanceStatus'
             ])->findOrFail($sessionId);
 
-            // Get all students in the section
+            // Get all ACTIVE students in the section (exclude dropped-out students)
             $allStudents = DB::table('student_details as sd')
                 ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
                 ->where('ss.section_id', $session->section_id)
@@ -472,14 +625,31 @@ class AttendanceSessionController extends Controller
                     $query->where('ss.is_active', true)
                           ->orWhereNull('ss.is_active');
                 })
+                // CRITICAL: Only count active students in statistics
+                ->where(function($query) {
+                    $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                          ->orWhereNull('sd.enrollment_status');
+                })
+                ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
                 ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.middleName')
                 ->get();
 
-            // Get attendance records
-            $records = $session->attendanceRecords;
+            // Get attendance records and FILTER OUT dropped-out students
+            $allRecords = $session->attendanceRecords;
+            
+            // Filter records to exclude dropped-out students
+            $records = $allRecords->filter(function($record) {
+                $student = $record->student;
+                if (!$student) return false;
+                
+                // Exclude dropped-out students from display
+                $excludedStatuses = ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'];
+                return !in_array($student->enrollment_status, $excludedStatuses);
+            });
+            
             $markedStudentIds = $records->pluck('student_id')->toArray();
 
-            // Calculate statistics
+            // Calculate statistics ONLY for active students
             $stats = [
                 'total_students' => $allStudents->count(),
                 'marked_students' => $records->count(),
@@ -1154,13 +1324,19 @@ class AttendanceSessionController extends Controller
             // Extract statistics from summary (they're nested under 'statistics' key)
             $stats = $summary['statistics'] ?? [];
             $subjectName = $summary['subject_name'] ?? 'Unknown Subject';
+            
+            // Get section name from the session relationship
+            $sectionName = 'Unknown Section';
+            if ($session->section) {
+                $sectionName = $session->section->name;
+            }
 
-            // Create compact notification message
+            // Create compact notification message with section info
             $presentCount = $stats['present'] ?? 0;
             $absentCount = $stats['absent'] ?? 0;
             $lateCount = $stats['late'] ?? 0;
 
-            $message = "{$subjectName} - {$presentCount} present, {$absentCount} absent";
+            $message = "{$subjectName} - {$sectionName} - {$presentCount} present, {$absentCount} absent";
 
             // Insert notification using indexed user_id column
             DB::table('notifications')->insert([
@@ -1173,6 +1349,7 @@ class AttendanceSessionController extends Controller
                     'subject_id' => $session->subject_id,
                     'subject_name' => $subjectName,
                     'section_id' => $session->section_id,
+                    'section_name' => $sectionName,
                     'present_count' => $presentCount,
                     'absent_count' => $absentCount,
                     'late_count' => $lateCount,
@@ -1200,12 +1377,18 @@ class AttendanceSessionController extends Controller
     private function autoMarkUnmarkedStudentsAsAbsent($session)
     {
         try {
-            // Get all active students in the section
+            // Get all ENROLLED students in the section (exclude dropped-out students)
             $allStudents = DB::table('student_section as ss')
                 ->join('student_details as sd', 'ss.student_id', '=', 'sd.id')
                 ->where('ss.section_id', $session->section_id)
                 ->where('ss.is_active', true)
                 ->where('sd.is_active', true)
+                // CRITICAL: Only include enrolled students, exclude dropped-out students
+                ->where(function($query) {
+                    $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                          ->orWhereNull('sd.enrollment_status');
+                })
+                ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
                 ->pluck('ss.student_id');
 
             // Get students who already have attendance

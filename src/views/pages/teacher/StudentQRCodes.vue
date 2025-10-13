@@ -3,14 +3,32 @@
         <!-- Modern Header with Animation -->
         <div class="page-header">
             <div class="header-content">
-                <h1 class="page-title">Student QR Codes</h1>
-                <p class="page-subtitle">QR codes for your assigned students - Use these for attendance tracking</p>
+                <h1 class="page-title">Homeroom Student QR Codes</h1>
+                <p class="page-subtitle">QR codes for your homeroom students - Generate and manage QR codes for attendance tracking</p>
+                <div class="info-badge">
+                    <i class="pi pi-info-circle"></i>
+                    <span>Only homeroom students are shown here. You can scan QR codes of all students you teach during attendance.</span>
+                </div>
             </div>
         </div>
 
         <!-- Modern Action Bar -->
         <div class="action-bar">
-            <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" class="print-button" />
+            <div class="action-left">
+                <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" class="print-button" />
+                
+                <div class="sort-wrapper">
+                    <label class="sort-label">Sort by:</label>
+                    <Dropdown 
+                        v-model="sortOrder" 
+                        :options="sortOptions" 
+                        optionLabel="label" 
+                        optionValue="value" 
+                        class="sort-dropdown"
+                        placeholder="Sort by..."
+                    />
+                </div>
+            </div>
 
             <div class="search-wrapper">
                 <span class="search-icon">
@@ -29,9 +47,20 @@
             <span class="ml-3">Loading student data...</span>
         </div>
 
+        <!-- QR Code Batch Loading Progress -->
+        <div v-if="!loading && batchLoadingProgress > 0 && batchLoadingProgress < 100" class="batch-loading-progress">
+            <div class="progress-header">
+                <i class="pi pi-qrcode"></i>
+                <span>Loading QR Codes... {{ batchLoadingProgress }}%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: batchLoadingProgress + '%' }"></div>
+            </div>
+        </div>
+
         <!-- Modern QR code grid with animations -->
-        <transition-group v-else name="card-list" tag="div" class="qrcode-grid">
-            <div v-for="(student, index) in filteredStudents" :key="student.id" class="qrcode-item print-page" :style="{ animationDelay: `${index * 0.05}s` }">
+        <transition-group v-if="!loading" name="card-list" tag="div" class="qrcode-grid">
+            <div v-for="(student, index) in filteredStudents" :key="`${student.id}-${refreshKey}`" class="qrcode-item print-page" :style="{ animationDelay: `${index * 0.05}s` }">
                 <StudentQRCode
                     :ref="
                         (el) => {
@@ -41,7 +70,10 @@
                     :studentId="student.id"
                     :studentName="student.full_name || student.name || `${student.first_name} ${student.last_name}` || `Student ${student.id}`"
                     :section="student.section_name || 'N/A'"
-                    :grade="student.grade_level || 'N/A'"
+                    :grade="student.grade_name || student.grade_level || 'N/A'"
+                    :preloadedQRData="qrCodes[student.id]"
+                    :batchLoadingComplete="batchLoadingComplete"
+                    :key="`qr-${student.id}-${refreshKey}`"
                 />
             </div>
         </transition-group>
@@ -51,9 +83,10 @@
             <div class="no-results-icon">
                 <i class="pi pi-search"></i>
             </div>
-            <h3>No students found</h3>
-            <p>No students match your search "{{ searchQuery }}"</p>
-            <Button label="Clear Search" icon="pi pi-times" @click="searchQuery = ''" class="p-button-text" />
+            <h3>No homeroom students found</h3>
+            <p v-if="searchQuery">No homeroom students match your search "{{ searchQuery }}"</p>
+            <p v-else>You don't have any homeroom students assigned. Only homeroom teachers can generate QR codes.</p>
+            <Button v-if="searchQuery" label="Clear Search" icon="pi pi-times" @click="searchQuery = ''" class="p-button-text" />
         </div>
     </div>
 </template>
@@ -63,6 +96,7 @@ import StudentQRCode from '@/components/StudentQRCode.vue';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 // Import teacher authentication service (alternative approach)
 import TeacherAuthServiceDefault from '@/services/TeacherAuthService.js';
+import Dropdown from 'primevue/dropdown';
 import { computed, onMounted, ref } from 'vue';
 
 // State variables
@@ -71,6 +105,21 @@ const loading = ref(true);
 const searchQuery = ref('');
 const downloadingAll = ref(false);
 const qrCardRefs = ref([]);
+const sortOrder = ref('name_asc'); // Default sort by name ascending
+const refreshKey = ref(Date.now()); // Force refresh key
+const qrCodes = ref({}); // Cache for QR codes - using object for better reactivity
+const qrLoading = ref(new Set()); // Track which QR codes are loading
+const batchLoadingProgress = ref(0); // Progress of batch loading (0-100)
+const batchLoadingComplete = ref(false); // Flag to indicate batch loading is done
+
+// Sort options
+const sortOptions = [
+    { label: 'Name (A-Z)', value: 'name_asc' },
+    { label: 'Name (Z-A)', value: 'name_desc' },
+    { label: 'Student ID (Low-High)', value: 'id_asc' },
+    { label: 'Student ID (High-Low)', value: 'id_desc' },
+    { label: 'Section', value: 'section' }
+];
 
 // Load students on component mount
 onMounted(async () => {
@@ -112,8 +161,8 @@ onMounted(async () => {
             console.log('Using fallback teacher ID due to auth error:', teacherId);
         }
 
-        // Load teacher's assigned students instead of hardcoded Grade 3
-        console.log(`Calling getTeacherAssignments for teacher ID: ${teacherId}`);
+        // Load ONLY homeroom students for QR code generation/management
+        console.log(`Loading homeroom students for teacher ID: ${teacherId}`);
         const assignmentsResponse = await TeacherAttendanceService.getTeacherAssignments(teacherId);
         console.log('Assignments API response:', assignmentsResponse);
 
@@ -122,34 +171,68 @@ onMounted(async () => {
         console.log('Extracted assignments array:', assignments);
 
         if (assignments && assignments.length > 0) {
-            // Get all students from all teacher's assignments
-            const allStudents = [];
+            // ONLY get students from HOMEROOM sections (is_primary = true)
+            const homeroomStudents = [];
 
             for (const assignment of assignments) {
                 console.log('Processing assignment:', assignment);
-                const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId, assignment.section_id, assignment.subject_id);
-                console.log(`Students for section ${assignment.section_id}, subject ${assignment.subject_id}:`, studentsResponse);
+                
+                // CRITICAL: Only process homeroom assignments (is_primary = true)
+                if (assignment.is_primary === true || assignment.subject_name === 'Homeroom') {
+                    console.log('✅ Processing HOMEROOM assignment:', assignment);
+                    const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId, assignment.section_id, assignment.subject_id);
+                    console.log(`Students for HOMEROOM section ${assignment.section_id}:`, studentsResponse);
 
-                // Extract students from the response object
-                const studentsData = studentsResponse?.students || studentsResponse || [];
-                console.log('Extracted students array:', studentsData);
+                    // Extract students from the response object
+                    const studentsData = studentsResponse?.students || studentsResponse || [];
+                    console.log('Extracted homeroom students array:', studentsData);
 
-                if (studentsData && studentsData.length > 0) {
-                    // Add students with section info
-                    studentsData.forEach((student) => {
-                        student.section_name = assignment.section_name;
-                        student.subject_name = assignment.subject_name;
-                    });
-                    allStudents.push(...studentsData);
+                    if (studentsData && studentsData.length > 0) {
+                        // Add students with section info (preserve backend data if available)
+                        studentsData.forEach((student) => {
+                            // Only override if backend didn't provide section info
+                            if (!student.section_name && assignment.section?.name) {
+                                student.section_name = assignment.section.name;
+                            }
+                            if (!student.grade_name && assignment.section?.grade_level) {
+                                student.grade_name = assignment.section.grade_level;
+                            }
+                            student.subject_name = assignment.subject_name;
+                            student.is_homeroom_student = true; // Mark as homeroom student
+                        });
+                        homeroomStudents.push(...studentsData);
+                    }
+                } else {
+                    console.log('❌ Skipping NON-HOMEROOM assignment:', assignment);
                 }
             }
 
-            // Remove duplicates (same student in multiple subjects)
-            const uniqueStudents = allStudents.filter((student, index, self) => index === self.findIndex((s) => s.id === student.id));
+            // Remove duplicates (though there shouldn't be any for homeroom)
+            const uniqueStudents = homeroomStudents.filter((student, index, self) => index === self.findIndex((s) => s.id === student.id));
 
             students.value = uniqueStudents;
-            console.log(`Loaded ${uniqueStudents.length} students for teacher ${teacherId} QR codes`);
-            console.log('Student data structure:', uniqueStudents);
+            refreshKey.value = Date.now(); // Force refresh QR components
+            console.log(`✅ Loaded ${uniqueStudents.length} ACTIVE homeroom students for teacher ${teacherId}`);
+            
+            // DEBUG: Check section and grade data for QR codes
+            if (uniqueStudents.length > 0) {
+                const firstStudent = uniqueStudents[0];
+                console.log('🔍 QR Code Data Check:', {
+                    name: `${firstStudent.first_name} ${firstStudent.last_name}`,
+                    section_name: firstStudent.section_name,
+                    grade_name: firstStudent.grade_name,
+                    grade_level: firstStudent.grade_level
+                });
+            }
+            
+            // 🚀 PERFORMANCE: Batch load QR codes for all students
+            try {
+                await batchLoadQRCodes(uniqueStudents);
+            } catch (error) {
+                console.error('❌ Batch loading failed:', error);
+                // Mark as complete even if failed so components can try individual loading
+                batchLoadingComplete.value = true;
+            }
         } else {
             console.warn(`No assignments found for teacher ${teacherId}`);
             students.value = [];
@@ -162,16 +245,111 @@ onMounted(async () => {
     }
 });
 
-// Computed property for filtered students
+// Computed property for filtered and sorted students
 const filteredStudents = computed(() => {
-    if (!searchQuery.value.trim()) return students.value;
+    let filtered = students.value;
 
-    const query = searchQuery.value.toLowerCase();
-    return students.value.filter((student) => {
-        const studentName = student.full_name || student.name || `${student.first_name} ${student.last_name}` || '';
-        return studentName.toLowerCase().includes(query) || student.id.toString().includes(query) || (student.first_name && student.first_name.toLowerCase().includes(query)) || (student.last_name && student.last_name.toLowerCase().includes(query));
+    // CRITICAL: Filter out non-active students (only show active students)
+    filtered = filtered.filter(student => {
+        const status = student.enrollment_status || 'active';
+        return ['active', 'enrolled', 'transferred_in'].includes(status);
     });
+
+    // Apply search filter
+    if (searchQuery.value.trim()) {
+        const query = searchQuery.value.toLowerCase();
+        filtered = filtered.filter(student => {
+            const name = (student.full_name || student.name || `${student.first_name} ${student.last_name}` || '').toLowerCase();
+            const studentId = (student.student_id || student.id || '').toString().toLowerCase();
+            return name.includes(query) || studentId.includes(query);
+        });
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+        const nameA = (a.full_name || a.name || `${a.first_name} ${a.last_name}` || '').toLowerCase();
+        const nameB = (b.full_name || b.name || `${b.first_name} ${b.last_name}` || '').toLowerCase();
+        const idA = (a.student_id || a.id || '').toString();
+        const idB = (b.student_id || b.id || '').toString();
+        const sectionA = (a.section_name || '').toLowerCase();
+        const sectionB = (b.section_name || '').toLowerCase();
+
+        switch (sortOrder.value) {
+            case 'name_asc':
+                return nameA.localeCompare(nameB);
+            case 'name_desc':
+                return nameB.localeCompare(nameA);
+            case 'id_asc':
+                return idA.localeCompare(idB);
+            case 'id_desc':
+                return idB.localeCompare(idA);
+            case 'section':
+                return sectionA.localeCompare(sectionB) || nameA.localeCompare(nameB);
+            default:
+                return nameA.localeCompare(nameB);
+        }
+    });
+
+    return filtered;
 });
+
+
+// 🚀 ULTRA-FAST: Single bulk API call for all QR codes
+const batchLoadQRCodes = async (studentList) => {
+    console.log('🚀 Starting BULK QR code loading for', studentList.length, 'students');
+    
+    try {
+        batchLoadingProgress.value = 10; // Show initial progress
+        
+        // Extract student IDs
+        const studentIds = studentList.map(student => student.id);
+        
+        // Single API call for ALL QR codes
+        const authToken = TeacherAuthServiceDefault.getToken();
+        const response = await fetch('http://localhost:8000/api/qr-codes/bulk', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                student_ids: studentIds
+            })
+        });
+        
+        batchLoadingProgress.value = 50; // Halfway progress
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            if (result.success) {
+                // Store all QR codes at once
+                qrCodes.value = { ...result.qr_codes };
+                
+                batchLoadingProgress.value = 100;
+                console.log(`🎉 BULK loading complete! Loaded ${result.found_count}/${result.requested_count} QR codes in ONE request`);
+            } else {
+                throw new Error('Bulk API returned error');
+            }
+        } else {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Bulk QR loading failed:', error);
+        batchLoadingProgress.value = 0;
+        throw error;
+    } finally {
+        // Mark batch loading as complete
+        batchLoadingComplete.value = true;
+        
+        // Reset progress after showing completion
+        setTimeout(() => {
+            batchLoadingProgress.value = 0;
+        }, 1000);
+    }
+};
 
 // Print all QR codes
 const printQRCodes = () => {
@@ -233,8 +411,24 @@ const downloadAllQRCodes = async () => {
 
 .page-subtitle {
     color: #64748b;
-    margin: 0;
+    margin: 0 0 1rem 0;
     font-size: 1rem;
+}
+
+.info-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #e0f2fe;
+    border: 1px solid #b3e5fc;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: #0277bd;
+    font-size: 0.875rem;
+}
+
+.info-badge i {
+    color: #0288d1;
 }
 
 /* Modern Action Bar */
@@ -249,6 +443,29 @@ const downloadAllQRCodes = async () => {
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     animation: slideDown 0.6s ease-out 0.1s backwards;
+}
+
+.action-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.sort-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.sort-dropdown {
+    min-width: 180px;
 }
 
 .action-buttons {
@@ -399,6 +616,40 @@ const downloadAllQRCodes = async () => {
 .no-results p {
     color: #64748b;
     margin: 0 0 1.5rem 0;
+}
+
+/* Batch Loading Progress */
+.batch-loading-progress {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+    animation: slideDown 0.3s ease-out;
+}
+
+.progress-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #4f46e5;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
 }
 
 /* Animations */

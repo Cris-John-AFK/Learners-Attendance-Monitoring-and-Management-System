@@ -7,7 +7,7 @@
                         <i class="pi pi-check-circle"></i>
                     </div>
                     <h2 class="modal-title">Attendance Completed</h2>
-                    <p class="modal-subtitle">{{ subjectName }} - {{ sessionDate }}</p>
+                    <p class="modal-subtitle">{{ subjectName }} - {{ sectionName }} - {{ sessionDate }}</p>
                 </div>
 
                 <div class="modal-stats" v-if="sessionData && sessionData.statistics">
@@ -95,6 +95,10 @@ const props = defineProps({
         default: false
     },
     subjectName: {
+        type: String,
+        default: ''
+    },
+    sectionName: {
         type: String,
         default: ''
     },

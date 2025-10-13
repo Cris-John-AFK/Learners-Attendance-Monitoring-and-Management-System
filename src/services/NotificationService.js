@@ -483,6 +483,11 @@ class NotificationService {
         notifications.forEach(notification => {
             // Find existing notification to stack with
             const existingIndex = stackedNotifications.findIndex(existing => {
+                // DON'T stack "Attendance Session Completed" notifications - each session is unique
+                if (notification.type === 'session_completed' || notification.title === 'Attendance Session Completed') {
+                    return false; // Never stack attendance session completions
+                }
+                
                 // For "No Active Session" notifications, match by subject name in message
                 if (notification.title === 'No Active Session' || notification.title.includes('No Active Session')) {
                     const getSubjectFromMessage = (msg) => {
@@ -548,6 +553,11 @@ class NotificationService {
         
         // Enhanced stacking logic for better duplicate detection
         const existingNotificationIndex = this.notifications.findIndex(n => {
+            // DON'T stack "Attendance Session Completed" notifications - each session is unique
+            if (notification.type === 'session_completed' || notification.title === 'Attendance Session Completed') {
+                return false; // Never stack attendance session completions
+            }
+            
             // Basic type and title match
             const typeMatch = n.type === notification.type;
             const titleMatch = n.title === notification.title;

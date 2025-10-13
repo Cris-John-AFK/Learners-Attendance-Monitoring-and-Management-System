@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use App\Models\TeacherSectionSubject;
+use App\Models\Student;
 
 class Section extends Model
 {
@@ -32,6 +33,9 @@ class Section extends Model
         'is_active' => 'boolean',
         'capacity' => 'integer'
     ];
+
+    // Automatically include filtered students in JSON response
+    protected $appends = ['students'];
 
     /**
      * Determine if grade_id column exists in the table
@@ -177,7 +181,48 @@ class Section extends Model
         return $this->belongsToMany(Student::class, 'student_section')
                     ->withPivot('school_year', 'is_active')
                     ->wherePivot('is_active', true)
+                    // CRITICAL: Filter out dropped out students
+                    ->where(function($query) {
+                        $query->whereIn('student_details.status', ['Enrolled', 'enrolled', 'active'])
+                              ->orWhereNull('student_details.status');
+                    })
+                    ->whereNotIn('student_details.status', ['Dropped Out', 'dropped_out', 'Transferred Out', 'transferred_out', 'Withdrawn', 'withdrawn', 'Deceased', 'deceased'])
                     ->withTimestamps();
+    }
+
+    /**
+     * Custom accessor to return filtered students (excludes dropped out students)
+     */
+    public function getStudentsAttribute()
+    {
+        // Get active students with proper filtering
+        $students = DB::table('student_details as sd')
+            ->join('student_section as ss', function($join) {
+                $join->on('sd.id', '=', 'ss.student_id')
+                     ->where('ss.section_id', '=', $this->id)
+                     ->where('ss.is_active', '=', 1);
+            })
+            ->where(function($query) {
+                $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                      ->orWhereNull('sd.enrollment_status');
+            })
+            ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased'])
+            ->select([
+                'sd.id',
+                'sd.firstName as first_name',
+                'sd.lastName as last_name', 
+                'sd.middleName as middle_name',
+                'sd.lrn',
+                'sd.qr_code_path as qr_code',
+                'sd.gender',
+                'sd.age',
+                'sd.status'
+            ])
+            ->orderBy('sd.lastName')
+            ->orderBy('sd.firstName')
+            ->get();
+
+        return $students;
     }
 
     /**

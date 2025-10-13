@@ -16,9 +16,10 @@
         </div>
 
         <div class="qr-container">
-            <div v-if="loading" class="qr-loading">
+            <div v-if="loading || (!hasQRCode && !props.batchLoadingComplete)" class="qr-loading">
                 <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
-                <p>Loading QR Code...</p>
+                <p v-if="!props.batchLoadingComplete">Loading QR Code...</p>
+                <p v-else>Generating QR Code...</p>
             </div>
             <div v-else-if="qrImageUrl" class="qr-image">
                 <img :src="qrImageUrl" alt="Student QR Code" />
@@ -28,7 +29,7 @@
             </div>
             <div v-else class="qr-error">
                 <p>No QR code available</p>
-                <Button label="Generate QR Code" icon="pi pi-qrcode" @click="generateQRCode" class="p-button-sm p-button-outlined" />
+                <Button label="Generate QR Code" icon="pi pi-qrcode" @click="generateQRCode" class="p-button-sm p-button-outlined" :disabled="!props.batchLoadingComplete" />
             </div>
         </div>
 
@@ -45,7 +46,7 @@
 <script setup>
 import { QRCodeAPIService } from '@/router/service/QRCodeAPIService';
 import QrcodeVue from 'qrcode.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     studentId: {
@@ -67,6 +68,14 @@ const props = defineProps({
     size: {
         type: Number,
         default: 200
+    },
+    preloadedQRData: {
+        type: [String, Object],
+        default: null
+    },
+    batchLoadingComplete: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -83,10 +92,44 @@ const hasQRCode = computed(() => {
 
 // Load QR code on component mount
 onMounted(async () => {
-    await loadQRCode();
+    // 🚀 PERFORMANCE: Use preloaded data if available
+    if (props.preloadedQRData) {
+        // Handle string SVG data
+        const svgData = typeof props.preloadedQRData === 'string' ? props.preloadedQRData : String(props.preloadedQRData);
+        
+        // Direct SVG data - no need to encode
+        qrImageUrl.value = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+        qrData.value = svgData;
+    } else if (props.batchLoadingComplete) {
+        // Batch loading is complete but no data - QR doesn't exist
+        // Silent - no console log needed
+    } else {
+        // Wait for batch loading to complete - no individual loading
+        // Silent - no console log needed
+    }
 });
 
-// Load existing QR code for student
+// Watch for batch loading completion
+watch(() => props.batchLoadingComplete, (isComplete) => {
+    if (isComplete && !props.preloadedQRData && !hasQRCode.value) {
+        // Batch loading is complete but no preloaded data - QR doesn't exist
+        // Silent - no individual API calls needed
+    }
+});
+
+// Watch for preloaded data changes
+watch(() => props.preloadedQRData, (newData) => {
+    if (newData) {
+        // Handle string SVG data
+        const svgData = typeof newData === 'string' ? newData : String(newData);
+        
+        // Direct SVG data - no need to encode
+        qrImageUrl.value = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+        qrData.value = svgData;
+    }
+}, { immediate: true });
+
+// Load existing QR code for student (fallback method)
 const loadQRCode = async () => {
     try {
         loading.value = true;

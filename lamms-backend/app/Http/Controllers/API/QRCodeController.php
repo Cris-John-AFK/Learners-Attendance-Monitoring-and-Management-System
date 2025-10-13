@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\StudentQRCode;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class QRCodeController extends Controller
@@ -78,6 +79,7 @@ class QRCodeController extends Controller
 
     /**
      * Validate QR code and return student information
+     * CRITICAL: Check if student is active before allowing QR code usage
      */
     public function validateQRCode(Request $request)
     {
@@ -95,6 +97,18 @@ class QRCodeController extends Controller
                 ], 404);
             }
 
+            // CRITICAL: Check if student is active
+            $enrollmentStatus = $student->enrollment_status ?? 'active';
+            $activeStatuses = ['active', 'enrolled', 'transferred_in'];
+            
+            if (!in_array($enrollmentStatus, $activeStatuses)) {
+                return response()->json([
+                    'valid' => false,
+                    'message' => 'QR code is disabled - Student is no longer active',
+                    'student_status' => $enrollmentStatus
+                ], 403);
+            }
+
             return response()->json([
                 'valid' => true,
                 'student' => [
@@ -104,11 +118,58 @@ class QRCodeController extends Controller
                     'lastName' => $student->lastName,
                     'gradeLevel' => $student->gradeLevel,
                     'email' => $student->email,
-                    'lrn' => $student->lrn
+                    'lrn' => $student->lrn,
+                    'enrollment_status' => $enrollmentStatus
                 ]
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to validate QR code: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Disable QR codes for non-active students
+     * Called when student status changes
+     */
+    public function disableQRCodesForInactiveStudents()
+    {
+        try {
+            // Get all students with non-active status
+            $inactiveStudents = Student::whereIn('enrollment_status', [
+                'dropped_out', 'transferred_out', 'withdrawn', 'deceased'
+            ])->pluck('id');
+
+            if ($inactiveStudents->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No inactive students found',
+                    'disabled_count' => 0
+                ]);
+            }
+
+            // Disable QR codes for inactive students
+            $disabledCount = StudentQRCode::whereIn('student_id', $inactiveStudents)
+                ->where('is_active', true)
+                ->update([
+                    'is_active' => false,
+                    'disabled_at' => now(),
+                    'disabled_reason' => 'Student status changed to inactive'
+                ]);
+
+            Log::info("🚫 Disabled QR codes for inactive students", [
+                'disabled_count' => $disabledCount,
+                'inactive_student_ids' => $inactiveStudents->toArray()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Disabled {$disabledCount} QR codes for inactive students",
+                'disabled_count' => $disabledCount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error disabling QR codes for inactive students: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to disable QR codes: ' . $e->getMessage()], 500);
         }
     }
 
@@ -169,6 +230,57 @@ class QRCodeController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to fetch student QR code: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * 🚀 BULK: Get QR codes for multiple students in one request
+     */
+    public function getBulkQRCodes(Request $request)
+    {
+        try {
+            $request->validate([
+                'student_ids' => 'required|array',
+                'student_ids.*' => 'integer|exists:student_details,id'
+            ]);
+
+            $studentIds = $request->input('student_ids');
+            Log::info('🚀 Bulk QR request for students:', $studentIds);
+
+            // Get all QR codes in one query
+            $qrCodes = StudentQRCode::whereIn('student_id', $studentIds)
+                ->where('is_active', true)
+                ->with('student')
+                ->get()
+                ->keyBy('student_id');
+
+            $result = [];
+            foreach ($studentIds as $studentId) {
+                $qrCode = $qrCodes->get($studentId);
+                if ($qrCode && $qrCode->qr_code_data) {
+                    // Generate SVG from QR code data (same as getQRCodeImage)
+                    $qrCodeSvg = QrCode::format('svg')
+                                       ->size(300)
+                                       ->margin(2)
+                                       ->generate($qrCode->qr_code_data);
+                    
+                    // Ensure it's a string
+                    $result[$studentId] = (string) $qrCodeSvg;
+                }
+            }
+
+            Log::info('✅ Bulk QR response:', ['requested' => count($studentIds), 'found' => count($result)]);
+
+            return response()->json([
+                'success' => true,
+                'qr_codes' => $result,
+                'requested_count' => count($studentIds),
+                'found_count' => count($result)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Bulk QR error:', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to fetch bulk QR codes: ' . $e->getMessage()], 500);
         }
     }
 }

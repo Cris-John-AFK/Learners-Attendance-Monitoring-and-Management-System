@@ -86,6 +86,21 @@ const absentDays = ref([]);
 const WARNING_THRESHOLD = 3; // Students missing 3-4 days need attention
 const CRITICAL_THRESHOLD = 5; // Students missing 5+ days need urgent action
 
+// Filter variables
+const selectedGradeFilter = ref(null);
+const selectedSectionFilter = ref(null);
+const selectedStatusFilter = ref(null);
+
+// Filter options - will be populated dynamically based on teacher's assignments
+const gradeFilterOptions = ref([]);
+
+const sectionFilterOptions = ref([]);
+const statusFilterOptions = ref([
+    { label: 'Normal', value: 'normal' },
+    { label: 'Warning', value: 'warning' },
+    { label: 'Critical', value: 'critical' }
+]);
+
 // Filter options
 const showOnlyAbsenceIssues = ref(false);
 
@@ -166,6 +181,47 @@ const MOCK_ATTENDANCE_CHART_DATA = {
     ]
 };
 
+const updateSectionFilterOptions = () => {
+    if (studentsWithAbsenceIssues.value && studentsWithAbsenceIssues.value.length > 0) {
+        const uniqueSections = [...new Set(studentsWithAbsenceIssues.value.map((student) => student.section))];
+        sectionFilterOptions.value = uniqueSections.map((section) => ({
+            label: section,
+            value: section
+        }));
+    } else if (availableSubjects.value && availableSubjects.value.length > 0) {
+        // Fallback: Use sections from teacher's assignments
+        const uniqueSections = [...new Set(availableSubjects.value.map((subject) => subject.sectionName).filter(Boolean))];
+        sectionFilterOptions.value = uniqueSections.map((section) => ({
+            label: section,
+            value: section
+        }));
+    }
+};
+
+const updateGradeFilterOptions = () => {
+    if (studentsWithAbsenceIssues.value && studentsWithAbsenceIssues.value.length > 0) {
+        // Use grades from actual student data
+        const uniqueGrades = [...new Set(studentsWithAbsenceIssues.value.map((student) => student.gradeLevel))];
+        gradeFilterOptions.value = uniqueGrades.map((grade) => ({
+            label: grade,
+            value: grade
+        }));
+    } else if (availableSubjects.value && availableSubjects.value.length > 0) {
+        // Fallback: Use grades from teacher's assignments
+        const uniqueGrades = [...new Set(availableSubjects.value.map((subject) => subject.grade).filter(Boolean))];
+        gradeFilterOptions.value = uniqueGrades.map((grade) => ({
+            label: grade,
+            value: grade
+        }));
+    }
+};
+
+// Call this function when student data is loaded
+watch(studentsWithAbsenceIssues, () => {
+    updateSectionFilterOptions();
+    updateGradeFilterOptions();
+});
+
 // Auto-refresh function to reload data with throttling
 async function refreshDashboardData(forceRefresh = false) {
     // Check if we're already refreshing or too soon
@@ -233,20 +289,45 @@ const initializeTeacherData = async () => {
             const assignments = TeacherAuthService.getAssignments();
             const uniqueSubjects = TeacherAuthService.getUniqueSubjects();
 
-            const processedSubjects = uniqueSubjects.map((subject) => {
-                // Find the assignment for this subject to get the correct section ID
-                const assignment = assignments.find((a) => a.subject_id === subject.id);
-                // Safe access to sections array with fallback
-                const sections = subject.sections || [];
-                const firstSection = sections[0] || {};
-                return {
-                    id: subject.id,
-                    name: subject.name,
-                    grade: subject.grade || firstSection.grade || 'Unknown',
-                    sectionId: assignment?.section_id || subject.sectionId || firstSection.id,
-                    originalSubject: { id: subject.id, name: subject.name },
-                    assignment: assignment
-                };
+            // Process subjects and handle departmentalized assignments
+            const processedSubjects = [];
+
+            uniqueSubjects.forEach((subject) => {
+                // Find ALL assignments for this subject (departmentalized teachers may have multiple)
+                const subjectAssignments = assignments.filter((a) => a.subject_id === subject.id);
+
+                if (subjectAssignments.length > 1) {
+                    // Departmentalized teacher: Same subject across multiple sections
+                    subjectAssignments.forEach((assignment, index) => {
+                        processedSubjects.push({
+                            id: subject.id,
+                            name: index === 0 ? subject.name : `${subject.name} (${assignment.section_name})`,
+                            grade: subject.grade || 'Unknown',
+                            sectionId: assignment.section_id,
+                            sectionName: assignment.section_name,
+                            originalSubject: { id: subject.id, name: subject.name },
+                            assignment: assignment,
+                            isDepartmentalized: true,
+                            groupId: subject.id // For grouping same subjects
+                        });
+                    });
+                } else {
+                    // Single assignment
+                    const assignment = subjectAssignments[0];
+                    const sections = subject.sections || [];
+                    const firstSection = sections[0] || {};
+
+                    processedSubjects.push({
+                        id: subject.id,
+                        name: subject.name,
+                        grade: subject.grade || firstSection.grade || 'Unknown',
+                        sectionId: assignment?.section_id || subject.sectionId || firstSection.id,
+                        sectionName: assignment?.section_name,
+                        originalSubject: { id: subject.id, name: subject.name },
+                        assignment: assignment,
+                        isDepartmentalized: false
+                    });
+                }
             });
 
             // Set BOTH for indexing to work!
@@ -265,6 +346,10 @@ const initializeTeacherData = async () => {
 
             console.log('Teacher data loaded:', currentTeacher.value);
             console.log('Available subjects:', availableSubjects.value);
+
+            // Update filter options based on teacher's assignments
+            updateSectionFilterOptions();
+            updateGradeFilterOptions();
         }
     } catch (error) {
         console.error('Error initializing teacher data:', error);
@@ -627,29 +712,102 @@ function processIndexedData(indexedData) {
 async function loadAttendanceData() {
     if (!currentTeacher.value) return;
 
-    // Handle "All Subjects" selection
+    // Handle "All Subjects" selection - load from all sections
     if (selectedSubject.value && selectedSubject.value.id === null) {
         console.log('Loading "All Subjects" attendance data');
         await loadAllSubjectsData();
         return;
     }
 
-    // Support homeroom-only teachers (no subjects)
-    let sectionId, subjectId;
+    // For departmentalized teachers, check if they teach the same subject across multiple sections
     if (selectedSubject.value) {
         console.log('Loading attendance data for subject:', selectedSubject.value);
-        sectionId = selectedSubject.value.sectionId;
-        subjectId = selectedSubject.value.id;
+
+        // Check if this teacher teaches this subject in multiple sections
+        const subjectAssignments = availableSubjects.value.filter((s) => s.id === selectedSubject.value.id);
+
+        if (subjectAssignments.length > 1) {
+            console.log(`📚 Departmentalized teacher: Loading ${selectedSubject.value.name} from ${subjectAssignments.length} sections`);
+            await loadDepartmentalizedSubjectData(selectedSubject.value.id);
+            return;
+        } else {
+            // Single section assignment
+            await loadSingleSectionData(selectedSubject.value.sectionId, selectedSubject.value.id);
+            return;
+        }
     } else if (currentTeacher.value.homeroom_section) {
         // Homeroom-only teacher
         console.log('Loading attendance data for homeroom section:', currentTeacher.value.homeroom_section);
-        sectionId = currentTeacher.value.homeroom_section.id;
-        subjectId = null;
+        await loadSingleSectionData(currentTeacher.value.homeroom_section.id, null);
+        return;
     } else {
         console.warn('No subject or homeroom section found for teacher');
         return;
     }
+}
 
+// Load data for departmentalized teachers teaching same subject across multiple sections
+async function loadDepartmentalizedSubjectData(subjectId) {
+    try {
+        // Get all sections where this teacher teaches this subject
+        const subjectAssignments = availableSubjects.value.filter((s) => s.id === subjectId);
+        const sectionIds = subjectAssignments.map((s) => s.sectionId);
+
+        console.log(`📚 Loading departmentalized data for subject ${subjectId} across sections:`, sectionIds);
+
+        let allStudents = [];
+        let totalStudents = 0;
+
+        // Load students from each section
+        for (const assignment of subjectAssignments) {
+            try {
+                const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(currentTeacher.value.id, assignment.sectionId, subjectId);
+
+                if (studentsResponse.success && studentsResponse.students) {
+                    const sectionStudents = studentsResponse.students.map((student) => ({
+                        id: student.student_id || student.id,
+                        name: student.name || `${student.first_name || student.firstName} ${student.last_name || student.lastName}`,
+                        gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+                        section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
+                        absences: student.total_absences || 0,
+                        severity: calculateSeverity(student.total_absences || 0),
+                        attendanceRate: student.attendance_rate || 100,
+                        totalPresent: student.total_present || 0,
+                        totalLate: student.total_late || 0
+                    }));
+
+                    allStudents = allStudents.concat(sectionStudents);
+                    totalStudents += studentsResponse.count || sectionStudents.length;
+                }
+            } catch (error) {
+                console.error(`Error loading students from section ${assignment.sectionId}:`, error);
+            }
+        }
+
+        // Update the students data
+        studentsWithAbsenceIssues.value = allStudents;
+
+        // Calculate summary statistics
+        const warningCount = allStudents.filter((s) => s.severity === 'warning').length;
+        const criticalCount = allStudents.filter((s) => s.severity === 'critical').length;
+
+        attendanceSummary.value = {
+            totalStudents: totalStudents,
+            averageAttendance: 0, // Will be calculated by trends API
+            studentsWithWarning: warningCount,
+            studentsWithCritical: criticalCount,
+            students: allStudents
+        };
+
+        console.log(`✅ Departmentalized data loaded. Total students: ${allStudents.length} from ${sectionIds.length} sections`);
+        console.log(`📊 Warning: ${warningCount}, Critical: ${criticalCount}`);
+    } catch (error) {
+        console.error('Error loading departmentalized subject data:', error);
+    }
+}
+
+// Load data for single section (homeroom or single subject assignment)
+async function loadSingleSectionData(sectionId, subjectId) {
     try {
         const params = {
             teacherId: currentTeacher.value.id,
@@ -713,10 +871,9 @@ async function loadAttendanceData() {
         }
 
         if (studentsResponse.success) {
-
             // Always show students from studentsResponse
             const studentsData = studentsResponse.students || [];
-            
+
             // DEBUG: Log first student to see actual data structure
             if (studentsData.length > 0) {
                 console.log('🔍 DEBUG First Student Data:', JSON.stringify(studentsData[0], null, 2));
@@ -735,25 +892,26 @@ async function loadAttendanceData() {
             }));
 
             // NOW calculate warning and critical counts from the processed student data
-            const warningCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'warning').length;
-            const criticalCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'critical').length;
+            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length;
+            const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
 
             // Set attendance summary with calculated counts
-            attendanceSummary.value = summaryResponse && summaryResponse.success
-                ? {
-                      totalStudents: summaryResponse.data.total_students || studentsResponse.count,
-                      averageAttendance: summaryResponse.data.average_attendance || 0,
-                      studentsWithWarning: warningCount,
-                      studentsWithCritical: criticalCount,
-                      students: summaryResponse.data.students || []
-                  }
-                : {
-                      totalStudents: studentsResponse.count || 0,
-                      averageAttendance: 0,
-                      studentsWithWarning: warningCount,
-                      studentsWithCritical: criticalCount,
-                      students: []
-                  };
+            attendanceSummary.value =
+                summaryResponse && summaryResponse.success
+                    ? {
+                          totalStudents: summaryResponse.data.total_students || studentsResponse.count,
+                          averageAttendance: summaryResponse.data.average_attendance || 0,
+                          studentsWithWarning: warningCount,
+                          studentsWithCritical: criticalCount,
+                          students: summaryResponse.data.students || []
+                      }
+                    : {
+                          totalStudents: studentsResponse.count || 0,
+                          averageAttendance: 0,
+                          studentsWithWarning: warningCount,
+                          studentsWithCritical: criticalCount,
+                          students: []
+                      };
 
             console.log('✅ Attendance data loaded. Students:', studentsWithAbsenceIssues.value.length);
             console.log('📊 Warning count:', warningCount, 'Critical count:', criticalCount);
@@ -809,8 +967,8 @@ async function loadAllSubjectsData() {
             }
 
             // Calculate warning and critical counts from processed student data
-            const warningCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'warning').length;
-            const criticalCount = studentsWithAbsenceIssues.value.filter(s => s.severity === 'critical').length;
+            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length;
+            const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
 
             attendanceSummary.value = {
                 totalStudents: summaryResponse.data.total_students || 0,
@@ -1484,20 +1642,36 @@ watch(viewType, async () => {
 // Filter students by name
 const searchQuery = ref('');
 const filteredStudents = computed(() => {
-    let students = studentsWithAbsenceIssues.value;
+    if (!studentsWithAbsenceIssues.value) return [];
 
-    // Filter by "show only issues" checkbox
+    let filtered = studentsWithAbsenceIssues.value;
+
+    // Apply search filter
+    if (searchQuery.value) {
+        filtered = filtered.filter((student) => student.name.toLowerCase().includes(searchQuery.value.toLowerCase()));
+    }
+
+    // Apply grade filter
+    if (selectedGradeFilter.value) {
+        filtered = filtered.filter((student) => student.gradeLevel === selectedGradeFilter.value);
+    }
+
+    // Apply section filter
+    if (selectedSectionFilter.value) {
+        filtered = filtered.filter((student) => student.section === selectedSectionFilter.value);
+    }
+
+    // Apply status filter
+    if (selectedStatusFilter.value) {
+        filtered = filtered.filter((student) => student.severity === selectedStatusFilter.value);
+    }
+
+    // Apply absence issues filter
     if (showOnlyAbsenceIssues.value) {
-        students = students.filter((student) => student.severity !== 'normal');
+        filtered = filtered.filter((student) => student.severity !== 'normal');
     }
 
-    // Filter by search query
-    if (searchQuery.value.trim()) {
-        const query = searchQuery.value.toLowerCase();
-        students = students.filter((student) => student.name.toLowerCase().includes(query));
-    }
-
-    return students;
+    return filtered;
 });
 
 // Get severity icon for student absence
@@ -1886,18 +2060,100 @@ async function showStudentProfile(student) {
                         Student Attendance
                     </h2>
 
-                    <div class="flex flex-col sm:flex-row gap-3 mt-2 sm:mt-0">
-                        <div class="p-inputgroup w-full sm:w-64">
-                            <span class="p-inputgroup-addon"> </span>
-                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full rounded-lg" />
+                    <div class="flex flex-col gap-4 mt-4 sm:mt-0">
+                        <!-- Search Bar -->
+                        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                            <div class="p-inputgroup w-full sm:w-80">
+                                <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
+                            </div>
+
+                            <!-- Show Issues Toggle -->
+                            <div class="flex items-center p-3 rounded-lg border transition-all duration-200" :class="showOnlyAbsenceIssues ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'">
+                                <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" class="mr-3" />
+                                <label for="showIssues" class="text-sm font-medium cursor-pointer text-gray-700">
+                                    Show only students with issues
+                                    <span v-if="showOnlyAbsenceIssues" class="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">Active</span>
+                                </label>
+                            </div>
                         </div>
 
-                        <div class="flex items-center p-2 rounded-lg transition-colors duration-200 cursor-pointer" :class="showOnlyAbsenceIssues ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'">
-                            <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" />
-                            <label for="showIssues" class="ml-2 text-sm font-medium cursor-pointer">
-                                Show only students with issues
-                                <span v-if="showOnlyAbsenceIssues" class="ml-2 text-blue-600">(Active)</span>
-                            </label>
+                        <!-- Filter Row -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <!-- Grade Level Filter -->
+                            <div class="flex flex-col">
+                                <label class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                                    <i class="pi pi-graduation-cap mr-1 text-blue-500"></i>
+                                    Grade Level
+                                </label>
+                                <Dropdown v-model="selectedGradeFilter" :options="gradeFilterOptions" optionLabel="label" optionValue="value" placeholder="All Grades" class="w-full" showClear>
+                                    <template #value="slotProps">
+                                        <div v-if="slotProps.value" class="flex items-center">
+                                            <i class="pi pi-graduation-cap mr-2 text-blue-500 text-sm"></i>
+                                            <span>{{ slotProps.value }}</span>
+                                        </div>
+                                        <span v-else class="text-gray-500">All Grades</span>
+                                    </template>
+                                    <template #option="slotProps">
+                                        <div class="flex items-center">
+                                            <i class="pi pi-graduation-cap mr-2 text-blue-500 text-sm"></i>
+                                            <span>{{ slotProps.option.label }}</span>
+                                        </div>
+                                    </template>
+                                </Dropdown>
+                            </div>
+
+                            <!-- Section Filter -->
+                            <div class="flex flex-col">
+                                <label class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                                    <i class="pi pi-building mr-1 text-green-500"></i>
+                                    Section
+                                </label>
+                                <Dropdown v-model="selectedSectionFilter" :options="sectionFilterOptions" optionLabel="label" optionValue="value" placeholder="All Sections" class="w-full" showClear>
+                                    <template #value="slotProps">
+                                        <div v-if="slotProps.value" class="flex items-center">
+                                            <i class="pi pi-building mr-2 text-green-500 text-sm"></i>
+                                            <span>{{ slotProps.value }}</span>
+                                        </div>
+                                        <span v-else class="text-gray-500">All Sections</span>
+                                    </template>
+                                    <template #option="slotProps">
+                                        <div class="flex items-center">
+                                            <i class="pi pi-building mr-2 text-green-500 text-sm"></i>
+                                            <span>{{ slotProps.option.label }}</span>
+                                        </div>
+                                    </template>
+                                </Dropdown>
+                            </div>
+
+                            <!-- Status Filter -->
+                            <div class="flex flex-col">
+                                <label class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                                    <i class="pi pi-flag mr-1 text-orange-500"></i>
+                                    Status
+                                </label>
+                                <Dropdown v-model="selectedStatusFilter" :options="statusFilterOptions" optionLabel="label" optionValue="value" placeholder="All Status" class="w-full" showClear>
+                                    <template #value="slotProps">
+                                        <div v-if="slotProps.value" class="flex items-center">
+                                            <i class="pi pi-flag mr-2 text-orange-500 text-sm"></i>
+                                            <span>{{ slotProps.value }}</span>
+                                        </div>
+                                        <span v-else class="text-gray-500">All Status</span>
+                                    </template>
+                                    <template #option="slotProps">
+                                        <div class="flex items-center">
+                                            <i
+                                                class="mr-2 text-sm"
+                                                :class="{
+                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'normal',
+                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'warning',
+                                                    'pi pi-exclamation-circle text-red-500': slotProps.option.value === 'critical'
+                                                }"
+                                            ></i>
+                                            <span>{{ slotProps.option.label }}</span>
+                                        </div>
+                                    </template>
+                                </Dropdown>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -29,6 +29,8 @@ class AttendanceSessionController extends Controller
                 'subject_id' => $subjectId
             ]);
             
+            Log::info("🔍 DEBUGGING: About to execute student query with filtering");
+            
             // Validate required parameters
             if (empty($sectionId) || $sectionId === '' || $sectionId === 'null') {
                 Log::warning("Invalid section_id provided", ['section_id' => $sectionId]);
@@ -48,6 +50,7 @@ class AttendanceSessionController extends Controller
             Log::info("Section name retrieved", ['section_id' => $sectionId, 'section_name' => $sectionName]);
 
             // Get all active students in the section - ONLY from pivot table
+            // EXCLUDE dropped out, transferred out, withdrawn, and deceased students
             $students = DB::table('student_details as sd')
                 ->join('student_section as ss', function($join) use ($sectionId) {
                     $join->on('sd.id', '=', 'ss.student_id')
@@ -57,6 +60,14 @@ class AttendanceSessionController extends Controller
                 ->join('sections as s', 'ss.section_id', '=', 's.id')
                 ->leftJoin('curriculum_grade as cg', 's.curriculum_grade_id', '=', 'cg.id')
                 ->leftJoin('grades as g', 'cg.grade_id', '=', 'g.id')
+                // CRITICAL: Only include active students, explicitly exclude dropped out students
+                ->where(function($query) {
+                    $query->where(function($subQuery) {
+                        $subQuery->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                                 ->orWhereNull('sd.enrollment_status');
+                    })
+                    ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased']);
+                })
                 ->select([
                     'sd.id',
                     'sd.firstName as first_name',
@@ -67,6 +78,7 @@ class AttendanceSessionController extends Controller
                     'sd.gender',
                     'sd.age',
                     'sd.status',
+                    'sd.enrollment_status',
                     's.name as section_name',
                     'g.name as grade_name',
                     DB::raw('(SELECT COUNT(*) FROM attendance_records ar 
@@ -78,9 +90,48 @@ class AttendanceSessionController extends Controller
                 ->orderBy('sd.firstName')
                 ->get();
 
+            // Log any dropped out students that were filtered out
+            $allStudentsInSection = DB::table('student_details as sd')
+                ->join('student_section as ss', function($join) use ($sectionId) {
+                    $join->on('sd.id', '=', 'ss.student_id')
+                         ->where('ss.section_id', '=', $sectionId)
+                         ->where('ss.is_active', '=', 1);
+                })
+                ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.status')
+                ->get();
+            
+            $droppedOutStudents = $allStudentsInSection->whereIn('status', ['Dropped Out', 'dropped_out', 'Transferred Out', 'transferred_out', 'Withdrawn', 'withdrawn', 'Deceased', 'deceased']);
+            
+            if ($droppedOutStudents->count() > 0) {
+                Log::info("🚫 Filtered out non-enrolled students from attendance", [
+                    'section_id' => $sectionId,
+                    'filtered_count' => $droppedOutStudents->count(),
+                    'filtered_students' => $droppedOutStudents->map(function($student) {
+                        return $student->firstName . ' ' . $student->lastName . ' (' . $student->status . ')';
+                    })->toArray()
+                ]);
+            }
+
+            $totalInSection = $allStudentsInSection->count();
+            $filteredOut = $droppedOutStudents->count();
+
             Log::info("Found students for section", [
-                'section_id' => $sectionId,
-                'student_count' => $students->count()
+                'section_id' => $sectionId, 
+                'student_count' => $students->count(),
+                'total_in_section' => $totalInSection,
+                'filtered_out' => $filteredOut
+            ]);
+
+            // DEBUG: Log first few students with their enrollment status
+            Log::info("🔍 DEBUGGING: First 5 students returned", [
+                'students' => $students->take(5)->map(function($student) {
+                    return [
+                        'id' => $student->id,
+                        'name' => $student->first_name . ' ' . $student->last_name,
+                        'status' => $student->status,
+                        'enrollment_status' => $student->enrollment_status
+                    ];
+                })->toArray()
             ]);
 
             return response()->json([

@@ -10,7 +10,8 @@ export const TeacherAttendanceService = {
                 params: {
                     teacher_id: teacherId,
                     section_id: sectionId,
-                    subject_id: subjectId
+                    subject_id: subjectId,
+                    _t: Date.now() // Cache busting parameter
                 }
             });
             console.log('Students API response:', response.data);

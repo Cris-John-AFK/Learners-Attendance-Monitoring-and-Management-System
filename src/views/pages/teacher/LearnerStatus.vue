@@ -25,8 +25,10 @@ const isSectionAdviser = ref(false);
 const selectedStatus = ref(null);
 const selectedSection = ref(null);
 const selectedGrade = ref(null);
+const selectedSubject = ref(null);
 const availableSections = ref([]);
 const availableGrades = ref([]);
+const availableSubjects = ref([]);
 const teacherId = ref(null);
 const showEditDialog = ref(false);
 const showHistoryDialog = ref(false);
@@ -59,6 +61,12 @@ const reasonOptions = computed(() => {
     return options[editForm.value.new_status] || [];
 });
 
+// Computed properties for filter availability based on current view
+const isStatusFilterEnabled = computed(() => true); // Always enabled
+const isSectionFilterEnabled = computed(() => currentView.value === 'section' || currentView.value === 'all');
+const isGradeFilterEnabled = computed(() => currentView.value === 'all');
+const isSubjectFilterEnabled = computed(() => currentView.value === 'subject' || currentView.value === 'all');
+
 const filteredStudents = computed(() => {
     let filtered = students.value;
 
@@ -71,19 +79,26 @@ const filteredStudents = computed(() => {
         );
     }
 
-    // Apply status filter
+    // Apply status filter (always available)
     if (selectedStatus.value) {
         filtered = filtered.filter((s) => s.enrollment_status === selectedStatus.value);
     }
 
-    // Apply section filter
-    if (selectedSection.value) {
+    // Apply section filter (only for 'section' and 'all' views)
+    if (selectedSection.value && isSectionFilterEnabled.value) {
         filtered = filtered.filter((s) => s.section === selectedSection.value);
     }
 
-    // Apply grade filter
-    if (selectedGrade.value) {
+    // Apply grade filter (only for 'all' view)
+    if (selectedGrade.value && isGradeFilterEnabled.value) {
         filtered = filtered.filter((s) => s.grade_level === selectedGrade.value);
+    }
+
+    // Apply subject filter (only for 'subject' and 'all' views)
+    if (selectedSubject.value && isSubjectFilterEnabled.value) {
+        filtered = filtered.filter((s) => 
+            s.subjects && s.subjects.includes(selectedSubject.value)
+        );
     }
 
     return filtered;
@@ -101,9 +116,14 @@ const loadStudents = async () => {
             isSectionAdviser.value = response.is_section_adviser;
             console.log('Students loaded:', students.value.length, 'Section Adviser:', isSectionAdviser.value);
             
-            // Extract unique sections and grades for filters
+            // Extract unique sections, grades, and subjects for filters
             availableSections.value = [...new Set(students.value.map(s => s.section))].filter(Boolean).sort();
             availableGrades.value = [...new Set(students.value.map(s => s.grade_level))].filter(Boolean).sort();
+            
+            // Extract available subjects from the API response
+            if (response.available_subjects) {
+                availableSubjects.value = response.available_subjects;
+            }
         } else {
             console.error('API returned success=false:', response);
             toast.add({ severity: 'error', summary: 'Error', detail: response.message || 'Failed to load students', life: 3000 });
@@ -119,6 +139,41 @@ const loadStudents = async () => {
         });
     } finally {
         loading.value = false;
+    }
+};
+
+const changeView = (newView) => {
+    currentView.value = newView;
+    
+    // Clear filters that are not available in the new view
+    if (newView === 'section') {
+        // My Section: Only Status and Section filters enabled
+        selectedGrade.value = null;
+        selectedSubject.value = null;
+    } else if (newView === 'subject') {
+        // My Subject Students: Only Status and Subject filters enabled
+        selectedGrade.value = null;
+        selectedSection.value = null;
+    }
+    // For 'all' view, keep all filters as they are
+    
+    loadStudents();
+};
+
+const clearFilters = () => {
+    // Always clear search and status
+    searchQuery.value = '';
+    selectedStatus.value = null;
+    
+    // Only clear enabled filters
+    if (isGradeFilterEnabled.value) {
+        selectedGrade.value = null;
+    }
+    if (isSectionFilterEnabled.value) {
+        selectedSection.value = null;
+    }
+    if (isSubjectFilterEnabled.value) {
+        selectedSubject.value = null;
     }
 };
 
@@ -230,10 +285,7 @@ onMounted(() => {
                         :label="view.label"
                         :icon="view.icon"
                         :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
-                        @click="
-                            currentView = view.value;
-                            loadStudents();
-                        "
+                        @click="changeView(view.value)"
                     />
                 </div>
                 <InputText v-model="searchQuery" placeholder="Search by name or ID..." class="w-64" />
@@ -254,23 +306,39 @@ onMounted(() => {
                     />
                 </div>
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-semibold mb-2">Grade</label>
+                    <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isGradeFilterEnabled }">Grade</label>
                     <Dropdown 
                         v-model="selectedGrade" 
                         :options="availableGrades" 
                         placeholder="All Grades" 
                         class="w-full" 
+                        :class="{ 'opacity-50 cursor-not-allowed': !isGradeFilterEnabled }"
                         :showClear="true"
+                        :disabled="!isGradeFilterEnabled"
                     />
                 </div>
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-semibold mb-2">Section</label>
+                    <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isSectionFilterEnabled }">Section</label>
                     <Dropdown 
                         v-model="selectedSection" 
                         :options="availableSections" 
                         placeholder="All Sections" 
                         class="w-full" 
+                        :class="{ 'opacity-50 cursor-not-allowed': !isSectionFilterEnabled }"
                         :showClear="true"
+                        :disabled="!isSectionFilterEnabled"
+                    />
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isSubjectFilterEnabled }">Subject</label>
+                    <Dropdown 
+                        v-model="selectedSubject" 
+                        :options="availableSubjects" 
+                        placeholder="All Subjects" 
+                        class="w-full" 
+                        :class="{ 'opacity-50 cursor-not-allowed': !isSubjectFilterEnabled }"
+                        :showClear="true"
+                        :disabled="!isSubjectFilterEnabled"
                     />
                 </div>
                 <div class="flex items-end pb-1">
@@ -278,7 +346,7 @@ onMounted(() => {
                         label="Clear Filters" 
                         icon="pi pi-filter-slash" 
                         class="p-button-outlined p-button-secondary" 
-                        @click="selectedStatus = null; selectedGrade = null; selectedSection = null; searchQuery = ''"
+                        @click="clearFilters"
                     />
                 </div>
             </div>
@@ -300,6 +368,11 @@ onMounted(() => {
                 <Column field="name" header="Name" :sortable="true"></Column>
                 <Column field="grade_level" header="Grade" :sortable="true"></Column>
                 <Column field="section" header="Section" :sortable="true"></Column>
+                <Column field="subjects_display" header="Subject(s)" :sortable="true">
+                    <template #body="{ data }">
+                        <span class="text-sm">{{ data.subjects_display || 'No subjects assigned' }}</span>
+                    </template>
+                </Column>
                 <Column field="enrollment_status" header="Status" :sortable="true">
                     <template #body="{ data }">
                         <Tag :value="getStatusLabel(data.enrollment_status)" :severity="getStatusSeverity(data.enrollment_status)" />

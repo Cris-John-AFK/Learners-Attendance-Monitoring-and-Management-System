@@ -109,11 +109,22 @@ class StudentStatusController extends Controller
                     })->get();
             }
             
-            // Format student data with status information
-            $formattedStudents = $students->map(function ($student) {
+            // Get teacher's subject assignments for subject information
+            $teacherSubjects = DB::table('teacher_section_subject as tss')
+                ->join('subjects as sub', 'tss.subject_id', '=', 'sub.id')
+                ->join('sections as sec', 'tss.section_id', '=', 'sec.id')
+                ->where('tss.teacher_id', $teacherId)
+                ->where('tss.is_active', true)
+                ->select('sub.name as subject_name', 'sec.id as section_id', 'sec.name as section_name')
+                ->get()
+                ->groupBy('section_id');
+
+            // Format student data with status and subject information
+            $formattedStudents = $students->map(function ($student) use ($teacherSubjects) {
                 // Get section name from relationship
                 $section = $student->sections->first();
                 $sectionName = $section ? $section->name : null;
+                $sectionId = $section ? $section->id : null;
                 
                 // Get grade name from relationship
                 $gradeName = null;
@@ -123,12 +134,20 @@ class StudentStatusController extends Controller
                     $gradeName = $student->gradeLevel; // Fallback to code
                 }
                 
+                // Get subjects taught by this teacher for this student's section
+                $subjects = [];
+                if ($sectionId && isset($teacherSubjects[$sectionId])) {
+                    $subjects = $teacherSubjects[$sectionId]->pluck('subject_name')->unique()->values()->toArray();
+                }
+                
                 return [
                     'id' => $student->id,
                     'student_id' => $student->studentId,
                     'name' => $student->name ?? ($student->firstName . ' ' . $student->lastName),
                     'grade_level' => $gradeName,
                     'section' => $sectionName,
+                    'subjects' => $subjects, // Array of subject names
+                    'subjects_display' => implode(', ', $subjects), // Comma-separated string for display
                     'enrollment_status' => $student->enrollment_status ?? 'active',
                     'dropout_reason' => $student->dropout_reason,
                     'dropout_reason_category' => $student->dropout_reason_category,
@@ -138,11 +157,23 @@ class StudentStatusController extends Controller
                 ];
             });
 
+            // Get available subjects for filtering
+            $availableSubjects = DB::table('teacher_section_subject as tss')
+                ->join('subjects as sub', 'tss.subject_id', '=', 'sub.id')
+                ->where('tss.teacher_id', $teacherId)
+                ->where('tss.is_active', true)
+                ->select('sub.name')
+                ->distinct()
+                ->pluck('name')
+                ->sort()
+                ->values();
+
             return response()->json([
                 'success' => true,
                 'students' => $formattedStudents,
                 'is_section_adviser' => $isSectionAdviser,
-                'view_type' => $viewType
+                'view_type' => $viewType,
+                'available_subjects' => $availableSubjects
             ]);
 
         } catch (\Exception $e) {

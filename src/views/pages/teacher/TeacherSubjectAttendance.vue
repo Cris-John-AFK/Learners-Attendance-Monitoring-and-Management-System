@@ -83,6 +83,11 @@ const currentDateString = computed(() => {
     return currentDate.value;
 });
 
+// Computed property to get current section name
+const currentSectionName = computed(() => {
+    return route.query.sectionName || 'Unknown Section';
+});
+
 // Function to ensure date is always current
 const ensureCurrentDate = () => {
     const today = new Date();
@@ -454,45 +459,89 @@ const loadStudentsData = async () => {
             throw new Error('Teacher not authenticated');
         }
 
-        // Get teacher's homeroom section directly (more reliable)
-        console.log('🔍 Getting teacher homeroom section for teacher ID:', teacherId.value);
+        // Determine which section to load students from
+        console.log('🔍 Determining section for teacher ID:', teacherId.value, 'subject ID:', subjectId.value);
 
         try {
-            // Check sections cache first
-            let allSections;
-            if (isCacheValid('sections') && permanentCache.sections) {
-                console.log('📦 Using cached sections data');
-                allSections = permanentCache.sections;
-            } else {
-                console.log('🔄 Fetching sections from database...');
-                const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
-                const sectionsData = await sectionsResponse.json();
-                allSections = sectionsData.sections || sectionsData || [];
+            // First, check if we have route parameters that specify a section
+            const routeSectionName = route.query.sectionName;
+            let targetSectionId = null;
+            let targetSectionName = '';
 
-                // Cache sections data
-                permanentCache.sections = allSections;
-                permanentCache.timestamp = Date.now();
+            if (routeSectionName) {
+                console.log('🎯 Route specifies section:', routeSectionName);
+                
+                // Check sections cache first
+                let allSections;
+                if (isCacheValid('sections') && permanentCache.sections) {
+                    console.log('📦 Using cached sections data');
+                    allSections = permanentCache.sections;
+                } else {
+                    console.log('🔄 Fetching sections from database...');
+                    const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
+                    const sectionsData = await sectionsResponse.json();
+                    allSections = sectionsData.sections || sectionsData || [];
+
+                    // Cache sections data
+                    permanentCache.sections = allSections;
+                    permanentCache.timestamp = Date.now();
+                }
+
+                // Find the section by name from route
+                const targetSection = allSections.find((section) => section.name === routeSectionName);
+                if (targetSection) {
+                    targetSectionId = targetSection.id;
+                    targetSectionName = targetSection.name;
+                    console.log('✅ Found target section:', targetSectionName, 'ID:', targetSectionId);
+                } else {
+                    console.warn('⚠️ Section not found:', routeSectionName, 'falling back to homeroom');
+                }
             }
 
-            // Find homeroom section for this teacher
-            const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
-            if (homeroomSection) {
-                console.log('✅ Found homeroom section:', homeroomSection.name, 'ID:', homeroomSection.id);
-                sectionId.value = homeroomSection.id;
+            // If no route section or section not found, fall back to homeroom
+            if (!targetSectionId) {
+                console.log('🏠 No route section specified, using teacher homeroom section');
+                
+                // Check sections cache first (if not already loaded)
+                let allSections;
+                if (isCacheValid('sections') && permanentCache.sections) {
+                    allSections = permanentCache.sections;
+                } else {
+                    console.log('🔄 Fetching sections from database...');
+                    const sectionsResponse = await fetch('http://127.0.0.1:8000/api/sections');
+                    const sectionsData = await sectionsResponse.json();
+                    allSections = sectionsData.sections || sectionsData || [];
+
+                    // Cache sections data
+                    permanentCache.sections = allSections;
+                    permanentCache.timestamp = Date.now();
+                }
+
+                // Find homeroom section for this teacher
+                const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
+                if (homeroomSection) {
+                    targetSectionId = homeroomSection.id;
+                    targetSectionName = homeroomSection.name;
+                    console.log('✅ Found homeroom section:', targetSectionName, 'ID:', targetSectionId);
+                }
+            }
+
+            if (targetSectionId) {
+                sectionId.value = targetSectionId;
 
                 // Use optimized teacher-specific API to avoid loading ALL students
-                console.log('🔄 Loading students for teacher section:', homeroomSection.id);
-                const studentsApiKey = `teacher_${teacherId.value}_students`;
+                console.log('🔄 Loading students for section:', targetSectionName, 'ID:', targetSectionId);
+                const studentsApiKey = `teacher_${teacherId.value}_section_${targetSectionId}_students`;
 
                 // Check if request is already pending
                 if (pendingRequests.has(studentsApiKey)) {
-                    console.log('🔄 Teacher students API call already pending, waiting...');
+                    console.log('🔄 Students API call already pending for section, waiting...');
                 } else {
-                    // Use teacher-specific endpoint to get only relevant students
+                    // Use teacher-specific endpoint to get students from the correct section
                     const requestPromise = TeacherAttendanceService.getStudentsForTeacherSubject(
                         teacherId.value,
-                        homeroomSection.id,
-                        null // null for homeroom
+                        targetSectionId,
+                        subjectId.value || null
                     )
                         .then((data) => {
                             const students = data.students || [];
@@ -504,7 +553,7 @@ const loadStudentsData = async () => {
                             console.warn('Teacher API failed, falling back to sections API:', error);
                             pendingRequests.delete(studentsApiKey);
                             // Fallback to smaller sections-based API
-                            return fetch(`http://127.0.0.1:8000/api/sections/${homeroomSection.id}`)
+                            return fetch(`http://127.0.0.1:8000/api/sections/${targetSectionId}`)
                                 .then((response) => response.json())
                                 .then((data) => data.students || []);
                         });
@@ -514,9 +563,12 @@ const loadStudentsData = async () => {
 
                 const teacherStudents = (await pendingRequests.get(studentsApiKey)) || [];
 
-                // Teacher API already returns filtered students for the section, no need to filter again
+                // Backend now handles filtering out dropped out students
+                console.log('📦 Received students from API:', teacherStudents.length);
                 const filteredStudents = teacherStudents;
 
+                console.log(`✅ Filtered and normalized ${filteredStudents.length} students for section ${targetSectionName}`);
+                
                 // Normalize student data to ensure consistent IDs - use actual database IDs
                 const normalizedStudents = filteredStudents.map((student, index) => {
                     // Use the actual database ID as primary identifier
@@ -529,7 +581,7 @@ const loadStudentsData = async () => {
                         name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
                         firstName: student.first_name || student.firstName || '',
                         lastName: student.last_name || student.lastName || '',
-                        current_section_id: homeroomSection.id,
+                        current_section_id: targetSectionId,
                         studentId: ncsId, // NCS format for display
                         student_id: ncsId, // NCS format for compatibility
                         dbId: dbId // Keep database ID for lookups
@@ -542,7 +594,7 @@ const loadStudentsData = async () => {
                 permanentCache.students = normalizedStudents;
                 permanentCache.timestamp = Date.now();
 
-                console.log('✅ Filtered and normalized', students.value.length, 'students for section', homeroomSection.name);
+                console.log('✅ Filtered and normalized', students.value.length, 'students for section', targetSectionName);
                 console.log(
                     '📋 Student IDs:',
                     students.value.map((s) => s.studentId)
@@ -550,54 +602,17 @@ const loadStudentsData = async () => {
 
                 // Prevent infinite loop - if we still have 0 students, don't retry
                 if (students.value.length === 0) {
-                    console.warn('⚠️ No students found for section', homeroomSection.name, 'ID:', homeroomSection.id);
+                    console.warn('⚠️ No students found for section', targetSectionName, 'ID:', targetSectionId);
                     console.warn('⚠️ This may indicate a data issue or API problem');
                     // Don't return false here to avoid infinite retry loop
                 }
             } else {
-                console.warn('❌ No homeroom section found for teacher', teacherId.value);
-                // Fallback to assignments method
-                const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
-                console.log('Teacher assignments:', assignments);
-
-                const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];
-
-                if (assignmentsArray.length > 0) {
-                    const assignmentData = assignmentsArray[0];
-                    sectionId.value = assignmentData.section_id;
-
-                    // Load students using the assignment data
-                    const resolvedSubjectId = getResolvedSubjectId();
-                    const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, sectionId.value, resolvedSubjectId);
-
-                    if (studentsResponse && studentsResponse.students) {
-                        students.value = studentsResponse.students.map((student) => ({
-                            id: student.id,
-                            name: student.name || `${student.first_name || student.firstName || ''} ${student.last_name || student.lastName || ''}`.trim(),
-                            firstName: student.first_name || student.firstName || '',
-                            lastName: student.last_name || student.lastName || '',
-                            current_section_id: sectionId.value,
-                            studentId: student.studentId || student.id,
-                            student_id: student.studentId || student.id
-                        }));
-                        console.log('✅ Loaded', students.value.length, 'students from assignments');
-                    } else {
-                        students.value = [];
-                    }
-                } else {
-                    console.warn('❌ No assignments found, using fallback');
-                    // Final fallback
-                    sectionId.value = 289; // Ana Cruz's Gumamela section ID
-                    const studentsData = await AttendanceService.getStudentsByGrade('Kindergarten');
-                    students.value = studentsData || [];
-                }
+                console.warn('❌ No target section determined - this should not happen with proper route parameters');
+                throw new Error('Unable to determine target section for student loading');
             }
         } catch (error) {
-            console.error('Error loading homeroom section:', error);
-            // Final fallback
-            sectionId.value = 289; // Ana Cruz's Gumamela section ID
-            const studentsData = await AttendanceService.getStudentsByGrade('Kindergarten');
-            students.value = studentsData || [];
+            console.error('Error loading students data:', error);
+            throw error; // Re-throw to be handled by outer catch
         }
 
         // Validate section_id before proceeding
@@ -1370,6 +1385,7 @@ const cleanupInvalidStudentAssignments = () => {
     console.log('Available student IDs:', availableStudentIds);
 
     let foundInvalid = false;
+    let droppedOutStudents = [];
 
     for (let row = 0; row < seatPlan.value.length; row++) {
         for (let col = 0; col < seatPlan.value[row].length; col++) {
@@ -1378,9 +1394,11 @@ const cleanupInvalidStudentAssignments = () => {
                 console.log(`Checking seat [${row}][${col}] with studentId ${seat.studentId}: ${availableStudentIds.includes(seat.studentId) ? 'FOUND' : 'NOT FOUND'}`);
 
                 if (!availableStudentIds.includes(seat.studentId)) {
-                    console.log(`Removing invalid assignment: ${seat.studentId} from [${row}][${col}]`);
+                    console.log(`🚫 Removing dropped out student: ${seat.studentId} from seat [${row}][${col}]`);
+                    droppedOutStudents.push(seat.studentId);
                     seat.studentId = null;
                     seat.studentName = '';
+                    seat.isOccupied = false;
                     foundInvalid = true;
                 }
             }
@@ -1390,6 +1408,16 @@ const cleanupInvalidStudentAssignments = () => {
     if (foundInvalid) {
         console.log('Found invalid assignments, updating counts');
         calculateUnassignedStudents();
+        
+        // Show notification if dropped out students were removed
+        if (droppedOutStudents.length > 0) {
+            toast.add({
+                severity: 'info',
+                summary: 'Seating Updated',
+                detail: `Removed ${droppedOutStudents.length} dropped out student(s) from seating arrangement`,
+                life: 4000
+            });
+        }
     } else {
         console.log('No invalid assignments found during cleanup');
     }
@@ -2335,19 +2363,41 @@ const completeAttendanceSession = async () => {
             timestamp: new Date().toISOString(),
             sessionData: {
                 ...response.summary,
-                subject_name: subjectName.value // Store the subject name when session was completed
+                subject_name: response.summary?.subject_name || subjectName.value, // Use API subject name if available
+                section_name: currentSectionName.value
             }
         };
+        // Get the actual subject name - use resolved subject name if available
+        let actualSubjectName = response.summary?.subject_name || subjectName.value;
+        
+        // If subject name is still "Loading..." or generic, try to get the real name
+        if (actualSubjectName === 'Loading...' || actualSubjectName === 'Subject') {
+            if (resolvedSubjectId.value) {
+                try {
+                    const subjectDetails = await fetchSubjectDetails(resolvedSubjectId.value);
+                    actualSubjectName = subjectDetails.name || actualSubjectName;
+                    console.log('🔧 Fixed subject name for completion modal:', actualSubjectName);
+                } catch (error) {
+                    console.warn('Could not fetch subject name for completion modal:', error);
+                }
+            }
+        }
+        
+        // Update the completion data with the correct subject name
+        completionData.sessionData.subject_name = actualSubjectName;
         localStorage.setItem(completionKey, JSON.stringify(completionData));
+        
         completedSessionData.value = {
             ...response.summary,
-            subject_name: subjectName.value
+            subject_name: actualSubjectName,
+            section_name: currentSectionName.value
         };
 
         // Add notification with correct method
         const methodNames = {
             qr: 'QR Code Scan',
-            seat_plan: 'Seat Plan'
+            seat_plan: 'Seat Plan',
+            roll_call: 'Roll Call'
         };
 
         const sessionSummaryWithMethod = {
@@ -4279,6 +4329,14 @@ const checkCompletedSessionPersistence = () => {
 
         // Check if it's still the same day and before 11:59 PM
         if (completionTime.toDateString() === now.toDateString() && now.getHours() < 24) {
+            // Check if the subject name is "Loading..." and fix it
+            if (data.sessionData.subject_name === 'Loading...' || data.sessionData.subject_name === 'Subject') {
+                console.log('🔧 Clearing completion data with invalid subject name:', data.sessionData.subject_name);
+                localStorage.removeItem(completionKey);
+                localStorage.removeItem(dismissKey);
+                return; // Don't show modal with invalid data
+            }
+            
             completedSessionData.value = data.sessionData;
             showCompletionModal.value = true;
             setupMidnightTimer();
@@ -4294,14 +4352,16 @@ const saveCompletedSession = (sessionData) => {
         timestamp: new Date().toISOString(),
         sessionData: {
             ...sessionData,
-            subject_name: subjectName.value // Store the subject name when session was completed
+            subject_name: subjectName.value, // Store the subject name when session was completed
+            section_name: currentSectionName.value
         }
     };
 
     localStorage.setItem(completionKey, JSON.stringify(completionData));
     completedSessionData.value = {
         ...sessionData,
-        subject_name: subjectName.value
+        subject_name: subjectName.value,
+        section_name: currentSectionName.value
     };
 
     // Add notification to the system with correct method
@@ -5361,6 +5421,7 @@ const titleRef = ref(null);
         <AttendanceCompletionModal
             :visible="showCompletionModal"
             :subject-name="completedSessionData?.subject_name || subjectName"
+            :section-name="completedSessionData?.section_name || currentSectionName"
             :session-date="new Date().toLocaleDateString()"
             :session-data="completedSessionData"
             @close="handleModalClose"

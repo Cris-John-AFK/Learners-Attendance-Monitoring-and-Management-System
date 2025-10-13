@@ -278,6 +278,8 @@ Route::get('/test/attendance', [App\Http\Controllers\API\TestController::class, 
 Route::post('/attendance-sessions', [AttendanceSessionController::class, 'createSession']);
 Route::post('/attendance-sessions/mark', [AttendanceSessionController::class, 'markAttendance']);
 Route::post('/attendance-sessions/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
+Route::post('/attendance-sessions/{sessionId}/cleanup', [App\Http\Controllers\API\AttendanceSessionController::class, 'cleanupExistingSession']);
+Route::post('/attendance-sessions/cleanup-all', [App\Http\Controllers\API\AttendanceSessionController::class, 'cleanupAllSessions']);
 
 // Students endpoint for attendance sessions
 Route::get('/attendance-sessions/students', [App\Http\Controllers\AttendanceSessionController::class, 'getStudentsForTeacherSubject']);
@@ -353,6 +355,8 @@ Route::get('/qr-codes/image/{studentId}', [QRCodeController::class, 'getQRCodeIm
 Route::post('/qr-codes/validate', [QRCodeController::class, 'validateQRCode']);
 Route::get('/qr-codes', [QRCodeController::class, 'getAllQRCodes']);
 Route::get('/qr-codes/student/{studentId}', [QRCodeController::class, 'getStudentQRCode']);
+Route::post('/qr-codes/disable-inactive', [QRCodeController::class, 'disableQRCodesForInactiveStudents']);
+Route::post('/qr-codes/bulk', [QRCodeController::class, 'getBulkQRCodes']); // 🚀 BULK endpoint
 
 // Student Management and Seating Arrangement routes
 Route::prefix('student-management')->group(function () {

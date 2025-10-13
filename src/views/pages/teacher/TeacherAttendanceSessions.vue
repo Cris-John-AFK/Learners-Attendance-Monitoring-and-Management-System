@@ -30,6 +30,10 @@ const sessionStudents = ref([]);
 const selectedStudents = ref([]);
 const bulkStatus = ref('Present');
 const selectedMonth = ref(null); // For month filter
+const selectedSection = ref(null); // For section filter
+const selectedSubject = ref(null); // For subject filter
+const sectionOptions = ref([]);
+const subjectOptions = ref([]);
 
 // Attendance Reason Dialog states
 const showReasonDialog = ref(false);
@@ -78,17 +82,34 @@ const monthOptions = computed(() => {
     return months;
 });
 
-// Filtered sessions by selected month
+// Filtered sessions by selected month, section, and subject
 const filteredSessions = computed(() => {
-    if (!selectedMonth.value) {
-        return sessions.value;
+    let filtered = sessions.value;
+
+    // Filter by month
+    if (selectedMonth.value) {
+        filtered = filtered.filter((session) => {
+            const sessionDate = new Date(session.session_date);
+            const sessionMonth = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
+            return sessionMonth === selectedMonth.value;
+        });
     }
 
-    return sessions.value.filter((session) => {
-        const sessionDate = new Date(session.session_date);
-        const sessionMonth = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
-        return sessionMonth === selectedMonth.value;
-    });
+    // Filter by section
+    if (selectedSection.value) {
+        filtered = filtered.filter((session) => {
+            return session.section_name === selectedSection.value;
+        });
+    }
+
+    // Filter by subject
+    if (selectedSubject.value) {
+        filtered = filtered.filter((session) => {
+            return session.subject_name === selectedSubject.value;
+        });
+    }
+
+    return filtered;
 });
 
 // Group sessions by date (using filtered sessions)
@@ -160,6 +181,38 @@ const initializeTeacherData = async () => {
     }
 };
 
+// Populate section and subject options from sessions
+const populateFilterOptions = () => {
+    // Get unique sections from sessions
+    const uniqueSections = [...new Set(sessions.value.map(session => session.section_name))];
+    
+    // Create section options
+    sectionOptions.value = [
+        { label: 'All Sections', value: null },
+        ...uniqueSections.map(section => ({
+            label: section,
+            value: section
+        }))
+    ];
+    
+    // Get unique subjects from sessions
+    const uniqueSubjects = [...new Set(sessions.value.map(session => session.subject_name))];
+    
+    // Create subject options
+    subjectOptions.value = [
+        { label: 'All Subjects', value: null },
+        ...uniqueSubjects.map(subject => ({
+            label: subject,
+            value: subject
+        }))
+    ];
+    
+    console.log('Filter options populated:', {
+        sections: sectionOptions.value,
+        subjects: subjectOptions.value
+    });
+};
+
 // Load attendance sessions for the teacher
 const loadAttendanceSessions = async () => {
     if (!teacherId.value) {
@@ -186,6 +239,9 @@ const loadAttendanceSessions = async () => {
 
         sessions.value = response.sessions || [];
         console.log('Sessions stored in reactive variable:', sessions.value.length);
+        
+        // Populate filter options from sessions
+        populateFilterOptions();
     } catch (error) {
         console.error('Error loading attendance sessions:', error);
         toast.add({
@@ -521,10 +577,25 @@ onUnmounted(() => {
                 <p class="text-gray-600">View and edit your attendance sessions</p>
             </div>
 
-            <!-- Month Filter -->
-            <div class="flex items-center gap-3">
-                <label class="text-sm font-medium text-gray-700">Filter by Month:</label>
-                <Dropdown v-model="selectedMonth" :options="monthOptions" optionLabel="label" optionValue="value" placeholder="All Months" class="w-64" showClear />
+            <!-- Filters -->
+            <div class="flex flex-wrap items-center gap-4">
+                <!-- Month Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">Month:</label>
+                    <Dropdown v-model="selectedMonth" :options="monthOptions" optionLabel="label" optionValue="value" placeholder="All Months" class="w-52" showClear />
+                </div>
+                
+                <!-- Section Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">Section:</label>
+                    <Dropdown v-model="selectedSection" :options="sectionOptions" optionLabel="label" optionValue="value" placeholder="All Sections" class="w-40" showClear />
+                </div>
+                
+                <!-- Subject Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">Subject:</label>
+                    <Dropdown v-model="selectedSubject" :options="subjectOptions" optionLabel="label" optionValue="value" placeholder="All Subjects" class="w-40" showClear />
+                </div>
             </div>
         </div>
 
@@ -544,7 +615,15 @@ onUnmounted(() => {
         <!-- Sessions Count -->
         <div v-if="!loading && sessions.length > 0" class="mb-4 text-sm text-gray-600">
             Showing <span class="font-semibold text-gray-800">{{ filteredSessions.length }}</span> of <span class="font-semibold text-gray-800">{{ sessions.length }}</span> sessions
-            <span v-if="selectedMonth" class="ml-2 text-blue-600"> (Filtered by {{ monthOptions.find((m) => m.value === selectedMonth)?.label }}) </span>
+            <span v-if="selectedMonth || selectedSection || selectedSubject" class="ml-2 text-blue-600">
+                (Filtered by 
+                <span v-if="selectedMonth">{{ monthOptions.find((m) => m.value === selectedMonth)?.label }}</span>
+                <span v-if="(selectedMonth && selectedSection) || (selectedMonth && selectedSubject)"> & </span>
+                <span v-if="selectedSection">{{ selectedSection }}</span>
+                <span v-if="selectedSection && selectedSubject"> & </span>
+                <span v-if="selectedSubject">{{ selectedSubject }}</span>
+                )
+            </span>
         </div>
 
         <!-- Sessions by Date -->
