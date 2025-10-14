@@ -1,6 +1,8 @@
 <script setup>
 import { GradesService } from '@/router/service/GradesService';
 import { SectionService } from '@/router/service/SectionService';
+import { TeacherService } from '@/router/service/TeacherService';
+import { useRouter } from 'vue-router';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
@@ -12,15 +14,14 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const toast = useToast();
 const sections = ref([]);
+const router = useRouter();
 const grades = ref([]);
 const filterGrades = ref([]);
 const loading = ref(true);
 const sectionDialog = ref(false);
 const deleteSectionDialog = ref(false);
 const selectedGrade = ref(null);
-const showSectionDetails = ref(false);
-const detailsEditMode = ref(false);
-const modalContainer = ref(null);
+// Removed Section Details modal per request
 const searchQuery = ref('');
 
 const section = ref({
@@ -115,12 +116,20 @@ const loadSections = async () => {
         loading.value = true;
         console.log('Fetching sections from API...');
 
-        const data = await SectionService.getSections();
-        // Transform the data to include grade name
-        sections.value = data.map((section) => ({
-            ...section,
-            gradeName: section.grade?.name || 'No Grade'
-        }));
+        const [data, teachers] = await Promise.all([SectionService.getSections(), TeacherService.getTeachers()]);
+        const teacherNameById = new Map((teachers || []).map((t) => [t.id, `${t.first_name || t.firstName || ''} ${t.last_name || t.lastName || ''}`.trim()]));
+
+        // Transform the data to include grade name and homeroom teacher name
+        sections.value = (data || []).map((section) => {
+            const homeroomId = section.homeroom_teacher_id || section.homeroomTeacherId || section.homeroom_teacher?.id;
+            const homeroomName = homeroomId ? teacherNameById.get(homeroomId) || `Teacher ${homeroomId}` : 'Not set';
+            return {
+                ...section,
+                gradeName: section.grade?.name || 'No Grade',
+                homeroomTeacherId: homeroomId || null,
+                homeroomTeacherName: homeroomName
+            };
+        });
         console.log('Loaded sections:', sections.value);
 
         loading.value = false;
@@ -241,15 +250,7 @@ const editSection = (sect) => {
         ...sect,
         grade: typeof sect.grade === 'object' ? sect.grade : sect.grade
     };
-
-    if (showSectionDetails.value) {
-        detailsEditMode.value = true;
-    } else {
-        openDetailsModal(sect);
-        nextTick(() => {
-            detailsEditMode.value = true;
-        });
-    }
+    sectionDialog.value = true;
 };
 
 const confirmDelete = (sect) => {
@@ -257,31 +258,7 @@ const confirmDelete = (sect) => {
     deleteSectionDialog.value = true;
 };
 
-const openDetailsModal = (sect) => {
-    section.value = { ...sect };
-    showSectionDetails.value = true;
-    detailsEditMode.value = false;
-    nextTick(() => {
-        if (modalContainer.value) {
-            modalContainer.value.classList.add('six');
-            document.body.classList.add('modal-active');
-        }
-    });
-};
-
-const closeDetailsModal = () => {
-    if (modalContainer.value) {
-        modalContainer.value.classList.add('out');
-    }
-    document.body.classList.remove('modal-active');
-    setTimeout(() => {
-        showSectionDetails.value = false;
-        detailsEditMode.value = false;
-        if (modalContainer.value) {
-            modalContainer.value.classList.remove('six', 'out');
-        }
-    }, 300);
-};
+// Removed modal open/close handlers
 
 const filterSections = () => {
     console.log('Filtering sections...');
@@ -351,6 +328,16 @@ onMounted(async () => {
     await loadGrades();
     await loadSections();
 });
+
+// Actions for buttons on the card
+const goToSchedules = (sect) => {
+    router.push({ path: '/subject-scheduling', query: { sectionId: sect.id } });
+};
+
+const changeHomeroomTeacher = (sect) => {
+    // Navigate to curriculum with preselected section for teacher assignment
+    router.push({ path: '/admin-curriculum', query: { sectionId: sect.id } });
+};
 </script>
 
 <template>
@@ -395,7 +382,7 @@ onMounted(async () => {
 
             <!-- Cards Grid -->
             <div v-else class="cards-grid">
-                <div v-for="section in filteredSections" :key="section.id" class="subject-card" :style="cardStyles[section.id]" @click="openDetailsModal(section)">
+                <div v-for="section in filteredSections" :key="section.id" class="subject-card" :style="cardStyles[section.id]">
                     <!-- Floating symbols -->
                     <span class="symbol">§</span>
                     <span class="symbol">✦</span>
@@ -405,11 +392,22 @@ onMounted(async () => {
 
                     <div class="card-content">
                         <h1 class="subject-title">{{ section.name }}</h1>
-                        <div class="grade-badge">{{ section.grade?.name || 'No Grade' }}</div>
-                        <div class="card-actions">
-                            <Button icon="pi pi-pencil" class="p-button-rounded p-button-text" @click.stop="editSection(section)" />
-                            <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger" @click.stop="confirmDelete(section)" />
+                        <div class="info-row">
+                            <i class="pi pi-users mr-2"></i>
+                            <span>Capacity:</span>
+                            <span class="font-semibold ml-1">{{ section.capacity || '—' }}</span>
                         </div>
+                        <div class="info-row">
+                            <i class="pi pi-id-card mr-2"></i>
+                            <span>Homeroom Teacher:</span>
+                            <span class="font-semibold ml-1">{{ section.homeroomTeacherName || 'Not set' }}</span>
+                        </div>
+                        <div class="actions-row">
+                            <Button label="Change Teacher" icon="pi pi-user-edit" severity="info" class="mr-2" @click.stop="changeHomeroomTeacher(section)" />
+                            <Button label="Schedules" icon="pi pi-calendar" severity="help" class="mr-2" @click.stop="goToSchedules(section)" />
+                            <Button label="Delete" icon="pi pi-trash" severity="danger" @click.stop="confirmDelete(section)" />
+                        </div>
+                        <div class="grade-badge">{{ section.grade?.name || 'No Grade' }}</div>
                     </div>
                 </div>
             </div>
@@ -420,70 +418,7 @@ onMounted(async () => {
             </div>
         </div>
 
-        <!-- Sketch Style Modal -->
-        <div v-if="showSectionDetails" ref="modalContainer" id="modal-container">
-            <div class="modal-background" @click="closeDetailsModal">
-                <div class="modal" @click.stop>
-                    <div class="modal-header">
-                        <h2>{{ detailsEditMode ? 'Edit Section' : 'Section Details' }}</h2>
-                        <Button icon="pi pi-times" class="p-button-rounded p-button-text close-button" @click="closeDetailsModal" aria-label="Close" />
-                    </div>
-
-                    <!-- View Mode -->
-                    <div v-if="!detailsEditMode" class="modal-content">
-                        <div class="subject-details">
-                            <div class="detail-row">
-                                <label>Name:</label>
-                                <span>{{ section.name }}</span>
-                            </div>
-                            <div class="detail-row">
-                                <label>Grade:</label>
-                                <span>{{ section.grade?.name || 'No Grade' }}</span>
-                            </div>
-                            <div class="detail-row description">
-                                <label>Description:</label>
-                                <p>{{ section.description || 'No description available.' }}</p>
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <Button label="Edit" icon="pi pi-pencil" class="p-button-primary" @click="detailsEditMode = true" />
-                            <Button label="Delete" icon="pi pi-trash" class="p-button-danger" @click="confirmDelete(section)" />
-                        </div>
-                    </div>
-
-                    <!-- Edit Mode -->
-                    <div v-else class="modal-content">
-                        <div class="edit-form">
-                            <div class="field">
-                                <label for="name">Name</label>
-                                <InputText id="name" v-model="section.name" required placeholder="Enter section name" :class="{ 'p-invalid': submitted && !section.name }" />
-                                <small class="p-error" v-if="submitted && !section.name">Name is required.</small>
-                            </div>
-                            <div class="field">
-                                <label for="grade">Grade</label>
-                                <div class="select-wrapper">
-                                    <Select id="grade" v-model="section.grade" :options="grades" optionLabel="name" placeholder="Select a grade" :class="{ 'p-invalid': submitted && !section.grade }" appendTo="body" />
-                                </div>
-                                <small class="p-error" v-if="submitted && !section.grade">Grade is required.</small>
-                            </div>
-                            <div class="field">
-                                <label for="description">Description</label>
-                                <Textarea id="description" v-model="section.description" rows="3" placeholder="Add a description" />
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="detailsEditMode = false" />
-                            <Button label="Save" icon="pi pi-check" class="p-button-raised p-button-primary save-button-custom" @click="saveSection" />
-                        </div>
-                    </div>
-
-                    <!-- Modal SVG for sketch animation -->
-                    <svg class="modal-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
-                        <rect x="0" y="0" fill="none" width="100%" height="100%" rx="12" ry="12"></rect>
-                    </svg>
-                </div>
-            </div>
-        </div>
+        <!-- Section Details modal removed per request -->
 
         <!-- Add/Edit Dialog (used only for adding new) -->
         <Dialog v-model:visible="sectionDialog" :header="section.id ? 'Edit Section' : 'Add Section'" modal class="p-fluid section-dialog" :style="{ width: '500px' }" :breakpoints="{ '960px': '75vw', '640px': '90vw' }">
@@ -1205,8 +1140,6 @@ onMounted(async () => {
     stroke-width: 2px;
     stroke-dasharray: 1500;
     stroke-dashoffset: 1500;
-    rx: 12px;
-    ry: 12px;
 }
 
 /* Modal Animations */

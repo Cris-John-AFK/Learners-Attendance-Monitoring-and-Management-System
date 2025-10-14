@@ -715,12 +715,17 @@ export const CurriculumService = {
                             grade_id: subject.grade_id || gradeId,
                             status: subject.status || 'Active',
                             is_active: subject.is_active !== undefined ? subject.is_active : true,
+                            // CRITICAL: Preserve teacher information from API response
+                            teacher_id: subject.teacher_id,
+                            teacher: subject.teacher,
+                            teacher_name: subject.teacher_name,
                             // CRITICAL: Preserve the schedules array from API response
                             schedules: subject.schedules || [],
                             // Make sure the pivot data is included
                             pivot: subject.pivot || {
                                 section_id: sectionId,
                                 subject_id: subject.id,
+                                teacher_id: subject.teacher_id,
                                 created_at: subject.created_at || new Date().toISOString(),
                                 updated_at: subject.updated_at || new Date().toISOString()
                             }

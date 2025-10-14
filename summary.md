@@ -52,7 +52,61 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## Major Features Implemented
 
-### 🚨 RECENT CRITICAL FIXES & MAJOR UPDATES (October 4, 2025)
+### 🚨 RECENT CRITICAL FIXES & MAJOR UPDATES (October 15, 2025)
+
+#### **ADMIN CURRICULUM SECTION MANAGEMENT - COMPLETE OVERHAUL** ✅ NEW
+**Feature**: Fixed and enhanced Admin Curriculum section management with proper teacher display, subject assignments, and streamlined UI.
+
+**Critical Backend Fixes**:
+1. **Fixed Subject Query** (`SectionController.php` → `getSubjects()`)
+   - **Problem**: API was querying wrong table (`section_subject` pivot) instead of `teacher_section_subject`
+   - **Solution**: Rewrote query to directly access `teacher_section_subject` table
+   - **Result**: Now correctly returns subjects WITH teacher information
+   - **Data Returned**: Each subject includes `teacher_id`, `teacher` object (first_name, last_name, name), `teacher_name`, and `schedules` array
+
+2. **Synced Homeroom Teachers** (Migration: `2025_10_15_011000_sync_homeroom_teachers.php`)
+   - **Problem**: Homeroom teachers stored in `teacher_section_subject` table but not synced to `sections.homeroom_teacher_id`
+   - **Solution**: Created migration to sync homeroom teacher data from `teacher_section_subject` to `sections` table
+   - **Result**: Section cards now display correct homeroom teacher names
+
+**Frontend Improvements** (`Curriculum.vue`):
+1. **Removed Section Details Tab**: Simplified UI by removing redundant "⚙️ Section Details" tab, keeping only "📚 Subjects" tab
+2. **Removed Capacity Display**: Cleaner section cards without "Capacity: X students" line
+3. **Enhanced Teacher Display**:
+   - Changed fallback from "Teacher 1" to "No teacher assigned"
+   - Handles multiple backend data structures: `teacher` object, `teacher_id`, `pivot.teacher_id`, `teacher_name`
+   - Added comprehensive console logging for debugging
+
+**Technical Details**:
+```php
+// Backend Query (SectionController.php)
+$assignments = DB::table('teacher_section_subject as tss')
+    ->join('subjects as s', 'tss.subject_id', '=', 's.id')
+    ->leftJoin('teachers as t', 'tss.teacher_id', '=', 't.id')
+    ->where('tss.section_id', $sectionId)
+    ->where('tss.is_active', true)
+    ->whereNotNull('tss.subject_id')
+    ->select('s.id', 's.name', 's.code', 's.description', 's.is_active',
+             'tss.teacher_id', 't.first_name', 't.last_name')
+    ->distinct()
+    ->get();
+```
+
+**User Experience Improvements**:
+- **Section Cards**: Now show full homeroom teacher names (e.g., "Maria Santos" instead of "No teacher assigned")
+- **Schedules Dialog**: Clicking "Schedules" button now displays:
+  - All assigned subjects for the section
+  - Teacher name for each subject
+  - Full weekly schedules with days and times
+- **Faster Loading**: Removed unnecessary API calls and fallback logic
+- **Cleaner UI**: Removed redundant tabs and capacity information
+
+**Database Structure Clarification**:
+- `teacher_section_subject` table is the **source of truth** for:
+  - Subject assignments (with `subject_id`)
+  - Homeroom assignments (with `role = 'homeroom'`)
+  - Teacher-section-subject relationships
+- `sections.homeroom_teacher_id` is now **synchronized** from `teacher_section_subject`
 
 #### **GEOGRAPHIC ATTENDANCE HEATMAP SYSTEM - PRODUCTION READY**
 **Feature**: Revolutionary geographic attendance visualization system that maps student attendance patterns by location using real Naawan, Misamis Oriental addresses.
