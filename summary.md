@@ -1588,6 +1588,13 @@ const getSessionFilterOptions = (sessionId) => {
 - **Performance Optimized**: Client-side filtering, efficient API calls, minimal redundancy
 - **Mobile Responsive**: All new features work seamlessly on mobile devices
 
+### UI Polish (October 14, 2025)
+- Admin Collected Reports header and filters aligned and modernized.
+  - Implemented responsive grid `.filters-bar` (3 inputs + auto-width action). Tablet = 2-cols; Mobile = 1-col.
+  - Increased spacing, padding, and input height for breathing room; filter container restyled as white card with shadow and rounded corners; button min-width and full-width on small screens.
+  - Header alignment fix: search input aligned to the right of the title/metrics on a single row (wraps gracefully on medium screens). Normalized calendar control and Reset button heights to 44px to match other fields.
+  - Classes touched only in `Admin-CollectedReports.vue`; no JS/logic changes.
+
 ### SYSTEM RELIABILITY
 - **Zero Breaking Changes**: All existing functionality preserved
 - **Backward Compatible**: New features don't affect existing workflows

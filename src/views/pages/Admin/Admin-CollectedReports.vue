@@ -1,8 +1,8 @@
 <script setup>
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
-import { computed, onMounted, ref, onUnmounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 const toast = useToast();
 const router = useRouter();
@@ -505,26 +505,44 @@ const viewSF2Report = async (reportData) => {
         // Fetch the actual SF2 report data from backend
         const sectionId = reportData.section_id || reportData.id;
         let month = reportData.month || reportData.month_name;
-        
+
         // Convert month name to YYYY-MM format if needed
         if (month && !month.match(/^\d{4}-\d{2}$/)) {
             // Handle month names like "September 2025", "September", "AUGUST 2025", etc.
             const currentYear = new Date().getFullYear();
             const monthMap = {
-                'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                'May': '05', 'June': '06', 'July': '07', 'August': '08',
-                'September': '09', 'October': '10', 'November': '11', 'December': '12',
+                January: '01',
+                February: '02',
+                March: '03',
+                April: '04',
+                May: '05',
+                June: '06',
+                July: '07',
+                August: '08',
+                September: '09',
+                October: '10',
+                November: '11',
+                December: '12',
                 // Handle uppercase versions
-                'JANUARY': '01', 'FEBRUARY': '02', 'MARCH': '03', 'APRIL': '04',
-                'MAY': '05', 'JUNE': '06', 'JULY': '07', 'AUGUST': '08',
-                'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
+                JANUARY: '01',
+                FEBRUARY: '02',
+                MARCH: '03',
+                APRIL: '04',
+                MAY: '05',
+                JUNE: '06',
+                JULY: '07',
+                AUGUST: '08',
+                SEPTEMBER: '09',
+                OCTOBER: '10',
+                NOVEMBER: '11',
+                DECEMBER: '12'
             };
-            
+
             // Extract month name and year
             const parts = month.split(' ');
             const monthName = parts[0];
             const year = parts[1] || currentYear;
-            
+
             if (monthMap[monthName]) {
                 month = `${year}-${monthMap[monthName]}`;
             }
@@ -536,20 +554,19 @@ const viewSF2Report = async (reportData) => {
         console.log('Section Name:', reportData.section || reportData.section_name);
         console.log('Month (original):', reportData.month || reportData.month_name);
         console.log('Month (converted):', month);
-        
+
         // First, try to get the submitted report to see what section ID was actually used
         try {
             const submittedResponse = await fetch('http://127.0.0.1:8000/api/sf2/submitted');
             if (submittedResponse.ok) {
                 const submittedReports = await submittedResponse.json();
                 console.log('All submitted reports:', submittedReports);
-                
+
                 // Find the matching report
-                const matchingReport = submittedReports.find(report => 
-                    (report.section_name === reportData.section || report.section_name === reportData.section_name) &&
-                    (report.month_name === reportData.month || report.month_name === reportData.month_name)
+                const matchingReport = submittedReports.find(
+                    (report) => (report.section_name === reportData.section || report.section_name === reportData.section_name) && (report.month_name === reportData.month || report.month_name === reportData.month_name)
                 );
-                
+
                 if (matchingReport) {
                     console.log('Found matching submitted report:', matchingReport);
                     sectionId = matchingReport.section_id;
@@ -559,7 +576,7 @@ const viewSF2Report = async (reportData) => {
         } catch (error) {
             console.error('Error fetching submitted reports:', error);
         }
-        
+
         console.log('Final API URL:', `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
         console.log('=== ADMIN CALLING SAME API AS TEACHER ===');
         console.log('If teacher uses section ID 2 for Matatag, admin should also use section ID 2');
@@ -569,7 +586,7 @@ const viewSF2Report = async (reportData) => {
         // First try to get the submitted SF2 data (exact data teacher submitted)
         let response;
         let usingSubmittedData = false;
-        
+
         try {
             // Try to get the exact submitted data first
             response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
@@ -598,58 +615,59 @@ const viewSF2Report = async (reportData) => {
         console.log('Students in response:', data.data?.students);
         console.log('Number of students:', data.data?.students?.length);
         console.log('First student:', data.data?.students?.[0]);
-        console.log('Student names:', data.data?.students?.map(s => `${s.firstName} ${s.lastName}`));
-        
+        console.log(
+            'Student names:',
+            data.data?.students?.map((s) => `${s.firstName} ${s.lastName}`)
+        );
+
         // Debug attendance data for first student
         if (data.data?.students?.[0]) {
             const firstStudent = data.data.students[0];
             console.log('=== ATTENDANCE DATA DEBUG ===');
             console.log('First student attendance_data:', firstStudent.attendance_data);
             console.log('Sample attendance marks:');
-            Object.keys(firstStudent.attendance_data || {}).slice(0, 5).forEach(date => {
-                console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
-            });
+            Object.keys(firstStudent.attendance_data || {})
+                .slice(0, 5)
+                .forEach((date) => {
+                    console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
+                });
         }
 
         // Process the API response data
         if (data.success && data.data && data.data.students && data.data.students.length > 0) {
             sf2ReportData.value = data.data;
-            
+
             console.log('SF2 Data loaded:', sf2ReportData.value);
             console.log('Students loaded:', sf2ReportData.value.students);
-            
+
             // Check if we're getting sample data (fallback from backend)
             const firstStudent = data.data.students[0];
-            const isSampleData = firstStudent && 
-                (firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') ||
-                (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
-            
+            const isSampleData = (firstStudent && firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') || (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
+
             if (isSampleData) {
                 console.warn('WARNING: Getting sample data from backend - trying alternative approach');
-                
+
                 // Try to get real students from students API and match by section name
                 try {
                     const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
                     if (studentsResponse.ok) {
                         const studentsData = await studentsResponse.json();
                         const sectionName = reportData.section || reportData.section_name;
-                        
+
                         // Filter students by section name or look for specific students from teacher's view
-                        let realStudents = studentsData.filter(student => 
-                            student.section === sectionName || 
-                            student.current_section_name === sectionName ||
-                            student.gradeLevel === 'Grade 1' // Fallback for Matatag section
+                        let realStudents = studentsData.filter(
+                            (student) => student.section === sectionName || student.current_section_name === sectionName || student.gradeLevel === 'Grade 1' // Fallback for Matatag section
                         );
-                        
+
                         // Log all students to see what's available
                         console.log('All students from API:', studentsData);
                         console.log('Filtered students for section:', realStudents);
-                        
+
                         if (realStudents.length > 0) {
                             console.log('Found real students via alternative method:', realStudents);
-                            
+
                             // Replace sample data with real students
-                            sf2ReportData.value.students = realStudents.map(student => ({
+                            sf2ReportData.value.students = realStudents.map((student) => ({
                                 id: student.id,
                                 name: `${student.lastName || student.last_name}, ${student.firstName || student.first_name} ${student.middleName || student.middle_name || ''}`,
                                 firstName: student.firstName || student.first_name,
@@ -661,7 +679,7 @@ const viewSF2Report = async (reportData) => {
                                 total_absent: 0,
                                 attendance_rate: 0
                             }));
-                            
+
                             toast.add({
                                 severity: 'success',
                                 summary: 'Real Students Found',
@@ -687,14 +705,12 @@ const viewSF2Report = async (reportData) => {
                 }
             } else {
                 // Show detailed information about what data was loaded
-                const studentNames = data.data.students.map(s => `${s.firstName} ${s.lastName}`).join(', ');
+                const studentNames = data.data.students.map((s) => `${s.firstName} ${s.lastName}`).join(', ');
                 const dataSource = usingSubmittedData ? 'SUBMITTED DATA' : 'LIVE API';
                 toast.add({
                     severity: usingSubmittedData ? 'success' : 'info',
                     summary: `SF2 Data Loaded (${dataSource})`,
-                    detail: usingSubmittedData ? 
-                        `Showing exact data teacher submitted: ${studentNames}` : 
-                        `Using live API data: ${studentNames}`,
+                    detail: usingSubmittedData ? `Showing exact data teacher submitted: ${studentNames}` : `Using live API data: ${studentNames}`,
                     life: 8000
                 });
             }
@@ -706,7 +722,7 @@ const viewSF2Report = async (reportData) => {
                 detail: `No submitted SF2 report found for ${reportData.section} - ${month}`,
                 life: 5000
             });
-            
+
             // Set empty data structure
             sf2ReportData.value = {
                 students: [],
@@ -754,15 +770,24 @@ const downloadSF2Report = async (reportData) => {
         if (month && !month.match(/^\d{4}-\d{2}$/)) {
             const currentYear = new Date().getFullYear();
             const monthMap = {
-                'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                'May': '05', 'June': '06', 'July': '07', 'August': '08',
-                'September': '09', 'October': '10', 'November': '11', 'December': '12'
+                January: '01',
+                February: '02',
+                March: '03',
+                April: '04',
+                May: '05',
+                June: '06',
+                July: '07',
+                August: '08',
+                September: '09',
+                October: '10',
+                November: '11',
+                December: '12'
             };
-            
+
             const parts = month.split(' ');
             const monthName = parts[0];
             const year = parts[1] || currentYear;
-            
+
             if (monthMap[monthName]) {
                 month = `${year}-${monthMap[monthName]}`;
             }
@@ -815,62 +840,62 @@ const getTotalStudents = () => {
 // Generate remarks text for student based on status
 const getStudentRemarks = (student) => {
     if (!student) return '-';
-    
+
     // Check if student has dropout/transfer status
     if (student.enrollment_status === 'dropped_out' && student.dropout_reason) {
         // Map reason codes to full text as per DepEd guidelines
         const reasonMap = {
-            'a1': 'a.1 Had to take care of siblings',
-            'a2': 'a.2 Early marriage/pregnancy', 
-            'a3': 'a.3 Parents\' attitude toward schooling',
-            'a4': 'a.4 Family problems',
-            'b1': 'b.1 Illness',
-            'b2': 'b.2 Disease', 
-            'b3': 'b.3 Death',
-            'b4': 'b.4 Disability',
-            'b5': 'b.5 Poor academic performance',
-            'b6': 'b.6 Disinterest/lack of ambitions',
-            'b7': 'b.7 Hunger/Malnutrition',
-            'c1': 'c.1 Teacher Factor',
-            'c2': 'c.2 Physical condition of classroom',
-            'c3': 'c.3 Peer Factor',
-            'd1': 'd.1 Distance from home to school',
-            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
-            'd3': 'd.3 Calamities/disaster',
-            'd4': 'd.4 Work-Related',
-            'd5': 'd.5 Transferred/work'
+            a1: 'a.1 Had to take care of siblings',
+            a2: 'a.2 Early marriage/pregnancy',
+            a3: "a.3 Parents' attitude toward schooling",
+            a4: 'a.4 Family problems',
+            b1: 'b.1 Illness',
+            b2: 'b.2 Disease',
+            b3: 'b.3 Death',
+            b4: 'b.4 Disability',
+            b5: 'b.5 Poor academic performance',
+            b6: 'b.6 Disinterest/lack of ambitions',
+            b7: 'b.7 Hunger/Malnutrition',
+            c1: 'c.1 Teacher Factor',
+            c2: 'c.2 Physical condition of classroom',
+            c3: 'c.3 Peer Factor',
+            d1: 'd.1 Distance from home to school',
+            d2: 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            d3: 'd.3 Calamities/disaster',
+            d4: 'd.4 Work-Related',
+            d5: 'd.5 Transferred/work'
         };
-        
+
         const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
         return `DROPPED OUT - ${reasonText}`;
     }
-    
+
     if (student.enrollment_status === 'transferred_out') {
         const reasonMap = {
-            'a1': 'a.1 Had to take care of siblings',
-            'a2': 'a.2 Early marriage/pregnancy', 
-            'a3': 'a.3 Parents\' attitude toward schooling',
-            'a4': 'a.4 Family problems',
-            'b1': 'b.1 Illness',
-            'b2': 'b.2 Disease', 
-            'b4': 'b.4 Disability',
-            'c1': 'c.1 Teacher Factor',
-            'c2': 'c.2 Physical condition of classroom',
-            'c3': 'c.3 Peer Factor',
-            'd1': 'd.1 Distance from home to school',
-            'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
-            'd3': 'd.3 Calamities/disaster',
-            'd4': 'd.4 Work-Related',
-            'd5': 'd.5 Transferred/work'
+            a1: 'a.1 Had to take care of siblings',
+            a2: 'a.2 Early marriage/pregnancy',
+            a3: "a.3 Parents' attitude toward schooling",
+            a4: 'a.4 Family problems',
+            b1: 'b.1 Illness',
+            b2: 'b.2 Disease',
+            b4: 'b.4 Disability',
+            c1: 'c.1 Teacher Factor',
+            c2: 'c.2 Physical condition of classroom',
+            c3: 'c.3 Peer Factor',
+            d1: 'd.1 Distance from home to school',
+            d2: 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+            d3: 'd.3 Calamities/disaster',
+            d4: 'd.4 Work-Related',
+            d5: 'd.5 Transferred/work'
         };
         const reasonText = reasonMap[student.dropout_reason] || student.dropout_reason;
         return `TRANSFERRED OUT - ${reasonText}`;
     }
-    
+
     if (student.enrollment_status === 'transferred_in') {
         return 'TRANSFERRED IN';
     }
-    
+
     return '-';
 };
 
@@ -970,7 +995,7 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
     if (student.attendance_data) {
         // Try different date formats that might be used
         let status = null;
-        
+
         // Try the day as-is (might be YYYY-MM-DD format)
         if (student.attendance_data[day]) {
             status = student.attendance_data[day];
@@ -980,9 +1005,9 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
             // If day is a number, try to find it in the attendance data
             const dayNum = parseInt(day);
             const dateKeys = Object.keys(student.attendance_data);
-            
+
             // Look for a date that matches this day number
-            const matchingDate = dateKeys.find(dateKey => {
+            const matchingDate = dateKeys.find((dateKey) => {
                 if (dateKey.includes('-')) {
                     // Extract day from YYYY-MM-DD format
                     const dateParts = dateKey.split('-');
@@ -991,16 +1016,16 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
                 }
                 return false;
             });
-            
+
             if (matchingDate) {
                 status = student.attendance_data[matchingDate];
             }
         }
-        
+
         if (status) {
             const statusLower = status.toLowerCase();
             console.log('Found status:', statusLower, 'for day:', day);
-            
+
             switch (statusLower) {
                 case 'present':
                     return '✓';
@@ -1031,48 +1056,48 @@ const getTotalForDay = (isEmpty = false) => {
 // Calculate total present students for a specific day (Male students)
 const getMalePresentForDay = (day, isEmpty = false) => {
     if (isEmpty) return '';
-    
+
     const maleStudents = getMaleStudents();
     let presentCount = 0;
-    
-    maleStudents.forEach(student => {
+
+    maleStudents.forEach((student) => {
         const mark = getAttendanceMark(student, day, false);
         if (mark === '✓') {
             presentCount++;
         }
     });
-    
+
     return presentCount > 0 ? presentCount : '';
 };
 
 // Calculate total present students for a specific day (Female students)
 const getFemalePresentForDay = (day, isEmpty = false) => {
     if (isEmpty) return '';
-    
+
     const femaleStudents = getFemaleStudents();
     let presentCount = 0;
-    
-    femaleStudents.forEach(student => {
+
+    femaleStudents.forEach((student) => {
         const mark = getAttendanceMark(student, day, false);
         if (mark === '✓') {
             presentCount++;
         }
     });
-    
+
     return presentCount > 0 ? presentCount : '';
 };
 
 // Calculate combined total present students for a specific day
 const getCombinedPresentForDay = (day, isEmpty = false) => {
     if (isEmpty) return '';
-    
+
     const malePresent = getMalePresentForDay(day, false);
     const femalePresent = getFemalePresentForDay(day, false);
-    
+
     const maleCount = typeof malePresent === 'number' ? malePresent : 0;
     const femaleCount = typeof femalePresent === 'number' ? femalePresent : 0;
     const total = maleCount + femaleCount;
-    
+
     return total > 0 ? total : '';
 };
 
@@ -1080,11 +1105,11 @@ const getCombinedPresentForDay = (day, isEmpty = false) => {
 const getMaleTotalPresent = () => {
     const maleStudents = getMaleStudents();
     let totalPresent = 0;
-    
+
     const schoolDays = getSchoolDays();
-    schoolDays.forEach(schoolDay => {
+    schoolDays.forEach((schoolDay) => {
         if (!schoolDay.isEmpty) {
-            maleStudents.forEach(student => {
+            maleStudents.forEach((student) => {
                 const mark = getAttendanceMark(student, schoolDay.date, false);
                 if (mark === '✓') {
                     totalPresent++;
@@ -1092,7 +1117,7 @@ const getMaleTotalPresent = () => {
             });
         }
     });
-    
+
     return totalPresent;
 };
 
@@ -1100,11 +1125,11 @@ const getMaleTotalPresent = () => {
 const getFemaleTotalPresent = () => {
     const femaleStudents = getFemaleStudents();
     let totalPresent = 0;
-    
+
     const schoolDays = getSchoolDays();
-    schoolDays.forEach(schoolDay => {
+    schoolDays.forEach((schoolDay) => {
         if (!schoolDay.isEmpty) {
-            femaleStudents.forEach(student => {
+            femaleStudents.forEach((student) => {
                 const mark = getAttendanceMark(student, schoolDay.date, false);
                 if (mark === '✓') {
                     totalPresent++;
@@ -1112,7 +1137,7 @@ const getFemaleTotalPresent = () => {
             });
         }
     });
-    
+
     return totalPresent;
 };
 
@@ -1124,23 +1149,20 @@ const getCombinedTotalPresent = () => {
 // Format month display (convert 2025-08 to AUGUST 2025)
 const formatMonthDisplay = (monthValue) => {
     if (!monthValue) return 'OCTOBER 2025';
-    
+
     // If it's already in the correct format (like "AUGUST 2025"), return as is
     if (monthValue.includes(' ') && monthValue.length > 10) {
         return monthValue.toUpperCase();
     }
-    
+
     // If it's in YYYY-MM format (like "2025-08")
     if (monthValue.includes('-') && monthValue.length === 7) {
         const [year, month] = monthValue.split('-');
-        const monthNames = [
-            'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-            'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
-        ];
+        const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
         const monthIndex = parseInt(month) - 1;
         return `${monthNames[monthIndex]} ${year}`;
     }
-    
+
     // If it's just a month name, add current year
     return `${monthValue.toUpperCase()} 2025`;
 };
@@ -1261,9 +1283,7 @@ function resetFilters() {
 const filteredStudents = computed(() => {
     return students.value.filter((student) => {
         // Apply grade filter - check both grade_level and gradeLevel for compatibility
-        if (filters.value.grade && 
-            student.grade_level !== filters.value.grade && 
-            student.gradeLevel !== filters.value.grade) {
+        if (filters.value.grade && student.grade_level !== filters.value.grade && student.gradeLevel !== filters.value.grade) {
             return false;
         }
 
@@ -1275,18 +1295,18 @@ const filteredStudents = computed(() => {
         // Apply month filter - handle Date object from Calendar component
         if (filters.value.month) {
             let filterMatch = false;
-            
+
             // If filter is a Date object (from Calendar component)
             if (filters.value.month instanceof Date) {
                 const filterYear = filters.value.month.getFullYear();
                 const filterMonth = filters.value.month.getMonth() + 1; // getMonth() returns 0-11
                 const filterMonthName = filters.value.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 const filterMonthNameShort = filters.value.month.toLocaleDateString('en-US', { month: 'long' });
-                
+
                 // Check against various month formats in the data
                 const studentMonthName = student.month_name || student.month || '';
                 const studentMonth = student.month || '';
-                
+
                 // Debug logging
                 console.log('Month Filter Debug:', {
                     filterYear,
@@ -1297,21 +1317,19 @@ const filteredStudents = computed(() => {
                     studentMonth,
                     studentData: student
                 });
-                
+
                 // Match against different possible formats
-                filterMatch = 
+                filterMatch =
                     (studentMonthName.includes(filterYear.toString()) && studentMonthName.toLowerCase().includes(filterMonthNameShort.toLowerCase())) ||
                     studentMonth === `${filterYear}-${filterMonth.toString().padStart(2, '0')}` ||
                     studentMonthName.toLowerCase() === filterMonthName.toLowerCase();
-                    
+
                 console.log('Filter match result:', filterMatch);
             } else {
                 // If filter is a string (fallback)
-                filterMatch = 
-                    student.month === filters.value.month || 
-                    student.month_name === filters.value.month;
+                filterMatch = student.month === filters.value.month || student.month_name === filters.value.month;
             }
-            
+
             if (!filterMatch) {
                 return false;
             }
@@ -1845,8 +1863,8 @@ function generateTempId() {
             <meta http-equiv="Expires" content="0">
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { 
-                    font-family: 'Arial', sans-serif; 
+                body {
+                    font-family: 'Arial', sans-serif;
                     background: #f0f2f5;
                     padding: 20px;
                     min-height: 100vh;
@@ -1854,14 +1872,14 @@ function generateTempId() {
                     justify-content: center;
                     align-items: center;
                 }
-                
-                .card-wrapper { 
-                    display: flex; 
-                    gap: 30px; 
+
+                .card-wrapper {
+                    display: flex;
+                    gap: 30px;
                     justify-content: center;
                     align-items: center;
                 }
-                
+
                 .id-card {
                     width: 320px;
                     height: 600px;
@@ -1870,14 +1888,14 @@ function generateTempId() {
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                     position: relative;
                 }
-                
+
                 /* FRONT SIDE */
                 .front {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     position: relative;
                     overflow: hidden;
                 }
-                
+
                 .front::before {
                     content: '';
                     position: absolute;
@@ -1888,7 +1906,7 @@ function generateTempId() {
                     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 320'%3E%3Cpath fill='%23ffffff' fill-opacity='0.1' d='M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E") no-repeat bottom;
                     background-size: cover;
                 }
-                
+
                 .front::after {
                     content: '';
                     position: absolute;
@@ -1899,7 +1917,7 @@ function generateTempId() {
                     background: rgba(255,255,255,0.05);
                     border-radius: 50%;
                 }
-                
+
                 .school-logo {
                     position: absolute;
                     top: 20px;
@@ -1914,26 +1932,26 @@ function generateTempId() {
                     justify-content: center;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .school-logo img {
                     width: 40px;
                     height: 40px;
                     object-fit: contain;
                 }
-                
+
                 .school-header {
                     text-align: center;
                     padding: 20px 20px 30px;
                     color: white;
                 }
-                
+
                 .school-name {
                     font-size: 18px;
                     font-weight: bold;
                     margin-top: 75px;
                     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                 }
-                
+
                 .student-photo {
                     width: 100px;
                     height: 100px;
@@ -1944,7 +1962,7 @@ function generateTempId() {
                     margin: 15px auto;
                     box-shadow: 0 6px 20px rgba(0,0,0,0.3);
                 }
-                
+
                 .student-name {
                     color: white;
                     font-size: 20px;
@@ -1953,14 +1971,14 @@ function generateTempId() {
                     margin: 10px 0 5px;
                     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                 }
-                
+
                 .name-label {
                     color: rgba(255,255,255,0.8);
                     font-size: 11px;
                     text-align: center;
                     margin-bottom: 15px;
                 }
-                
+
                 .qr-code {
                     width: 160px;
                     height: 160px;
@@ -1971,7 +1989,7 @@ function generateTempId() {
                     margin: 15px auto;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .student-info {
                     background: rgba(255,255,255,0.95);
                     margin: 0 20px 15px;
@@ -1980,7 +1998,7 @@ function generateTempId() {
                     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     clear: both;
                 }
-                
+
                 .info-label {
                     color: #2a5298;
                     font-size: 10px;
@@ -1988,46 +2006,46 @@ function generateTempId() {
                     margin-bottom: 1px;
                     text-transform: uppercase;
                 }
-                
+
                 .info-value {
                     color: #333;
                     font-size: 12px;
                     font-weight: 600;
                     line-height: 1.2;
                 }
-                
+
                 /* BACK SIDE */
                 .back {
                     background: #f8f9fa;
                     color: #333;
                 }
-                
+
                 .deped-header {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     color: white;
                     padding: 20px;
                     text-align: center;
                 }
-                
+
                 .deped-logo {
                     font-size: 24px;
                     font-weight: bold;
                     margin-bottom: 5px;
                 }
-                
+
                 .deped-subtitle {
                     font-size: 12px;
                     opacity: 0.9;
                 }
-                
+
                 .back-content {
                     padding: 25px 20px;
                 }
-                
+
                 .info-section {
                     margin-bottom: 20px;
                 }
-                
+
                 .section-title {
                     color: #2a5298;
                     font-weight: bold;
@@ -2035,7 +2053,7 @@ function generateTempId() {
                     margin-bottom: 8px;
                     text-transform: uppercase;
                 }
-                
+
                 .info-box {
                     background: white;
                     padding: 10px;
@@ -2045,7 +2063,7 @@ function generateTempId() {
                     line-height: 1.4;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                 }
-                
+
                 .signature-area {
                     text-align: center;
                     margin: 25px 0;
@@ -2054,20 +2072,20 @@ function generateTempId() {
                     border-radius: 8px;
                     border: 2px dashed #ddd;
                 }
-                
+
                 .signature-line {
                     border-bottom: 2px solid #333;
                     width: 120px;
                     margin: 0 auto 8px;
                     height: 25px;
                 }
-                
+
                 .signature-label {
                     font-size: 11px;
                     font-weight: bold;
                     color: #666;
                 }
-                
+
                 .validity-box {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     color: white;
@@ -2078,20 +2096,20 @@ function generateTempId() {
                     font-size: 13px;
                     margin-bottom: 10px;
                 }
-                
+
                 .non-transferable {
                     text-align: center;
                     font-size: 10px;
                     color: #666;
                     font-style: italic;
                 }
-                
+
                 /* Buttons */
                 .no-print {
                     text-align: center;
                     margin-top: 30px;
                 }
-                
+
                 .btn {
                     background: linear-gradient(135deg, #2a5298, #1e3c72);
                     color: white;
@@ -2104,28 +2122,28 @@ function generateTempId() {
                     transition: all 0.3s ease;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .btn:hover {
                     transform: translateY(-2px);
                     box-shadow: 0 6px 16px rgba(0,0,0,0.3);
                 }
-                
+
                 /* Print Styles */
                 @media print {
                     * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-                    body { 
-                        background: white !important; 
-                        padding: 0 !important; 
+                    body {
+                        background: white !important;
+                        padding: 0 !important;
                         margin: 0 !important;
                     }
-                    .card-wrapper { 
-                        gap: 15px; 
+                    .card-wrapper {
+                        gap: 15px;
                         page-break-inside: avoid;
                         display: flex !important;
                         flex-direction: row !important;
                     }
-                    .id-card { 
-                        box-shadow: none !important; 
+                    .id-card {
+                        box-shadow: none !important;
                         page-break-inside: avoid;
                         break-inside: avoid;
                     }
@@ -2155,32 +2173,32 @@ function generateTempId() {
                     <div class="school-logo">
                         <img src="/demo/images/logo.png" alt="School Logo" />
                     </div>
-                    
+
                     <div class="school-header">
                         <div class="school-name">Naawan Central School</div>
                     </div>
-                    
+
                     <img src="${student.photo ? (student.photo.startsWith('data:') ? student.photo : `http://localhost:8000/${student.photo}`) : 'https://via.placeholder.com/120x120?text=Photo'}" class="student-photo" />
-                    
+
                     <div class="student-name">${student.name.toUpperCase()}</div>
                     <div class="name-label">NAME</div>
-                    
+
                     <img src="${qrSrc}" class="qr-code" />
-                    
+
                     <div class="student-info">
                         <div class="info-label">LRN:</div>
                         <div class="info-value">${student.studentId || student.lrn}</div>
                     </div>
-                    
+
                 </div>
-                
+
                 <!-- BACK SIDE -->
                 <div class="id-card back">
                     <div class="deped-header">
                         <div class="deped-logo">DepED</div>
                         <div class="deped-subtitle">DEPARTMENT OF EDUCATION</div>
                     </div>
-                    
+
                     <div class="back-content">
                         <div class="info-section">
                             <div class="section-title">Emergency Contact</div>
@@ -2189,38 +2207,38 @@ function generateTempId() {
                                 <strong>PHONE:</strong> ${student.contact || '484-421-377'}
                             </div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">Allergies/Medical Conditions:</div>
                             <div class="info-box">${student.medicalConditions || 'PEANUT ALLERGY'}</div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">Home Address:</div>
                             <div class="info-box">${student.address || '1244 HORSESHOE LANE NEWARK, PA 19714'}</div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">School Year:</div>
                             <div class="info-box">${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
                         </div>
-                        
+
                         <div class="signature-area">
                             <div class="signature-line"></div>
                             <div class="signature-label">SIGNATURE</div>
                         </div>
-                        
+
                         <div class="validity-box">
                             VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}
                         </div>
-                        
+
                         <div class="non-transferable">
                             THIS ID CARD IS NON-TRANSFERABLE
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <div class="no-print">
                 <button class="btn" onclick="window.print()">Print</button>
                 <button class="btn" onclick="window.close()">Close</button>
@@ -2653,36 +2671,36 @@ const previousStep = () => {
 // Get row class for highlighting
 const getRowClass = (data) => {
     const classes = [];
-    
+
     // Add data attribute for targeting
     if (data.id) {
         classes.push(`report-row-${data.id}`);
     }
-    
+
     // Add highlight class if this row is highlighted
     if (highlightedReportId.value && data.id === highlightedReportId.value) {
         classes.push('highlighted-row');
     }
-    
+
     return classes.join(' ');
 };
 
 // Highlight specific report row
 const highlightReport = (reportId) => {
     highlightedReportId.value = reportId;
-    
+
     // Scroll to the highlighted row
     setTimeout(() => {
         const rowElement = document.querySelector(`.report-row-${reportId}`);
         if (rowElement) {
-            rowElement.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
+            rowElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
             });
-            
+
             // Add blink animation
             rowElement.classList.add('highlight-blink');
-            
+
             // Remove highlight after animation
             setTimeout(() => {
                 highlightedReportId.value = null;
@@ -2713,7 +2731,7 @@ onMounted(() => {
     setTimeout(() => {
         generateAllQRCodes();
     }, 500);
-    
+
     // Check for highlight query parameter
     const highlightId = route.query.highlight;
     if (highlightId) {
@@ -2721,7 +2739,7 @@ onMounted(() => {
             highlightReport(parseInt(highlightId));
         }, 1000); // Wait for data to load
     }
-    
+
     // Listen for highlight events from notifications
     window.addEventListener('highlightReport', handleHighlightEvent);
 });
@@ -2764,21 +2782,21 @@ onUnmounted(() => {
         </div>
 
         <!-- Filters -->
-        <div class="flex flex-wrap gap-6 mb-8 p-4 bg-gray-50 rounded-lg border">
-            <div class="flex-1 min-w-[200px]">
+        <div class="filters-bar mb-8">
+            <div class="filter-item">
                 <label class="block text-sm font-medium mb-1">Grade Level</label>
                 <Dropdown v-model="filters.grade" :options="grades" optionLabel="name" optionValue="code" placeholder="Select Grade" class="w-full" @change="updateSections" />
             </div>
-            <div class="flex-1 min-w-[200px]">
+            <div class="filter-item">
                 <label class="block text-sm font-medium mb-1">Section</label>
                 <Dropdown v-model="filters.section" :options="sections" placeholder="Select Section" class="w-full" :disabled="!filters.grade" />
             </div>
-            <div class="flex-1 min-w-[200px]">
+            <div class="filter-item">
                 <label class="block text-sm font-medium mb-1">Month / Year</label>
                 <Calendar v-model="filters.month" view="month" dateFormat="MM yy" placeholder="Select Month" class="w-full" showIcon />
             </div>
-            <div class="flex flex-col justify-end min-w-[150px]">
-                <Button label="Reset Filters" icon="pi pi-refresh" class="p-button-outlined p-button-secondary h-[42px]" @click="resetFilters" />
+            <div class="filter-actions">
+                <Button label="Reset Filters" icon="pi pi-refresh" class="reset-btn" @click="resetFilters" />
             </div>
         </div>
 
@@ -3310,7 +3328,6 @@ onUnmounted(() => {
 }
 
 :deep(.p-button-success) {
-    background-color: #22c55e;
     border: none;
 }
 
@@ -3924,6 +3941,115 @@ onUnmounted(() => {
 }
 
 /* SF2 Modal Styling */
+/* Header layout fixes */
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap; /* prevent overflow on medium widths */
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-container {
+    position: relative;
+}
+.search-input {
+    width: 360px !important;
+    height: 44px !important;
+}
+
+.filters-bar {
+    /* Grid aligns labels/inputs nicely and keeps Reset aligned right */
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto; /* button keeps natural width */
+    column-gap: 1.25rem;
+    row-gap: 1rem;
+    align-items: end;
+    background: #ffffff; /* elevate as a white card */
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 1.25rem 1.25rem;
+    box-shadow: 0 6px 14px rgba(2, 6, 23, 0.06);
+    --control-h: 40px;
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+}
+.filter-item label {
+    color: #0f172a;
+    opacity: 0.9;
+}
+
+.filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: end;
+    grid-column: 4 / 5;
+}
+
+.reset-btn {
+    width: auto;
+    min-width: 140px;
+    height: var(--control-h);
+    padding: 0 14px;
+    border-radius: 10px;
+}
+
+@media (max-width: 1024px) {
+    .filters-bar {
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+    }
+    .filter-actions {
+        grid-column: 1 / -1; /* button spans full row */
+        justify-content: stretch;
+    }
+    .reset-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .filters-bar {
+        grid-template-columns: 1fr;
+    }
+    .filter-actions {
+        grid-column: 1 / -1;
+        justify-content: stretch;
+    }
+    .reset-btn {
+        width: 100%;
+    }
+}
+
+/* Make inputs in filter bar comfortable height and spacing */
+.filters-bar :deep(.p-inputtext),
+.filters-bar :deep(.p-dropdown),
+.filters-bar :deep(.p-calendar) {
+    min-height: var(--control-h);
+    height: var(--control-h);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.875rem;
+}
+
+/* Normalize PrimeVue Calendar height and icon button */
+.filters-bar :deep(.p-calendar .p-inputtext) {
+    min-height: var(--control-h);
+    height: var(--control-h);
+}
+.filters-bar :deep(.p-calendar .p-button) {
+    height: var(--control-h);
+    width: var(--control-h);
+}
+
 .sf2-report-container {
     background: white;
     padding: 20px;
@@ -4130,7 +4256,8 @@ onUnmounted(() => {
 }
 
 @keyframes highlight-blink {
-    0%, 100% {
+    0%,
+    100% {
         background-color: #fef3c7;
         transform: scale(1);
     }

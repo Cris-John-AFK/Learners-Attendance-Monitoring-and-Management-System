@@ -470,7 +470,7 @@ const loadStudentsData = async () => {
 
             if (routeSectionName) {
                 console.log('🎯 Route specifies section:', routeSectionName);
-                
+
                 // Check sections cache first
                 let allSections;
                 if (isCacheValid('sections') && permanentCache.sections) {
@@ -501,7 +501,7 @@ const loadStudentsData = async () => {
             // If no route section or section not found, fall back to homeroom
             if (!targetSectionId) {
                 console.log('🏠 No route section specified, using teacher homeroom section');
-                
+
                 // Check sections cache first (if not already loaded)
                 let allSections;
                 if (isCacheValid('sections') && permanentCache.sections) {
@@ -538,11 +538,7 @@ const loadStudentsData = async () => {
                     console.log('🔄 Students API call already pending for section, waiting...');
                 } else {
                     // Use teacher-specific endpoint to get students from the correct section
-                    const requestPromise = TeacherAttendanceService.getStudentsForTeacherSubject(
-                        teacherId.value,
-                        targetSectionId,
-                        subjectId.value || null
-                    )
+                    const requestPromise = TeacherAttendanceService.getStudentsForTeacherSubject(teacherId.value, targetSectionId, subjectId.value || null)
                         .then((data) => {
                             const students = data.students || [];
                             pendingRequests.delete(studentsApiKey); // Clean up
@@ -568,7 +564,7 @@ const loadStudentsData = async () => {
                 const filteredStudents = teacherStudents;
 
                 console.log(`✅ Filtered and normalized ${filteredStudents.length} students for section ${targetSectionName}`);
-                
+
                 // Normalize student data to ensure consistent IDs - use actual database IDs
                 const normalizedStudents = filteredStudents.map((student, index) => {
                     // Use the actual database ID as primary identifier
@@ -1172,10 +1168,10 @@ const selectQRMethod = async () => {
             attendanceMethod.value = 'qr';
             console.log('🔄 Changed method to QR Scanner for existing session');
         }
-        
+
         showAttendanceMethodModal.value = false;
         await startQRScanner();
-        
+
         toast.add({
             severity: 'success',
             summary: sessionActive.value ? 'Method Changed' : 'Session Started',
@@ -1408,7 +1404,7 @@ const cleanupInvalidStudentAssignments = () => {
     if (foundInvalid) {
         console.log('Found invalid assignments, updating counts');
         calculateUnassignedStudents();
-        
+
         // Show notification if dropped out students were removed
         if (droppedOutStudents.length > 0) {
             toast.add({
@@ -2126,7 +2122,7 @@ const createAttendanceSession = async () => {
     try {
         // Clear QR scan data when starting new session
         clearQRScanData();
-        
+
         // Use resolved subject ID for session creation
         const resolvedSubjectId = getResolvedSubjectId();
 
@@ -2240,9 +2236,9 @@ const selectSeatPlanMethod = async () => {
             attendanceMethod.value = 'seat_plan';
             console.log('🔄 Changed method to Seat Plan for existing session');
         }
-        
+
         showAttendanceMethodModal.value = false;
-        
+
         toast.add({
             severity: 'success',
             summary: sessionActive.value ? 'Method Changed' : 'Session Started',
@@ -2271,10 +2267,10 @@ const selectRollCallMethod = async () => {
             attendanceMethod.value = 'roll_call';
             console.log('🔄 Changed method to Roll Call for existing session');
         }
-        
+
         showAttendanceMethodModal.value = false;
         startRollCall();
-        
+
         toast.add({
             severity: 'success',
             summary: sessionActive.value ? 'Method Changed' : 'Session Started',
@@ -2333,20 +2329,20 @@ const completeAttendanceSession = async () => {
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
-        
+
         // Clear QR scan data and reset attendance method
         clearQRScanData();
         attendanceMethod.value = null;
-        
+
         // Clear all student statuses from seating arrangement
-        seatPlan.value.forEach(row => {
-            row.forEach(seat => {
+        seatPlan.value.forEach((row) => {
+            row.forEach((seat) => {
                 if (seat.student) {
                     seat.status = null;
                 }
             });
         });
-        
+
         console.log('🧹 Session completed - cleared all data for fresh start');
 
         // Step 4: Prepare modal data
@@ -2369,7 +2365,7 @@ const completeAttendanceSession = async () => {
         };
         // Get the actual subject name - use resolved subject name if available
         let actualSubjectName = response.summary?.subject_name || subjectName.value;
-        
+
         // If subject name is still "Loading..." or generic, try to get the real name
         if (actualSubjectName === 'Loading...' || actualSubjectName === 'Subject') {
             if (resolvedSubjectId.value) {
@@ -2382,11 +2378,11 @@ const completeAttendanceSession = async () => {
                 }
             }
         }
-        
+
         // Update the completion data with the correct subject name
         completionData.sessionData.subject_name = actualSubjectName;
         localStorage.setItem(completionKey, JSON.stringify(completionData));
-        
+
         completedSessionData.value = {
             ...response.summary,
             subject_name: actualSubjectName,
@@ -3518,9 +3514,9 @@ const cameraInitialized = ref(false);
 const stopQRScanner = () => {
     console.log('Stopping QR scanner...');
     console.log('🎯 Updating seating arrangement with QR scan results:', qrScanResults.value);
-    
+
     // Update seating arrangement with QR scan results
-    qrScanResults.value.forEach(result => {
+    qrScanResults.value.forEach((result) => {
         const seat = findSeatByStudentId(result.studentId);
         if (seat) {
             seat.status = result.status;
@@ -3529,13 +3525,13 @@ const stopQRScanner = () => {
             console.warn(`⚠️ No seat found for student ${result.name} (ID: ${result.studentId})`);
         }
     });
-    
+
     // Force reactivity update
     seatPlan.value = [...seatPlan.value];
-    
+
     scanning.value = false;
     showQRScanner.value = false;
-    
+
     toast.add({
         severity: 'success',
         summary: 'Scanner Closed',
@@ -3548,7 +3544,7 @@ const reopenQRScanner = () => {
     console.log('🔄 Reopening QR scanner...');
     showQRScanner.value = true;
     scanning.value = true;
-    
+
     toast.add({
         severity: 'info',
         summary: 'Scanner Reopened',
@@ -3559,15 +3555,15 @@ const reopenQRScanner = () => {
 
 const changeAttendanceMethod = () => {
     console.log('🔄 Changing attendance method...');
-    
+
     // Close QR scanner if it's open
     if (showQRScanner.value) {
         stopQRScanner();
     }
-    
+
     // Show method selection modal
     showAttendanceMethodModal.value = true;
-    
+
     toast.add({
         severity: 'info',
         summary: 'Change Method',
@@ -3578,26 +3574,21 @@ const changeAttendanceMethod = () => {
 
 const cancelAttendanceSession = async () => {
     console.log('❌ Canceling attendance session...');
-    
+
     // Show confirmation dialog
-    const confirmed = await showConfirmDialog(
-        'Cancel Session',
-        'Are you sure you want to cancel this attendance session? All progress will be lost.',
-        'Yes, Cancel Session',
-        'Keep Session'
-    );
-    
+    const confirmed = await showConfirmDialog('Cancel Session', 'Are you sure you want to cancel this attendance session? All progress will be lost.', 'Yes, Cancel Session', 'Keep Session');
+
     if (!confirmed) {
         return;
     }
-    
+
     try {
         // Close QR scanner if open
         if (showQRScanner.value) {
             scanning.value = false;
             showQRScanner.value = false;
         }
-        
+
         // Cancel session on backend if it exists
         if (currentSession.value?.id) {
             try {
@@ -3606,39 +3597,38 @@ const cancelAttendanceSession = async () => {
                 console.warn('Backend cancel not available, proceeding with frontend cleanup:', error);
             }
         }
-        
+
         // Reset all session data
         sessionActive.value = false;
         currentSession.value = null;
         attendanceMethod.value = null;
-        
+
         // Clear QR scan data
         clearQRScanData();
-        
+
         // Clear all student statuses from seating arrangement
-        seatPlan.value.forEach(row => {
-            row.forEach(seat => {
+        seatPlan.value.forEach((row) => {
+            row.forEach((seat) => {
                 if (seat.student) {
                     seat.status = null;
                 }
             });
         });
-        
+
         // Force reactivity update
         seatPlan.value = [...seatPlan.value];
-        
+
         console.log('🧹 Session canceled - all data cleared');
-        
+
         toast.add({
             severity: 'warn',
             summary: 'Session Canceled',
             detail: 'Attendance session has been canceled. All progress has been cleared.',
             life: 4000
         });
-        
     } catch (error) {
         console.error('Error canceling session:', error);
-        
+
         toast.add({
             severity: 'error',
             summary: 'Cancel Error',
@@ -3737,15 +3727,16 @@ const onQRDecode = async (decodedText) => {
             if (parts.length >= 3) {
                 extractedStudentId = parseInt(parts[2]); // Extract student ID from position 2
                 console.log('Extracted student ID from LAMMS format:', extractedStudentId);
-                
+
                 // Try multiple matching strategies for LAMMS format
-                student = students.value.find((s) => 
-                    s.id === extractedStudentId || 
-                    s.studentId === extractedStudentId ||
-                    s.student_id === extractedStudentId ||
-                    parseInt(s.id) === extractedStudentId ||
-                    parseInt(s.studentId) === extractedStudentId ||
-                    parseInt(s.student_id) === extractedStudentId
+                student = students.value.find(
+                    (s) =>
+                        s.id === extractedStudentId ||
+                        s.studentId === extractedStudentId ||
+                        s.student_id === extractedStudentId ||
+                        parseInt(s.id) === extractedStudentId ||
+                        parseInt(s.studentId) === extractedStudentId ||
+                        parseInt(s.student_id) === extractedStudentId
                 );
             }
         }
@@ -3753,23 +3744,12 @@ const onQRDecode = async (decodedText) => {
         // Method 2: Direct numeric ID match
         if (!student && !isNaN(decodedText)) {
             const studentId = parseInt(decodedText);
-            student = students.value.find((s) => 
-                s.id === studentId || 
-                s.studentId === studentId ||
-                s.student_id === studentId ||
-                parseInt(s.id) === studentId ||
-                parseInt(s.studentId) === studentId ||
-                parseInt(s.student_id) === studentId
-            );
+            student = students.value.find((s) => s.id === studentId || s.studentId === studentId || s.student_id === studentId || parseInt(s.id) === studentId || parseInt(s.studentId) === studentId || parseInt(s.student_id) === studentId);
         }
 
         // Method 3: String match against student ID fields
         if (!student) {
-            student = students.value.find((s) => 
-                s.studentId?.toString() === decodedText || 
-                s.student_id?.toString() === decodedText ||
-                s.id?.toString() === decodedText
-            );
+            student = students.value.find((s) => s.studentId?.toString() === decodedText || s.student_id?.toString() === decodedText || s.id?.toString() === decodedText);
         }
 
         // Method 4: Partial ID match (for cases where QR contains partial student info)
@@ -3782,7 +3762,10 @@ const onQRDecode = async (decodedText) => {
 
         console.log('Found student:', student);
         console.log('Debug - Extracted ID:', extractedStudentId);
-        console.log('Debug - Available student IDs:', students.value.map(s => ({ id: s.id, studentId: s.studentId, student_id: s.student_id })));
+        console.log(
+            'Debug - Available student IDs:',
+            students.value.map((s) => ({ id: s.id, studentId: s.studentId, student_id: s.student_id }))
+        );
 
         if (student) {
             // Check if already scanned
@@ -3854,9 +3837,7 @@ const onQRDecode = async (decodedText) => {
             toast.add({
                 severity: 'error',
                 summary: 'Student Not In This Class',
-                detail: extractedStudentId ? 
-                    `Student ID ${extractedStudentId} is not enrolled in this section. Please check if they belong to a different class.` :
-                    `QR code "${decodedText}" does not match any student in this class.`,
+                detail: extractedStudentId ? `Student ID ${extractedStudentId} is not enrolled in this section. Please check if they belong to a different class.` : `QR code "${decodedText}" does not match any student in this class.`,
                 life: 5000
             });
         }
@@ -4336,7 +4317,7 @@ const checkCompletedSessionPersistence = () => {
                 localStorage.removeItem(dismissKey);
                 return; // Don't show modal with invalid data
             }
-            
+
             completedSessionData.value = data.sessionData;
             showCompletionModal.value = true;
             setupMidnightTimer();
@@ -4891,34 +4872,13 @@ const titleRef = ref(null);
             <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
 
             <!-- Change Method button - shows when session is active -->
-            <Button 
-                icon="pi pi-sync" 
-                label="Change Method" 
-                class="p-button-help" 
-                @click="changeAttendanceMethod" 
-                v-if="sessionActive"
-                :disabled="isCompletingSession"
-            />
+            <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" v-if="sessionActive" :disabled="isCompletingSession" />
 
             <!-- Reopen Scanner button - only shows when QR session is active but scanner is closed -->
-            <Button 
-                icon="pi pi-qrcode" 
-                label="Reopen Scanner" 
-                class="p-button-info" 
-                @click="reopenQRScanner" 
-                v-if="sessionActive && attendanceMethod === 'qr' && !showQRScanner"
-                :disabled="isCompletingSession"
-            />
+            <Button icon="pi pi-qrcode" label="Reopen Scanner" class="p-button-info" @click="reopenQRScanner" v-if="sessionActive && attendanceMethod === 'qr' && !showQRScanner" :disabled="isCompletingSession" />
 
             <!-- Cancel Session button - shows when session is active -->
-            <Button 
-                icon="pi pi-times" 
-                label="Cancel Session" 
-                class="p-button-danger p-button-outlined" 
-                @click="cancelAttendanceSession" 
-                v-if="sessionActive"
-                :disabled="isCompletingSession"
-            />
+            <Button icon="pi pi-times" label="Cancel Session" class="p-button-danger p-button-outlined" @click="cancelAttendanceSession" v-if="sessionActive" :disabled="isCompletingSession" />
 
             <Button
                 :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
@@ -5268,10 +5228,10 @@ const titleRef = ref(null);
 
         <!-- Enhanced QR Scanner Dialog with Gate Log -->
         <Dialog v-model:visible="showQRScanner" modal header="QR Code Attendance Scanner" :style="{ width: '95vw', height: '85vh' }" :closable="false">
-            <div class="qr-scanner-layout" style="display: flex; gap: 1.5rem; height: calc(85vh - 120px); min-height: 500px;">
+            <div class="qr-scanner-layout" style="display: flex; gap: 1.5rem; height: calc(85vh - 120px); min-height: 500px">
                 <!-- Camera Section (Left Side) -->
-                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
-                    <div class="qr-camera-section" style="flex: 1; display: flex; flex-direction: column;">
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                    <div class="qr-camera-section" style="flex: 1; display: flex; flex-direction: column">
                         <h4 class="text-lg font-semibold mb-3">Camera Feed</h4>
 
                         <div v-if="cameraError" class="text-center p-4 border-2 border-dashed border-red-300 rounded-lg">
@@ -5280,9 +5240,9 @@ const titleRef = ref(null);
                             <Button label="Try Again" icon="pi pi-refresh" @click="initializeCamera" />
                         </div>
 
-                        <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden" style="flex: 1; min-height: 300px;">
-                            <QrcodeStream v-if="scanning" @decode="onQRDecode" @detect="onQRDetect" @init="onCameraInit" @error="onCameraError" class="qr-scanner w-full" style="height: 100%;" />
-                            <div v-if="!scanning" class="scanner-paused bg-gray-100 flex flex-column align-items-center justify-content-center" style="height: 100%;">
+                        <div v-else class="scanner-container border-2 border-blue-300 rounded-lg overflow-hidden" style="flex: 1; min-height: 300px">
+                            <QrcodeStream v-if="scanning" @decode="onQRDecode" @detect="onQRDetect" @init="onCameraInit" @error="onCameraError" class="qr-scanner w-full" style="height: 100%" />
+                            <div v-if="!scanning" class="scanner-paused bg-gray-100 flex flex-column align-items-center justify-content-center" style="height: 100%">
                                 <i class="pi pi-pause-circle text-4xl mb-2"></i>
                                 <p>Scanner Paused - Click Resume to start scanning</p>
                             </div>
@@ -5304,32 +5264,28 @@ const titleRef = ref(null);
                 </div>
 
                 <!-- Results & Log Section (Right Side) -->
-                <div style="flex: 1; min-width: 0; border-left: 2px solid #e5e7eb; padding-left: 1.5rem; display: flex; flex-direction: column;">
-                    <div class="qr-results-section" style="flex: 1; display: flex; flex-direction: column;">
+                <div style="flex: 1; min-width: 0; border-left: 2px solid #e5e7eb; padding-left: 1.5rem; display: flex; flex-direction: column">
+                    <div class="qr-results-section" style="flex: 1; display: flex; flex-direction: column">
                         <!-- Enhanced Scanned Students Panel -->
                         <div class="mb-4">
                             <div class="flex justify-content-between align-items-center mb-3">
                                 <h4 class="text-lg font-semibold">📱 Scanned Students ({{ qrScanResults.length }})</h4>
                                 <Badge v-if="qrScanResults.length > 0" :value="qrScanResults.length" severity="success" />
                             </div>
-                            
+
                             <div class="max-h-40 overflow-y-auto border rounded-lg bg-white">
                                 <div v-if="qrScanResults.length === 0" class="p-4 text-center text-gray-500">
                                     <i class="pi pi-qrcode text-3xl mb-2 block"></i>
                                     <p>No students scanned yet</p>
                                     <small>Students will appear here when they scan their QR codes</small>
                                 </div>
-                                
+
                                 <div v-for="result in qrScanResults" :key="result.id" class="p-3 border-bottom-1 surface-border hover:bg-gray-50 transition-colors">
                                     <div class="flex justify-content-between align-items-start">
                                         <div class="flex-1">
                                             <div class="font-semibold text-primary">{{ result.name }}</div>
-                                            <div class="text-sm text-gray-600 mt-1">
-                                                <i class="pi pi-id-card mr-1"></i>ID: {{ result.studentId }}
-                                            </div>
-                                            <div class="text-xs text-gray-500 mt-1">
-                                                <i class="pi pi-clock mr-1"></i>Scanned: {{ new Date(result.scannedAt).toLocaleTimeString() }}
-                                            </div>
+                                            <div class="text-sm text-gray-600 mt-1"><i class="pi pi-id-card mr-1"></i>ID: {{ result.studentId }}</div>
+                                            <div class="text-xs text-gray-500 mt-1"><i class="pi pi-clock mr-1"></i>Scanned: {{ new Date(result.scannedAt).toLocaleTimeString() }}</div>
                                         </div>
                                         <div class="flex flex-column align-items-end">
                                             <Tag :value="result.status" :severity="getStatusSeverity(result.status)" class="mb-1" />
@@ -5338,7 +5294,7 @@ const titleRef = ref(null);
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <!-- Quick Stats -->
                             <div v-if="qrScanResults.length > 0" class="mt-2 p-2 bg-green-50 border border-green-200 rounded text-center">
                                 <small class="text-green-700">

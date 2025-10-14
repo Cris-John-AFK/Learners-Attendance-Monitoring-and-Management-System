@@ -115,21 +115,33 @@ const handleLogin = async () => {
         if (result.success) {
             console.log('✅ Login successful! Role:', result.role);
 
-            // Redirect based on user role
+            // Add a small delay to ensure auth state is properly set
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // Clear any existing error messages
+            errorMessage.value = '';
+            
+            // Force a complete page reload to ensure clean state
+            let targetPath;
             switch (result.role) {
                 case 'teacher':
-                    router.push('/teacher');
+                    targetPath = '/teacher';
                     break;
                 case 'admin':
-                    router.push('/admin');
+                    targetPath = '/admin';
                     break;
                 case 'guardhouse':
-                    router.push('/guardhouse');
+                    targetPath = '/guardhouse';
                     break;
                 default:
                     errorMessage.value = 'Unknown user role. Please contact administrator.';
                     return;
             }
+            
+            console.log('🔄 Redirecting to:', targetPath);
+            
+            // Use window.location.replace for a clean navigation
+            window.location.replace(targetPath);
         } else {
             console.log('❌ Login failed:', result.message);
             errorMessage.value = result.message || 'Login failed. Please check your credentials.';

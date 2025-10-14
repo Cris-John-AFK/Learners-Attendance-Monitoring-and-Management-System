@@ -204,24 +204,43 @@ const loadDashboardData = async () => {
         loading.value = true;
         error.value = null;
 
-        // Load all data in parallel
-        const [studentsResponse, teachersResponse, sectionsResponse] = await Promise.all([api.get(`${API_BASE_URL}/students`), api.get(`${API_BASE_URL}/teachers`), api.get(`${API_BASE_URL}/sections`)]);
+        console.log('🔄 Loading admin dashboard data...');
+
+        // Create timeout wrapper for API calls
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 10000)
+        );
+
+        // Load data with timeout protection
+        const dataPromises = [
+            Promise.race([api.get(`${API_BASE_URL}/students`), timeoutPromise]),
+            Promise.race([api.get(`${API_BASE_URL}/teachers`), timeoutPromise]),
+            Promise.race([api.get(`${API_BASE_URL}/sections`), timeoutPromise])
+        ];
+
+        const [studentsResponse, teachersResponse, sectionsResponse] = await Promise.all(dataPromises);
 
         // Set the counts
         totalStudents.value = studentsResponse.data?.length || 0;
         totalTeachers.value = teachersResponse.data?.length || 0;
         totalSections.value = sectionsResponse.data?.length || 0;
 
-        console.log('Dashboard data loaded:', {
+        console.log('✅ Dashboard data loaded:', {
             students: totalStudents.value,
             teachers: totalTeachers.value,
             sections: totalSections.value
         });
     } catch (err) {
-        console.error('Error loading dashboard data:', err);
-        error.value = 'Failed to load dashboard data. Please try again.';
+        console.error('❌ Error loading dashboard data:', err);
+        error.value = `Failed to load dashboard data: ${err.message}. Please try again.`;
+        
+        // Set default values on error
+        totalStudents.value = 0;
+        totalTeachers.value = 0;
+        totalSections.value = 0;
     } finally {
         loading.value = false;
+        console.log('📊 Admin dashboard loading completed');
     }
 };
 
