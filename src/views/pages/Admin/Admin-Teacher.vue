@@ -1746,11 +1746,21 @@ const loadAllSectionsForSubjectAssignment = async () => {
     }
 };
 
-// Check if subject is already assigned to teacher
+// Check if subject is already assigned to teacher FOR THE CURRENTLY SELECTED SECTION
+// This allows departmentalized teachers to teach the same subject to different sections
 const isSubjectAlreadyAssigned = (subject) => {
     if (!selectedTeacher.value) {
         return false;
     }
+
+    // CRITICAL: For departmentalized teachers, we need to check per-section
+    // If no section is selected yet, we can't determine if it's assigned
+    if (!selectedSectionForSubjectAssignment.value) {
+        return false;
+    }
+
+    // Get the currently selected section ID
+    const currentSectionId = selectedSectionForSubjectAssignment.value.id;
 
     // Try different possible assignment property names
     const assignments = selectedTeacher.value.subject_assignments || selectedTeacher.value.active_assignments || selectedTeacher.value.assignments || selectedTeacher.value.teaching_subjects || selectedTeacher.value.subjects || [];
@@ -1759,15 +1769,26 @@ const isSubjectAlreadyAssigned = (subject) => {
         return false;
     }
 
-    // Check if teacher already has this subject assigned (check both ID and name for safety)
+    // Check if teacher already has this subject assigned TO THIS SPECIFIC SECTION
     const isAssigned = assignments.some((assignment) => {
         // Handle different assignment data structures
         const assignmentSubject = assignment.subject || assignment;
+        const assignmentSectionId = assignment.section_id || assignment.section?.id;
 
-        if (!assignmentSubject) {
+        if (!assignmentSubject || !assignmentSectionId) {
             return false;
         }
 
+        // CRITICAL: Check both subject AND section match
+        // Only return true if BOTH the subject AND section are the same
+        const sectionMatches = Number(assignmentSectionId) === Number(currentSectionId);
+        
+        if (!sectionMatches) {
+            // Different section, so this subject is available for the current section
+            return false;
+        }
+
+        // Same section - now check if the subject matches
         // Check by ID (primary)
         if (assignmentSubject.id === subject.id) {
             return true;

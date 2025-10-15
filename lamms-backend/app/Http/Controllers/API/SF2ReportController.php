@@ -1579,16 +1579,22 @@ class SF2ReportController extends Controller
             
             // Get currently authenticated teacher
             $authenticatedTeacher = auth('teacher')->user();
-            $submittedByTeacherId = $authenticatedTeacher ? $authenticatedTeacher->id : $section->teacher_id;
+            
+            // IMPORTANT: Always use the section's homeroom teacher ID for notifications
+            // This ensures the notification shows the correct homeroom teacher name,
+            // not the name of whoever submitted the report (e.g., departmentalized teachers)
+            $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id;
             
             Log::info("SF2 Submission - Teacher Info", [
                 'section_id' => $sectionId,
                 'section_name' => $section->name,
+                'homeroom_teacher_id' => $section->homeroom_teacher_id,
                 'section_teacher_id' => $section->teacher_id,
                 'section_teacher_name' => $section->teacher ? $section->teacher->first_name . ' ' . $section->teacher->last_name : 'N/A',
                 'authenticated_teacher_id' => $authenticatedTeacher ? $authenticatedTeacher->id : null,
                 'authenticated_teacher_name' => $authenticatedTeacher ? $authenticatedTeacher->first_name . ' ' . $authenticatedTeacher->last_name : 'N/A',
-                'submitted_by_will_be' => $submittedByTeacherId
+                'submitted_by_will_be' => $submittedByTeacherId,
+                'note' => 'Using homeroom teacher ID for notification display'
             ]);
             
             // Check if already submitted for this section and month

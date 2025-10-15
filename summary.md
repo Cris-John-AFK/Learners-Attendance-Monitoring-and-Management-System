@@ -52,7 +52,130 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## Major Features Implemented
 
-### 🚨 RECENT CRITICAL FIXES & MAJOR UPDATES (October 4, 2025)
+### 🚨 RECENT CRITICAL FIXES & MAJOR UPDATES (October 15, 2025)
+
+#### **TEACHER SUBJECT ASSIGNMENT ENHANCEMENT - DEPARTMENTALIZED SUPPORT** ✅ NEW
+**Feature**: Enhanced teacher subject assignment system to support departmentalized teachers (Grades 4-6) assigning the same subject to multiple sections while preventing duplicate assignments within the same section.
+
+**Problem Solved**:
+- **Before**: Teachers could not assign the same subject (e.g., English) to different sections
+- **System Behavior**: Global subject check prevented English → Section A if English was already assigned to Section B
+- **Impact**: Departmentalized teachers (Grade 4-6) couldn't teach the same subject across multiple sections
+
+**Solution Implemented** (`Admin-Teacher.vue`):
+1. **Modified `isSubjectAlreadyAssigned()` Function**:
+   - Changed from global subject check to **per-section validation**
+   - Now checks if subject is assigned to the **currently selected section** only
+   - Allows same subject to different sections: ✅ English → Section A, ✅ English → Section B
+   - Prevents duplicates in same section: ❌ English → Section A twice
+
+2. **User Experience**:
+   - Teacher selects "Grade 4 - Dagohoy" → English shows "Already Assigned" if assigned to Dagohoy
+   - Teacher selects "Grade 4 - Mabini" → English is CLICKABLE if not assigned to Mabini
+   - Result: Teacher can assign English to both sections
+
+**Files Modified**: `src/views/pages/Admin/Admin-Teacher.vue` (lines 1748-1788)
+
+---
+
+#### **ADMIN STUDENT VIEW - QR CODE COLUMN REMOVAL** ✅ NEW
+**Feature**: Removed QR Code column from Admin-Student DataTable for cleaner UI.
+
+**Changes**: Removed QR Code column (header, image display, generate button) from student management table
+**Result**: Cleaner table; QR functionality still accessible via student details dialog
+**Files Modified**: `src/views/pages/Admin/Admin-Student.vue` (lines 2080-2089)
+
+---
+
+#### **ADMIN CURRICULUM - CAPACITY FIELD REMOVAL** ✅ NEW
+**Feature**: Removed Capacity field from "Create New Section" dialog for simplified section creation.
+
+**Changes**: Removed Capacity input field and validation from section creation dialog
+**Result**: Simpler dialog with only Section Name (required) and Description (optional)
+**Files Modified**: `src/views/pages/Admin/Curriculum.vue` (lines 5277-5280)
+
+---
+
+#### **SF2 NOTIFICATION TEACHER NAME FIX** ✅ NEW
+**Feature**: Fixed SF2 report notifications to display correct homeroom teacher name instead of authenticated teacher.
+
+**Problem**: Notifications showed "Ana Cruz submitted SF2 for Gumamela" even though Maria Santos is the homeroom teacher
+**Root Cause**: Backend used authenticated teacher's ID instead of section's homeroom teacher ID
+
+**Solution**:
+1. **Backend Fix** (`SF2ReportController.php` line 1582):
+   ```php
+   // OLD - Used whoever was logged in
+   $submittedByTeacherId = $authenticatedTeacher ? $authenticatedTeacher->id : $section->teacher_id;
+   
+   // NEW - Always use the homeroom teacher
+   $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id;
+   ```
+
+2. **Database Fix**: Created artisan command `php artisan sf2:fix-submitted-by`
+   - Updated existing SF2 records to use correct homeroom teacher IDs
+   - Fixed 1 record: Gumamela section from Ana Cruz → Maria Santos
+
+**Result**: ✅ Notifications now show "Maria Santos submitted SF2 for Gumamela"
+**Files Modified**: 
+- `lamms-backend/app/Http/Controllers/API/SF2ReportController.php` (lines 1576-1591)
+- `lamms-backend/app/Console/Commands/FixSF2SubmittedByTeacher.php` (new file)
+
+---
+
+#### **ADMIN CURRICULUM SECTION MANAGEMENT - COMPLETE OVERHAUL** ✅
+**Feature**: Fixed and enhanced Admin Curriculum section management with proper teacher display, subject assignments, and streamlined UI.
+
+**Critical Backend Fixes**:
+1. **Fixed Subject Query** (`SectionController.php` → `getSubjects()`)
+   - **Problem**: API was querying wrong table (`section_subject` pivot) instead of `teacher_section_subject`
+   - **Solution**: Rewrote query to directly access `teacher_section_subject` table
+   - **Result**: Now correctly returns subjects WITH teacher information
+   - **Data Returned**: Each subject includes `teacher_id`, `teacher` object (first_name, last_name, name), `teacher_name`, and `schedules` array
+
+2. **Synced Homeroom Teachers** (Migration: `2025_10_15_011000_sync_homeroom_teachers.php`)
+   - **Problem**: Homeroom teachers stored in `teacher_section_subject` table but not synced to `sections.homeroom_teacher_id`
+   - **Solution**: Created migration to sync homeroom teacher data from `teacher_section_subject` to `sections` table
+   - **Result**: Section cards now display correct homeroom teacher names
+
+**Frontend Improvements** (`Curriculum.vue`):
+1. **Removed Section Details Tab**: Simplified UI by removing redundant "⚙️ Section Details" tab, keeping only "📚 Subjects" tab
+2. **Removed Capacity Display**: Cleaner section cards without "Capacity: X students" line
+3. **Enhanced Teacher Display**:
+   - Changed fallback from "Teacher 1" to "No teacher assigned"
+   - Handles multiple backend data structures: `teacher` object, `teacher_id`, `pivot.teacher_id`, `teacher_name`
+   - Added comprehensive console logging for debugging
+
+**Technical Details**:
+```php
+// Backend Query (SectionController.php)
+$assignments = DB::table('teacher_section_subject as tss')
+    ->join('subjects as s', 'tss.subject_id', '=', 's.id')
+    ->leftJoin('teachers as t', 'tss.teacher_id', '=', 't.id')
+    ->where('tss.section_id', $sectionId)
+    ->where('tss.is_active', true)
+    ->whereNotNull('tss.subject_id')
+    ->select('s.id', 's.name', 's.code', 's.description', 's.is_active',
+             'tss.teacher_id', 't.first_name', 't.last_name')
+    ->distinct()
+    ->get();
+```
+
+**User Experience Improvements**:
+- **Section Cards**: Now show full homeroom teacher names (e.g., "Maria Santos" instead of "No teacher assigned")
+- **Schedules Dialog**: Clicking "Schedules" button now displays:
+  - All assigned subjects for the section
+  - Teacher name for each subject
+  - Full weekly schedules with days and times
+- **Faster Loading**: Removed unnecessary API calls and fallback logic
+- **Cleaner UI**: Removed redundant tabs and capacity information
+
+**Database Structure Clarification**:
+- `teacher_section_subject` table is the **source of truth** for:
+  - Subject assignments (with `subject_id`)
+  - Homeroom assignments (with `role = 'homeroom'`)
+  - Teacher-section-subject relationships
+- `sections.homeroom_teacher_id` is now **synchronized** from `teacher_section_subject`
 
 #### **GEOGRAPHIC ATTENDANCE HEATMAP SYSTEM - PRODUCTION READY**
 **Feature**: Revolutionary geographic attendance visualization system that maps student attendance patterns by location using real Naawan, Misamis Oriental addresses.

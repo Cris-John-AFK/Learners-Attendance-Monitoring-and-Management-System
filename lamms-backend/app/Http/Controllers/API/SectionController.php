@@ -577,6 +577,7 @@ class SectionController extends Controller
 
     /**
      * Get subjects for a section (direct route version)
+     * FIXED: Now queries teacher_section_subject table to get actual assigned subjects with teachers
      */
     public function getSubjects(Request $request, $sectionId)
     {
@@ -584,58 +585,71 @@ class SectionController extends Controller
             Log::info("Getting subjects for section: $sectionId with params: " . json_encode($request->all()));
 
             $section = Section::findOrFail($sectionId);
-            $userAddedOnly = $request->boolean('user_added_only');
 
-            Log::info("User added only flag: " . ($userAddedOnly ? 'true' : 'false'));
+            // Query the teacher_section_subject table to get subjects assigned to this section
+            Log::info("Querying teacher_section_subject table for section $sectionId");
+            
+            $assignments = DB::table('teacher_section_subject as tss')
+                ->join('subjects as s', 'tss.subject_id', '=', 's.id')
+                ->leftJoin('teachers as t', 'tss.teacher_id', '=', 't.id')
+                ->where('tss.section_id', $sectionId)
+                ->where('tss.is_active', true)
+                ->whereNotNull('tss.subject_id') // Exclude homeroom-only assignments
+                ->select(
+                    's.id',
+                    's.name',
+                    's.code',
+                    's.description',
+                    's.is_active',
+                    'tss.teacher_id',
+                    't.first_name as teacher_first_name',
+                    't.last_name as teacher_last_name'
+                )
+                ->distinct()
+                ->get();
 
-            // If user_added_only is true, only return subjects that were manually added through directSubjects
-            if ($userAddedOnly) {
-                Log::info("Getting ONLY user-added subjects for section $sectionId");
+            Log::info("Found " . count($assignments) . " subjects from teacher_section_subject for section $sectionId");
 
-                // Use the directSubjects relationship which uses the section_subject pivot table
-                // This specifically gets only manually added subjects
-                $subjects = $section->directSubjects()->get();
-
-                // Load schedules for user-added subjects too
-                $subjects = $subjects->map(function ($subject) use ($sectionId) {
-                    $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
-                        ->where('subject_id', $subject->id)
-                        ->get();
-                    $subject->schedules = $schedules;
-                    return $subject;
-                });
-
-                Log::info("Found " . count($subjects) . " user-added subjects for section $sectionId");
-                Log::debug("User-added subjects with schedules: " . json_encode($subjects->toArray()));
-
-                return response()->json($subjects);
-            }
-
-            // If not filtering, return a combination of both relationships to ensure
-            // we get all subjects associated with this section
-            Log::info("Getting ALL subjects for section $sectionId (including auto-assigned)");
-
-            // Get subjects from both relationships
-            $allSubjects = $section->subjects()->get();
-            $directSubjects = $section->directSubjects()->get();
-
-            // Merge them and ensure uniqueness by ID
-            $mergedSubjects = $allSubjects->concat($directSubjects)->unique('id');
-
-            // Load schedules for each subject
-            $mergedSubjects = $mergedSubjects->map(function ($subject) use ($sectionId) {
-                $schedules = \App\Models\SubjectSchedule::where('section_id', $sectionId)
-                    ->where('subject_id', $subject->id)
+            // Transform the results to include teacher info and schedules
+            $subjects = $assignments->map(function ($assignment) use ($sectionId) {
+                // Get schedules for this subject
+                $schedules = SubjectSchedule::where('section_id', $sectionId)
+                    ->where('subject_id', $assignment->id)
                     ->get();
-                $subject->schedules = $schedules;
-                return $subject;
+
+                // Build teacher object if teacher is assigned
+                $teacher = null;
+                if ($assignment->teacher_id) {
+                    $teacher = [
+                        'id' => $assignment->teacher_id,
+                        'first_name' => $assignment->teacher_first_name,
+                        'last_name' => $assignment->teacher_last_name,
+                        'name' => trim(($assignment->teacher_first_name ?? '') . ' ' . ($assignment->teacher_last_name ?? ''))
+                    ];
+                }
+
+                return [
+                    'id' => $assignment->id,
+                    'name' => $assignment->name,
+                    'code' => $assignment->code,
+                    'description' => $assignment->description,
+                    'is_active' => $assignment->is_active,
+                    'teacher_id' => $assignment->teacher_id,
+                    'teacher' => $teacher,
+                    'teacher_name' => $teacher ? $teacher['name'] : null,
+                    'schedules' => $schedules,
+                    'pivot' => [
+                        'section_id' => $sectionId,
+                        'subject_id' => $assignment->id,
+                        'teacher_id' => $assignment->teacher_id
+                    ]
+                ];
             });
 
-            Log::info("Found " . count($mergedSubjects) . " total subjects for section $sectionId");
-            Log::debug("All subjects: " . json_encode($mergedSubjects->pluck('name')));
-            Log::debug("Subjects with schedules: " . json_encode($mergedSubjects->toArray()));
+            Log::info("Returning " . count($subjects) . " subjects with teacher info for section $sectionId");
+            Log::debug("Subjects with teachers: " . json_encode($subjects));
 
-            return response()->json($mergedSubjects);
+            return response()->json($subjects);
         } catch (\Exception $e) {
             Log::error("Error in getSubjects: " . $e->getMessage());
             Log::error($e->getTraceAsString());

@@ -2608,7 +2608,7 @@ const loadAllGrades = async () => {
 
 // Add a helper function to get teacher name from ID
 const getTeacherName = (teacherId) => {
-    if (!teacherId) return 'No teacher selected';
+    if (!teacherId) return 'No teacher assigned';
 
     // If the full teacher object is passed
     if (typeof teacherId === 'object') {
@@ -2629,7 +2629,8 @@ const getTeacherName = (teacherId) => {
         }
     }
 
-    return `Teacher ${teacherId}`;
+    // Fallback - return 'No teacher assigned' instead of 'Teacher 1'
+    return 'No teacher assigned';
 };
 
 // Add this function after loadSubjects
@@ -3385,18 +3386,18 @@ const selectedSectionForHub = ref(null);
 const activeManagementTab = ref('subjects'); // subjects, details
 const activeManagementTabIndex = ref(0);
 
-// Tab menu items for section management
-const managementTabItems = ref([{ label: '📚 Subjects' }, { label: '⚙️ Section Details' }]);
+// Tab menu items for section management - Only Subjects tab (Section Details removed per user request)
+const managementTabItems = ref([{ label: '📚 Subjects' }]);
 
 // Watch for tab index changes to update the active tab
 watch(activeManagementTabIndex, (newIndex) => {
-    const tabMap = ['subjects', 'details'];
+    const tabMap = ['subjects'];
     activeManagementTab.value = tabMap[newIndex] || 'subjects';
 });
 
 // Watch for active tab changes to update the index
 watch(activeManagementTab, (newTab) => {
-    const indexMap = { subjects: 0, details: 1 };
+    const indexMap = { subjects: 0 };
     activeManagementTabIndex.value = indexMap[newTab] || 0;
 });
 
@@ -3562,6 +3563,20 @@ const openSectionManagementHub = async (section) => {
         const gradeId = section.grade_id || selectedGradeForSections.value?.id || 1;
         const subjectsResponse = await CurriculumService.getSubjectsBySection(curriculum.value.id, gradeId, section.id);
         selectedSubjects.value = Array.isArray(subjectsResponse) ? subjectsResponse : [];
+
+        // Debug: Log subject data to see teacher information
+        console.log('📚 Loaded subjects for section:', section.name);
+        console.log('📊 Total subjects:', selectedSubjects.value.length);
+        if (selectedSubjects.value.length > 0) {
+            console.log('🔍 First subject full data:', JSON.stringify(selectedSubjects.value[0], null, 2));
+            console.log('👨‍🏫 Teacher info in first subject:', {
+                teacher: selectedSubjects.value[0].teacher,
+                teacher_id: selectedSubjects.value[0].teacher_id,
+                teacher_name: selectedSubjects.value[0].teacher_name,
+                pivot: selectedSubjects.value[0].pivot
+            });
+        }
+        console.log('👥 Available teachers in memory:', teachers.value.length);
 
         // Use the same data for schedules tab (subjects with schedules)
         sectionSchedules.value = selectedSubjects.value;
@@ -4080,11 +4095,28 @@ const openSectionManagement = async (grade) => {
     selectedGradeForSections.value = grade;
     sectionManagementDialog.value = true;
 
-    // Load sections for this grade
+    // Load sections for this grade - FORCE FRESH DATA
     try {
         loading.value = true;
-        const sections = await CurriculumService.getSectionsByGrade(curriculum.value.id, grade.id);
+
+        // Clear cache to ensure fresh data with updated homeroom teachers
+        CurriculumService.clearCache();
+        localStorage.removeItem(`sections_${curriculum.value.id}_${grade.id}`);
+        localStorage.removeItem(`sections_${curriculum.value.id}_${grade.id}_timestamp`);
+
+        // Force fresh API call
+        const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, grade.id);
         gradeSections.value = Array.isArray(sections) ? sections : [];
+
+        console.log('📋 Loaded sections with homeroom teachers:');
+        gradeSections.value.forEach((s) => {
+            console.log(`  Section: ${s.name} (ID: ${s.id})`);
+            console.log(`    - homeroom_teacher_id: ${s.homeroom_teacher_id}`);
+            console.log(`    - homeroom_teacher object:`, s.homeroom_teacher);
+            if (s.homeroom_teacher) {
+                console.log(`    - Teacher Name: ${s.homeroom_teacher.first_name} ${s.homeroom_teacher.last_name}`);
+            }
+        });
     } catch (error) {
         console.error('Error loading sections:', error);
         gradeSections.value = [];
@@ -5116,16 +5148,10 @@ watch(
 
                         <div class="section-body">
                             <p v-if="section.description" class="section-description">{{ section.description }}</p>
-                            <div class="section-capacity">
-                                <i class="pi pi-users"></i>
-                                <span
-                                    >Capacity: <strong>{{ section.capacity }}</strong> students</span
-                                >
-                            </div>
-                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id">
+                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id || section.homeroom_teacher">
                                 <i class="pi pi-user-edit"></i>
                                 <span
-                                    >Homeroom Teacher: <strong>{{ getTeacherName(section.homeroom_teacher_id) }}</strong></span
+                                    >Homeroom Teacher: <strong>{{ section.homeroom_teacher ? getTeacherName(section.homeroom_teacher) : getTeacherName(section.homeroom_teacher_id) }}</strong></span
                                 >
                             </div>
                             <div class="homeroom-teacher no-teacher" v-else>
@@ -5189,16 +5215,10 @@ watch(
 
                         <div class="section-body">
                             <p v-if="section.description" class="section-description">{{ section.description }}</p>
-                            <div class="section-capacity">
-                                <i class="pi pi-users"></i>
-                                <span
-                                    >Capacity: <strong>{{ section.capacity }}</strong> students</span
-                                >
-                            </div>
-                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id">
+                            <div class="homeroom-teacher" v-if="section.homeroom_teacher_id || section.homeroom_teacher">
                                 <i class="pi pi-user-edit"></i>
                                 <span
-                                    >Homeroom Teacher: <strong>{{ getTeacherName(section.homeroom_teacher_id) }}</strong></span
+                                    >Homeroom Teacher: <strong>{{ section.homeroom_teacher ? getTeacherName(section.homeroom_teacher) : getTeacherName(section.homeroom_teacher_id) }}</strong></span
                                 >
                             </div>
                             <div class="homeroom-teacher no-teacher" v-else>
@@ -5253,11 +5273,6 @@ watch(
             <div class="field">
                 <label for="sectionDescription" class="font-medium mb-2 block">Description (Optional)</label>
                 <InputText id="sectionDescription" v-model="newSection.description" placeholder="Enter section description" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label for="sectionCapacity" class="font-medium mb-2 block">Capacity</label>
-                <InputNumber id="sectionCapacity" v-model="newSection.capacity" :min="1" :max="100" placeholder="Enter capacity" class="w-full" />
             </div>
 
             <template #footer>
@@ -5676,16 +5691,15 @@ watch(
 
                         <!-- Subject Details -->
                         <div class="mb-3">
-                            <p v-if="subject.description" class="mt-0 mb-1">{{ subject.description }}</p>
-                            <div v-if="currentGradeHasSubjectTeachers">
-                                <div v-if="subject.teacher" class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="teacher-name">{{ subject.teacher.name }}</span>
-                                </div>
-                                <div v-else class="teacher-display mt-2">
-                                    <i class="pi pi-user mr-2"></i>
-                                    <span class="no-teacher-text">No teacher assigned</span>
-                                </div>
+                            <p v-if="subject.description" class="mt-0 mb-1 text-gray-600">{{ subject.description }}</p>
+                            <!-- Always show teacher info for all subjects -->
+                            <div class="teacher-display mt-2">
+                                <i class="pi pi-user mr-2 text-primary"></i>
+                                <span v-if="subject.teacher" class="teacher-name font-semibold">Teacher: {{ getTeacherName(subject.teacher) }}</span>
+                                <span v-else-if="subject.teacher_id" class="teacher-name font-semibold">Teacher: {{ getTeacherName(subject.teacher_id) }}</span>
+                                <span v-else-if="subject.pivot && subject.pivot.teacher_id" class="teacher-name font-semibold">Teacher: {{ getTeacherName(subject.pivot.teacher_id) }}</span>
+                                <span v-else-if="subject.teacher_name" class="teacher-name font-semibold">Teacher: {{ subject.teacher_name }}</span>
+                                <span v-else class="no-teacher-text text-gray-500">No teacher assigned</span>
                             </div>
                         </div>
 
@@ -5717,41 +5731,7 @@ watch(
                 </div>
             </div>
 
-            <!-- Section Details Tab -->
-            <div v-if="activeManagementTab === 'details'" class="tab-content">
-                <div class="schedule-header-container">
-                    <div class="schedule-header-content">
-                        <h3 class="m-0">⚙️ Section Details for {{ selectedSectionForHub?.name }}</h3>
-                    </div>
-                </div>
-
-                <div class="section-details-form">
-                    <div class="grid">
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="hubSectionName" class="font-medium mb-2 block">Section Name</label>
-                                <InputText id="hubSectionName" v-model="selectedSectionForHub.name" class="w-full" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="hubCapacity" class="font-medium mb-2 block">Capacity</label>
-                                <InputNumber id="hubCapacity" v-model="selectedSectionForHub.capacity" :min="1" :max="100" class="w-full" />
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="field">
-                                <label for="hubDescription" class="font-medium mb-2 block">Description</label>
-                                <InputText id="hubDescription" v-model="selectedSectionForHub.description" class="w-full" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-content-end gap-2 mt-4">
-                        <Button label="Save Changes" icon="pi pi-check" class="p-button-primary" @click="saveSectionDetailsFromHub" :loading="loading" />
-                    </div>
-                </div>
-            </div>
+            <!-- Section Details Tab - REMOVED per user request -->
 
             <template #footer>
                 <Button label="Close" icon="pi pi-times" class="p-button-text" @click="sectionManagementHub = false" />
@@ -7282,7 +7262,11 @@ body > .p-dialog-mask {
 }
 
 .curriculum-form .field:last-child {
-    margin-bottom: 0;
+    margin-bottom: 10px;
+}
+
+.curriculum-form .field:first-child {
+    margin-top: 10px;
 }
 
 /* Grid layout for cards */
