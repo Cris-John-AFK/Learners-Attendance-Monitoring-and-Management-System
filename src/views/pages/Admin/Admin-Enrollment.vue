@@ -19,6 +19,10 @@ const activeStudentTab = ref(0);
 const selectedGradeLevel = ref(null);
 const selectedSection = ref(null);
 
+// Expandable cards state
+const expandEnrolledCard = ref(false);
+const expandNotEnrolledCard = ref(false);
+
 // Helper functions for student display
 function getStudentDisplayName(student) {
     // Try different name field combinations based on backend data structure
@@ -975,28 +979,79 @@ defineExpose({
             </div>
         </div>
 
-        <!-- Statistics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8 px-6 py-8">
-            <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
-                <div class="flex items-center justify-between">
-                    <div>
+        <!-- Expandable Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 px-6 py-8">
+            <!-- Enrolled Students Card -->
+            <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer transform hover:scale-105" @click="expandEnrolledCard = !expandEnrolledCard">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex-1">
                         <p class="text-green-100 text-sm font-medium uppercase tracking-wide mb-2">Enrolled</p>
-                        <p class="text-3xl font-bold">{{ totalEnrolledStudents }}</p>
+                        <p class="text-4xl font-bold">{{ totalEnrolledStudents }}</p>
                     </div>
-                    <div class="bg-green-400 bg-opacity-30 rounded-lg p-3">
-                        <i class="pi pi-check-circle text-2xl"></i>
+                    <div class="bg-green-400 bg-opacity-30 rounded-xl p-4">
+                        <i class="pi pi-check-circle text-3xl"></i>
                     </div>
                 </div>
+                
+                <!-- Expandable Content -->
+                <div v-if="expandEnrolledCard" class="mt-6 pt-4 border-t border-green-400 border-opacity-30">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-green-400 bg-opacity-20 rounded-lg p-3">
+                            <p class="text-green-100 text-xs uppercase tracking-wide">With Sections</p>
+                            <p class="text-xl font-bold">{{ fullyEnrolledStudents.length }}</p>
+                        </div>
+                        <div class="bg-green-400 bg-opacity-20 rounded-lg p-3">
+                            <p class="text-green-100 text-xs uppercase tracking-wide">Pending Assignment</p>
+                            <p class="text-xl font-bold">{{ pendingEnrollmentStudents.length }}</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center">
+                        <span class="text-green-100 text-sm">Click to view details</span>
+                        <i class="pi pi-angle-up text-green-100"></i>
+                    </div>
+                </div>
+                
+                <!-- Collapsed Indicator -->
+                <div v-else class="mt-4 flex justify-between items-center">
+                    <span class="text-green-100 text-sm">Click to expand</span>
+                    <i class="pi pi-angle-down text-green-100"></i>
+                </div>
             </div>
-            <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
-                <div class="flex items-center justify-between">
-                    <div>
+
+            <!-- Not Enrolled Students Card -->
+            <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer transform hover:scale-105" @click="expandNotEnrolledCard = !expandNotEnrolledCard">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex-1">
                         <p class="text-orange-100 text-sm font-medium uppercase tracking-wide mb-2">Not Enrolled</p>
-                        <p class="text-3xl font-bold">{{ notEnrolledStudents.length }}</p>
+                        <p class="text-4xl font-bold">{{ notEnrolledStudents.length }}</p>
                     </div>
-                    <div class="bg-orange-400 bg-opacity-30 rounded-lg p-3">
-                        <i class="pi pi-chart-bar text-2xl"></i>
+                    <div class="bg-orange-400 bg-opacity-30 rounded-xl p-4">
+                        <i class="pi pi-chart-bar text-3xl"></i>
                     </div>
+                </div>
+                
+                <!-- Expandable Content -->
+                <div v-if="expandNotEnrolledCard" class="mt-6 pt-4 border-t border-orange-400 border-opacity-30">
+                    <div class="grid grid-cols-1 gap-3">
+                        <div class="bg-orange-400 bg-opacity-20 rounded-lg p-3">
+                            <p class="text-orange-100 text-xs uppercase tracking-wide">Awaiting Enrollment</p>
+                            <p class="text-xl font-bold">{{ students.filter(s => s.status === 'Admitted').length }}</p>
+                        </div>
+                        <div class="bg-orange-400 bg-opacity-20 rounded-lg p-3">
+                            <p class="text-orange-100 text-xs uppercase tracking-wide">Total Applicants</p>
+                            <p class="text-xl font-bold">{{ students.length }}</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center">
+                        <span class="text-orange-100 text-sm">Click to view details</span>
+                        <i class="pi pi-angle-up text-orange-100"></i>
+                    </div>
+                </div>
+                
+                <!-- Collapsed Indicator -->
+                <div v-else class="mt-4 flex justify-between items-center">
+                    <span class="text-orange-100 text-sm">Click to expand</span>
+                    <i class="pi pi-angle-down text-orange-100"></i>
                 </div>
             </div>
         </div>
@@ -1030,19 +1085,120 @@ defineExpose({
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 gap-3">
-                            <div v-for="student in pendingEnrollmentStudents" :key="student.id" class="student-card p-4 border rounded-lg hover:shadow-md transition-shadow">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center space-x-3">
-                                        <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <span class="text-blue-600 font-semibold text-sm">{{ getStudentInitials(student) }}</span>
+                        <div class="grid grid-cols-1 gap-4">
+                            <div v-for="student in pendingEnrollmentStudents" :key="student.id" class="student-card bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden">
+                                <!-- Card Header -->
+                                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border-b border-gray-100">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-4">
+                                            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+                                                <span class="text-white font-bold text-lg">{{ getStudentInitials(student) }}</span>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-xl font-semibold text-gray-900">{{ getStudentDisplayName(student) }}</h4>
+                                                <div class="flex items-center space-x-2 mt-1">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                        <i class="pi pi-graduation-cap mr-1"></i>
+                                                        {{ student.gradeLevel || student.grade_level }}
+                                                    </span>
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <i class="pi pi-check-circle mr-1"></i>
+                                                        {{ student.status || 'Admitted' }}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h4 class="font-medium text-gray-900">{{ getStudentDisplayName(student) }}</h4>
-                                            <p class="text-sm text-gray-500">{{ student.gradeLevel || student.grade_level }}</p>
+                                        <Button label="Assign Section" icon="pi pi-arrow-right" class="p-button-primary p-button-sm" @click="openSectionAssignment(student)" />
+                                    </div>
+                                </div>
+
+                                <!-- Card Body -->
+                                <div class="p-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <!-- Student Information -->
+                                        <div class="space-y-3">
+                                            <h5 class="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1">Student Information</h5>
+                                            <div class="space-y-2">
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-id-card text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">ID:</span>
+                                                    <span class="text-gray-900">{{ student.studentId || student.enrollment_id || 'N/A' }}</span>
+                                                </div>
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-calendar text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">Birthdate:</span>
+                                                    <span class="text-gray-900">{{ student.birthdate || 'N/A' }}</span>
+                                                </div>
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-user text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">Gender:</span>
+                                                    <span class="text-gray-900">{{ student.gender || student.sex || 'N/A' }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Contact Information -->
+                                        <div class="space-y-3">
+                                            <h5 class="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1">Contact Information</h5>
+                                            <div class="space-y-2">
+                                                <div class="flex items-start text-sm">
+                                                    <i class="pi pi-envelope text-gray-400 mr-2 w-4 mt-0.5"></i>
+                                                    <div>
+                                                        <span class="text-gray-600 font-medium">Email:</span>
+                                                        <p class="text-gray-900 break-all">{{ student.email || 'N/A' }}</p>
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-phone text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">Contact:</span>
+                                                    <span class="text-gray-900">{{ student.contact || student.phone || 'N/A' }}</span>
+                                                </div>
+                                                <div class="flex items-start text-sm">
+                                                    <i class="pi pi-map-marker text-gray-400 mr-2 w-4 mt-0.5"></i>
+                                                    <div>
+                                                        <span class="text-gray-600 font-medium">Address:</span>
+                                                        <p class="text-gray-900 text-xs leading-relaxed">{{ formatAddress(student) }}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Enrollment Details -->
+                                        <div class="space-y-3">
+                                            <h5 class="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1">Enrollment Details</h5>
+                                            <div class="space-y-2">
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-calendar-plus text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">Admission:</span>
+                                                    <span class="text-gray-900">{{ student.admissionDate || student.admission_date || 'N/A' }}</span>
+                                                </div>
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-bookmark text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">LRN:</span>
+                                                    <span class="text-gray-900">{{ student.lrn || 'Not provided' }}</span>
+                                                </div>
+                                                <div class="flex items-center text-sm">
+                                                    <i class="pi pi-building text-gray-400 mr-2 w-4"></i>
+                                                    <span class="text-gray-600 font-medium mr-2">Section:</span>
+                                                    <span class="text-orange-600 font-medium">{{ student.section || 'Not Assigned' }}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <Button label="Assign Section" icon="pi pi-arrow-right" size="small" class="p-button-sm" @click="openSectionAssignment(student)" />
+
+                                    <!-- Action Buttons -->
+                                    <div class="mt-4 pt-4 border-t border-gray-100">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex space-x-2">
+                                                <Button label="View Details" icon="pi pi-eye" class="p-button-outlined p-button-sm" @click="openStudentModal(student)" />
+                                                <Button label="Edit Info" icon="pi pi-pencil" class="p-button-outlined p-button-sm" />
+                                            </div>
+                                            <div class="text-xs text-gray-500">
+                                                <i class="pi pi-clock mr-1"></i>
+                                                Last updated: {{ new Date().toLocaleDateString() }}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
