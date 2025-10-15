@@ -691,7 +691,8 @@ function processIndexedData(indexedData) {
             gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
             section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
             absences: student.total_absences || 0,
-            severity: calculateSeverity(student.total_absences || 0),
+            recent_absences: student.recent_absences || 0,
+            severity: calculateSeverity(student.recent_absences || 0),
             attendanceRate: student.attendance_rate || 100,
             totalPresent: student.total_present || 0,
             totalLate: student.total_late || 0
@@ -770,7 +771,8 @@ async function loadDepartmentalizedSubjectData(subjectId) {
                         gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
                         section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
                         absences: student.total_absences || 0,
-                        severity: calculateSeverity(student.total_absences || 0),
+                        recent_absences: student.recent_absences || 0,
+                        severity: calculateSeverity(student.recent_absences || 0),
                         attendanceRate: student.attendance_rate || 100,
                         totalPresent: student.total_present || 0,
                         totalLate: student.total_late || 0
@@ -835,6 +837,7 @@ async function loadSingleSectionData(sectionId, subjectId) {
                     gradeLevel: student.grade_name || 'Unknown Grade',
                     section: student.section_name || `Section ${student.section_id}`,
                     absences: student.total_absences,
+                    recent_absences: student.recent_absences || 0,
                     severity: student.severity,
                     attendanceRate: student.attendance_rate,
                     totalPresent: student.total_present,
@@ -881,11 +884,17 @@ async function loadSingleSectionData(sectionId, subjectId) {
 
             studentsWithAbsenceIssues.value = studentsData.map((student) => ({
                 id: student.student_id || student.id,
+                student_id: student.student_id || student.id,
                 name: student.name || `${student.first_name || student.firstName} ${student.last_name || student.lastName}`,
+                first_name: student.first_name || student.firstName,
+                last_name: student.last_name || student.lastName,
                 gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
                 section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
                 absences: student.total_absences || 0,
-                severity: calculateSeverity(student.total_absences || 0),
+                total_absences: student.total_absences || 0,
+                recent_absences: student.recent_absences || 0,
+                consecutive_absences: student.consecutive_absences || 0,
+                severity: calculateSeverity(student.recent_absences || 0),
                 attendanceRate: student.attendance_rate || 100,
                 totalPresent: student.total_present || 0,
                 totalLate: student.total_late || 0
@@ -903,14 +912,14 @@ async function loadSingleSectionData(sectionId, subjectId) {
                           averageAttendance: summaryResponse.data.average_attendance || 0,
                           studentsWithWarning: warningCount,
                           studentsWithCritical: criticalCount,
-                          students: summaryResponse.data.students || []
+                          students: studentsWithAbsenceIssues.value // Use processed student data
                       }
                     : {
                           totalStudents: studentsResponse.count || 0,
                           averageAttendance: 0,
                           studentsWithWarning: warningCount,
                           studentsWithCritical: criticalCount,
-                          students: []
+                          students: studentsWithAbsenceIssues.value // Use processed student data
                       };
 
             console.log('✅ Attendance data loaded. Students:', studentsWithAbsenceIssues.value.length);
@@ -957,7 +966,8 @@ async function loadAllSubjectsData() {
                     gradeLevel: student.grade_name || student.curriculum_grade?.grade_name || 'Unknown',
                     section: student.section_name || student.section || 'Unknown Section',
                     absences: student.total_absences || student.absence_count || 0,
-                    severity: calculateSeverity(student.total_absences || student.absence_count || 0),
+                    recent_absences: student.recent_absences || 0,
+                    severity: calculateSeverity(student.recent_absences || 0),
                     attendanceRate: student.attendance_rate || 100,
                     totalPresent: student.total_present || 0,
                     totalLate: student.total_late || 0
@@ -1913,7 +1923,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Need Attention (3-4 absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">At Risk (3-4 absences)</div>
                             <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
                         </div>
                     </div>
@@ -1923,7 +1933,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Urgent Action (5+ absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Critical Risk (5+ absences)</div>
                             <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
                         </div>
                     </div>

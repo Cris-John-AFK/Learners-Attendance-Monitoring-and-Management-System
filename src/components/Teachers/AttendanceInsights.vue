@@ -8,35 +8,7 @@
             <small class="insights-subtitle">All Students</small>
         </div>
 
-        <!-- Risk Assessment Cards -->
-        <div class="risk-cards-grid">
-            <div class="risk-card critical" v-if="criticalStudents.length > 0">
-                <div class="risk-header">
-                    <i class="pi pi-exclamation-circle"></i>
-                    <span>Critical Risk</span>
-                </div>
-                <div class="risk-count">{{ criticalStudents.length }}</div>
-                <div class="risk-description">Students with 5+ recent absences</div>
-            </div>
-
-            <div class="risk-card warning" v-if="warningStudents.length > 0">
-                <div class="risk-header">
-                    <i class="pi pi-exclamation-triangle"></i>
-                    <span>At Risk</span>
-                </div>
-                <div class="risk-count">{{ warningStudents.length }}</div>
-                <div class="risk-description">Students with 3-4 recent absences</div>
-            </div>
-
-            <div class="risk-card consecutive" v-if="consecutiveAbsenceStudents.length > 0">
-                <div class="risk-header">
-                    <i class="pi pi-calendar-times"></i>
-                    <span>Consecutive Absences</span>
-                </div>
-                <div class="risk-count">{{ consecutiveAbsenceStudents.length }}</div>
-                <div class="risk-description">Students with 3+ consecutive days absent</div>
-            </div>
-        </div>
+        <!-- Risk cards removed - now shown on main dashboard -->
 
         <!-- Individual Student Plans -->
         <div class="student-plans-section" v-if="studentsNeedingAttention && studentsNeedingAttention.length > 0">
@@ -175,31 +147,22 @@
                         <h5><i class="pi pi-chart-bar"></i> Weekly Attendance Overview</h5>
                         <div class="filters-container">
                             <div class="filter-group">
-                                <label for="subject-filter" style="margin-right: 8px; font-weight: 500;">Subject:</label>
-                                <Dropdown 
+                                <label for="subject-filter" style="margin-right: 8px; font-weight: 500">Subject:</label>
+                                <Dropdown
                                     id="subject-filter"
-                                    v-model="selectedSubjectFilter" 
+                                    v-model="selectedSubjectFilter"
                                     :options="availableSubjects"
                                     optionLabel="name"
                                     optionValue="id"
                                     placeholder="All Subjects"
                                     @change="onSubjectFilterChange"
                                     showClear
-                                    style="min-width: 180px;"
+                                    style="min-width: 180px"
                                 />
                             </div>
                             <div class="filter-group">
-                                <label for="month-picker" style="margin-right: 8px; font-weight: 500;">Month:</label>
-                                <Calendar 
-                                    id="month-picker"
-                                    v-model="selectedMonth" 
-                                    view="month" 
-                                    dateFormat="MM yy"
-                                    @date-select="onMonthChange"
-                                    :maxDate="new Date()"
-                                    showIcon
-                                    placeholder="Select month"
-                                />
+                                <label for="month-picker" style="margin-right: 8px; font-weight: 500">Month:</label>
+                                <Calendar id="month-picker" v-model="selectedMonth" view="month" dateFormat="MM yy" @date-select="onMonthChange" :maxDate="new Date()" showIcon placeholder="Select month" />
                             </div>
                         </div>
                     </div>
@@ -226,20 +189,20 @@
                                     <span class="stat-value">{{ week.late }}</span>
                                 </div>
                             </div>
-                            
+
                             <!-- Subject Breakdown Tooltip -->
                             <div v-if="week.subject_breakdown && Object.keys(week.subject_breakdown).length > 0" class="subject-breakdown-info">
                                 <small class="breakdown-label">📚 By Subject:</small>
                                 <div class="subject-list">
                                     <div v-for="(stats, subjectKey) in week.subject_breakdown" :key="subjectKey" class="subject-item">
-                                        <strong>{{ stats.subject_name || subjectKey }}:</strong> 
+                                        <strong>{{ stats.subject_name || subjectKey }}:</strong>
                                         <span class="text-green-600">{{ stats.present }}P</span>
                                         <span class="text-red-600">{{ stats.absent }}A</span>
                                         <span class="text-yellow-600" v-if="stats.late > 0">{{ stats.late }}L</span>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="percentage-bar">
                                 <div class="percentage-fill" :style="{ width: week.percentage + '%' }"></div>
                                 <span class="percentage-text">{{ week.percentage }}%</span>
@@ -335,13 +298,12 @@ const progressData = ref({
 
 // Helper functions (defined first to be used in computed properties)
 function getRiskLevel(student) {
-    const totalAbsences = student.total_absences || 0;
+    // Use ONLY recent_absences for consistency with dashboard cards
     const recentAbsences = student.recent_absences || 0;
-    const consecutiveAbsences = student.consecutive_absences || 0;
 
-    if (totalAbsences >= 5 || recentAbsences >= 5 || consecutiveAbsences >= 5) return 'critical';
-    if (totalAbsences >= 3 || recentAbsences >= 3 || consecutiveAbsences >= 3) return 'high';
-    if (totalAbsences >= 1 || recentAbsences >= 1 || consecutiveAbsences >= 1) return 'medium';
+    if (recentAbsences >= 5) return 'critical';
+    if (recentAbsences >= 3) return 'high';
+    if (recentAbsences >= 1) return 'medium';
     return 'normal';
 }
 
@@ -416,7 +378,7 @@ const studentsNeedingAttention = computed(() => {
             riskFactors: getRiskFactors(student),
             attendancePlan: getExistingPlan(student),
             // Only show consecutive absences if there are actual recent sessions (not old seeded data)
-            consecutive_absences: (student.recent_absences > 0) ? (student.consecutive_absences || 0) : 0
+            consecutive_absences: student.recent_absences > 0 ? student.consecutive_absences || 0 : 0
         }))
         .sort((a, b) => (b.recent_absences || 0) - (a.recent_absences || 0));
 
@@ -611,10 +573,10 @@ async function loadProgressData(student) {
 
         // Fetch REAL weekly attendance records from database for selected month, subject, AND teacher!
         const weeklyResponse = await SmartAnalyticsService.getStudentWeeklyAttendance(
-            studentId, 
+            studentId,
             selectedMonth.value,
             selectedSubjectFilter.value,
-            props.currentTeacher?.id  // CRITICAL: Only show this teacher's sessions!
+            props.currentTeacher?.id // CRITICAL: Only show this teacher's sessions!
         );
 
         console.log('📊 Real Weekly Attendance Response:', weeklyResponse);
@@ -622,11 +584,11 @@ async function loadProgressData(student) {
         if (weeklyResponse.success && weeklyResponse.data) {
             const weeklyAttendance = weeklyResponse.data.weekly_attendance;
             console.log('✅ Loaded real weekly attendance:', weeklyAttendance);
-            
+
             // Load available subjects from the breakdown (with real database IDs)
             // BUT only show subjects that belong to the current teacher (from props)
             const subjectsMap = new Map();
-            
+
             // If we have a selected subject from props, use only that
             if (props.selectedSubject && props.selectedSubject.id) {
                 subjectsMap.set(props.selectedSubject.id, {
@@ -634,11 +596,11 @@ async function loadProgressData(student) {
                     name: props.selectedSubject.name
                 });
             }
-            
+
             // Also collect subjects from the breakdown, but they should match teacher's subjects
-            weeklyAttendance.forEach(week => {
+            weeklyAttendance.forEach((week) => {
                 if (week.subject_breakdown) {
-                    Object.values(week.subject_breakdown).forEach(subjectData => {
+                    Object.values(week.subject_breakdown).forEach((subjectData) => {
                         if (subjectData.subject_id && subjectData.subject_name) {
                             subjectsMap.set(subjectData.subject_id, {
                                 id: subjectData.subject_id,
@@ -648,12 +610,12 @@ async function loadProgressData(student) {
                     });
                 }
             });
-            
+
             availableSubjects.value = Array.from(subjectsMap.values());
             console.log('📚 Available subjects for current teacher:', availableSubjects.value);
 
             // Format weekly data for display
-            const weeklyData = weeklyAttendance.map(week => ({
+            const weeklyData = weeklyAttendance.map((week) => ({
                 week: week.week,
                 present: week.present,
                 absent: week.absent,
@@ -681,42 +643,43 @@ async function loadProgressData(student) {
             let improvements = [];
             let concerns = [];
             let nextSteps = [];
-            
+
             try {
                 const smartAnalytics = await SmartAnalyticsService.getStudentAnalytics(studentId);
                 console.log('🤖 Smart Analytics Response:', smartAnalytics);
-                
+
                 if (smartAnalytics.success && smartAnalytics.data && smartAnalytics.data.recommendations) {
                     const recs = smartAnalytics.data.recommendations;
-                    
+
                     // Use AI-generated insights from the recommendations!
-                    improvements = (recs.positive_improvements || []).map(imp => {
+                    improvements = (recs.positive_improvements || []).map((imp) => {
                         return `${imp.icon || '✅'} ${imp.message}`;
                     });
-                    
-                    concerns = (recs.areas_of_concern || []).map(concern => {
+
+                    concerns = (recs.areas_of_concern || []).map((concern) => {
                         return `${concern.icon || '⚠️'} ${concern.title}: ${concern.message}`;
                     });
-                    
+
                     // Format recommended next steps with urgency
-                    nextSteps = (recs.recommended_next_steps || []).map(action => {
-                        const urgencyEmoji = {
-                            'critical': '🚨',
-                            'high': '⚠️',
-                            'medium': '📌',
-                            'low': '💡'
-                        }[action.urgency] || '📋';
-                        
+                    nextSteps = (recs.recommended_next_steps || []).map((action) => {
+                        const urgencyEmoji =
+                            {
+                                critical: '🚨',
+                                high: '⚠️',
+                                medium: '📌',
+                                low: '💡'
+                            }[action.urgency] || '📋';
+
                         return `${urgencyEmoji} ${action.action} (${action.timeline})`;
                     });
-                    
+
                     console.log('✅ Using Smart Analytics insights!', { improvements, concerns, nextSteps });
                 } else {
                     throw new Error('Smart analytics not available');
                 }
             } catch (error) {
                 console.warn('⚠️ Smart analytics failed, using basic fallback:', error);
-                
+
                 // Fallback to basic logic if smart analytics fails
                 if (totalAbsences === 0) {
                     improvements.push('Perfect attendance record maintained');
@@ -745,7 +708,7 @@ async function loadProgressData(student) {
                     improvements.push('🔄 Working on improving attendance consistency');
                 }
             }
-            
+
             if (concerns.length === 0) {
                 if (weeklyData.length === 0) {
                     concerns.push('📊 Insufficient data - waiting for attendance records');
@@ -753,7 +716,7 @@ async function loadProgressData(student) {
                     concerns.push('✅ No significant concerns at this time');
                 }
             }
-            
+
             if (nextSteps.length === 0) {
                 if (weeklyData.length === 0) {
                     nextSteps.push('📝 Begin recording attendance once classes start');
@@ -770,7 +733,7 @@ async function loadProgressData(student) {
                 concerns: concerns,
                 nextSteps: nextSteps
             };
-            
+
             console.log('✅ Progress data loaded with REAL weekly attendance!', progressData.value);
         } else {
             // Fallback to empty state if no analytics available
@@ -784,7 +747,7 @@ async function loadProgressData(student) {
         }
     } catch (error) {
         console.error('Error loading student analytics:', error);
-        
+
         progressData.value = {
             weeklyAttendance: [],
             monthlyTrends: [],
@@ -1401,55 +1364,7 @@ function viewStudentProfile(student) {
     font-size: 0.875rem;
 }
 
-.risk-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-}
-
-.risk-card {
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid;
-    background: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.risk-card.critical {
-    border-left-color: #dc3545;
-    background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
-}
-
-.risk-card.warning {
-    border-left-color: #ffc107;
-    background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);
-}
-
-.risk-card.consecutive {
-    border-left-color: #fd7e14;
-    background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
-}
-
-.risk-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    font-size: 0.875rem;
-}
-
-.risk-count {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-}
-
-.risk-description {
-    font-size: 0.75rem;
-    color: #6c757d;
-}
+/* Risk cards CSS removed - cards now on main dashboard */
 
 .section-title {
     display: flex;

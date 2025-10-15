@@ -378,7 +378,7 @@ class AttendanceController extends Controller
             $subject = \App\Models\Subject::where('name', 'ILIKE', $requestData['subject_id'])
                 ->orWhere('code', 'ILIKE', $requestData['subject_id'])
                 ->first();
-            
+
             if ($subject) {
                 $requestData['subject_id'] = $subject->id;
                 Log::info('Converted subject identifier to ID in mark attendance', [
@@ -684,7 +684,7 @@ class AttendanceController extends Controller
 
             // Get students directly with enrollment status filter
             Log::info('🎯🎯🎯 NEW CODE IS RUNNING - FILTERING DROPPED STUDENTS 🎯🎯🎯');
-            
+
             $students = Student::whereHas('sections', function($query) use ($sectionId) {
                     $query->where('section_id', $sectionId)
                           ->where('student_section.is_active', true);
@@ -695,7 +695,7 @@ class AttendanceController extends Controller
                           ->orWhere('enrollment_status', 'transferred_in');
                 })
                 ->get();
-            
+
             Log::info('🔥 FILTERED STUDENTS RESULT', [
                 'teacher_id' => $teacherId,
                 'section_id' => $sectionId,
@@ -710,7 +710,7 @@ class AttendanceController extends Controller
                     ->where('student_id', $student->id)
                     ->where('section_id', $sectionId)
                     ->first();
-                
+
                 $gradeInfo = null;
                 if ($sectionPivot) {
                     $section = DB::table('sections as s')
@@ -719,17 +719,17 @@ class AttendanceController extends Controller
                         ->where('s.id', $sectionId)
                         ->select('g.name as grade_name')
                         ->first();
-                    
+
                     $gradeInfo = $section;
                 }
-                
+
                 // Get absence count from attendance records
                 $absenceCount = DB::table('attendance_records as ar')
                     ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                     ->where('ar.student_id', $student->id)
                     ->where('ast.code', 'A')
                     ->count();
-                
+
                 return [
                     'id' => $student->id,
                     'name' => $student->name ?? $student->firstName . ' ' . $student->lastName,
@@ -743,7 +743,7 @@ class AttendanceController extends Controller
             });
 
             $section = Section::findOrFail($sectionId);
-            
+
             return response()->json([
                 'section' => [
                     'id' => $section->id,
@@ -824,12 +824,12 @@ class AttendanceController extends Controller
 
             $studentIds = explode(',', $request->student_ids);
             $subjectId = $request->subject_id;
-            
+
             // CRITICAL FIX: Convert 'homeroom' string to NULL
             if ($subjectId === 'homeroom' || $subjectId === 'null' || $subjectId === '') {
                 $subjectId = null;
             }
-            
+
             $month = $request->month + 1; // Convert JS month (0-11) to PHP month (1-12)
             $year = $request->year;
 
@@ -838,14 +838,14 @@ class AttendanceController extends Controller
                 ->join('attendance_sessions as as', 'ar.attendance_session_id', '=', 'as.id')
                 ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                 ->whereIn('ar.student_id', $studentIds);
-            
+
             // Handle homeroom vs subject filtering
             if ($subjectId === null) {
                 $recordsQuery->whereNull('as.subject_id');
             } else {
                 $recordsQuery->where('as.subject_id', $subjectId);
             }
-            
+
             $records = $recordsQuery
                 ->leftJoin('attendance_reasons as areason', 'ar.reason_id', '=', 'areason.id')
                 ->whereYear('as.session_date', $year)
@@ -867,11 +867,11 @@ class AttendanceController extends Controller
                     // Map status codes to full names
                     $statusMap = [
                         'P' => 'PRESENT',
-                        'A' => 'ABSENT', 
+                        'A' => 'ABSENT',
                         'L' => 'LATE',
                         'E' => 'EXCUSED'
                     ];
-                    
+
                     return [
                         'id' => $record->record_id,
                         'student_id' => $record->student_id,

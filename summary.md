@@ -123,6 +123,55 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ---
 
+#### **TEACHER DASHBOARD NAMING CONSISTENCY FIX** ✅ NEW
+**Feature**: Fixed confusing and inconsistent naming, removed duplicate cards, AND fixed data source mismatch (frontend + backend) based on user testing feedback.
+
+**Problem**: User testing revealed confusion with inconsistent terminology AND different numbers:
+- Top Cards: "Need Attention" and "Urgent Action"
+- Attendance Insights: "At Risk" and "Critical Risk" (duplicate cards)
+- Expandable Groups: "High Risk" and "Medium Risk"
+- **CRITICAL BUG**: Top card showed 15 Critical Risk, but Insights showed 18 Critical Risk
+- **Root Cause**: Top cards used `total_absences`, Insights used `recent_absences`
+- **Backend Issue**: API was NOT returning `recent_absences` field, causing both cards to show 0
+
+**Solution**: Standardized all naming, removed duplicates, AND fixed data source + backend:
+- **Top Cards**: "At Risk (3-4 absences)" and "Critical Risk (5+ absences)"
+- **Attendance Insights**: Duplicate cards REMOVED, only expandable section remains
+- **Expandable Groups**: "At Risk", "Critical Risk", and "Low Risk"
+- **Single Data Source**: ALL components now use `recent_absences` consistently
+- **Backend Fixed**: API now returns `recent_absences` (last 30 days)
+- **Numbers Match**: Top card and Insights now show identical counts
+
+**Risk Level Definitions**:
+- **Critical Risk**: 5+ recent absences
+- **At Risk**: 3-4 recent absences
+- **Low Risk**: 1-2 recent absences
+- **Normal**: 0 recent absences
+
+**Technical Changes**:
+1. `TeacherDashboard.vue` (lines 1915, 1925): Updated card labels
+2. `TeacherDashboard.vue` (lines 772, 887, 693, 838, 960): 
+   - Fixed `loadSingleSectionData()` to use `recent_absences`
+   - Fixed `loadAllSubjectsData()` to use `recent_absences`
+   - Fixed `loadDepartmentalizedSubjectData()` to use `recent_absences`
+   - Fixed `processIndexedData()` to use `recent_absences`
+   - Fixed cached data mapping to include `recent_absences`
+3. `AttendanceInsights.vue` (lines 336-350, 75-111, 10-38): 
+   - Modified `getRiskLevel()` to use only `recent_absences`
+   - Renamed risk level labels for consistency
+   - **REMOVED duplicate risk cards** from top of component
+4. `AttendanceController.php` (lines 725-741):
+   - Added `recent_absences` calculation to API
+   - Calculates absences from last 30 days
+
+**Result**: Clear, consistent terminology; **numbers match perfectly**; **no duplicate cards** (cleaner UI); eliminates teacher confusion; data integrity across all views; backend provides accurate data
+**Files Modified**: 
+- `src/views/pages/teacher/TeacherDashboard.vue`
+- `src/components/Teachers/AttendanceInsights.vue`
+- `lamms-backend/app/Http/Controllers/API/AttendanceController.php`
+
+---
+
 #### **ADMIN CURRICULUM SECTION MANAGEMENT - COMPLETE OVERHAUL** ✅
 **Feature**: Fixed and enhanced Admin Curriculum section management with proper teacher display, subject assignments, and streamlined UI.
 

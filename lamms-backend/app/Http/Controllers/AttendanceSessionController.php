@@ -22,15 +22,15 @@ class AttendanceSessionController extends Controller
             $teacherId = $request->query('teacher_id');
             $sectionId = $request->query('section_id');
             $subjectId = $request->query('subject_id');
-            
+
             Log::info("AttendanceSessionController - Getting students", [
                 'teacher_id' => $teacherId,
                 'section_id' => $sectionId,
                 'subject_id' => $subjectId
             ]);
-            
+
             Log::info("🔍 DEBUGGING: About to execute student query with filtering");
-            
+
             // Validate required parameters
             if (empty($sectionId) || $sectionId === '' || $sectionId === 'null') {
                 Log::warning("Invalid section_id provided", ['section_id' => $sectionId]);
@@ -41,7 +41,7 @@ class AttendanceSessionController extends Controller
                     'count' => 0
                 ], 400);
             }
-            
+
             // First, get the section name
             $sectionName = DB::table('sections')
                 ->where('id', $sectionId)
@@ -81,9 +81,15 @@ class AttendanceSessionController extends Controller
                     'sd.enrollment_status',
                     's.name as section_name',
                     'g.name as grade_name',
-                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar 
-                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id 
-                             WHERE ar.student_id = sd.id AND ast.code = \'A\') as total_absences')
+                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
+                             WHERE ar.student_id = sd.id AND ast.code = \'A\') as total_absences'),
+                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
+                             INNER JOIN attendance_sessions asess ON ar.attendance_session_id = asess.id
+                             WHERE ar.student_id = sd.id 
+                             AND ast.code = \'A\'
+                             AND asess.session_date >= CURRENT_DATE - INTERVAL \'30 days\') as recent_absences')
                 ])
                 ->distinct()
                 ->orderBy('sd.lastName')
@@ -99,9 +105,9 @@ class AttendanceSessionController extends Controller
                 })
                 ->select('sd.id', 'sd.firstName', 'sd.lastName', 'sd.status')
                 ->get();
-            
+
             $droppedOutStudents = $allStudentsInSection->whereIn('status', ['Dropped Out', 'dropped_out', 'Transferred Out', 'transferred_out', 'Withdrawn', 'withdrawn', 'Deceased', 'deceased']);
-            
+
             if ($droppedOutStudents->count() > 0) {
                 Log::info("🚫 Filtered out non-enrolled students from attendance", [
                     'section_id' => $sectionId,
@@ -116,7 +122,7 @@ class AttendanceSessionController extends Controller
             $filteredOut = $droppedOutStudents->count();
 
             Log::info("Found students for section", [
-                'section_id' => $sectionId, 
+                'section_id' => $sectionId,
                 'student_count' => $students->count(),
                 'total_in_section' => $totalInSection,
                 'filtered_out' => $filteredOut
@@ -150,7 +156,7 @@ class AttendanceSessionController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching students: ' . $e->getMessage(),
@@ -292,7 +298,7 @@ class AttendanceSessionController extends Controller
     {
         try {
             $session = AttendanceSession::findOrFail($sessionId);
-            
+
             $session->update([
                 'status' => 'completed',
                 'session_end_time' => now()->format('H:i:s')
