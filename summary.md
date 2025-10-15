@@ -5,6 +5,120 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
+### **October 16, 2025 - Student Status Filter & SF2 Grade Level Fixes**
+
+#### **1. Admin Student Status Filter - COMPLETE FIX** ✅
+**Problem**: Status filter dropdown wasn't working - selecting "Dropped Out" showed no results even though SF2 reports showed students with that status.
+
+**Root Cause**: Database has TWO status columns in `student_details` table:
+1. `status` (old column - boolean/simple text)
+2. `enrollment_status` (new column - authoritative, with values: 'active', 'dropped_out', 'transferred_out', 'transferred_in', 'graduated')
+
+SF2 Report uses `enrollment_status` (correct), but Admin-Student filter was using wrong values with case/format mismatch.
+
+**Solutions Implemented**:
+
+1. **Backend** (`StudentController.php`):
+   - Added `enrollment_status` fields to API response:
+   ```php
+   'enrollment_status' => $student->enrollment_status,
+   'dropout_reason' => $student->dropout_reason,
+   'dropout_reason_category' => $student->dropout_reason_category,
+   'status_effective_date' => $student->status_effective_date
+   ```
+
+2. **Frontend** (`Admin-Student.vue`):
+   - **Status Filter Dropdown**: Changed values from 'Dropped Out' to 'dropped_out' (lowercase with underscores)
+   - **Status Change Dialog**: Updated dropdown to use database values
+   - **Display Function**: Added `getStudentStatusDisplay()` to format database values:
+   ```javascript
+   const statusMap = {
+       'active': 'Active',
+       'dropped_out': 'Dropped Out',
+       'transferred_out': 'Transferred Out',
+       'transferred_in': 'Transferred In',
+       'graduated': 'Graduated'
+   };
+   ```
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/StudentController.php` (lines 73-77)
+- `src/views/pages/Admin/Admin-Student.vue` (lines 530-550, 2030-2038, 2922-2930)
+
+**Result**: Status filter now works correctly - selecting "Dropped Out" shows all students with `enrollment_status='dropped_out'` in database.
+
+---
+
+#### **2. SF2 Collected Reports Grade Level - COMPLETE FIX** ✅
+**Problem**: In the Collected Reports table, all SF2 reports were showing "Grade 1" regardless of the teacher's actual grade level. For example, Ana Cruz (Grade 4 teacher) had her report listed as "Grade 1".
+
+**Root Cause**: The `SimpleSF2Controller.php` had **hardcoded 'Grade 1'** in two places when creating SF2 report submissions:
+- Line 79: When inserting into `submitted_sf2_reports` table
+- Line 106: When returning the response data
+
+**Solutions Implemented**:
+
+1. **Fixed Future Submissions** (`SimpleSF2Controller.php`):
+   ```php
+   // BEFORE:
+   'grade_level' => 'Grade 1',
+   
+   // AFTER:
+   $section = DB::table('sections')
+       ->join('curriculum_grades', 'sections.curriculum_grade_id', '=', 'curriculum_grades.id')
+       ->join('grades', 'curriculum_grades.grade_id', '=', 'grades.id')
+       ->select('sections.*', 'grades.name as grade_name')
+       ->first();
+   
+   'grade_level' => $section->grade_name ?? 'Grade 1',
+   ```
+
+2. **Fixed Existing Data** (Manual Database Update):
+   - Report ID 1 (Ana Cruz - Silang section) → Updated to **Grade 4**
+   - Report ID 2 (Maria Santos - Gumamela section) → Updated to **Grade 1**
+
+**Database Structure Discovery**:
+- Sections table uses `curriculum_grade_id` (NOT `grade_id`)
+- Requires join: `sections → curriculum_grades → grades`
+- Grade name is stored in `grades.name`
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/SimpleSF2Controller.php` (lines 29-36, 85, 112)
+- `lamms-backend/routes/api.php` (added temporary fix route)
+
+**Result**: 
+- ✅ Future SF2 submissions automatically use correct grade level from teacher's section
+- ✅ Existing reports updated to show correct grade levels
+- ✅ Ana Cruz's Grade 4 reports now display "Grade 4" instead of "Grade 1"
+- ✅ No breaking changes to other controllers (SF2ReportController, TeacherStudentManagementController)
+
+---
+
+#### **3. Admin Enrollment UI Enhancement** ✅
+**Feature**: Removed redundant Quick Actions sidebar from Admin-Enrollment page for cleaner, more spacious interface.
+
+**Changes Made**:
+1. **Removed Quick Actions Sidebar** (lines 1209-1218):
+   - Deleted entire right sidebar containing:
+     - "Add New Student" button (redundant - exists in empty state)
+     - "Import Students" button
+     - "Export Data" button
+
+2. **Updated Layout Grid**:
+   - Changed from: `grid grid-cols-1 lg:grid-cols-3 gap-8` (3-column grid with sidebar)
+   - Changed to: Simple container with full width
+   - Removed: `lg:col-span-2` class from enrolled students section
+
+**Files Modified**:
+- `src/views/pages/Admin/Admin-Enrollment.vue` (lines 1058-1218)
+
+**Result**: 
+- ✅ Enrolled Students section spans entire width
+- ✅ More space for student cards and information
+- ✅ Cleaner, more focused interface
+
+---
+
 ### **October 16, 2025 - Dashboard & Enrollment Fixes**
 
 #### **1. Teacher Dashboard Attendance Risk Cards - FIXED** ✅

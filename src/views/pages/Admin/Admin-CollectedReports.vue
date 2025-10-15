@@ -2830,7 +2830,7 @@ onUnmounted(() => {
                         <template #body="slotProps">
                             <div class="flex gap-1">
                                 <Button icon="pi pi-eye" class="p-button-rounded p-button-text" title="View Report" @click="viewSF2Report(slotProps.data)" />
-                                <Button icon="pi pi-download" class="p-button-rounded p-button-text p-button-success" title="Download Report" @click="downloadSF2Report(slotProps.data)" />
+                                <Button icon="pi pi-download" class="p-button-rounded p-button-text" title="Download Report" @click="downloadSF2Report(slotProps.data)" />
                             </div>
                         </template>
                     </Column>

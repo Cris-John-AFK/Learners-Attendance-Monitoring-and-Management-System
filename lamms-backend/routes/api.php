@@ -558,3 +558,47 @@ Route::get('/teachers/{teacherId}/assignments', [TeacherAssignmentValidationCont
 Route::post('/teachers/validate-homeroom-assignment', [TeacherAssignmentValidationController::class, 'validateHomeroomAssignment']);
 
 Route::get('/students/{studentId}/qr-card/download', [QRCodeController::class, 'downloadQRCard']);
+
+// Fix SF2 Grade Levels (one-time fix for existing data)
+Route::get('/fix-sf2-grade-levels', function() {
+    try {
+        Log::info('Starting SF2 grade level fix...');
+        $reports = DB::table('submitted_sf2_reports')->get();
+        Log::info('Found ' . count($reports) . ' reports');
+        $updated = 0;
+        
+        foreach ($reports as $report) {
+            Log::info('Processing report', ['id' => $report->id, 'section_id' => $report->section_id]);
+            
+            $section = DB::table('sections')
+                ->join('curriculum_grades', 'sections.curriculum_grade_id', '=', 'curriculum_grades.id')
+                ->join('grades', 'curriculum_grades.grade_id', '=', 'grades.id')
+                ->where('sections.id', $report->section_id)
+                ->select('grades.name as grade_name')
+                ->first();
+            
+            if ($section) {
+                Log::info('Found grade', ['grade' => $section->grade_name]);
+                DB::table('submitted_sf2_reports')
+                    ->where('id', $report->id)
+                    ->update(['grade_level' => $section->grade_name]);
+                $updated++;
+            } else {
+                Log::warning('Section not found', ['section_id' => $report->section_id]);
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Grade levels updated successfully',
+            'updated' => $updated,
+            'total' => count($reports)
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fix grade levels',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});

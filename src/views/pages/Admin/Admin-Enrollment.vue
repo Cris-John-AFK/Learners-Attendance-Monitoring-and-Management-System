@@ -1057,9 +1057,9 @@ defineExpose({
         </div>
 
         <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 px-6">
+        <div class="px-6">
             <!-- Enrolled Students Section -->
-            <div class="lg:col-span-2">
+            <div>
                 <div class="bg-white rounded-lg shadow-sm border">
                     <div class="p-4 bg-gray-50 border-b">
                         <h3 class="text-lg font-semibold text-gray-800">Enrolled Students</h3>
@@ -1202,18 +1202,6 @@ defineExpose({
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Sidebar -->
-            <div class="space-y-6">
-                <div class="bg-white rounded-lg shadow-sm border p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
-                    <div class="space-y-3">
-                        <Button label="Add New Student" icon="pi pi-plus" class="w-full p-button-outlined" @click="openNewStudentDialog" />
-                        <Button label="Import Students" icon="pi pi-upload" class="w-full p-button-outlined" />
-                        <Button label="Export Data" icon="pi pi-download" class="w-full p-button-outlined" />
                     </div>
                 </div>
             </div>
