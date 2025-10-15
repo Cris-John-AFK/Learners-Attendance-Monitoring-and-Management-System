@@ -530,24 +530,13 @@ function formatAddress(student) {
 
 // Get student status display text
 function getStudentStatusDisplay(student) {
-    // Get the status value
-    let status = student.current_status || student.enrollment_status;
-    
-    // If no enrollment_status, fall back to isActive
-    if (!status) {
-        return student.isActive ? 'Active' : 'Inactive';
+    if (student.current_status) {
+        return student.current_status;
     }
-    
-    // Format database values for display
-    const statusMap = {
-        'active': 'Active',
-        'dropped_out': 'Dropped Out',
-        'transferred_out': 'Transferred Out',
-        'transferred_in': 'Transferred In',
-        'graduated': 'Graduated'
-    };
-    
-    return statusMap[status] || status;
+    if (student.enrollment_status) {
+        return student.enrollment_status;
+    }
+    return student.isActive ? 'Active' : 'Inactive';
 }
 
 // Get student status severity for Tag component
@@ -615,11 +604,8 @@ const filteredStudents = computed(() => {
         }
 
         // Apply status filter
-        if (filters.value.status !== null) {
-            const studentStatus = student.current_status || student.enrollment_status || (student.isActive ? 'Active' : 'Inactive');
-            if (studentStatus !== filters.value.status) {
-                return false;
-            }
+        if (filters.value.status !== null && student.isActive !== filters.value.status) {
+            return false;
         }
 
         // Apply search term
@@ -2040,13 +2026,9 @@ onMounted(() => {
                 <Dropdown
                     v-model="filters.status"
                     :options="[
-                        { name: 'All Statuses', value: null },
-                        { name: 'Active', value: 'active' },
-                        { name: 'Dropped Out', value: 'dropped_out' },
-                        { name: 'Transferred Out', value: 'transferred_out' },
-                        { name: 'Transferred In', value: 'transferred_in' },
-                        { name: 'Graduated', value: 'graduated' }
-                    ]"
+                        { name: 'Active', value: true },
+                        { name: 'Inactive', value: false }
+                    ]"REPLACE_ME
                     optionLabel="name"
                     optionValue="value"
                     placeholder="Select Status"
@@ -2230,7 +2212,7 @@ onMounted(() => {
                                 :options="[
                                     { name: 'Active', value: true },
                                     { name: 'Inactive', value: false }
-                                ]"
+                                ]"REPLACE_ME
                                 optionLabel="name"
                                 optionValue="value"
                                 class="w-full"
@@ -2922,11 +2904,11 @@ onMounted(() => {
                         id="newStatus"
                         v-model="newStudentStatus" 
                         :options="[
-                            { label: 'Active', value: 'active' },
-                            { label: 'Dropped Out', value: 'dropped_out' },
-                            { label: 'Transferred Out', value: 'transferred_out' },
-                            { label: 'Transferred In', value: 'transferred_in' },
-                            { label: 'Graduated', value: 'graduated' }
+                            { label: 'Active', value: 'Active' },
+                            { label: 'Dropped Out', value: 'Dropped Out' },
+                            { label: 'Transferred Out', value: 'Transferred Out' },
+                            { label: 'Graduated', value: 'Graduated' },
+                            { label: 'Inactive', value: 'Inactive' }
                         ]"
                         optionLabel="label"
                         optionValue="value"

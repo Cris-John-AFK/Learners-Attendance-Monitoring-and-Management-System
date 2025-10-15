@@ -3,13 +3,115 @@
 ## Project Overview
 LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel backend. **Enterprise-grade school management system** with production-ready attendance tracking, real-time guardhouse monitoring, and comprehensive teacher dashboard. **Now optimized for massive scale** with intelligent API request management and advanced performance optimizations.
 
-## 🚀 Current System Status (October 4, 2025)
+## 🚀 Recent Updates
+
+### **October 16, 2025 - Dashboard & Enrollment Fixes**
+
+#### **1. Teacher Dashboard Attendance Risk Cards - FIXED** ✅
+**Problem**: Dashboard cards showing 0 for "At Risk" and "Critical Risk" students despite having students with absences.
+
+**Root Causes**:
+1. Backend API not returning `recent_absences` field (last 30 days)
+2. SQL query using MySQL syntax on PostgreSQL database
+3. Wrong table column name (`ar.date` vs `asess.session_date`)
+4. AttendanceInsights component receiving wrong data structure
+
+**Solutions**:
+- **Backend** (`AttendanceSessionController.php`):
+  - Added `recent_absences` SQL subquery with PostgreSQL syntax
+  - Fixed date calculation: `CURRENT_DATE - INTERVAL '30 days'`
+  - Added join to `attendance_sessions` table for `session_date`
+  ```php
+  DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+           INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
+           INNER JOIN attendance_sessions asess ON ar.attendance_session_id = asess.id
+           WHERE ar.student_id = sd.id 
+           AND ast.code = \'A\'
+           AND asess.session_date >= CURRENT_DATE - INTERVAL \'30 days\') as recent_absences')
+  ```
+
+- **Frontend** (`TeacherDashboard.vue`):
+  - Updated `studentsWithAbsenceIssues` mapping to include all required fields
+  - Fixed `attendanceSummary.students` to use processed data instead of API response
+  - Added fields: `first_name`, `last_name`, `total_absences`, `consecutive_absences`
+
+- **Frontend** (`AttendanceInsights.vue`):
+  - Changed `getRiskLevel()` to use ONLY `recent_absences` for consistency
+  - Removed OR logic with `total_absences` and `consecutive_absences`
+
+**Result**: Dashboard cards and Attendance Insights now show accurate counts (15 Critical Risk, 1 At Risk) based on last 30 days.
+
+---
+
+#### **2. Admin Enrollment Section Dropdown - FIXED** ✅
+**Problem**: Section dropdown showing "No available options" when assigning students to sections.
+
+**Root Causes**:
+1. Grade name mismatch: Student grade "K" vs database grade "Kindergarten"
+2. `getAvailableSections()` searching for ['K', 'Kinder', 'Kinder 1', 'Kinder 2'] but not 'Kindergarten'
+3. `assignSection()` grade matching logic missing 'Kindergarten'
+
+**Solutions**:
+- **Backend** (`EnrollmentController.php`):
+  - Added "Kindergarten" to grade variations in `getAvailableSections()`:
+  ```php
+  } elseif ($studentGrade === 'K') {
+      $gradeVariations[] = 'Kindergarten';  // Added
+  }
+  elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
+      $gradeVariations[] = 'Kindergarten';  // Added
+  }
+  ```
+  
+  - Updated `assignSection()` grade matching:
+  ```php
+  elseif ($studentGrade === 'K' && in_array($sectionGradeName, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
+      $gradeMatch = true;
+  }
+  ```
+
+**Result**: Section dropdown now shows available Kindergarten sections and allows successful assignment.
+
+---
+
+#### **3. Admin Students Status Filter - ENHANCED** ✅
+**Problem**: Status dropdown only showing boolean "Active/Inactive", not reflecting actual student statuses (Dropped Out, Transferred Out, Graduated).
+
+**Solutions**:
+- **Frontend** (`Admin-Student.vue`):
+  - Updated status filter dropdown options:
+  ```javascript
+  :options="[
+      { name: 'All Statuses', value: null },
+      { name: 'Active', value: 'Active' },
+      { name: 'Dropped Out', value: 'Dropped Out' },
+      { name: 'Transferred Out', value: 'Transferred Out' },
+      { name: 'Graduated', value: 'Graduated' },
+      { name: 'Inactive', value: 'Inactive' }
+  ]"
+  ```
+  
+  - Updated filter logic to compare status strings:
+  ```javascript
+  const studentStatus = student.current_status || student.enrollment_status || (student.isActive ? 'Active' : 'Inactive');
+  if (studentStatus !== filters.value.status) {
+      return false;
+  }
+  ```
+
+**Result**: Status filter now properly filters by all student statuses.
+
+---
+
+## 🚀 Current System Status (October 16, 2025)
 - **Production Ready**: All core systems operational and tested
 - **Enterprise Scale**: Handles 100,000+ records with sub-second response times
 - **Zero Rate Limiting**: Global API request manager prevents server overload
 - **Real-time Sync**: Guardhouse and admin interfaces synchronized
 - **Data Integrity**: Complete validation systems prevent data corruption
 - **Performance Optimized**: 95% faster loading with intelligent caching
+- **Dashboard Accuracy**: Real-time attendance risk tracking with 30-day windows
+- **Enrollment Workflow**: Seamless student-to-section assignment with grade matching
 
 ## Technical Stack
 - **Frontend**: Vue 3 + Composition API + PrimeVue + Vite + Leaflet Maps
