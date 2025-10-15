@@ -54,7 +54,76 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ### 🚨 RECENT CRITICAL FIXES & MAJOR UPDATES (October 15, 2025)
 
-#### **ADMIN CURRICULUM SECTION MANAGEMENT - COMPLETE OVERHAUL** ✅ NEW
+#### **TEACHER SUBJECT ASSIGNMENT ENHANCEMENT - DEPARTMENTALIZED SUPPORT** ✅ NEW
+**Feature**: Enhanced teacher subject assignment system to support departmentalized teachers (Grades 4-6) assigning the same subject to multiple sections while preventing duplicate assignments within the same section.
+
+**Problem Solved**:
+- **Before**: Teachers could not assign the same subject (e.g., English) to different sections
+- **System Behavior**: Global subject check prevented English → Section A if English was already assigned to Section B
+- **Impact**: Departmentalized teachers (Grade 4-6) couldn't teach the same subject across multiple sections
+
+**Solution Implemented** (`Admin-Teacher.vue`):
+1. **Modified `isSubjectAlreadyAssigned()` Function**:
+   - Changed from global subject check to **per-section validation**
+   - Now checks if subject is assigned to the **currently selected section** only
+   - Allows same subject to different sections: ✅ English → Section A, ✅ English → Section B
+   - Prevents duplicates in same section: ❌ English → Section A twice
+
+2. **User Experience**:
+   - Teacher selects "Grade 4 - Dagohoy" → English shows "Already Assigned" if assigned to Dagohoy
+   - Teacher selects "Grade 4 - Mabini" → English is CLICKABLE if not assigned to Mabini
+   - Result: Teacher can assign English to both sections
+
+**Files Modified**: `src/views/pages/Admin/Admin-Teacher.vue` (lines 1748-1788)
+
+---
+
+#### **ADMIN STUDENT VIEW - QR CODE COLUMN REMOVAL** ✅ NEW
+**Feature**: Removed QR Code column from Admin-Student DataTable for cleaner UI.
+
+**Changes**: Removed QR Code column (header, image display, generate button) from student management table
+**Result**: Cleaner table; QR functionality still accessible via student details dialog
+**Files Modified**: `src/views/pages/Admin/Admin-Student.vue` (lines 2080-2089)
+
+---
+
+#### **ADMIN CURRICULUM - CAPACITY FIELD REMOVAL** ✅ NEW
+**Feature**: Removed Capacity field from "Create New Section" dialog for simplified section creation.
+
+**Changes**: Removed Capacity input field and validation from section creation dialog
+**Result**: Simpler dialog with only Section Name (required) and Description (optional)
+**Files Modified**: `src/views/pages/Admin/Curriculum.vue` (lines 5277-5280)
+
+---
+
+#### **SF2 NOTIFICATION TEACHER NAME FIX** ✅ NEW
+**Feature**: Fixed SF2 report notifications to display correct homeroom teacher name instead of authenticated teacher.
+
+**Problem**: Notifications showed "Ana Cruz submitted SF2 for Gumamela" even though Maria Santos is the homeroom teacher
+**Root Cause**: Backend used authenticated teacher's ID instead of section's homeroom teacher ID
+
+**Solution**:
+1. **Backend Fix** (`SF2ReportController.php` line 1582):
+   ```php
+   // OLD - Used whoever was logged in
+   $submittedByTeacherId = $authenticatedTeacher ? $authenticatedTeacher->id : $section->teacher_id;
+   
+   // NEW - Always use the homeroom teacher
+   $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id;
+   ```
+
+2. **Database Fix**: Created artisan command `php artisan sf2:fix-submitted-by`
+   - Updated existing SF2 records to use correct homeroom teacher IDs
+   - Fixed 1 record: Gumamela section from Ana Cruz → Maria Santos
+
+**Result**: ✅ Notifications now show "Maria Santos submitted SF2 for Gumamela"
+**Files Modified**: 
+- `lamms-backend/app/Http/Controllers/API/SF2ReportController.php` (lines 1576-1591)
+- `lamms-backend/app/Console/Commands/FixSF2SubmittedByTeacher.php` (new file)
+
+---
+
+#### **ADMIN CURRICULUM SECTION MANAGEMENT - COMPLETE OVERHAUL** ✅
 **Feature**: Fixed and enhanced Admin Curriculum section management with proper teacher display, subject assignments, and streamlined UI.
 
 **Critical Backend Fixes**:

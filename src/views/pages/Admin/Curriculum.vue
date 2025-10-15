@@ -4098,18 +4098,18 @@ const openSectionManagement = async (grade) => {
     // Load sections for this grade - FORCE FRESH DATA
     try {
         loading.value = true;
-        
+
         // Clear cache to ensure fresh data with updated homeroom teachers
         CurriculumService.clearCache();
         localStorage.removeItem(`sections_${curriculum.value.id}_${grade.id}`);
         localStorage.removeItem(`sections_${curriculum.value.id}_${grade.id}_timestamp`);
-        
+
         // Force fresh API call
         const sections = await CurriculumService.getSectionsByGradeForced(curriculum.value.id, grade.id);
         gradeSections.value = Array.isArray(sections) ? sections : [];
-        
+
         console.log('📋 Loaded sections with homeroom teachers:');
-        gradeSections.value.forEach(s => {
+        gradeSections.value.forEach((s) => {
             console.log(`  Section: ${s.name} (ID: ${s.id})`);
             console.log(`    - homeroom_teacher_id: ${s.homeroom_teacher_id}`);
             console.log(`    - homeroom_teacher object:`, s.homeroom_teacher);
@@ -5273,11 +5273,6 @@ watch(
             <div class="field">
                 <label for="sectionDescription" class="font-medium mb-2 block">Description (Optional)</label>
                 <InputText id="sectionDescription" v-model="newSection.description" placeholder="Enter section description" class="w-full" />
-            </div>
-
-            <div class="field">
-                <label for="sectionCapacity" class="font-medium mb-2 block">Capacity</label>
-                <InputNumber id="sectionCapacity" v-model="newSection.capacity" :min="1" :max="100" placeholder="Enter capacity" class="w-full" />
             </div>
 
             <template #footer>
@@ -7267,7 +7262,11 @@ body > .p-dialog-mask {
 }
 
 .curriculum-form .field:last-child {
-    margin-bottom: 0;
+    margin-bottom: 10px;
+}
+
+.curriculum-form .field:first-child {
+    margin-top: 10px;
 }
 
 /* Grid layout for cards */

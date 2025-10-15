@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
@@ -2078,16 +2078,7 @@ onMounted(() => {
                             <span class="font-semibold">{{ slotProps.data.lrn }}</span>
                         </template>
                     </Column>
-                    <Column header="QR Code" style="width: 60px">
-                        <template #body="slotProps">
-                            <div v-if="slotProps.data.qrCodePath" class="flex justify-center">
-                                <img :src="slotProps.data.qrCodePath" alt="QR Code" class="w-12 h-12 border border-gray-300 rounded cursor-pointer hover:scale-110 transition-transform" @click="showQRCode(slotProps.data)" />
-                            </div>
-                            <div v-else class="flex justify-center">
-                                <Button icon="pi pi-qrcode" class="p-button-rounded p-button-text p-button-sm p-button-secondary" @click="generateStudentQR(slotProps.data)" title="Generate QR Code" />
-                            </div>
-                        </template>
-                    </Column>
+
                     <Column field="age" header="Age" sortable style="width: 50px">
                         <template #body="slotProps">
                             <span>{{ slotProps.data.age }}</span>
