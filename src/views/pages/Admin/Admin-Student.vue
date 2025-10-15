@@ -565,8 +565,59 @@ function getStudentStatusSeverity(student) {
 
 // Get student reason for status change
 function getStudentReason(student) {
+    // Mapping of dropout reason codes to full descriptions (DepEd SF2 Form)
+    // This matches the exact mapping used in SF2ReportController.php
+    const reasonMap = {
+        // Category A - Family-related
+        'a1': 'a.1 Had to take care of siblings',
+        'a.1': 'a.1 Had to take care of siblings',
+        'a2': 'a.2 Early marriage/pregnancy',
+        'a.2': 'a.2 Early marriage/pregnancy',
+        'a3': 'a.3 Parents\' attitude toward schooling',
+        'a.3': 'a.3 Parents\' attitude toward schooling',
+        'a4': 'a.4 Family problems',
+        'a.4': 'a.4 Family problems',
+        
+        // Category B - Health/Personal
+        'b1': 'b.1 Illness',
+        'b.1': 'b.1 Illness',
+        'b2': 'b.2 Disease',
+        'b.2': 'b.2 Disease',
+        'b3': 'b.3 Death',
+        'b.3': 'b.3 Death',
+        'b4': 'b.4 Disability',
+        'b.4': 'b.4 Disability',
+        'b5': 'b.5 Poor academic performance',
+        'b.5': 'b.5 Poor academic performance',
+        'b6': 'b.6 Disinterest/lack of ambitions',
+        'b.6': 'b.6 Disinterest/lack of ambitions',
+        'b7': 'b.7 Hunger/Malnutrition',
+        'b.7': 'b.7 Hunger/Malnutrition',
+        
+        // Category C - School Environment
+        'c1': 'c.1 Teacher Factor',
+        'c.1': 'c.1 Teacher Factor',
+        'c2': 'c.2 Physical condition of classroom',
+        'c.2': 'c.2 Physical condition of classroom',
+        'c3': 'c.3 Peer Factor',
+        'c.3': 'c.3 Peer Factor',
+        
+        // Category D - External Factors
+        'd1': 'd.1 Distance from home to school',
+        'd.1': 'd.1 Distance from home to school',
+        'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+        'd.2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+        'd3': 'd.3 Calamities/disaster',
+        'd.3': 'd.3 Calamities/disaster',
+        'd4': 'd.4 Work-Related',
+        'd.4': 'd.4 Work-Related',
+        'd5': 'd.5 Transferred/work',
+        'd.5': 'd.5 Transferred/work'
+    };
+    
     if (student.dropout_reason) {
-        return student.dropout_reason;
+        const code = student.dropout_reason.toLowerCase().trim();
+        return reasonMap[code] || student.dropout_reason;
     }
     if (student.dropout_reason_category) {
         return student.dropout_reason_category;
@@ -2125,11 +2176,10 @@ onMounted(() => {
                             </div>
                         </template>
                     </Column>
-                    <Column header="Reason" style="width: 150px">
+                    <Column header="Reason" style="min-width: 200px; max-width: 300px">
                         <template #body="slotProps">
-                            <div class="flex gap-1">
-                                <span class="text-sm">{{ getStudentReason(slotProps.data) || 'N/A' }}</span>
-                                <Button icon="pi pi-search" class="p-button-rounded p-button-text" @click="viewStudentDetails(slotProps.data)" title="View Details" />
+                            <div class="text-sm" style="white-space: normal; word-wrap: break-word;">
+                                {{ getStudentReason(slotProps.data) || 'N/A' }}
                             </div>
                         </template>
                     </Column>
