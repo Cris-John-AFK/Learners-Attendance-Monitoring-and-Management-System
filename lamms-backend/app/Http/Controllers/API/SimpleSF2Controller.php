@@ -27,8 +27,13 @@ class SimpleSF2Controller extends Controller
                 'teacher_id' => $teacherId
             ]);
 
-            // Get section info
-            $section = DB::table('sections')->where('id', $sectionId)->first();
+            // Get section info with grade name
+            $section = DB::table('sections')
+                ->join('curriculum_grades', 'sections.curriculum_grade_id', '=', 'curriculum_grades.id')
+                ->join('grades', 'curriculum_grades.grade_id', '=', 'grades.id')
+                ->where('sections.id', $sectionId)
+                ->select('sections.*', 'grades.name as grade_name')
+                ->first();
             if (!$section) {
                 return response()->json([
                     'success' => false,
@@ -77,7 +82,7 @@ class SimpleSF2Controller extends Controller
                 $submissionId = DB::table('submitted_sf2_reports')->insertGetId([
                     'section_id' => $sectionId,
                     'section_name' => $section->name,
-                    'grade_level' => 'Grade 1',
+                    'grade_level' => $section->grade_name ?? 'Grade 1',
                     'month' => $month,
                     'month_name' => $monthName,
                     'report_type' => 'SF2',
@@ -104,7 +109,7 @@ class SimpleSF2Controller extends Controller
                 'data' => [
                     'submission_id' => $submissionId,
                     'section_name' => $section->name,
-                    'grade_level' => 'Grade 1',
+                    'grade_level' => $section->grade_name ?? 'Grade 1',
                     'month' => $monthName,
                     'teacher_name' => $teacherName,
                     'status' => 'submitted',

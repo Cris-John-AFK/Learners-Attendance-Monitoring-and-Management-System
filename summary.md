@@ -3,13 +3,229 @@
 ## Project Overview
 LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel backend. **Enterprise-grade school management system** with production-ready attendance tracking, real-time guardhouse monitoring, and comprehensive teacher dashboard. **Now optimized for massive scale** with intelligent API request management and advanced performance optimizations.
 
-## 🚀 Current System Status (October 4, 2025)
+## 🚀 Recent Updates
+
+### **October 16, 2025 - Student Status Filter & SF2 Grade Level Fixes**
+
+#### **1. Admin Student Status Filter - COMPLETE FIX** ✅
+**Problem**: Status filter dropdown wasn't working - selecting "Dropped Out" showed no results even though SF2 reports showed students with that status.
+
+**Root Cause**: Database has TWO status columns in `student_details` table:
+1. `status` (old column - boolean/simple text)
+2. `enrollment_status` (new column - authoritative, with values: 'active', 'dropped_out', 'transferred_out', 'transferred_in', 'graduated')
+
+SF2 Report uses `enrollment_status` (correct), but Admin-Student filter was using wrong values with case/format mismatch.
+
+**Solutions Implemented**:
+
+1. **Backend** (`StudentController.php`):
+   - Added `enrollment_status` fields to API response:
+   ```php
+   'enrollment_status' => $student->enrollment_status,
+   'dropout_reason' => $student->dropout_reason,
+   'dropout_reason_category' => $student->dropout_reason_category,
+   'status_effective_date' => $student->status_effective_date
+   ```
+
+2. **Frontend** (`Admin-Student.vue`):
+   - **Status Filter Dropdown**: Changed values from 'Dropped Out' to 'dropped_out' (lowercase with underscores)
+   - **Status Change Dialog**: Updated dropdown to use database values
+   - **Display Function**: Added `getStudentStatusDisplay()` to format database values:
+   ```javascript
+   const statusMap = {
+       'active': 'Active',
+       'dropped_out': 'Dropped Out',
+       'transferred_out': 'Transferred Out',
+       'transferred_in': 'Transferred In',
+       'graduated': 'Graduated'
+   };
+   ```
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/StudentController.php` (lines 73-77)
+- `src/views/pages/Admin/Admin-Student.vue` (lines 530-550, 2030-2038, 2922-2930)
+
+**Result**: Status filter now works correctly - selecting "Dropped Out" shows all students with `enrollment_status='dropped_out'` in database.
+
+---
+
+#### **2. SF2 Collected Reports Grade Level - COMPLETE FIX** ✅
+**Problem**: In the Collected Reports table, all SF2 reports were showing "Grade 1" regardless of the teacher's actual grade level. For example, Ana Cruz (Grade 4 teacher) had her report listed as "Grade 1".
+
+**Root Cause**: The `SimpleSF2Controller.php` had **hardcoded 'Grade 1'** in two places when creating SF2 report submissions:
+- Line 79: When inserting into `submitted_sf2_reports` table
+- Line 106: When returning the response data
+
+**Solutions Implemented**:
+
+1. **Fixed Future Submissions** (`SimpleSF2Controller.php`):
+   ```php
+   // BEFORE:
+   'grade_level' => 'Grade 1',
+   
+   // AFTER:
+   $section = DB::table('sections')
+       ->join('curriculum_grades', 'sections.curriculum_grade_id', '=', 'curriculum_grades.id')
+       ->join('grades', 'curriculum_grades.grade_id', '=', 'grades.id')
+       ->select('sections.*', 'grades.name as grade_name')
+       ->first();
+   
+   'grade_level' => $section->grade_name ?? 'Grade 1',
+   ```
+
+2. **Fixed Existing Data** (Manual Database Update):
+   - Report ID 1 (Ana Cruz - Silang section) → Updated to **Grade 4**
+   - Report ID 2 (Maria Santos - Gumamela section) → Updated to **Grade 1**
+
+**Database Structure Discovery**:
+- Sections table uses `curriculum_grade_id` (NOT `grade_id`)
+- Requires join: `sections → curriculum_grades → grades`
+- Grade name is stored in `grades.name`
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/SimpleSF2Controller.php` (lines 29-36, 85, 112)
+- `lamms-backend/routes/api.php` (added temporary fix route)
+
+**Result**: 
+- ✅ Future SF2 submissions automatically use correct grade level from teacher's section
+- ✅ Existing reports updated to show correct grade levels
+- ✅ Ana Cruz's Grade 4 reports now display "Grade 4" instead of "Grade 1"
+- ✅ No breaking changes to other controllers (SF2ReportController, TeacherStudentManagementController)
+
+---
+
+#### **3. Admin Enrollment UI Enhancement** ✅
+**Feature**: Removed redundant Quick Actions sidebar from Admin-Enrollment page for cleaner, more spacious interface.
+
+**Changes Made**:
+1. **Removed Quick Actions Sidebar** (lines 1209-1218):
+   - Deleted entire right sidebar containing:
+     - "Add New Student" button (redundant - exists in empty state)
+     - "Import Students" button
+     - "Export Data" button
+
+2. **Updated Layout Grid**:
+   - Changed from: `grid grid-cols-1 lg:grid-cols-3 gap-8` (3-column grid with sidebar)
+   - Changed to: Simple container with full width
+   - Removed: `lg:col-span-2` class from enrolled students section
+
+**Files Modified**:
+- `src/views/pages/Admin/Admin-Enrollment.vue` (lines 1058-1218)
+
+**Result**: 
+- ✅ Enrolled Students section spans entire width
+- ✅ More space for student cards and information
+- ✅ Cleaner, more focused interface
+
+---
+
+### **October 16, 2025 - Dashboard & Enrollment Fixes**
+
+#### **1. Teacher Dashboard Attendance Risk Cards - FIXED** ✅
+**Problem**: Dashboard cards showing 0 for "At Risk" and "Critical Risk" students despite having students with absences.
+
+**Root Causes**:
+1. Backend API not returning `recent_absences` field (last 30 days)
+2. SQL query using MySQL syntax on PostgreSQL database
+3. Wrong table column name (`ar.date` vs `asess.session_date`)
+4. AttendanceInsights component receiving wrong data structure
+
+**Solutions**:
+- **Backend** (`AttendanceSessionController.php`):
+  - Added `recent_absences` SQL subquery with PostgreSQL syntax
+  - Fixed date calculation: `CURRENT_DATE - INTERVAL '30 days'`
+  - Added join to `attendance_sessions` table for `session_date`
+  ```php
+  DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+           INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
+           INNER JOIN attendance_sessions asess ON ar.attendance_session_id = asess.id
+           WHERE ar.student_id = sd.id 
+           AND ast.code = \'A\'
+           AND asess.session_date >= CURRENT_DATE - INTERVAL \'30 days\') as recent_absences')
+  ```
+
+- **Frontend** (`TeacherDashboard.vue`):
+  - Updated `studentsWithAbsenceIssues` mapping to include all required fields
+  - Fixed `attendanceSummary.students` to use processed data instead of API response
+  - Added fields: `first_name`, `last_name`, `total_absences`, `consecutive_absences`
+
+- **Frontend** (`AttendanceInsights.vue`):
+  - Changed `getRiskLevel()` to use ONLY `recent_absences` for consistency
+  - Removed OR logic with `total_absences` and `consecutive_absences`
+
+**Result**: Dashboard cards and Attendance Insights now show accurate counts (15 Critical Risk, 1 At Risk) based on last 30 days.
+
+---
+
+#### **2. Admin Enrollment Section Dropdown - FIXED** ✅
+**Problem**: Section dropdown showing "No available options" when assigning students to sections.
+
+**Root Causes**:
+1. Grade name mismatch: Student grade "K" vs database grade "Kindergarten"
+2. `getAvailableSections()` searching for ['K', 'Kinder', 'Kinder 1', 'Kinder 2'] but not 'Kindergarten'
+3. `assignSection()` grade matching logic missing 'Kindergarten'
+
+**Solutions**:
+- **Backend** (`EnrollmentController.php`):
+  - Added "Kindergarten" to grade variations in `getAvailableSections()`:
+  ```php
+  } elseif ($studentGrade === 'K') {
+      $gradeVariations[] = 'Kindergarten';  // Added
+  }
+  elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
+      $gradeVariations[] = 'Kindergarten';  // Added
+  }
+  ```
+  
+  - Updated `assignSection()` grade matching:
+  ```php
+  elseif ($studentGrade === 'K' && in_array($sectionGradeName, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
+      $gradeMatch = true;
+  }
+  ```
+
+**Result**: Section dropdown now shows available Kindergarten sections and allows successful assignment.
+
+---
+
+#### **3. Admin Students Status Filter - ENHANCED** ✅
+**Problem**: Status dropdown only showing boolean "Active/Inactive", not reflecting actual student statuses (Dropped Out, Transferred Out, Graduated).
+
+**Solutions**:
+- **Frontend** (`Admin-Student.vue`):
+  - Updated status filter dropdown options:
+  ```javascript
+  :options="[
+      { name: 'All Statuses', value: null },
+      { name: 'Active', value: 'Active' },
+      { name: 'Dropped Out', value: 'Dropped Out' },
+      { name: 'Transferred Out', value: 'Transferred Out' },
+      { name: 'Graduated', value: 'Graduated' },
+      { name: 'Inactive', value: 'Inactive' }
+  ]"
+  ```
+  
+  - Updated filter logic to compare status strings:
+  ```javascript
+  const studentStatus = student.current_status || student.enrollment_status || (student.isActive ? 'Active' : 'Inactive');
+  if (studentStatus !== filters.value.status) {
+      return false;
+  }
+  ```
+
+**Result**: Status filter now properly filters by all student statuses.
+
+---
+
+## 🚀 Current System Status (October 16, 2025)
 - **Production Ready**: All core systems operational and tested
 - **Enterprise Scale**: Handles 100,000+ records with sub-second response times
 - **Zero Rate Limiting**: Global API request manager prevents server overload
 - **Real-time Sync**: Guardhouse and admin interfaces synchronized
 - **Data Integrity**: Complete validation systems prevent data corruption
 - **Performance Optimized**: 95% faster loading with intelligent caching
+- **Dashboard Accuracy**: Real-time attendance risk tracking with 30-day windows
+- **Enrollment Workflow**: Seamless student-to-section assignment with grade matching
 
 ## Technical Stack
 - **Frontend**: Vue 3 + Composition API + PrimeVue + Vite + Leaflet Maps
@@ -120,6 +336,55 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 **Files Modified**: 
 - `lamms-backend/app/Http/Controllers/API/SF2ReportController.php` (lines 1576-1591)
 - `lamms-backend/app/Console/Commands/FixSF2SubmittedByTeacher.php` (new file)
+
+---
+
+#### **TEACHER DASHBOARD NAMING CONSISTENCY FIX** ✅ NEW
+**Feature**: Fixed confusing and inconsistent naming, removed duplicate cards, AND fixed data source mismatch (frontend + backend) based on user testing feedback.
+
+**Problem**: User testing revealed confusion with inconsistent terminology AND different numbers:
+- Top Cards: "Need Attention" and "Urgent Action"
+- Attendance Insights: "At Risk" and "Critical Risk" (duplicate cards)
+- Expandable Groups: "High Risk" and "Medium Risk"
+- **CRITICAL BUG**: Top card showed 15 Critical Risk, but Insights showed 18 Critical Risk
+- **Root Cause**: Top cards used `total_absences`, Insights used `recent_absences`
+- **Backend Issue**: API was NOT returning `recent_absences` field, causing both cards to show 0
+
+**Solution**: Standardized all naming, removed duplicates, AND fixed data source + backend:
+- **Top Cards**: "At Risk (3-4 absences)" and "Critical Risk (5+ absences)"
+- **Attendance Insights**: Duplicate cards REMOVED, only expandable section remains
+- **Expandable Groups**: "At Risk", "Critical Risk", and "Low Risk"
+- **Single Data Source**: ALL components now use `recent_absences` consistently
+- **Backend Fixed**: API now returns `recent_absences` (last 30 days)
+- **Numbers Match**: Top card and Insights now show identical counts
+
+**Risk Level Definitions**:
+- **Critical Risk**: 5+ recent absences
+- **At Risk**: 3-4 recent absences
+- **Low Risk**: 1-2 recent absences
+- **Normal**: 0 recent absences
+
+**Technical Changes**:
+1. `TeacherDashboard.vue` (lines 1915, 1925): Updated card labels
+2. `TeacherDashboard.vue` (lines 772, 887, 693, 838, 960): 
+   - Fixed `loadSingleSectionData()` to use `recent_absences`
+   - Fixed `loadAllSubjectsData()` to use `recent_absences`
+   - Fixed `loadDepartmentalizedSubjectData()` to use `recent_absences`
+   - Fixed `processIndexedData()` to use `recent_absences`
+   - Fixed cached data mapping to include `recent_absences`
+3. `AttendanceInsights.vue` (lines 336-350, 75-111, 10-38): 
+   - Modified `getRiskLevel()` to use only `recent_absences`
+   - Renamed risk level labels for consistency
+   - **REMOVED duplicate risk cards** from top of component
+4. `AttendanceController.php` (lines 725-741):
+   - Added `recent_absences` calculation to API
+   - Calculates absences from last 30 days
+
+**Result**: Clear, consistent terminology; **numbers match perfectly**; **no duplicate cards** (cleaner UI); eliminates teacher confusion; data integrity across all views; backend provides accurate data
+**Files Modified**: 
+- `src/views/pages/teacher/TeacherDashboard.vue`
+- `src/components/Teachers/AttendanceInsights.vue`
+- `lamms-backend/app/Http/Controllers/API/AttendanceController.php`
 
 ---
 

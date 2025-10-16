@@ -558,3 +558,4 @@ Route::get('/teachers/{teacherId}/assignments', [TeacherAssignmentValidationCont
 Route::post('/teachers/validate-homeroom-assignment', [TeacherAssignmentValidationController::class, 'validateHomeroomAssignment']);
 
 Route::get('/students/{studentId}/qr-card/download', [QRCodeController::class, 'downloadQRCard']);
+

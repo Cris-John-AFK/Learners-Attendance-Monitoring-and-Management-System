@@ -285,12 +285,14 @@ class EnrollmentController extends Controller
                 $gradeVariations[] = 'Kinder 1';
                 $gradeVariations[] = 'Kinder 2';
                 $gradeVariations[] = 'Kinder';
-            } elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2'])) {
+                $gradeVariations[] = 'Kindergarten';
+            } elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
                 // Handle specific Kinder levels
                 $gradeVariations[] = 'K';
                 $gradeVariations[] = 'Kinder';
                 $gradeVariations[] = 'Kinder 1';
                 $gradeVariations[] = 'Kinder 2';
+                $gradeVariations[] = 'Kindergarten';
             }
             
             Log::info('Searching for sections with grade variations: ' . json_encode($gradeVariations));
@@ -388,11 +390,11 @@ class EnrollmentController extends Controller
                 $gradeMatch = true;
             }
             // Handle Kinder variations
-            elseif ($studentGrade === 'K' && in_array($sectionGradeName, ['Kinder', 'Kinder 1', 'Kinder 2'])) {
+            elseif ($studentGrade === 'K' && in_array($sectionGradeName, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten'])) {
                 $gradeMatch = true;
             }
-            elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2']) && 
-                    (in_array($sectionGradeName, ['K', 'Kinder', 'Kinder 1', 'Kinder 2']))) {
+            elseif (in_array($studentGrade, ['Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten']) && 
+                    (in_array($sectionGradeName, ['K', 'Kinder', 'Kinder 1', 'Kinder 2', 'Kindergarten']))) {
                 $gradeMatch = true;
             }
             
