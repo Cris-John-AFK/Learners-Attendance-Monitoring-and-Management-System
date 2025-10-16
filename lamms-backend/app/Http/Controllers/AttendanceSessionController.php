@@ -81,15 +81,20 @@ class AttendanceSessionController extends Controller
                     'sd.enrollment_status',
                     's.name as section_name',
                     'g.name as grade_name',
+                    // CRITICAL: Filter absences by subject using optimized subqueries
                     DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+                             INNER JOIN attendance_sessions ases ON ar.attendance_session_id = ases.id
                              INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
-                             WHERE ar.student_id = sd.id AND ast.code = \'A\') as total_absences'),
-                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar
-                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
-                             INNER JOIN attendance_sessions asess ON ar.attendance_session_id = asess.id
                              WHERE ar.student_id = sd.id 
                              AND ast.code = \'A\'
-                             AND asess.session_date >= CURRENT_DATE - INTERVAL \'30 days\') as recent_absences')
+                             ' . ($subjectId && $subjectId !== 'null' ? 'AND ases.subject_id = ' . intval($subjectId) : 'AND ases.subject_id IS NULL') . ') as total_absences'),
+                    DB::raw('(SELECT COUNT(*) FROM attendance_records ar
+                             INNER JOIN attendance_sessions ases ON ar.attendance_session_id = ases.id
+                             INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
+                             WHERE ar.student_id = sd.id 
+                             AND ast.code = \'A\'
+                             AND ases.session_date >= CURRENT_DATE - INTERVAL \'30 days\'
+                             ' . ($subjectId && $subjectId !== 'null' ? 'AND ases.subject_id = ' . intval($subjectId) : 'AND ases.subject_id IS NULL') . ') as recent_absences')
                 ])
                 ->distinct()
                 ->orderBy('sd.lastName')

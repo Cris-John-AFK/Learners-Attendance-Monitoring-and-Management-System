@@ -82,6 +82,13 @@ const currentYear = ref(new Date().getFullYear());
 const calendarData = ref([]);
 const absentDays = ref([]);
 
+// Calendar subject filter (independent from main subject selection)
+const calendarSubjectFilter = ref(null);
+const calendarSubjectOptions = computed(() => {
+    // Only show actual subjects, no "All Subjects" option
+    return availableSubjects.value || [];
+});
+
 // Attendance threshold settings - Teacher-friendly
 const WARNING_THRESHOLD = 3; // Students missing 3-4 days need attention
 const CRITICAL_THRESHOLD = 5; // Students missing 5+ days need urgent action
@@ -866,8 +873,8 @@ async function loadSingleSectionData(sectionId, subjectId) {
         try {
             summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
                 period: 'week',
-                viewType: 'all_students',
-                subjectId: null
+                viewType: subjectId ? 'subject' : 'all_students', // Use 'subject' if subjectId exists
+                subjectId: subjectId // Pass the actual subject ID for filtering
             });
         } catch (err) {
             console.warn('⚠️ Summary API failed (non-critical):', err.message);
@@ -1427,6 +1434,9 @@ async function openStudentProfile(student) {
     // Load available subjects for this teacher
     profileAvailableSubjects.value = availableSubjects.value || [];
 
+    // Initialize calendar filter to currently selected subject
+    calendarSubjectFilter.value = selectedSubject.value?.id || null;
+
     await prepareCalendarData(student);
     studentProfileVisible.value = true;
 }
@@ -1436,6 +1446,88 @@ async function onProfileSubjectChange() {
     console.log('📚 Profile subject filter changed to:', profileSubjectFilter.value);
     if (selectedStudent.value) {
         await prepareCalendarData(selectedStudent.value);
+    }
+}
+
+// Handler for calendar subject filter change (independent filter)
+async function onCalendarSubjectChange() {
+    console.log('📅 Calendar subject filter changed to:', calendarSubjectFilter.value);
+    if (selectedStudent.value) {
+        await prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+    }
+}
+
+// Prepare calendar data with specific subject filter
+async function prepareCalendarDataForFilter(student, subjectId) {
+    if (!student) return;
+
+    // Generate calendar data for current month
+    const daysInMonth = new Date(currentYear.value, currentMonth.value + 1, 0).getDate();
+
+    // Initialize calendar data
+    calendarData.value = Array.from({ length: daysInMonth }, (_, i) => ({
+        date: new Date(currentYear.value, currentMonth.value, i + 1),
+        day: i + 1,
+        isAbsent: false,
+        status: null
+    }));
+
+    try {
+        // Get attendance records filtered by subject (null = all subjects)
+        const response = await StudentAttendanceService.getSubjectAttendanceRecords(
+            [student.id],
+            subjectId, // Use the calendar filter
+            currentMonth.value,
+            currentYear.value
+        );
+
+        const records = response.records || [];
+
+        // Find absent days
+        absentDays.value = records
+            .filter((record) => record.status === 'ABSENT' || record.status === 'EXCUSED' || record.status === 'LATE')
+            .map((record) => ({
+                date: new Date(record.date),
+                status: record.status,
+                time: record.time || 'N/A',
+                recordId: record.id,
+                reason: record.reason,
+                reason_notes: record.reason_notes,
+                reason_description: record.reason_description
+            }));
+
+        // Map attendance status to calendar
+        const statusPriority = {
+            ABSENT: 4,
+            EXCUSED: 3,
+            LATE: 2,
+            PRESENT: 1
+        };
+
+        const attendanceMap = {};
+        records.forEach((record) => {
+            const recordDate = new Date(record.date);
+            const day = recordDate.getDate();
+            const month = recordDate.getMonth();
+            const year = recordDate.getFullYear();
+
+            if (year === currentYear.value && month === currentMonth.value) {
+                const currentPriority = statusPriority[record.status] || 0;
+                const existingPriority = statusPriority[attendanceMap[day]] || 0;
+
+                if (currentPriority > existingPriority) {
+                    attendanceMap[day] = record.status;
+                }
+            }
+        });
+
+        // Update calendar data with attendance status
+        calendarData.value = calendarData.value.map((dayData) => ({
+            ...dayData,
+            status: attendanceMap[dayData.day] || null
+        }));
+    } catch (error) {
+        console.error('Error loading calendar data:', error);
     }
 }
 
@@ -2065,10 +2157,22 @@ async function showStudentProfile(student) {
             <!-- Student List with Attendance Issues -->
             <div class="bg-white rounded-xl shadow-sm p-5">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                    <h2 class="text-lg font-semibold flex items-center">
-                        <i class="mr-2"></i>
-                        Student Attendance
-                    </h2>
+                    <div>
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i class="pi pi-users mr-2 text-blue-600"></i>
+                            Student Attendance Overview
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">
+                            <i class="pi pi-calendar mr-1"></i>
+                            Showing recent absence tracking (Last 30 Days)
+                            <span v-if="selectedSubject" class="ml-2">
+                                • <i class="pi pi-book mr-1"></i>{{ selectedSubject.name }}
+                            </span>
+                            <span v-else-if="viewType === 'all_students'" class="ml-2">
+                                • <i class="pi pi-globe mr-1"></i>All Subjects
+                            </span>
+                        </p>
+                    </div>
 
                     <div class="flex flex-col gap-4 mt-4 sm:mt-0">
                         <!-- Search Bar -->
@@ -2250,9 +2354,15 @@ async function showStudentProfile(student) {
                         </template>
                     </Column>
 
-                    <Column header="Actions" style="width: 100px">
+                    <Column header="Actions" style="width: 160px">
                         <template #body="slotProps">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View student details'" />
+                            <Button 
+                                icon="pi pi-calendar" 
+                                label="View Details" 
+                                class="p-button-sm p-button-info" 
+                                @click="openStudentProfile(slotProps.data)" 
+                                v-tooltip.top="'View attendance calendar & history'"
+                            />
                         </template>
                     </Column>
                 </DataTable>
@@ -2342,17 +2452,16 @@ async function showStudentProfile(student) {
                     </div>
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2">
-                            <label for="profile-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
+                            <label for="calendar-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
                             <Dropdown
-                                id="profile-subject-filter"
-                                v-model="profileSubjectFilter"
-                                :options="profileAvailableSubjects"
+                                id="calendar-subject-filter"
+                                v-model="calendarSubjectFilter"
+                                :options="calendarSubjectOptions"
                                 optionLabel="name"
                                 optionValue="id"
-                                placeholder="All Subjects"
-                                @change="onProfileSubjectChange"
-                                showClear
-                                style="min-width: 150px"
+                                placeholder="Select Subject"
+                                @change="onCalendarSubjectChange"
+                                class="w-48"
                             />
                         </div>
                     </div>

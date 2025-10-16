@@ -704,7 +704,7 @@ class AttendanceController extends Controller
                 'student_ids' => $students->pluck('id')->toArray()
             ]);
 
-            $studentsData = $students->map(function ($student) use ($sectionId) {
+            $studentsData = $students->map(function ($student) use ($sectionId, $subjectId) {
                 // Get grade info from section relationship
                 $sectionPivot = DB::table('student_section')
                     ->where('student_id', $student->id)
@@ -723,12 +723,38 @@ class AttendanceController extends Controller
                     $gradeInfo = $section;
                 }
 
-                // Get absence count from attendance records
-                $absenceCount = DB::table('attendance_records as ar')
+                // Get absence count from attendance records - FILTERED BY SUBJECT
+                $absenceQuery = DB::table('attendance_records as ar')
+                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
+                    ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
+                    ->where('ar.student_id', $student->id)
+                    ->where('ast.code', 'A');
+                
+                // CRITICAL: Filter by subject to show subject-specific absences
+                if ($subjectId !== null) {
+                    $absenceQuery->where('ases.subject_id', $subjectId);
+                } else {
+                    // Homeroom: only count homeroom attendance (subject_id IS NULL)
+                    $absenceQuery->whereNull('ases.subject_id');
+                }
+                
+                $absenceCount = $absenceQuery->count();
+                
+                // Also get recent absences (last 30 days) for the same subject
+                $recentAbsenceQuery = DB::table('attendance_records as ar')
+                    ->join('attendance_sessions as ases', 'ar.attendance_session_id', '=', 'ases.id')
                     ->join('attendance_statuses as ast', 'ar.attendance_status_id', '=', 'ast.id')
                     ->where('ar.student_id', $student->id)
                     ->where('ast.code', 'A')
-                    ->count();
+                    ->where('ases.session_date', '>=', now()->subDays(30));
+                
+                if ($subjectId !== null) {
+                    $recentAbsenceQuery->where('ases.subject_id', $subjectId);
+                } else {
+                    $recentAbsenceQuery->whereNull('ases.subject_id');
+                }
+                
+                $recentAbsenceCount = $recentAbsenceQuery->count();
 
                 return [
                     'id' => $student->id,
@@ -738,7 +764,8 @@ class AttendanceController extends Controller
                     'studentId' => $student->studentId ?? $student->student_id,
                     'grade_name' => $gradeInfo ? $gradeInfo->grade_name : null,
                     'total_absences' => $absenceCount,
-                    'absence_count' => $absenceCount
+                    'absence_count' => $absenceCount,
+                    'recent_absences' => $recentAbsenceCount  // Last 30 days, subject-specific
                 ];
             });
 
