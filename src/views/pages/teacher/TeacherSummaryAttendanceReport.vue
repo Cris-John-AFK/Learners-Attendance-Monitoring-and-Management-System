@@ -1,246 +1,174 @@
 <template>
-    <div class="grid">
-        <div class="col-12">
-            <div class="card">
-                <!-- Header -->
-                <div class="flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h3 class="m-0">Summary Attendance Report</h3>
-                        <p class="text-600 mt-1 mb-0">Monthly attendance summary for all students</p>
-                    </div>
-                    <div class="flex align-items-center gap-2">
-                        <Button 
-                            label="Print Report" 
-                            icon="pi pi-print" 
-                            @click="printReport"
-                            class="p-button-outlined"
-                        />
-                        <Button 
-                            label="Export Excel" 
-                            icon="pi pi-file-excel" 
-                            @click="exportExcel"
-                            class="p-button-success"
-                        />
-                    </div>
-                </div>
-
+    <div class="summary-report-container">
+        <!-- Header Controls (No Print) -->
+        <div class="no-print mb-4 flex justify-between items-center bg-white p-4 rounded-lg shadow">
+            <div class="flex items-center gap-4">
+                <Button icon="pi pi-arrow-left" label="Back" class="p-button-outlined" @click="$router.back()" />
+                <h2 class="text-xl font-bold text-gray-800">Summary Attendance Report</h2>
+            </div>
+            <div class="flex items-center gap-3">
                 <!-- Date Range Selector -->
-                <div class="grid mb-4">
-                    <div class="col-12 md:col-4">
-                        <label class="block text-900 font-medium mb-2">Month</label>
-                        <Dropdown 
-                            v-model="selectedMonth" 
-                            :options="monthOptions" 
-                            optionLabel="label" 
-                            optionValue="value"
-                            placeholder="Select Month"
-                            @change="loadAttendanceData"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="col-12 md:col-4">
-                        <label class="block text-900 font-medium mb-2">Year</label>
-                        <Dropdown 
-                            v-model="selectedYear" 
-                            :options="yearOptions" 
-                            placeholder="Select Year"
-                            @change="loadAttendanceData"
-                            class="w-full"
-                        />
-                    </div>
-                    <div class="col-12 md:col-4">
-                        <label class="block text-900 font-medium mb-2">Section</label>
-                        <Dropdown 
-                            v-model="selectedSection" 
-                            :options="sectionOptions" 
-                            optionLabel="label" 
-                            optionValue="value"
-                            placeholder="All Sections"
-                            @change="loadAttendanceData"
-                            class="w-full"
-                        />
-                    </div>
+                <div class="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2 bg-gray-50">
+                    <label class="text-sm font-medium text-gray-700">From:</label>
+                    <Calendar 
+                        v-model="startDate" 
+                        dateFormat="mm/dd/yy" 
+                        placeholder="Start Date"
+                        @date-select="onDateRangeChange"
+                        class="w-40"
+                        showIcon
+                    />
+                    <span class="text-gray-500">-</span>
+                    <label class="text-sm font-medium text-gray-700">To:</label>
+                    <Calendar 
+                        v-model="endDate" 
+                        dateFormat="mm/dd/yy" 
+                        placeholder="End Date"
+                        @date-select="onDateRangeChange"
+                        class="w-40"
+                        showIcon
+                    />
                 </div>
-
-                <!-- Loading State -->
-                <div v-if="loading" class="text-center py-6">
-                    <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="8" />
-                    <p class="mt-3 text-600">Loading attendance data...</p>
-                </div>
-
-                <!-- Summary Statistics -->
-                <div v-else-if="summaryData" class="grid mb-4">
-                    <div class="col-12 md:col-3">
-                        <div class="card bg-blue-50 border-blue-200">
-                            <div class="flex align-items-center">
-                                <div class="bg-blue-500 border-circle w-3rem h-3rem flex align-items-center justify-content-center mr-3">
-                                    <i class="pi pi-users text-white text-xl"></i>
-                                </div>
-                                <div>
-                                    <div class="text-2xl font-bold text-blue-900">{{ summaryData.total_students }}</div>
-                                    <div class="text-blue-600">Total Students</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 md:col-3">
-                        <div class="card bg-green-50 border-green-200">
-                            <div class="flex align-items-center">
-                                <div class="bg-green-500 border-circle w-3rem h-3rem flex align-items-center justify-content-center mr-3">
-                                    <i class="pi pi-check-circle text-white text-xl"></i>
-                                </div>
-                                <div>
-                                    <div class="text-2xl font-bold text-green-900">{{ summaryData.average_attendance }}%</div>
-                                    <div class="text-green-600">Average Attendance</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 md:col-3">
-                        <div class="card bg-orange-50 border-orange-200">
-                            <div class="flex align-items-center">
-                                <div class="bg-orange-500 border-circle w-3rem h-3rem flex align-items-center justify-content-center mr-3">
-                                    <i class="pi pi-calendar text-white text-xl"></i>
-                                </div>
-                                <div>
-                                    <div class="text-2xl font-bold text-orange-900">{{ schoolDays }}</div>
-                                    <div class="text-orange-600">School Days</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 md:col-3">
-                        <div class="card bg-purple-50 border-purple-200">
-                            <div class="flex align-items-center">
-                                <div class="bg-purple-500 border-circle w-3rem h-3rem flex align-items-center justify-content-center mr-3">
-                                    <i class="pi pi-chart-bar text-white text-xl"></i>
-                                </div>
-                                <div>
-                                    <div class="text-2xl font-bold text-purple-900">{{ maleStudents.length }}/{{ femaleStudents.length }}</div>
-                                    <div class="text-purple-600">Male/Female</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Attendance Report Table -->
-                <div v-if="!loading && students.length > 0" id="attendance-report">
-                    <!-- Male Students Section -->
-                    <div class="mb-4">
-                        <h4 class="text-blue-600 mb-3">
-                            <i class="pi pi-mars mr-2"></i>
-                            Male Students ({{ maleStudents.length }})
-                        </h4>
-                        <DataTable 
-                            :value="maleStudents" 
-                            class="p-datatable-sm"
-                            :paginator="false"
-                            responsiveLayout="scroll"
-                        >
-                            <Column field="name" header="Student Name" :sortable="true">
-                                <template #body="slotProps">
-                                    <div class="flex align-items-center">
-                                        <div class="bg-blue-100 border-circle w-2rem h-2rem flex align-items-center justify-content-center mr-2">
-                                            <i class="pi pi-user text-blue-600"></i>
-                                        </div>
-                                        <span class="font-medium">{{ slotProps.data.name }}</span>
-                                    </div>
-                                </template>
-                            </Column>
-                            <Column field="total_present" header="Present" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_present" severity="success" />
-                                </template>
-                            </Column>
-                            <Column field="total_absences" header="Absent" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_absences" severity="danger" />
-                                </template>
-                            </Column>
-                            <Column field="total_late" header="Late" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_late" severity="warning" />
-                                </template>
-                            </Column>
-                            <Column field="attendance_rate" header="Attendance Rate" :sortable="true">
-                                <template #body="slotProps">
-                                    <div class="flex align-items-center">
-                                        <ProgressBar 
-                                            :value="slotProps.data.attendance_rate" 
-                                            class="w-6rem mr-2"
-                                            :showValue="false"
-                                        />
-                                        <span class="font-medium">{{ slotProps.data.attendance_rate }}%</span>
-                                    </div>
-                                </template>
-                            </Column>
-                        </DataTable>
-                    </div>
-
-                    <!-- Female Students Section -->
-                    <div class="mb-4">
-                        <h4 class="text-pink-600 mb-3">
-                            <i class="pi pi-venus mr-2"></i>
-                            Female Students ({{ femaleStudents.length }})
-                        </h4>
-                        <DataTable 
-                            :value="femaleStudents" 
-                            class="p-datatable-sm"
-                            :paginator="false"
-                            responsiveLayout="scroll"
-                        >
-                            <Column field="name" header="Student Name" :sortable="true">
-                                <template #body="slotProps">
-                                    <div class="flex align-items-center">
-                                        <div class="bg-pink-100 border-circle w-2rem h-2rem flex align-items-center justify-content-center mr-2">
-                                            <i class="pi pi-user text-pink-600"></i>
-                                        </div>
-                                        <span class="font-medium">{{ slotProps.data.name }}</span>
-                                    </div>
-                                </template>
-                            </Column>
-                            <Column field="total_present" header="Present" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_present" severity="success" />
-                                </template>
-                            </Column>
-                            <Column field="total_absences" header="Absent" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_absences" severity="danger" />
-                                </template>
-                            </Column>
-                            <Column field="total_late" header="Late" :sortable="true">
-                                <template #body="slotProps">
-                                    <Tag :value="slotProps.data.total_late" severity="warning" />
-                                </template>
-                            </Column>
-                            <Column field="attendance_rate" header="Attendance Rate" :sortable="true">
-                                <template #body="slotProps">
-                                    <div class="flex align-items-center">
-                                        <ProgressBar 
-                                            :value="slotProps.data.attendance_rate" 
-                                            class="w-6rem mr-2"
-                                            :showValue="false"
-                                        />
-                                        <span class="font-medium">{{ slotProps.data.attendance_rate }}%</span>
-                                    </div>
-                                </template>
-                            </Column>
-                        </DataTable>
-                    </div>
-                </div>
-
-                <!-- Empty State -->
-                <div v-else-if="!loading && students.length === 0" class="text-center py-8">
-                    <i class="pi pi-chart-bar text-400 text-6xl mb-4"></i>
-                    <h4 class="text-600 mb-2">No Attendance Data</h4>
-                    <p class="text-500 mb-4">No attendance records found for the selected period.</p>
-                    <Button label="Refresh" icon="pi pi-refresh" @click="loadAttendanceData" class="p-button-outlined" />
-                </div>
+                <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
+                <Button icon="pi pi-download" label="Export Excel" class="p-button-success" @click="exportExcel" />
             </div>
         </div>
-    </div>
+
+        <!-- Report Card -->
+        <div class="report-card bg-white rounded-lg shadow-lg p-8">
+            <!-- Header Section with Logos -->
+            <div class="report-header">
+                <div class="header-logo-left">
+                    <img src="/demo/images/logo.png" alt="School Logo" class="logo-large" />
+                </div>
+                <div class="header-center">
+                    <h2 class="report-title">Summary Attendance Report of Learners</h2>
+                    <p class="report-subtitle">(Monthly attendance summary for all students)</p>
+                </div>
+                <div class="header-logo-right">
+                    <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="logo-large" />
+                </div>
+            </div>
+
+            <!-- School Information -->
+            <div class="school-info-section">
+                <div class="info-row">
+                    <div class="info-field">
+                        <label>School ID:</label>
+                        <input type="text" value="123456" class="input-compact" readonly />
+                    </div>
+                    <div class="info-field">
+                        <label>School Year:</label>
+                        <input type="text" value="2024-2025" class="input-compact" readonly />
+                    </div>
+                    <div class="info-field">
+                        <label>Report for the Month of:</label>
+                        <input type="text" :value="getMonthName()" class="input-compact" readonly />
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-field">
+                        <label>Name of School:</label>
+                        <input type="text" value="Naawan Central School" class="input-compact" readonly />
+                    </div>
+                    <div class="info-field">
+                        <label>Grade Level:</label>
+                        <input type="text" value="Kinder" class="input-compact" readonly />
+                    </div>
+                    <div class="info-field">
+                        <label>Section:</label>
+                        <input type="text" value="Malikhain" class="input-compact" readonly />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Attendance Table -->
+            <div class="summary-table-section mb-6">
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">No.</th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-left font-bold">Learner's Name<br/>(Last Name, First Name, Middle Name)</th>
+                            <th colspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Sex</th>
+                            <th colspan="4" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Summary</th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Rate</th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Remarks</th>
+                        </tr>
+                        <tr>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">M</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">F</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Present</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Late</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Excused</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="!loading && students.length > 0">
+                        <!-- Male Students -->
+                        <tr>
+                            <td colspan="10" class="border-2 border-gray-900 bg-blue-100 p-2 font-bold text-sm">MALE STUDENTS</td>
+                        </tr>
+                        <tr v-for="(student, index) in maleStudents" :key="student.id">
+                            <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
+                            <td class="border border-gray-900 p-2 text-sm">{{ student.name }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">✓</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm"></td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_present || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_absences || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_late || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_excused || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(student.attendance_rate)">{{ student.attendance_rate }}%</td>
+                            <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
+                        </tr>
+                        <!-- Female Students -->
+                        <tr>
+                            <td colspan="10" class="border-2 border-gray-900 bg-pink-100 p-2 font-bold text-sm">FEMALE STUDENTS</td>
+                        </tr>
+                        <tr v-for="(student, index) in femaleStudents" :key="student.id">
+                            <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
+                            <td class="border border-gray-900 p-2 text-sm">{{ student.name }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm"></td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">✓</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_present || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_absences || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_late || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_excused || 0 }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(student.attendance_rate)">{{ student.attendance_rate }}%</td>
+                            <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
+                        </tr>
+                        <!-- Total Row -->
+                        <tr class="bg-gray-100">
+                            <td colspan="2" class="border-2 border-gray-900 p-2 text-center font-bold">TOTAL</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ maleStudents.length }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ femaleStudents.length }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalPresent }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalAbsent }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalLate }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalExcused }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ averageAttendanceRate }}%</td>
+                            <td class="border-2 border-gray-900 p-1"></td>
+                        </tr>
+                    </tbody>
+                    <tbody v-else-if="!loading && students.length === 0">
+                        <tr>
+                            <td colspan="10" class="border border-gray-900 p-8 text-center text-gray-500">
+                                <i class="pi pi-info-circle text-4xl mb-2"></i>
+                                <p>No student data available</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tbody v-else>
+                        <tr>
+                            <td colspan="10" class="border border-gray-900 p-8 text-center">
+                                <ProgressSpinner style="width: 40px; height: 40px" strokeWidth="6" />
+                                <p class="mt-2 text-gray-600">Loading data...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div> <!-- Close report-card -->
+    </div> <!-- Close summary-report-container -->
 </template>
 
 <script setup>
@@ -256,6 +184,10 @@ const loading = ref(false);
 const selectedMonth = ref(new Date().getMonth() + 1);
 const selectedYear = ref(new Date().getFullYear());
 const selectedSection = ref(null);
+
+// Date range for filtering
+const startDate = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); // First day of current month
+const endDate = ref(new Date()); // Today
 
 const monthOptions = [
     { label: 'January', value: 1 },
@@ -286,6 +218,33 @@ const femaleStudents = computed(() =>
 const schoolDays = computed(() => {
     const daysInMonth = new Date(selectedYear.value, selectedMonth.value, 0).getDate();
     return Math.floor(daysInMonth * 0.7); // Approximate school days (excluding weekends)
+});
+
+// Calculate total present
+const totalPresent = computed(() => {
+    return students.value.reduce((sum, student) => sum + (student.total_present || 0), 0);
+});
+
+// Calculate total absent
+const totalAbsent = computed(() => {
+    return students.value.reduce((sum, student) => sum + (student.total_absences || 0), 0);
+});
+
+// Calculate total late
+const totalLate = computed(() => {
+    return students.value.reduce((sum, student) => sum + (student.total_late || 0), 0);
+});
+
+// Calculate total excused
+const totalExcused = computed(() => {
+    return students.value.reduce((sum, student) => sum + (student.total_excused || 0), 0);
+});
+
+// Calculate average attendance rate
+const averageAttendanceRate = computed(() => {
+    if (students.value.length === 0) return 0;
+    const sum = students.value.reduce((total, student) => total + (student.attendance_rate || 0), 0);
+    return Math.round(sum / students.value.length);
 });
 
 const getTeacherId = () => {
@@ -372,19 +331,181 @@ const exportExcel = () => {
     });
 };
 
+const getMonthName = () => {
+    const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+    return `${months[selectedMonth.value - 1]} ${selectedYear.value}`;
+};
+
+const getAttendanceRateClass = (rate) => {
+    if (rate >= 95) return 'text-green-700';
+    if (rate >= 85) return 'text-blue-700';
+    if (rate >= 75) return 'text-yellow-700';
+    return 'text-red-700';
+};
+
+const onDateRangeChange = () => {
+    if (startDate.value && endDate.value) {
+        // Validate that end date is after start date
+        if (endDate.value < startDate.value) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Invalid Date Range',
+                detail: 'End date must be after start date',
+                life: 3000
+            });
+            return;
+        }
+        loadAttendanceData();
+    }
+};
+
 onMounted(() => {
     loadAttendanceData();
 });
 </script>
 
 <style scoped>
-@media print {
-    .p-button, .p-dropdown {
-        display: none !important;
-    }
+.summary-report-container {
+    min-height: 100vh;
+    background-color: #f8fafc;
+    padding: 1rem;
+}
+
+.report-card {
+    font-family: 'Arial', 'Calibri', sans-serif;
+    line-height: 1.2;
+}
+
+/* Header Section */
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem 0;
+}
+
+.header-logo-left,
+.header-logo-right {
+    flex: 0 0 100px;
+}
+
+.header-center {
+    flex: 1;
+    text-align: center;
+    padding: 0 2rem;
+}
+
+.logo-large {
+    width: 90px;
+    height: 90px;
+    object-fit: contain;
+}
+
+.report-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: #2c3e50;
+}
+
+.report-subtitle {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.75rem;
+    color: #666;
+    font-style: italic;
+}
+
+/* School Info */
+.school-info-section {
+    margin-bottom: 1.5rem;
+    background: white;
+}
+
+.info-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    align-items: center;
+}
+
+.info-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.info-field label {
+    font-weight: 600;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: #333;
+}
+
+.info-field input.input-compact {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #333;
+    background: white;
+    font-size: 0.85rem;
+    border-radius: 0;
+}
+
+.info-field input.input-compact:focus {
+    outline: none;
+    border: 2px solid #4a90e2;
 }
 
 .border-circle {
     border-radius: 50%;
+}
+
+/* Summary Table */
+.summary-table-section {
+    overflow-x: auto;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.summary-table th,
+.summary-table td {
+    border: 1px solid #1f2937;
+    padding: 0.5rem;
+}
+
+.summary-table thead th {
+    background-color: #f3f4f6;
+    font-weight: 600;
+    text-align: center;
+}
+
+.summary-table tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+/* Print Styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    .summary-report-container {
+        padding: 0;
+        background: white;
+    }
+
+    .report-card {
+        box-shadow: none;
+    }
+
+    .p-button, .p-dropdown {
+        display: none !important;
+    }
 }
 </style>
