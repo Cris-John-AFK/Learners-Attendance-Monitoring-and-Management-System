@@ -3,7 +3,6 @@
         <!-- Header Controls (No Print) -->
         <div class="no-print mb-4 flex justify-between items-center bg-white p-4 rounded-lg shadow">
             <div class="flex items-center gap-4">
-                <Button icon="pi pi-arrow-left" label="Back" class="p-button-outlined" @click="$router.back()" />
                 <h2 class="text-xl font-bold text-gray-800">Summary Attendance Report</h2>
             </div>
             <div class="flex items-center gap-3">
@@ -30,7 +29,6 @@
                     />
                 </div>
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
-                <Button icon="pi pi-download" label="Export Excel" class="p-button-success" @click="exportExcel" />
             </div>
         </div>
 
@@ -54,20 +52,6 @@
             <div class="school-info-section">
                 <div class="info-row">
                     <div class="info-field">
-                        <label>School ID:</label>
-                        <input type="text" value="123456" class="input-compact" readonly />
-                    </div>
-                    <div class="info-field">
-                        <label>School Year:</label>
-                        <input type="text" value="2024-2025" class="input-compact" readonly />
-                    </div>
-                    <div class="info-field">
-                        <label>Report for the Month of:</label>
-                        <input type="text" :value="getMonthName()" class="input-compact" readonly />
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-field">
                         <label>Name of School:</label>
                         <input type="text" value="Naawan Central School" class="input-compact" readonly />
                     </div>
@@ -89,14 +73,11 @@
                         <tr>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">No.</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-left font-bold">Learner's Name<br/>(Last Name, First Name, Middle Name)</th>
-                            <th colspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Sex</th>
                             <th colspan="4" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Summary</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Rate</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Remarks</th>
                         </tr>
                         <tr>
-                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">M</th>
-                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">F</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Present</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Late</th>
@@ -106,41 +87,35 @@
                     <tbody v-if="!loading && students.length > 0">
                         <!-- Male Students -->
                         <tr>
-                            <td colspan="10" class="border-2 border-gray-900 bg-blue-100 p-2 font-bold text-sm">MALE STUDENTS</td>
+                            <td colspan="8" class="border-2 border-gray-900 bg-blue-100 p-2 font-bold text-sm">MALE STUDENTS</td>
                         </tr>
                         <tr v-for="(student, index) in maleStudents" :key="student.id">
                             <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
                             <td class="border border-gray-900 p-2 text-sm">{{ student.name }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">✓</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm"></td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_present || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_absences || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_late || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_excused || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(student.attendance_rate)">{{ student.attendance_rate }}%</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100))">{{ Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100) }}%</td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                         </tr>
                         <!-- Female Students -->
                         <tr>
-                            <td colspan="10" class="border-2 border-gray-900 bg-pink-100 p-2 font-bold text-sm">FEMALE STUDENTS</td>
+                            <td colspan="8" class="border-2 border-gray-900 bg-pink-100 p-2 font-bold text-sm">FEMALE STUDENTS</td>
                         </tr>
                         <tr v-for="(student, index) in femaleStudents" :key="student.id">
                             <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
                             <td class="border border-gray-900 p-2 text-sm">{{ student.name }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm"></td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">✓</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_present || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_absences || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_late || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ student.total_excused || 0 }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(student.attendance_rate)">{{ student.attendance_rate }}%</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100))">{{ Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100) }}%</td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                         </tr>
                         <!-- Total Row -->
                         <tr class="bg-gray-100">
                             <td colspan="2" class="border-2 border-gray-900 p-2 text-center font-bold">TOTAL</td>
-                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ maleStudents.length }}</td>
-                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ femaleStudents.length }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalPresent }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalAbsent }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalLate }}</td>
@@ -174,147 +149,190 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import TeacherAuthService from '@/services/TeacherAuthService';
+import { useRoute } from 'vue-router';
+import axios from 'axios';
 
+const route = useRoute();
 const toast = useToast();
 
-const students = ref([]);
-const summaryData = ref(null);
+// Get section ID from route params or use hardcoded default
+// TODO: In production, this should come from a section selector or route param
+const sectionId = ref(route.params.sectionId || route.query.sectionId || 1); // Default to section ID 1
+const teacherSections = ref([]);
+
+const reportData = ref(null);
 const loading = ref(false);
-const selectedMonth = ref(new Date().getMonth() + 1);
-const selectedYear = ref(new Date().getFullYear());
-const selectedSection = ref(null);
+const selectedMonth = ref(null); // Will be set when user selects dates
 
-// Date range for filtering
-const startDate = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); // First day of current month
-const endDate = ref(new Date()); // Today
+// Date range for filtering - start empty
+const startDate = ref(null);
+const endDate = ref(null);
 
-const monthOptions = [
-    { label: 'January', value: 1 },
-    { label: 'February', value: 2 },
-    { label: 'March', value: 3 },
-    { label: 'April', value: 4 },
-    { label: 'May', value: 5 },
-    { label: 'June', value: 6 },
-    { label: 'July', value: 7 },
-    { label: 'August', value: 8 },
-    { label: 'September', value: 9 },
-    { label: 'October', value: 10 },
-    { label: 'November', value: 11 },
-    { label: 'December', value: 12 }
-];
+// Computed properties using SF2 Report data structure
+const students = computed(() => {
+    if (!reportData.value?.students) return [];
+    return reportData.value.students;
+});
 
-const yearOptions = [2023, 2024, 2025, 2026];
-const sectionOptions = ref([]);
+const maleStudents = computed(() => {
+    if (!reportData.value?.students) return [];
+    return reportData.value.students.filter(student => student.gender === 'Male');
+});
 
-const maleStudents = computed(() => 
-    students.value.filter(student => student.gender === 'Male')
-);
-
-const femaleStudents = computed(() => 
-    students.value.filter(student => student.gender === 'Female')
-);
+const femaleStudents = computed(() => {
+    if (!reportData.value?.students) return [];
+    return reportData.value.students.filter(student => student.gender === 'Female');
+});
 
 const schoolDays = computed(() => {
-    const daysInMonth = new Date(selectedYear.value, selectedMonth.value, 0).getDate();
-    return Math.floor(daysInMonth * 0.7); // Approximate school days (excluding weekends)
+    if (!reportData.value?.days_in_month) return 0;
+    if (!startDate.value || !endDate.value) return 0;
+    
+    const start = new Date(startDate.value);
+    start.setHours(0, 0, 0, 0); // Reset time to start of day
+    const end = new Date(endDate.value);
+    end.setHours(23, 59, 59, 999); // Set time to end of day
+    
+    // Count only days within the selected date range
+    let count = 0;
+    reportData.value.days_in_month.forEach(day => {
+        const dayDate = new Date(day.date);
+        dayDate.setHours(0, 0, 0, 0); // Reset time for comparison
+        if (dayDate >= start && dayDate <= end) {
+            count++;
+        }
+    });
+    console.log(`📅 School days in range: ${count}`);
+    return count;
 });
+
+// Calculate totals from attendance_data within selected date range
+const calculateStudentTotal = (student, status) => {
+    if (!student.attendance_data || !reportData.value?.days_in_month) return 0;
+    if (!startDate.value || !endDate.value) return 0;
+    
+    let count = 0;
+    const start = new Date(startDate.value);
+    start.setHours(0, 0, 0, 0); // Reset time to start of day
+    const end = new Date(endDate.value);
+    end.setHours(23, 59, 59, 999); // Set time to end of day
+    
+    reportData.value.days_in_month.forEach(day => {
+        const dayDate = new Date(day.date);
+        dayDate.setHours(0, 0, 0, 0); // Reset time for comparison
+        
+        // Only count if the day is within the selected date range
+        if (dayDate >= start && dayDate <= end) {
+            if (student.attendance_data[day.date] === status) {
+                count++;
+                console.log(`✅ Counted ${status} for ${student.name} on ${day.date}`);
+            }
+        }
+    });
+    return count;
+};
 
 // Calculate total present
 const totalPresent = computed(() => {
-    return students.value.reduce((sum, student) => sum + (student.total_present || 0), 0);
+    return students.value.reduce((sum, student) => sum + calculateStudentTotal(student, 'present'), 0);
 });
 
 // Calculate total absent
 const totalAbsent = computed(() => {
-    return students.value.reduce((sum, student) => sum + (student.total_absences || 0), 0);
+    return students.value.reduce((sum, student) => sum + calculateStudentTotal(student, 'absent'), 0);
 });
 
 // Calculate total late
 const totalLate = computed(() => {
-    return students.value.reduce((sum, student) => sum + (student.total_late || 0), 0);
+    return students.value.reduce((sum, student) => sum + calculateStudentTotal(student, 'late'), 0);
 });
 
 // Calculate total excused
 const totalExcused = computed(() => {
-    return students.value.reduce((sum, student) => sum + (student.total_excused || 0), 0);
+    return students.value.reduce((sum, student) => sum + calculateStudentTotal(student, 'excused'), 0);
 });
 
 // Calculate average attendance rate
 const averageAttendanceRate = computed(() => {
-    if (students.value.length === 0) return 0;
-    const sum = students.value.reduce((total, student) => total + (student.attendance_rate || 0), 0);
-    return Math.round(sum / students.value.length);
+    if (students.value.length === 0 || !reportData.value?.days_in_month) return 0;
+    
+    const totalDays = reportData.value.days_in_month.length;
+    if (totalDays === 0) return 0;
+    
+    const totalAttendanceRate = students.value.reduce((sum, student) => {
+        const presentDays = calculateStudentTotal(student, 'present');
+        const rate = (presentDays / totalDays) * 100;
+        return sum + rate;
+    }, 0);
+    
+    return Math.round(totalAttendanceRate / students.value.length);
 });
 
-const getTeacherId = () => {
-    const teacherData = TeacherAuthService.getTeacherData();
-    if (teacherData && teacherData.teacher && teacherData.teacher.id) {
-        return parseInt(teacherData.teacher.id);
-    }
-
-    const authData = localStorage.getItem('teacher_auth_data');
-    if (authData) {
-        try {
-            const parsed = JSON.parse(authData);
-            if (parsed.teacher && parsed.teacher.id) {
-                return parseInt(parsed.teacher.id);
+// Fetch teacher's sections
+const fetchTeacherSections = async () => {
+    try {
+        console.log('🔍 Fetching teacher sections from API...');
+        const response = await axios.get('http://127.0.0.1:8000/api/teacher/sections');
+        console.log('📥 Sections API response:', response.data);
+        
+        if (response.data.success && response.data.data.length > 0) {
+            teacherSections.value = response.data.data;
+            console.log('✅ Found sections:', teacherSections.value);
+            
+            // Use first section as default if no sectionId is set
+            if (!sectionId.value) {
+                sectionId.value = response.data.data[0].id;
+                console.log('✅ Using first section ID:', sectionId.value);
+                console.log('📋 Section details:', response.data.data[0]);
             }
-        } catch (e) {
-            console.error('Error parsing teacher_auth_data:', e);
+            return true;
         }
+        console.warn('⚠️ No sections found in response');
+        return false;
+    } catch (error) {
+        console.error('❌ Error fetching teacher sections:', error);
+        console.error('Error details:', error.response?.data || error.message);
+        return false;
     }
-
-    return 2; // Fallback
 };
 
+// Load SF2 report data (same as SF2 Report page)
 const loadAttendanceData = async () => {
     loading.value = true;
+    console.log('🔄 Loading attendance data...');
+    console.log('Current sectionId:', sectionId.value);
+    console.log('Selected month:', selectedMonth.value);
     
     try {
-        const teacherId = getTeacherId();
-        const params = new URLSearchParams({
-            teacher_id: teacherId,
-            period: 'month',
-            view_type: 'all_students'
-        });
-
-        if (selectedSection.value) {
-            params.append('section_id', selectedSection.value);
-        }
-
-        const response = await fetch(`http://127.0.0.1:8000/api/attendance/summary?${params}`);
+        // Section ID is already set (hardcoded or from route)
+        console.log('🎯 Using section ID:', sectionId.value);
         
-        if (!response.ok) {
-            throw new Error(`Failed to load attendance data: ${response.status}`);
-        }
+        const monthStr = selectedMonth.value.toISOString().slice(0, 7); // YYYY-MM format
+        const apiUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`;
+        console.log('🌐 API URL:', apiUrl);
         
-        const data = await response.json();
+        const response = await axios.get(apiUrl);
+        console.log('📦 API Response:', response.data);
         
-        if (data.success) {
-            students.value = data.data.students.map(student => ({
-                ...student,
-                name: `${student.first_name} ${student.last_name}`,
-                attendance_rate: Math.round(student.attendance_rate || 0)
-            }));
-            
-            summaryData.value = data.data;
-            
-            console.log('📊 Summary Attendance: Loaded data:', data.data);
+        if (response.data.success) {
+            reportData.value = response.data.data;
+            console.log('📊 Summary Attendance: Loaded SF2 data:', response.data.data);
+            console.log('👥 Students count:', response.data.data.students?.length || 0);
         } else {
-            throw new Error(data.message || 'Failed to load attendance data');
+            throw new Error(response.data.message || 'Failed to load report data');
         }
-        
     } catch (error) {
-        console.error('Error loading attendance data:', error);
+        console.error('❌ Error loading SF2 report:', error);
+        console.error('Error details:', error.response?.data || error.message);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load attendance data',
+            detail: error.response?.data?.message || error.message || 'Failed to load attendance data',
             life: 3000
         });
     } finally {
         loading.value = false;
+        console.log('✅ Loading complete. Students:', students.value.length);
     }
 };
 
@@ -332,8 +350,11 @@ const exportExcel = () => {
 };
 
 const getMonthName = () => {
+    if (!selectedMonth.value) return '';
     const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-    return `${months[selectedMonth.value - 1]} ${selectedYear.value}`;
+    const month = selectedMonth.value.getMonth();
+    const year = selectedMonth.value.getFullYear();
+    return `${months[month]} ${year}`;
 };
 
 const getAttendanceRateClass = (rate) => {
@@ -344,6 +365,7 @@ const getAttendanceRateClass = (rate) => {
 };
 
 const onDateRangeChange = () => {
+    // Only load if both dates are selected
     if (startDate.value && endDate.value) {
         // Validate that end date is after start date
         if (endDate.value < startDate.value) {
@@ -355,12 +377,18 @@ const onDateRangeChange = () => {
             });
             return;
         }
+        // Update selectedMonth based on date range
+        selectedMonth.value = new Date(startDate.value);
+        console.log('📅 Date range changed, loading data...');
         loadAttendanceData();
+    } else {
+        console.log('⏳ Waiting for both dates to be selected...');
     }
 };
 
 onMounted(() => {
-    loadAttendanceData();
+    console.log('🚀 Component mounted. Waiting for user to select dates...');
+    // Don't auto-load - wait for user to select dates
 });
 </script>
 
