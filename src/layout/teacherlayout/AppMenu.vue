@@ -60,6 +60,24 @@ const model = ref([
                 to: '/teacher/student-qrcodes'
             }
         ]
+    },
+    {
+        separator: true
+    },
+    {
+        label: 'Reports',
+        items: [
+            {
+                label: 'Daily Attendance',
+                icon: 'pi pi-fw pi-calendar-plus',
+                to: '/teacher/daily-attendance'
+            },
+            {
+                label: 'Summary Attendance',
+                icon: 'pi pi-fw pi-chart-bar',
+                to: '/teacher/summary-attendance'
+            }
+        ]
     }
 ]);
 
@@ -103,24 +121,22 @@ onMounted(async () => {
             const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];
 
             console.log('📋 Menu: Loaded assignments:', assignmentsArray);
-            
+
             // Debug: Log first assignment to see data structure
             if (assignmentsArray.length > 0) {
                 console.log('📋 Menu: First assignment structure:', JSON.stringify(assignmentsArray[0], null, 2));
             }
 
             // Find teacher's homeroom section first
-            const homeroomAssignment = assignmentsArray.find(assignment => 
-                !assignment.subject_id && assignment.is_primary
-            );
+            const homeroomAssignment = assignmentsArray.find((assignment) => !assignment.subject_id && assignment.is_primary);
             const homeroomSectionName = homeroomAssignment?.section?.name || homeroomAssignment?.section_name;
-            
+
             console.log('📋 Menu: Teacher homeroom section:', homeroomSectionName);
-            
+
             // Separate homeroom subjects from other subjects
             const homeroomSubjects = [];
             const otherSubjects = [];
-            
+
             assignmentsArray.forEach((assignment) => {
                 if (assignment.subject_id && assignment.subject_name) {
                     const subjectData = {
@@ -130,7 +146,7 @@ onMounted(async () => {
                         grade: assignment.section?.grade_level || 'Unknown Grade',
                         sectionId: assignment.section_id
                     };
-                    
+
                     // If this subject is taught in the teacher's homeroom section, it's a homeroom subject
                     const subjectSectionName = assignment.section_name || assignment.section?.name;
                     if (subjectSectionName === homeroomSectionName) {

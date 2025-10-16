@@ -138,6 +138,14 @@ const gradeLevels = ref([]);
 const allSections = ref([]);
 const sectionsByGrade = ref({});
 
+// Computed property to check if any filter is selected
+const hasActiveFilter = computed(() => {
+    return filters.value.grade !== null || 
+           filters.value.section !== null || 
+           filters.value.gender !== null || 
+           filters.value.status !== null;
+});
+
 const disabilityTypes = [
     'Visual Impairment',
     'Hearing Impairment',
@@ -2111,7 +2119,15 @@ onMounted(() => {
 
         <!-- Student List -->
         <div class="mt-6">
-            <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+            <!-- Message when no filter is selected -->
+            <div v-if="!hasActiveFilter" class="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+                <i class="pi pi-filter text-4xl text-blue-400 mb-4"></i>
+                <h3 class="text-xl font-semibold text-blue-900 mb-2">Select a Filter to View Students</h3>
+                <p class="text-blue-700">Please select at least one filter (Grade, Section, Gender, or Status) from the dropdown menus above to display the student list.</p>
+            </div>
+
+            <!-- Student Table (shown only when filter is active) -->
+            <div v-else class="bg-white rounded-lg shadow-sm border overflow-hidden">
                 <DataTable
                     :value="filteredStudents"
                     :paginator="true"

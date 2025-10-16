@@ -5,13 +5,12 @@ import EnrollmentLayout from '@/layout/enrollmentlayout/EnrollmentLayout.vue';
 import GuardHouseLayout from '@/layout/guardhouselayout/GuardHouseLayout.vue';
 import GuestLayout from '@/layout/guestlayout/GuestLayout.vue';
 import AppLayout from '@/layout/teacherlayout/AppLayout.vue';
+import AuthService from '@/services/AuthService';
 import StudentQRCodes from '@/views/pages/teacher/StudentQRCodes.vue';
 import TeacherDashboard from '@/views/pages/teacher/TeacherDashboard.vue';
 import TeacherSettings from '@/views/pages/teacher/TeacherSettings.vue';
 import TeacherSubjectAttendance from '@/views/pages/teacher/TeacherSubjectAttendance.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import TeacherAuthService from '@/services/TeacherAuthService';
-import AuthService from '@/services/AuthService';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -83,7 +82,7 @@ const router = createRouter({
                 },
                 {
                     path: '/subject/mathematics',
-                    name: 'mathematics-attendance', 
+                    name: 'mathematics-attendance',
                     component: TeacherSubjectAttendance,
                     props: { subjectId: '1', subjectName: 'Mathematics' }
                 },
@@ -101,6 +100,16 @@ const router = createRouter({
                     path: '/teacher/sf2-report/:sectionId',
                     name: 'teacher-sf2-report',
                     component: () => import('@/views/pages/teacher/TeacherSF2Report.vue')
+                },
+                {
+                    path: '/teacher/daily-attendance/:sectionId?',
+                    name: 'teacher-daily-attendance',
+                    component: () => import('@/views/pages/teacher/TeacherDailyAttendance.vue')
+                },
+                {
+                    path: '/teacher/summary-attendance',
+                    name: 'teacher-summary-attendance',
+                    component: () => import('@/views/pages/teacher/TeacherSummaryAttendanceReport.vue')
                 },
                 {
                     path: '/teacher/schedules',
@@ -288,11 +297,11 @@ const router = createRouter({
 // Enhanced route guard with session validation
 router.beforeEach(async (to, from, next) => {
     // Check if route requires authentication
-    if (to.matched.some(record => record.meta.requiresAuth)) {
+    if (to.matched.some((record) => record.meta.requiresAuth)) {
         try {
             // Check if user is authenticated (unified auth)
             const isAuthenticated = AuthService.isAuthenticated();
-            
+
             if (!isAuthenticated) {
                 console.log('User not authenticated, redirecting to login');
                 // Clear any stale data
@@ -304,7 +313,7 @@ router.beforeEach(async (to, from, next) => {
 
             // Validate session with backend
             const sessionCheck = await AuthService.checkSession();
-            
+
             if (!sessionCheck.valid) {
                 console.warn('Session invalid or expired:', sessionCheck.message);
                 // Clear auth data and redirect to root login page
@@ -369,25 +378,23 @@ router.beforeEach(async (to, from, next) => {
 // Prevent back/forward navigation to protected pages after logout
 router.afterEach((to, from) => {
     // If navigating to a protected route without authentication, replace history
-    if (to.matched.some(record => record.meta.requiresAuth) && !AuthService.isAuthenticated()) {
+    if (to.matched.some((record) => record.meta.requiresAuth) && !AuthService.isAuthenticated()) {
         // Force replace the history entry to prevent back button
         window.history.replaceState({}, '', '/');
     }
 });
 
 // Disable browser history navigation for authenticated pages
-window.addEventListener('popstate', function(event) {
+window.addEventListener('popstate', function (event) {
     const currentPath = window.location.pathname;
-    const isProtected = currentPath.startsWith('/teacher') || 
-                       currentPath.startsWith('/admin') || 
-                       currentPath.startsWith('/guardhouse');
-    
+    const isProtected = currentPath.startsWith('/teacher') || currentPath.startsWith('/admin') || currentPath.startsWith('/guardhouse');
+
     // If user navigated back from a protected page to root
     if (currentPath === '/' && isProtected === false && AuthService.isAuthenticated()) {
         // Clear the forward history by pushing current state
         window.history.pushState(null, '', '/');
     }
-    
+
     // If trying to access protected page without authentication
     if (isProtected && !AuthService.isAuthenticated()) {
         event.preventDefault();
