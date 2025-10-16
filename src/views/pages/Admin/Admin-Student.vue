@@ -3,6 +3,7 @@ import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import Calendar from 'primevue/calendar';
 
 const toast = useToast();
 const router = useRouter();
@@ -127,6 +128,7 @@ const statusChangeDialog = ref(false);
 const selectedStudentForStatus = ref(null);
 const newStudentStatus = ref('');
 const statusChangeReason = ref('');
+const statusEffectiveDate = ref(new Date());
 
 const selectedStudentAge = computed(() => calculateAge(selectedStudent.value?.birthdate));
 const originalStudentClone = ref(null);
@@ -999,8 +1001,10 @@ function confirmDeleteStudent(studentData) {
 // Open status change dialog
 function openStatusChangeDialog(studentData) {
     selectedStudentForStatus.value = { ...studentData };
-    newStudentStatus.value = getStudentStatusDisplay(studentData);
-    statusChangeReason.value = getStudentReason(studentData) || '';
+    newStudentStatus.value = studentData.enrollment_status || 'active';
+    statusChangeReason.value = studentData.dropout_reason || '';
+    // Set effective date to existing date or today
+    statusEffectiveDate.value = studentData.status_effective_date ? new Date(studentData.status_effective_date) : new Date();
     statusChangeDialog.value = true;
 }
 
@@ -1009,13 +1013,18 @@ const saveStatusChange = async () => {
     try {
         if (!selectedStudentForStatus.value) return;
         
+        // Format the effective date properly
+        const effectiveDate = statusEffectiveDate.value instanceof Date 
+            ? statusEffectiveDate.value.toISOString().split('T')[0]
+            : new Date(statusEffectiveDate.value).toISOString().split('T')[0];
+        
         const updateData = {
             ...selectedStudentForStatus.value,
             current_status: newStudentStatus.value,
             enrollment_status: newStudentStatus.value,
             dropout_reason: statusChangeReason.value,
             status_changed_date: new Date().toISOString().split('T')[0],
-            status_effective_date: new Date().toISOString().split('T')[0]
+            status_effective_date: effectiveDate
         };
 
         const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudentForStatus.value.id}`, {
@@ -3002,7 +3011,19 @@ onMounted(() => {
                 </div>
                 
                 <div class="field mb-4">
-                    <label for="statusReason" class="block text-sm font-medium mb-2">Reason</label>
+                    <label for="effectiveDate" class="block text-sm font-medium mb-2">Effective Date</label>
+                    <Calendar 
+                        id="effectiveDate"
+                        v-model="statusEffectiveDate" 
+                        dateFormat="yy-mm-dd" 
+                        :showIcon="true" 
+                        class="w-full"
+                        placeholder="Select effective date"
+                    />
+                </div>
+                
+                <div class="field mb-4">
+                    <label for="statusReason" class="block text-sm font-medium mb-2">Notes</label>
                     <Textarea 
                         id="statusReason"
                         v-model="statusChangeReason" 
