@@ -24,12 +24,12 @@ class SF2ReportController extends Controller
         try {
             // Get section with students
             $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
-            
+
             // Get current month attendance data
             $currentMonth = Carbon::now()->format('Y-m');
-            
+
             return $this->generateSF2Report($section, $currentMonth);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to generate SF2 report',
@@ -45,18 +45,18 @@ class SF2ReportController extends Controller
     {
         try {
             \Log::info("SF2 Download Request - Section ID: {$sectionId}, Month: {$month}");
-            
+
             // Load section with students and teacher
             $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
             \Log::info("Section loaded: " . $section->name);
-            
+
             // Generate and return SF2 report
             return $this->generateSF2Report($section, $month);
-            
+
         } catch (\Exception $e) {
             \Log::error("SF2 Download Error: " . $e->getMessage());
             \Log::error("Stack trace: " . $e->getTraceAsString());
-            
+
             return response()->json([
                 'error' => 'Failed to generate SF2 report',
                 'message' => $e->getMessage(),
@@ -73,13 +73,13 @@ class SF2ReportController extends Controller
         try {
             // Load the SF2 template
             $templatePath = public_path('templates/School Form Attendance Report of Learners.xlsx');
-            
+
             if (!file_exists($templatePath)) {
                 throw new \Exception('SF2 template file not found at: ' . $templatePath);
             }
 
             Log::info("Loading template from: " . $templatePath);
-            
+
             // Load the template
             $spreadsheet = IOFactory::load($templatePath);
             $worksheet = $spreadsheet->getActiveSheet();
@@ -88,24 +88,24 @@ class SF2ReportController extends Controller
 
             // Get students with attendance data
             $students = $this->getStudentsWithAttendance($section, $month);
-            
+
             Log::info("Found " . count($students) . " students");
-            
+
             // Clear any existing duplicate data first
             $this->clearDuplicateData($worksheet);
-            
+
             // Populate school information
             $this->populateSchoolInfo($worksheet, $section, $month);
-            
+
             // Populate day headers first
             $this->populateDayHeaders($worksheet, $month);
-            
+
             // Apply wrap text to learner's name header (red boxed area)
             $worksheet->getStyle('B10:B12')->getAlignment()->setWrapText(true);
-            
+
             // Populate student data
             $this->populateStudentData($worksheet, $students);
-            
+
             // Populate summary data
             $this->populateSummaryData($worksheet, $students);
 
@@ -117,7 +117,7 @@ class SF2ReportController extends Controller
 
             // Create temporary file path
             $tempFile = storage_path('app/temp/' . uniqid('sf2_') . '.xlsx');
-            
+
             // Ensure temp directory exists
             $tempDir = dirname($tempFile);
             if (!is_dir($tempDir)) {
@@ -127,22 +127,22 @@ class SF2ReportController extends Controller
             // Save the file
             $writer = new Xlsx($spreadsheet);
             $writer->save($tempFile);
-            
+
             Log::info("File saved to: " . $tempFile);
-            
+
             // Verify file was created and has content
             if (!file_exists($tempFile) || filesize($tempFile) == 0) {
                 throw new \Exception('Failed to create Excel file');
             }
-            
+
             Log::info("File size: " . filesize($tempFile) . " bytes");
-            
+
             // Return the Excel file as download
             return response()->download($tempFile, $filename, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'Content-Disposition' => 'attachment; filename="' . $filename . '"'
             ])->deleteFileAfterSend(true);
-            
+
         } catch (\Exception $e) {
             Log::error("SF2 Generation Error: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
@@ -160,21 +160,21 @@ class SF2ReportController extends Controller
                          ->orderBy('gender')
                          ->orderBy('name')
                          ->get();
-                         
+
         Log::info("Found " . $students->count() . " students using section name '{$section->name}'");
-        
+
         // If no students found using section name, try pivot table relationship
         if ($students->isEmpty()) {
             Log::info("No students found using section name for section {$section->id}, trying pivot table approach");
-            
+
             $students = $section->students()->orderBy('gender')->orderBy('name')->get();
             Log::info("Found " . $students->count() . " students using pivot table");
         }
-        
+
         // If still no students found, use sample data for testing
         if ($students->isEmpty()) {
             Log::info("No students found in section {$section->id}, using sample data");
-            
+
             // Create sample student objects
             $sampleStudents = collect([
                 (object)[
@@ -226,16 +226,16 @@ class SF2ReportController extends Controller
                     'lrn' => '123456789017'
                 ]
             ]);
-            
+
             $students = $sampleStudents;
         }
-        
+
         // Get attendance data for the month
         $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-        
+
         Log::info("Getting attendance data for section {$section->id} from {$startDate} to {$endDate}");
-        
+
         // Get real attendance records from the production system
         $attendanceRecords = [];
         try {
@@ -252,7 +252,7 @@ class SF2ReportController extends Controller
                     'st.code as status_code'
                 ])
                 ->get();
-                
+
             // Group by student and date
             foreach ($records as $record) {
                 $attendanceRecords[$record->student_id][$record->session_date] = [
@@ -260,17 +260,17 @@ class SF2ReportController extends Controller
                     'status_code' => $record->status_code
                 ];
             }
-            
+
             Log::info("Found " . count($records) . " real attendance records");
-            
+
             // Log all unique status names for debugging
             $uniqueStatuses = $records->pluck('status_name')->unique();
             Log::info("Unique attendance statuses found: " . $uniqueStatuses->implode(', '));
-            
+
         } catch (\Exception $e) {
             Log::info("Error fetching real attendance data: " . $e->getMessage());
         }
-        
+
         // Get saved SF2 edits for this section and month
         $sf2Edits = [];
         try {
@@ -278,11 +278,11 @@ class SF2ReportController extends Controller
                 ->where('section_id', $section->id)
                 ->where('month', $month)
                 ->get();
-                
+
             foreach ($edits as $edit) {
                 $sf2Edits[$edit->student_id][$edit->date] = $edit->status;
             }
-            
+
             Log::info("Found " . count($edits) . " SF2 attendance edits", [
                 'section_id' => $section->id,
                 'month' => $month,
@@ -291,14 +291,14 @@ class SF2ReportController extends Controller
         } catch (\Exception $e) {
             Log::info("Error fetching SF2 edits: " . $e->getMessage());
         }
-        
+
         Log::info("Processing students for SF2", [
             'section_id' => $section->id,
             'month' => $month,
             'student_count' => $students->count(),
             'student_ids' => $students->pluck('id')->toArray()
         ]);
-        
+
         foreach ($students as $student) {
             // Calculate attendance statistics
             $totalDays = 0;
@@ -306,17 +306,17 @@ class SF2ReportController extends Controller
             $absentDays = 0;
             $lateDays = 0;
             $attendanceData = [];
-            
+
             // Generate attendance data for each day of the month
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
                 // Skip weekends (assuming school days are Monday-Friday)
                 if ($currentDate->isWeekday()) {
                     $dateKey = $currentDate->format('Y-m-d');
-                    
+
                     // Check if there's a saved SF2 edit for this student and date
                     $sf2Edit = $sf2Edits[$student->id][$dateKey] ?? null;
-                    
+
                     if ($sf2Edit) {
                         // Use SF2 edit (manual override) - highest priority
                         $status = $sf2Edit;
@@ -324,11 +324,11 @@ class SF2ReportController extends Controller
                     } else {
                         // Use original attendance data
                         $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
-                        
+
                         if ($studentAttendance) {
                             // Use real attendance data and map to simple status
                             $statusName = strtolower($studentAttendance['status_name']);
-                            
+
                             if (in_array($statusName, ['present', 'on time'])) {
                                 $status = 'present';
                             } elseif (in_array($statusName, ['late', 'tardy', 'warning'])) {
@@ -338,14 +338,14 @@ class SF2ReportController extends Controller
                             } else {
                                 $status = 'absent';
                             }
-                            
+
                             Log::info("Student {$student->id} on {$dateKey}: {$statusName} -> {$status}");
                         } else {
                             // No attendance record means absent (no session was held or student was not marked)
                             $status = 'absent';
                         }
                     }
-                    
+
                     // Count the status for statistics
                     if ($status === 'present') {
                         $presentDays++;
@@ -355,26 +355,26 @@ class SF2ReportController extends Controller
                     } else {
                         $absentDays++;
                     }
-                    
+
                     $attendanceData[$dateKey] = $status;
                     $totalDays++;
                 }
                 $currentDate->addDay();
             }
-            
+
             // Calculate attendance rate
             $attendanceRate = $totalDays > 0 ? round(($presentDays / $totalDays) * 100, 1) : 0;
-            
+
             // Add calculated data to student object
             $student->attendance_data = $attendanceData;
             $student->total_present = $presentDays;
             $student->total_absent = $absentDays;
             $student->total_late = $lateDays;
             $student->attendance_rate = $attendanceRate;
-            
+
             Log::info("Student {$student->firstName} {$student->lastName}: Present: {$presentDays}, Absent: {$absentDays}, Late: {$lateDays}");
         }
-        
+
         return $students;
     }
 
@@ -386,18 +386,18 @@ class SF2ReportController extends Controller
         // Create different attendance patterns for different students
         $patterns = [
             1 => ['present' => 85, 'late' => 10, 'absent' => 5],     // Good student
-            2 => ['present' => 90, 'late' => 5, 'absent' => 5],      // Excellent student  
+            2 => ['present' => 90, 'late' => 5, 'absent' => 5],      // Excellent student
             3 => ['present' => 75, 'late' => 15, 'absent' => 10],    // Average student
             4 => ['present' => 80, 'late' => 12, 'absent' => 8],     // Good student
         ];
-        
+
         $pattern = $patterns[$studentId] ?? ['present' => 80, 'late' => 10, 'absent' => 10];
-        
+
         // Use date as seed for consistent results
         $seed = (int)$date->format('Ymd') + $studentId;
         srand($seed);
         $random = rand(1, 100);
-        
+
         if ($random <= $pattern['present']) {
             return 'present';
         } elseif ($random <= $pattern['present'] + $pattern['late']) {
@@ -414,13 +414,13 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Starting to populate school info for section: " . $section->name);
-            
+
             // Based on the Excel template image, use exact cell coordinates
             // First row of input fields (around row 6-7)
             $monthFormatted = strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y'));
             $gradeLevel = $section->grade_level ?? 'Kinder';
             $sectionName = $section->name ?? 'Matatag';
-            
+
             // Clear the specific input cells first to avoid overlaps
             $inputCells = ['D6', 'K6', 'X6', 'D8', 'X8', 'AC8'];
             foreach ($inputCells as $cell) {
@@ -430,18 +430,18 @@ class SF2ReportController extends Controller
                     // Continue if cell doesn't exist
                 }
             }
-            
+
             // Populate the exact input field cells based on user's coordinates
             // Row 6 - First row of input fields
             $worksheet->setCellValue('C6', '123456');           // School ID: 6 C D E
             $worksheet->setCellValue('K6', '2024-2025');        // School Year: 6 K L M N O
             $worksheet->setCellValue('X6', $monthFormatted);     // Report for the Month of: 6 X Y Z AA AB AC
-            
+
             // Row 8 - Second row of input fields
             $worksheet->setCellValue('D8', 'Naawan Central School'); // Name of School: 8 B
             $worksheet->setCellValue('X8', $gradeLevel);         // Grade Level: 8 X Y
             $worksheet->setCellValue('AC8', $sectionName);       // Section: 8 AC AD AE AF AG AH
-            
+
             Log::info("Successfully populated school info with exact user coordinates:");
             Log::info("- School ID (C6): 123456");
             Log::info("- School Year (K6): 2024-2025");
@@ -449,11 +449,11 @@ class SF2ReportController extends Controller
             Log::info("- School Name (D8): Naawan Central School");
             Log::info("- Grade Level (X8): {$gradeLevel}");
             Log::info("- Section (AC8): {$sectionName}");
-            
+
         } catch (\Exception $e) {
             Log::error("Error populating school info: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
-            
+
             // Fallback to scanning method if exact coordinates fail
             try {
                 $this->populateFieldByText($worksheet, 'School ID', '123456');
@@ -468,7 +468,7 @@ class SF2ReportController extends Controller
             }
         }
     }
-    
+
     /**
      * Clear only specific cells that contain duplicate data
      */
@@ -476,19 +476,19 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Clearing duplicate data from template");
-            
+
             // Only clear cells in the header area that might have duplicate data
             $rowsToCheck = range(5, 10);  // Limit to header rows only
             $columnsToCheck = range(ord('B'), ord('M'));  // Limit to relevant columns
-            
+
             foreach ($rowsToCheck as $row) {
                 foreach ($columnsToCheck as $colOrd) {
                     $col = chr($colOrd);
                     $cell = $col . $row;
-                    
+
                     try {
                         $currentValue = $worksheet->getCell($cell)->getValue();
-                        
+
                         // Only clear if it's an exact match of our data
                         if ($this->containsOurData($currentValue)) {
                             $worksheet->setCellValue($cell, '');
@@ -500,7 +500,7 @@ class SF2ReportController extends Controller
                     }
                 }
             }
-            
+
             Log::info("Finished clearing duplicate data");
         } catch (\Exception $e) {
             Log::error("Error clearing duplicate data: " . $e->getMessage());
@@ -515,7 +515,7 @@ class SF2ReportController extends Controller
         if (empty($value) || !is_string($value)) {
             return false;
         }
-        
+
         // Only clear exact matches of our data to avoid clearing template labels
         $ourExactData = [
             '123456',
@@ -524,21 +524,21 @@ class SF2ReportController extends Controller
             'Kinder',
             'Matatag'
         ];
-        
+
         $trimmedValue = trim($value);
-        
+
         // Check for exact matches only
         foreach ($ourExactData as $data) {
             if ($trimmedValue === $data) {
                 return true;
             }
         }
-        
+
         // Check for month patterns (SEPTEMBER 2025, etc.)
         if (preg_match('/^[A-Z]+ \d{4}$/', $trimmedValue)) {
             return true;
         }
-        
+
         return false;
     }
 
@@ -551,21 +551,21 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Looking for field: {$labelText} with value: {$value}");
-            
+
             $highestRow = min(15, $worksheet->getHighestRow()); // Limit search to first 15 rows
             $highestColumn = $worksheet->getHighestColumn();
-            
+
             // Search for the label text in the template
             for ($row = 1; $row <= $highestRow; $row++) {
                 for ($col = 'A'; $col <= $highestColumn; $col++) {
                     $cellValue = $worksheet->getCell($col . $row)->getValue();
-                    
+
                     if (is_string($cellValue) && stripos($cellValue, $labelText) !== false) {
                         Log::info("Found label '{$labelText}' in cell {$col}{$row}");
-                        
+
                         // Found the label, now find the nearest input field
                         $inputCell = $this->findNearestInputCell($worksheet, $col, $row, $labelText);
-                        
+
                         if ($inputCell) {
                             // Clear the cell first to avoid overlaps
                             $worksheet->setCellValue($inputCell, '');
@@ -577,16 +577,16 @@ class SF2ReportController extends Controller
                     }
                 }
             }
-            
+
             Log::warning("Could not find suitable input field for: {$labelText}");
             return false;
-            
+
         } catch (\Exception $e) {
             Log::error("Error populating field {$labelText}: " . $e->getMessage());
             return false;
         }
     }
-    
+
     /**
      * Find the nearest input cell for a given label
      */
@@ -595,7 +595,7 @@ class SF2ReportController extends Controller
         try {
             // Define search patterns based on common form layouts
             $searchCells = [];
-            
+
             // For horizontal layouts (label on left, input on right)
             for ($i = 1; $i <= 8; $i++) {
                 $nextCol = chr(ord($labelCol) + $i);
@@ -603,17 +603,17 @@ class SF2ReportController extends Controller
                     $searchCells[] = $nextCol . $labelRow;
                 }
             }
-            
+
             // For vertical layouts (label on top, input below)
             for ($i = 1; $i <= 3; $i++) {
                 $searchCells[] = $labelCol . ($labelRow + $i);
             }
-            
+
             // Try each potential input cell
             foreach ($searchCells as $cell) {
                 try {
                     $cellValue = $worksheet->getCell($cell)->getValue();
-                    
+
                     // Check if this looks like an input field
                     if ($this->isValidInputCell($cellValue, $cell)) {
                         Log::info("Found suitable input cell {$cell} for {$labelText}");
@@ -624,15 +624,15 @@ class SF2ReportController extends Controller
                     continue;
                 }
             }
-            
+
             return null;
-            
+
         } catch (\Exception $e) {
             Log::error("Error finding input cell: " . $e->getMessage());
             return null;
         }
     }
-    
+
     /**
      * Check if a cell is suitable for input
      */
@@ -642,12 +642,12 @@ class SF2ReportController extends Controller
         if (empty($cellValue)) {
             return true;
         }
-        
+
         // Cell is good if it contains placeholder text
         if (is_string($cellValue) && $this->isPlaceholderText($cellValue)) {
             return true;
         }
-        
+
         // Cell is good if it's a short text that might be a placeholder
         if (is_string($cellValue) && strlen(trim($cellValue)) < 30) {
             // Avoid cells that contain form labels
@@ -659,7 +659,7 @@ class SF2ReportController extends Controller
             }
             return true;
         }
-        
+
         return false;
     }
 
@@ -669,16 +669,16 @@ class SF2ReportController extends Controller
     private function isPlaceholderText($text)
     {
         if (!is_string($text)) return false;
-        
+
         $placeholders = ['[', 'placeholder', 'enter', 'input', 'fill'];
         $text = strtolower($text);
-        
+
         foreach ($placeholders as $placeholder) {
             if (strpos($text, $placeholder) !== false) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -689,125 +689,125 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Starting to populate student data in SF2 format");
-            
+
             $maleStudents = $students->where('gender', 'Male');
             $femaleStudents = $students->where('gender', 'Female');
-            
+
             // Template has predefined positions for total rows
             $templateMaleTotalRow = 35;
-            $templateFemaleTotalRow = 61; 
+            $templateFemaleTotalRow = 61;
             $templateCombinedTotalRow = 62;
-            
+
             // Calculate how many additional rows we need to insert
             $maleStudentCount = $maleStudents->count();
             $femaleStudentCount = $femaleStudents->count();
-            
+
             // Template assumes certain number of students - calculate excess
             $templateMaleCapacity = 21; // Rows 14-34 = 21 male students
             $templateFemaleCapacity = 25; // Rows 36-60 = 25 female students
-            
+
             $maleExcess = max(0, $maleStudentCount - $templateMaleCapacity);
             $femaleExcess = max(0, $femaleStudentCount - $templateFemaleCapacity);
-            
+
             // Insert additional rows for male students if needed
             if ($maleExcess > 0) {
                 Log::info("Inserting {$maleExcess} additional rows for male students before row {$templateMaleTotalRow}");
                 $worksheet->insertNewRowBefore($templateMaleTotalRow, $maleExcess);
-                
+
                 // Update all subsequent row positions
                 $templateFemaleTotalRow += $maleExcess;
                 $templateCombinedTotalRow += $maleExcess;
             }
-            
-            // Insert additional rows for female students if needed  
+
+            // Insert additional rows for female students if needed
             if ($femaleExcess > 0) {
                 Log::info("Inserting {$femaleExcess} additional rows for female students before row {$templateFemaleTotalRow}");
                 $worksheet->insertNewRowBefore($templateFemaleTotalRow, $femaleExcess);
-                
+
                 // Update subsequent row positions
                 $templateCombinedTotalRow += $femaleExcess;
             }
-            
+
             // Now populate students starting from template positions
             $currentRow = 14; // Male students start at row 14
-            
+
             // Male students section
             $maleIndex = 1;
             foreach ($maleStudents as $student) {
                 // Column A: Student number
                 $worksheet->setCellValue("A{$currentRow}", $maleIndex);
-                
+
                 // Column B: Student name
                 $worksheet->setCellValue("B{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
-                
+
                 // Populate daily attendance starting from column C (day 1) to column AG (day 31)
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
-                
+
                 // Summary columns at the end (shifted one column right)
                 $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-                
+
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
-                
+
                 // Remarks column
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
-                
+
                 $currentRow++;
                 $maleIndex++;
             }
-            
+
             // Male total row is now at its preserved position
             $maleTotalRow = $templateMaleTotalRow + $maleExcess;
             $this->addMaleTotalRow($worksheet, $maleStudents, $maleTotalRow);
-            
+
             // Female students start at row 36 + any male excess
             $currentRow = 36 + $maleExcess;
-            
+
             // Female students section - start numbering from 1
             $femaleIndex = 1;
             foreach ($femaleStudents as $student) {
                 // Column A: Student number
                 $worksheet->setCellValue("A{$currentRow}", $femaleIndex);
-                
+
                 // Column B: Student name
                 $worksheet->setCellValue("B{$currentRow}", "{$student->lastName}, {$student->firstName} {$student->middleName}");
-                
+
                 // Populate daily attendance
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
-                
+
                 // Summary columns (shifted one column right)
                 $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-                
+
                 $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
-                
+
                 // Remarks column
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
-                
+
                 $currentRow++;
                 $femaleIndex++;
             }
-            
+
             // Total rows are now at their preserved positions
             $femaleTotalRow = $templateFemaleTotalRow + $maleExcess + $femaleExcess;
             $combinedTotalRow = $templateCombinedTotalRow + $maleExcess + $femaleExcess;
-            
+
             $this->addFemaleTotalRow($worksheet, $femaleStudents, $femaleTotalRow);
             $this->addCombinedTotalRow($worksheet, $students, $combinedTotalRow);
-            
+
             // Apply center alignment to summary columns (ABSENT, TARDY, PRESENT)
             $this->applyCenterAlignmentToSummaryColumns($worksheet);
-            
+
             // Apply vertical text and center alignment to total rows
             $this->applyVerticalTextToTotalRows($worksheet, $maleTotalRow, $femaleTotalRow, $combinedTotalRow);
-            
+
             Log::info("Successfully populated " . count($students) . " students in SF2 format");
             Log::info("Male Total Row: {$maleTotalRow}, Female Total Row: {$femaleTotalRow}, Combined Total Row: {$combinedTotalRow}");
             Log::info("Inserted {$maleExcess} male rows and {$femaleExcess} female rows");
-            
+
         } catch (\Exception $e) {
             Log::error("Error populating student data: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Add MALE TOTAL Per Day row at dynamic position
      */
@@ -815,23 +815,23 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Adding MALE TOTAL Per Day at row {$row}");
-            
+
             // Set at dynamic row: "MALE | TOTAL Per Day"
             $worksheet->setCellValue("A{$row}", "MALE | TOTAL Per Day");
-            
+
             // Get the month from the first student's attendance data to calculate daily totals
             if ($maleStudents->count() > 0) {
                 $firstStudent = $maleStudents->first();
                 if (!empty($firstStudent->attendance_data)) {
                     $firstDate = array_keys($firstStudent->attendance_data)[0];
                     $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
-                    
+
                     // Build column mapping for weekdays
                     $columnMapping = $this->buildWeekdayColumnMapping($month);
-                    
+
                     // Calculate daily totals for male students
                     $dailyTotals = $this->calculateMaleDailyTotals($maleStudents, $month);
-                    
+
                     // Populate daily totals in each column (D, E, F, G, etc.)
                     foreach ($dailyTotals as $dayNumber => $totals) {
                         if (isset($columnMapping[$dayNumber])) {
@@ -840,27 +840,27 @@ class SF2ReportController extends Controller
                             $worksheet->setCellValue("{$column}{$row}", $presentCount);
                         }
                     }
-                    
+
                     // Summary columns for male totals
                     $totalAbsent = $maleStudents->sum('total_absent');
                     $totalPresent = $maleStudents->sum('total_present');
-                    
+
                      // ABSENT
-                    
+
                     $worksheet->setCellValue("AG{$row}", $totalPresent);  // PRESENT
                     $worksheet->getStyle("AG{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
                                  // TARDY
-                    
+
                 }
             }
-            
+
             Log::info("Successfully added MALE TOTAL Per Day at A{$row}");
-            
+
         } catch (\Exception $e) {
             Log::error("Error adding MALE TOTAL row: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Add FEMALE TOTAL Per Day row at dynamic position
      */
@@ -868,23 +868,23 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Adding FEMALE TOTAL Per Day at row {$row}");
-            
+
             // Set at dynamic row: "FEMALE | TOTAL Per Day"
             $worksheet->setCellValue("A{$row}", "FEMALE | TOTAL Per Day");
-            
+
             // Get the month from the first student's attendance data to calculate daily totals
             if ($femaleStudents->count() > 0) {
                 $firstStudent = $femaleStudents->first();
                 if (!empty($firstStudent->attendance_data)) {
                     $firstDate = array_keys($firstStudent->attendance_data)[0];
                     $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
-                    
+
                     // Build column mapping for weekdays
                     $columnMapping = $this->buildWeekdayColumnMapping($month);
-                    
+
                     // Calculate daily totals for female students
                     $dailyTotals = $this->calculateFemaleDailyTotals($femaleStudents, $month);
-                    
+
                     // Populate daily totals in each column (D, E, F, G, etc.)
                     foreach ($dailyTotals as $dayNumber => $totals) {
                         if (isset($columnMapping[$dayNumber])) {
@@ -893,25 +893,25 @@ class SF2ReportController extends Controller
                             $worksheet->setCellValue("{$column}{$row}", $presentCount);
                         }
                     }
-                    
+
                     // Summary columns for female totals
                     $totalAbsent = $femaleStudents->sum('total_absent');
                     $totalPresent = $femaleStudents->sum('total_present');
-                    
-                    
+
+
                     $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
-                    
-                  
+
+
                 }
             }
-            
+
             Log::info("Successfully added FEMALE TOTAL Per Day at A{$row}");
-            
+
         } catch (\Exception $e) {
             Log::error("Error adding FEMALE TOTAL row: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Add Combined TOTAL PER DAY row at dynamic position
      */
@@ -919,23 +919,23 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Adding Combined TOTAL PER DAY at row {$row}");
-            
+
             // Set at dynamic row: "Combined TOTAL PER DAY"
             $worksheet->setCellValue("A{$row}", "Combined TOTAL PER DAY");
-            
+
             // Get the month from the first student's attendance data to calculate daily totals
             if ($allStudents->count() > 0) {
                 $firstStudent = $allStudents->first();
                 if (!empty($firstStudent->attendance_data)) {
                     $firstDate = array_keys($firstStudent->attendance_data)[0];
                     $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
-                    
+
                     // Build column mapping for weekdays
                     $columnMapping = $this->buildWeekdayColumnMapping($month);
-                    
+
                     // Calculate daily totals for all students combined
                     $dailyTotals = $this->calculateCombinedDailyTotals($allStudents, $month);
-                    
+
                     // Populate daily totals in each column (D, E, F, G, etc.)
                     foreach ($dailyTotals as $dayNumber => $totals) {
                         if (isset($columnMapping[$dayNumber])) {
@@ -944,19 +944,19 @@ class SF2ReportController extends Controller
                             $worksheet->setCellValue("{$column}{$row}", $presentCount);
                         }
                     }
-                    
+
                     // Summary columns for combined totals
                     $totalAbsent = $allStudents->sum('total_absent');
                     $totalPresent = $allStudents->sum('total_present');
-                    
+
                     $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
-                  
-                   
+
+
                 }
             }
-            
+
             Log::info("Successfully added Combined TOTAL PER DAY at A{$row}");
-            
+
         } catch (\Exception $e) {
             Log::error("Error adding Combined TOTAL row: " . $e->getMessage());
         }
@@ -970,24 +970,24 @@ class SF2ReportController extends Controller
         try {
             $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-            
+
             $dailyTotals = [];
-            
+
             // Loop through each day of the month
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
                 if ($currentDate->isWeekday()) {
                     $dayNumber = $currentDate->day;
                     $dateKey = $currentDate->format('Y-m-d');
-                    
+
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
-                    
+
                     // Count attendance for male students only on this day
                     foreach ($maleStudents as $student) {
                         $status = $student->attendance_data[$dateKey] ?? 'absent';
-                        
+
                         switch ($status) {
                             case 'present':
                                 $presentCount++;
@@ -1000,7 +1000,7 @@ class SF2ReportController extends Controller
                                 break;
                         }
                     }
-                    
+
                     $dailyTotals[$dayNumber] = [
                         'present' => $presentCount,
                         'absent' => $absentCount,
@@ -1008,18 +1008,18 @@ class SF2ReportController extends Controller
                         'total' => $presentCount + $absentCount + $lateCount
                     ];
                 }
-                
+
                 $currentDate->addDay();
             }
-            
+
             return $dailyTotals;
-            
+
         } catch (\Exception $e) {
             Log::error("Error calculating male daily totals: " . $e->getMessage());
             return [];
         }
     }
-    
+
     /**
      * Calculate daily totals for female students only
      */
@@ -1028,24 +1028,24 @@ class SF2ReportController extends Controller
         try {
             $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-            
+
             $dailyTotals = [];
-            
+
             // Loop through each day of the month
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
                 if ($currentDate->isWeekday()) {
                     $dayNumber = $currentDate->day;
                     $dateKey = $currentDate->format('Y-m-d');
-                    
+
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
-                    
+
                     // Count attendance for female students only on this day
                     foreach ($femaleStudents as $student) {
                         $status = $student->attendance_data[$dateKey] ?? 'absent';
-                        
+
                         switch ($status) {
                             case 'present':
                                 $presentCount++;
@@ -1058,7 +1058,7 @@ class SF2ReportController extends Controller
                                 break;
                         }
                     }
-                    
+
                     $dailyTotals[$dayNumber] = [
                         'present' => $presentCount,
                         'absent' => $absentCount,
@@ -1066,18 +1066,18 @@ class SF2ReportController extends Controller
                         'total' => $presentCount + $absentCount + $lateCount
                     ];
                 }
-                
+
                 $currentDate->addDay();
             }
-            
+
             return $dailyTotals;
-            
+
         } catch (\Exception $e) {
             Log::error("Error calculating female daily totals: " . $e->getMessage());
             return [];
         }
     }
-    
+
     /**
      * Calculate daily totals for all students combined
      */
@@ -1086,24 +1086,24 @@ class SF2ReportController extends Controller
         try {
             $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-            
+
             $dailyTotals = [];
-            
+
             // Loop through each day of the month
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
                 if ($currentDate->isWeekday()) {
                     $dayNumber = $currentDate->day;
                     $dateKey = $currentDate->format('Y-m-d');
-                    
+
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
-                    
+
                     // Count attendance for all students on this day
                     foreach ($allStudents as $student) {
                         $status = $student->attendance_data[$dateKey] ?? 'absent';
-                        
+
                         switch ($status) {
                             case 'present':
                                 $presentCount++;
@@ -1116,7 +1116,7 @@ class SF2ReportController extends Controller
                                 break;
                         }
                     }
-                    
+
                     $dailyTotals[$dayNumber] = [
                         'present' => $presentCount,
                         'absent' => $absentCount,
@@ -1124,12 +1124,12 @@ class SF2ReportController extends Controller
                         'total' => $presentCount + $absentCount + $lateCount
                     ];
                 }
-                
+
                 $currentDate->addDay();
             }
-            
+
             return $dailyTotals;
-            
+
         } catch (\Exception $e) {
             Log::error("Error calculating combined daily totals: " . $e->getMessage());
             return [];
@@ -1143,105 +1143,105 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Populating consecutive weekday headers for month: {$month}");
-            
+
             // Get the actual month and year
             $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-            
+
             // Sequential columns starting from D (no gaps for weekends)
             $columns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH'];
-            
+
             $columnIndex = 0;
             $currentDate = $startDate->copy();
-            
+
             // Find what day of week the 1st falls on and adjust starting position
             $firstDayOfWeek = $startDate->dayOfWeek; // 0=Sunday, 1=Monday, 2=Tuesday, etc.
-            
+
             // Adjust column index based on what day the 1st falls on
             // If 1st is Monday (1), start at column 0
-            // If 1st is Tuesday (2), start at column 1  
+            // If 1st is Tuesday (2), start at column 1
             // If 1st is Wednesday (3), start at column 2
             // If 1st is Thursday (4), start at column 3
             // If 1st is Friday (5), start at column 4
             // If 1st is Saturday (6) or Sunday (0), find next Monday
-            
+
             if ($firstDayOfWeek == 0) { // Sunday - move to Monday
                 $currentDate->addDay();
                 $columnIndex = 0;
-            } elseif ($firstDayOfWeek == 6) { // Saturday - move to Monday  
+            } elseif ($firstDayOfWeek == 6) { // Saturday - move to Monday
                 $currentDate->addDays(2);
                 $columnIndex = 0;
             } else {
                 // Weekday - adjust column position based on day of week
                 $columnIndex = $firstDayOfWeek - 1; // Monday=0, Tuesday=1, Wednesday=2, Thursday=3, Friday=4
             }
-            
+
             Log::info("First day of month falls on: " . $startDate->format('l') . " (day {$firstDayOfWeek})");
             Log::info("Starting at column index: {$columnIndex}");
-            
+
             // Loop through each day of the month and assign to proper week positions
             while ($currentDate <= $endDate && $columnIndex < count($columns)) {
                 // Only process weekdays (Monday to Friday)
                 if ($currentDate->isWeekday()) {
                     $column = $columns[$columnIndex];
                     $dayNumber = $currentDate->day;
-                    
+
                     // Row 11: Weekday numbers in proper calendar week positions
                     $worksheet->setCellValue("{$column}11", $dayNumber);
-                    
+
                     Log::info("Set weekday {$dayNumber} ({$currentDate->format('D')}) in column {$column} (position {$columnIndex})");
-                    
+
                     $columnIndex++;
                 }
-                
+
                 $currentDate->addDay();
             }
-            
+
             Log::info("Successfully populated {$columnIndex} weekday positions for {$month}");
             Log::info("Total columns available: " . count($columns));
-            
+
             // Debug: Show which columns were used
             for ($i = 0; $i < $columnIndex && $i < count($columns); $i++) {
                 Log::info("Column {$i}: {$columns[$i]}");
             }
-            
+
             // Fill ALL columns with proper M T W TH F pattern like Picture 2
             // Summary columns are AC (ABSENT), AD (TARDY), AE, AF, AG, AH, AI, AJ, AK (PRESENT) - don't overwrite these
             $summaryColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']; // Columns to avoid
-            
+
             Log::info("Filling ALL columns with M T W TH F pattern like Picture 2");
-            
+
             // Override ALL columns with M T W TH F pattern (like Picture 2)
             $dayPattern = ['M', 'T', 'W', 'TH', 'F'];
-            
+
             for ($i = 0; $i < count($columns); $i++) {
                 $column = $columns[$i];
-                
+
                 // Skip if this is a summary column
                 if (in_array($column, $summaryColumns)) {
                     Log::info("Skipping summary column: {$column}");
                     continue;
                 }
-                
+
                 // Use column index for consistent M T W TH F M T W TH F pattern
                 $dayAbbrev = $dayPattern[$i % 5];
-                
+
                 // Only set day abbreviation (row 12), keep existing day numbers if they exist
                 $worksheet->setCellValue("{$column}12", $dayAbbrev);
-                
+
                 // Apply same formatting
                 $cellStyle = $worksheet->getStyle("{$column}12");
                 $cellStyle->getAlignment()->setTextRotation(255);
                 $cellStyle->getAlignment()->setWrapText(true);
-                
+
                 Log::info("Set column {$column} (index {$i}) with pattern day: {$dayAbbrev}");
             }
-            
+
         } catch (\Exception $e) {
             Log::error("Error populating day headers: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Get day of week abbreviation
      */
@@ -1256,10 +1256,10 @@ class SF2ReportController extends Controller
             5 => 'F',   // Friday
             6 => 'S'    // Saturday
         ];
-        
+
         return $abbreviations[$dayOfWeek] ?? 'U';
     }
-    
+
     /**
      * Populate daily attendance for a student across all days of the month
      */
@@ -1270,22 +1270,22 @@ class SF2ReportController extends Controller
             if (empty($student->attendance_data)) {
                 return;
             }
-            
+
             // Get month from first attendance record
             $firstDate = array_keys($student->attendance_data)[0];
             $month = Carbon::createFromFormat('Y-m-d', $firstDate)->format('Y-m');
-            
+
             // Build dynamic column mapping based on weekdays only
             $columnMapping = $this->buildWeekdayColumnMapping($month);
-            
+
             // Populate attendance for each day
             foreach ($student->attendance_data as $date => $status) {
                 $dateObj = Carbon::createFromFormat('Y-m-d', $date);
-                
+
                 // Only process weekdays
                 if ($dateObj->isWeekday()) {
                     $dayNumber = $dateObj->day;
-                    
+
                     if (isset($columnMapping[$dayNumber])) {
                         $column = $columnMapping[$dayNumber];
                         $mark = $this->getAttendanceMark($status);
@@ -1293,12 +1293,12 @@ class SF2ReportController extends Controller
                     }
                 }
             }
-            
+
         } catch (\Exception $e) {
             Log::error("Error populating daily attendance for student: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Build column mapping for weekdays only - consecutive columns without gaps
      */
@@ -1306,42 +1306,42 @@ class SF2ReportController extends Controller
     {
         $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-        
+
         // Sequential columns starting from D (same as day headers)
         $columns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH'];
-        
+
         $mapping = [];
         $columnIndex = 0;
         $currentDate = $startDate->copy();
-        
+
         // Find what day of week the 1st falls on and adjust starting position (same logic as day headers)
         $firstDayOfWeek = $startDate->dayOfWeek; // 0=Sunday, 1=Monday, 2=Tuesday, etc.
-        
+
         if ($firstDayOfWeek == 0) { // Sunday - move to Monday
             $currentDate->addDay();
             $columnIndex = 0;
-        } elseif ($firstDayOfWeek == 6) { // Saturday - move to Monday  
+        } elseif ($firstDayOfWeek == 6) { // Saturday - move to Monday
             $currentDate->addDays(2);
             $columnIndex = 0;
         } else {
             // Weekday - adjust column position based on day of week
             $columnIndex = $firstDayOfWeek - 1; // Monday=0, Tuesday=1, Wednesday=2, Thursday=3, Friday=4
         }
-        
+
         // Map each weekday to calendar-week-aligned columns (same as day headers)
         while ($currentDate <= $endDate && $columnIndex < count($columns)) {
             $dayNumber = $currentDate->day;
-            
+
             // Only map weekdays and ensure valid day number
             if ($currentDate->isWeekday() && $dayNumber > 0) {
                 $mapping[$dayNumber] = $columns[$columnIndex];
                 Log::info("Attendance mapping: day {$dayNumber} ({$currentDate->format('D')}) to column {$columns[$columnIndex]} (position {$columnIndex})");
                 $columnIndex++;
             }
-            
+
             $currentDate->addDay();
         }
-        
+
         return $mapping;
     }
 
@@ -1352,82 +1352,82 @@ class SF2ReportController extends Controller
     {
         $maleStudents = $students->where('gender', 'Male');
         $femaleStudents = $students->where('gender', 'Female');
-        
+
         // Calculate summary statistics
         $maleCount = $maleStudents->count();
         $femaleCount = $femaleStudents->count();
         $totalCount = $students->count();
-        
+
         $malePresent = $maleStudents->sum('total_present');
         $femalePresent = $femaleStudents->sum('total_present');
         $totalPresent = $students->sum('total_present');
-        
+
         $maleAbsent = $maleStudents->sum('total_absent');
         $femaleAbsent = $femaleStudents->sum('total_absent');
         $totalAbsent = $students->sum('total_absent');
-        
+
         $maleAttendanceRate = $maleCount > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0;
         $femaleAttendanceRate = $femaleCount > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0;
         $overallAttendanceRate = $totalCount > 0 ? round($students->avg('attendance_rate'), 1) : 0;
-        
+
         // Populate summary section (adjust cell references based on template)
         // Enrollment data
         $worksheet->setCellValue('AH66', $maleCount);     // Male enrollment
         $worksheet->setCellValue('AI66', $femaleCount);   // Female enrollment
         $worksheet->setCellValue('AJ66', $totalCount);    // Total enrollment
-        
+
         // Late enrollment (usually 0 for existing students)
         $worksheet->setCellValue('AH68', 0);
         $worksheet->setCellValue('AI68', 0);
         $worksheet->setCellValue('AJ68', 0);
-        
+
         // Registered learners (same as enrollment for this example)
         $worksheet->setCellValue('AH70', $maleCount);
         $worksheet->setCellValue('AI70', $femaleCount);
         $worksheet->setCellValue('AJ70', $totalCount);
-        
+
         // Percentage of enrollment (100% for existing students)
         $worksheet->setCellValue('AH72', '100%');
         $worksheet->setCellValue('AI72', '100%');
         $worksheet->setCellValue('AJ72', '100%');
-        
+
         // Average daily attendance
         $worksheet->setCellValue('AH74', $maleAttendanceRate . '%');
         $worksheet->setCellValue('AI74', $femaleAttendanceRate . '%');
         $worksheet->setCellValue('AJ74', $overallAttendanceRate . '%');
-        
+
         // Percentage of attendance for the month
         $worksheet->setCellValue('AH75', $maleAttendanceRate . '%');
         $worksheet->setCellValue('AI75', $femaleAttendanceRate . '%');
         $worksheet->setCellValue('AJ75', $overallAttendanceRate . '%');
-        
+
         // Students absent for 5 consecutive days (would need additional logic)
         $worksheet->setCellValue('AH77', 0);
         $worksheet->setCellValue('AI77', 0);
         $worksheet->setCellValue('AJ77', 0);
-        
+
         // Calculate dropout and transfer statistics
         $maleDropouts = $maleStudents->where('enrollment_status', 'dropped_out')->count();
         $femaleDropouts = $femaleStudents->where('enrollment_status', 'dropped_out')->count();
         $totalDropouts = $maleDropouts + $femaleDropouts;
-        
+
         $maleTransferredOut = $maleStudents->where('enrollment_status', 'transferred_out')->count();
         $femaleTransferredOut = $femaleStudents->where('enrollment_status', 'transferred_out')->count();
         $totalTransferredOut = $maleTransferredOut + $femaleTransferredOut;
-        
+
         $maleTransferredIn = $maleStudents->where('enrollment_status', 'transferred_in')->count();
         $femaleTransferredIn = $femaleStudents->where('enrollment_status', 'transferred_in')->count();
         $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
-        
+
         // Dropouts, transfers with actual counts
         $worksheet->setCellValue('AH79', $maleDropouts); // Male dropouts
         $worksheet->setCellValue('AI79', $femaleDropouts); // Female dropouts
         $worksheet->setCellValue('AJ79', $totalDropouts); // Total dropouts
-        
+
         $worksheet->setCellValue('AH81', $maleTransferredOut); // Male transferred out
         $worksheet->setCellValue('AI81', $femaleTransferredOut); // Female transferred out
         $worksheet->setCellValue('AJ81', $totalTransferredOut); // Total transferred out
-        
+
         $worksheet->setCellValue('AH83', $maleTransferredIn); // Male transferred in
         $worksheet->setCellValue('AI83', $femaleTransferredIn); // Female transferred in
         $worksheet->setCellValue('AJ83', $totalTransferredIn); // Total transferred in
@@ -1443,30 +1443,30 @@ class SF2ReportController extends Controller
             if (!$month) {
                 $month = Carbon::now()->format('Y-m');
             }
-            
+
             // Get section with students and teacher
             $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
-            
+
             // Get students with attendance data
             $students = $this->getStudentsWithAttendance($section, $month);
-            
+
             // Calculate summary statistics
             $maleStudents = $students->where('gender', 'Male');
             $femaleStudents = $students->where('gender', 'Female');
-            
+
             // Count dropout and transfer statistics
             $maleDropouts = $maleStudents->where('enrollment_status', 'dropped_out')->count();
             $femaleDropouts = $femaleStudents->where('enrollment_status', 'dropped_out')->count();
             $totalDropouts = $maleDropouts + $femaleDropouts;
-            
+
             $maleTransferredOut = $maleStudents->where('enrollment_status', 'transferred_out')->count();
             $femaleTransferredOut = $femaleStudents->where('enrollment_status', 'transferred_out')->count();
             $totalTransferredOut = $maleTransferredOut + $femaleTransferredOut;
-            
+
             $maleTransferredIn = $maleStudents->where('enrollment_status', 'transferred_in')->count();
             $femaleTransferredIn = $femaleStudents->where('enrollment_status', 'transferred_in')->count();
             $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
-            
+
             $summary = [
                 'male' => [
                     'enrollment' => $maleStudents->count(),
@@ -1496,12 +1496,12 @@ class SF2ReportController extends Controller
                     'transferred_in' => $totalTransferredIn
                 ]
             ];
-            
+
             // Get days in month for headers
             $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
             $daysInMonth = [];
-            
+
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
                 if ($currentDate->isWeekday()) {
@@ -1513,7 +1513,7 @@ class SF2ReportController extends Controller
                 }
                 $currentDate->addDay();
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -1557,7 +1557,7 @@ class SF2ReportController extends Controller
                     ]
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("SF2 Report Data Error: " . $e->getMessage());
             return response()->json([
@@ -1576,15 +1576,15 @@ class SF2ReportController extends Controller
         try {
             // Get section with teacher information
             $section = Section::with(['teacher'])->findOrFail($sectionId);
-            
+
             // Get currently authenticated teacher
             $authenticatedTeacher = auth('teacher')->user();
-            
+
             // IMPORTANT: Always use the section's homeroom teacher ID for notifications
             // This ensures the notification shows the correct homeroom teacher name,
             // not the name of whoever submitted the report (e.g., departmentalized teachers)
             $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id;
-            
+
             Log::info("SF2 Submission - Teacher Info", [
                 'section_id' => $sectionId,
                 'section_name' => $section->name,
@@ -1596,16 +1596,16 @@ class SF2ReportController extends Controller
                 'submitted_by_will_be' => $submittedByTeacherId,
                 'note' => 'Using homeroom teacher ID for notification display'
             ]);
-            
+
             // Check if already submitted for this section and month
             $existingSubmission = \DB::table('submitted_sf2_reports')
                 ->where('section_id', $sectionId)
                 ->where('month', $month)
                 ->first();
-            
+
             // Get the actual SF2 report data to store
             $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
-            
+
             Log::info("Storing SF2 submission data", [
                 'section_id' => $sectionId,
                 'month' => $month,
@@ -1614,7 +1614,7 @@ class SF2ReportController extends Controller
                 'is_resubmission' => $existingSubmission ? true : false,
                 'sample_student_data' => isset($sf2Data['students'][0]) ? $sf2Data['students'][0] : 'No students'
             ]);
-            
+
             if ($existingSubmission) {
                 // Update existing submission (allow resubmission)
                 \DB::table('submitted_sf2_reports')
@@ -1628,10 +1628,10 @@ class SF2ReportController extends Controller
                         'reviewed_by' => null, // Clear reviewer
                         'admin_notes' => null // Clear admin notes
                     ]);
-                
+
                 $submissionId = $existingSubmission->id;
                 $isResubmission = true;
-                
+
                 Log::info("SF2 report resubmitted successfully", [
                     'submission_id' => $submissionId,
                     'section_id' => $sectionId,
@@ -1653,9 +1653,9 @@ class SF2ReportController extends Controller
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
-                
+
                 $isResubmission = false;
-                
+
                 Log::info("SF2 report submitted successfully with real data", [
                     'submission_id' => $submissionId,
                     'section_id' => $sectionId,
@@ -1664,11 +1664,11 @@ class SF2ReportController extends Controller
                     'data_size' => strlen(json_encode($sf2Data))
                 ]);
             }
-            
+
             return response()->json([
                 'success' => true,
-                'message' => $isResubmission 
-                    ? 'SF2 report resubmitted successfully to admin' 
+                'message' => $isResubmission
+                    ? 'SF2 report resubmitted successfully to admin'
                     : 'SF2 report submitted successfully to admin',
                 'data' => [
                     'submission_id' => $submissionId,
@@ -1680,11 +1680,11 @@ class SF2ReportController extends Controller
                     'is_resubmission' => $isResubmission
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("Error submitting SF2 report: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to submit report',
@@ -1692,7 +1692,7 @@ class SF2ReportController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * Get SF2 report data for submission (internal method)
      */
@@ -1700,14 +1700,14 @@ class SF2ReportController extends Controller
     {
         // Get section with students and teacher
         $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
-        
+
         // Get students with attendance data
         $students = $this->getStudentsWithAttendance($section, $month);
-        
+
         // Calculate summary statistics
         $maleStudents = $students->where('gender', 'Male');
         $femaleStudents = $students->where('gender', 'Female');
-        
+
         $summary = [
             'male' => [
                 'enrollment' => $maleStudents->count(),
@@ -1728,12 +1728,12 @@ class SF2ReportController extends Controller
                 'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
             ]
         ];
-        
+
         // Get days in month for headers
         $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
         $daysInMonth = [];
-        
+
         $currentDate = $startDate->copy();
         while ($currentDate <= $endDate) {
             if ($currentDate->isWeekday()) {
@@ -1745,7 +1745,7 @@ class SF2ReportController extends Controller
             }
             $currentDate->addDay();
         }
-        
+
         return [
             'section' => [
                 'id' => $section->id,
@@ -1805,7 +1805,7 @@ class SF2ReportController extends Controller
             // Transform the data for frontend
             $transformedReports = $reports->map(function ($report) {
                 $teacherName = trim(($report->teacher_first_name ?? '') . ' ' . ($report->teacher_last_name ?? ''));
-                
+
                 // Log for debugging
                 Log::info("Teacher name for submission", [
                     'submission_id' => $report->id,
@@ -1814,7 +1814,7 @@ class SF2ReportController extends Controller
                     'teacher_last_name' => $report->teacher_last_name,
                     'teacher_name' => $teacherName
                 ]);
-                
+
                 return [
                     'id' => $report->id,
                     'section_id' => $report->section_id,
@@ -1840,7 +1840,7 @@ class SF2ReportController extends Controller
 
         } catch (\Exception $e) {
             Log::error("Error fetching submitted reports: " . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch submitted reports',
@@ -1860,23 +1860,23 @@ class SF2ReportController extends Controller
                 'month' => $month,
                 'request_url' => request()->url()
             ]);
-            
+
             // Find the submitted report for this section and month
             $submittedReport = \DB::table('submitted_sf2_reports')
                 ->where('section_id', $sectionId)
                 ->where('month', $month)
                 ->first();
-            
+
             if (!$submittedReport) {
                 Log::info("No submitted SF2 report found, generating from current data", [
                     'section_id' => $sectionId,
                     'month' => $month
                 ]);
-                
+
                 // If no submitted report found, generate from current data
                 try {
                     $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
-                    
+
                     return response()->json([
                         'success' => true,
                         'data' => $sf2Data,
@@ -1900,28 +1900,28 @@ class SF2ReportController extends Controller
                     ], 404);
                 }
             }
-            
+
             // Parse the stored SF2 data
             $sf2Data = json_decode($submittedReport->sf2_data, true);
-            
+
             if (!$sf2Data) {
                 Log::error("Invalid SF2 data in submission", [
                     'submission_id' => $submittedReport->id,
                     'sf2_data_preview' => substr($submittedReport->sf2_data, 0, 200)
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid SF2 data in submission'
                 ], 500);
             }
-            
+
             Log::info("Successfully retrieved submitted SF2 data", [
                 'submission_id' => $submittedReport->id,
                 'student_count' => count($sf2Data['students'] ?? []),
                 'status' => $submittedReport->status
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $sf2Data,
@@ -1936,7 +1936,7 @@ class SF2ReportController extends Controller
                 ],
                 'message' => 'Exact data teacher submitted'
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("Error in getSubmittedReportData: " . $e->getMessage(), [
                 'section_id' => $sectionId,
@@ -1944,7 +1944,7 @@ class SF2ReportController extends Controller
                 'error_line' => $e->getLine(),
                 'error_file' => $e->getFile()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch submitted SF2 data',
@@ -1966,9 +1966,9 @@ class SF2ReportController extends Controller
     {
         $startDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $endDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
-        
+
         $students = [];
-        
+
         // Sample students
         $sampleStudents = [
             ['id' => 1, 'firstName' => 'Juan', 'lastName' => 'Dela Cruz', 'middleName' => 'Santos', 'gender' => 'Male'],
@@ -1978,11 +1978,11 @@ class SF2ReportController extends Controller
             ['id' => 5, 'firstName' => 'Carmen', 'lastName' => 'Lopez', 'middleName' => 'Torres', 'gender' => 'Female'],
             ['id' => 6, 'firstName' => 'Ana', 'lastName' => 'Rodriguez', 'middleName' => 'Flores', 'gender' => 'Female'],
         ];
-        
+
         foreach ($sampleStudents as $studentData) {
             $attendance = [];
             $attendance_data = [];
-            
+
             // Fill all weekdays with 'absent' (X marks)
             $currentDate = $startDate->copy();
             while ($currentDate <= $endDate) {
@@ -1993,7 +1993,7 @@ class SF2ReportController extends Controller
                 }
                 $currentDate->addDay();
             }
-            
+
             $students[] = [
                 'id' => $studentData['id'],
                 'name' => $studentData['lastName'] . ', ' . $studentData['firstName'] . ' ' . $studentData['middleName'],
@@ -2008,7 +2008,7 @@ class SF2ReportController extends Controller
                 'attendanceRate' => 0
             ];
         }
-        
+
         return $students;
     }
 
@@ -2023,23 +2023,23 @@ class SF2ReportController extends Controller
                 'month' => $month,
                 'request_url' => request()->url()
             ]);
-            
+
             // Find the submitted report for this section and month
             $submittedReport = \DB::table('submitted_sf2_reports')
                 ->where('section_id', $sectionId)
                 ->where('month', $month)
                 ->first();
-            
+
             if (!$submittedReport) {
                 Log::info("No submitted SF2 report found, generating from current data", [
                     'section_id' => $sectionId,
                     'month' => $month
                 ]);
-                
+
                 // If no submitted report found, generate from current data
                 try {
                     $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
-                    
+
                     return response()->json([
                         'success' => true,
                         'data' => $sf2Data,
@@ -2063,7 +2063,7 @@ class SF2ReportController extends Controller
                     ], 404);
                 }
             }
-            
+
             // Decode the stored SF2 data
             $sf2Data = null;
             if (!empty($submittedReport->sf2_data)) {
@@ -2073,18 +2073,18 @@ class SF2ReportController extends Controller
                     'students_count' => isset($sf2Data['students']) ? count($sf2Data['students']) : 0
                 ]);
             }
-            
+
             // If no stored SF2 data (legacy submission) or failed to decode, generate it now
             if (!$sf2Data) {
                 Log::info("No stored SF2 data found, generating from current data", [
                     'submission_id' => $submittedReport->id,
                     'has_sf2_data' => !empty($submittedReport->sf2_data)
                 ]);
-                
+
                 try {
                     // Generate SF2 data from current attendance records INCLUDING SF2 edits
                     $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
-                    
+
                     // Update the submission with the generated data for future use
                     \DB::table('submitted_sf2_reports')
                         ->where('id', $submittedReport->id)
@@ -2092,18 +2092,18 @@ class SF2ReportController extends Controller
                             'sf2_data' => json_encode($sf2Data),
                             'updated_at' => now()
                         ]);
-                    
+
                     Log::info("Generated and stored SF2 data for legacy submission", [
                         'submission_id' => $submittedReport->id,
                         'students_count' => count($sf2Data['students'] ?? [])
                     ]);
-                    
+
                 } catch (\Exception $e) {
                     Log::error("Failed to generate SF2 data for legacy submission", [
                         'submission_id' => $submittedReport->id,
                         'error' => $e->getMessage()
                     ]);
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Failed to retrieve or generate SF2 data for this submission'
@@ -2138,7 +2138,7 @@ class SF2ReportController extends Controller
                 'error_file' => $e->getFile()
             ]);
             Log::error("Stack trace: " . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch submitted SF2 data',
@@ -2163,7 +2163,7 @@ class SF2ReportController extends Controller
             $status = $request->input('status');
             $sectionId = $request->input('section_id');
             $month = $request->input('month');
-            
+
             Log::info('Saving SF2 attendance edit', [
                 'student_id' => $studentId,
                 'date' => $date,
@@ -2172,7 +2172,7 @@ class SF2ReportController extends Controller
                 'month' => $month,
                 'request_data' => $request->all()
             ]);
-            
+
             // Create or update SF2 edit record
             $editRecord = \DB::table('sf2_attendance_edits')->updateOrInsert(
                 [
@@ -2187,7 +2187,7 @@ class SF2ReportController extends Controller
                     'created_at' => now()
                 ]
             );
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Attendance edit saved successfully',
@@ -2197,7 +2197,7 @@ class SF2ReportController extends Controller
                     'status' => $status
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error saving SF2 attendance edit: ' . $e->getMessage());
             return response()->json([
@@ -2262,7 +2262,7 @@ class SF2ReportController extends Controller
 
         } catch (\Exception $e) {
             Log::error("Error updating report status: " . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update report status',
@@ -2294,17 +2294,17 @@ class SF2ReportController extends Controller
     private function getStudentRemarks($student)
     {
         if (!$student) return '-';
-        
+
         // Check if student has dropout/transfer status
         if ($student->enrollment_status === 'dropped_out' && $student->dropout_reason) {
             // Map reason codes to full text as per DepEd guidelines
             $reasonMap = [
                 'a1' => 'a.1 Had to take care of siblings',
-                'a2' => 'a.2 Early marriage/pregnancy', 
+                'a2' => 'a.2 Early marriage/pregnancy',
                 'a3' => 'a.3 Parents\' attitude toward schooling',
                 'a4' => 'a.4 Family problems',
                 'b1' => 'b.1 Illness',
-                'b2' => 'b.2 Disease', 
+                'b2' => 'b.2 Disease',
                 'b3' => 'b.3 Death',
                 'b4' => 'b.4 Disability',
                 'b5' => 'b.5 Poor academic performance',
@@ -2319,19 +2319,19 @@ class SF2ReportController extends Controller
                 'd4' => 'd.4 Work-Related',
                 'd5' => 'd.5 Transferred/work'
             ];
-            
+
             $reasonText = $reasonMap[$student->dropout_reason] ?? $student->dropout_reason;
             return "DROPPED OUT - {$reasonText}";
         }
-        
+
         if ($student->enrollment_status === 'transferred_out') {
             $reasonMap = [
                 'a1' => 'a.1 Had to take care of siblings',
-                'a2' => 'a.2 Early marriage/pregnancy', 
+                'a2' => 'a.2 Early marriage/pregnancy',
                 'a3' => 'a.3 Parents\' attitude toward schooling',
                 'a4' => 'a.4 Family problems',
                 'b1' => 'b.1 Illness',
-                'b2' => 'b.2 Disease', 
+                'b2' => 'b.2 Disease',
                 'b4' => 'b.4 Disability',
                 'c1' => 'c.1 Teacher Factor',
                 'c2' => 'c.2 Physical condition of classroom',
@@ -2345,11 +2345,11 @@ class SF2ReportController extends Controller
             $reasonText = $reasonMap[$student->dropout_reason] ?? $student->dropout_reason;
             return "TRANSFERRED OUT - {$reasonText}";
         }
-        
+
         if ($student->enrollment_status === 'transferred_in') {
             return 'TRANSFERRED IN';
         }
-        
+
         return '-';
     }
 
@@ -2360,13 +2360,13 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Applying center alignment to summary columns");
-            
+
             // Define the summary columns that need center alignment
             $summaryColumns = ['AC', 'AD', 'AE', 'AG']; // ABSENT, PRESENT, TARDY columns
-            
+
             // Get the highest row with data
             $highestRow = $worksheet->getHighestRow();
-            
+
             // Apply vertical text and wrap text to MALE TOTAL row (row 35) - columns D to AB only
             $maleRowColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
             foreach ($maleRowColumns as $column) {
@@ -2376,7 +2376,7 @@ class SF2ReportController extends Controller
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
             }
-            
+
             // Apply center alignment to all summary columns from row 10 to the highest row
             foreach ($summaryColumns as $column) {
                 $range = "{$column}10:{$column}{$highestRow}";
@@ -2384,16 +2384,16 @@ class SF2ReportController extends Controller
                 $worksheet->getStyle($range)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
                 Log::info("Applied center alignment to range: {$range}");
             }
-            
+
             // Also center align the header row (around row 11-12) for the summary columns
             foreach ($summaryColumns as $column) {
                 $headerRange = "{$column}11:{$column}12";
                 $worksheet->getStyle($headerRange)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($headerRange)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
-            
+
             Log::info("Successfully applied center alignment to summary columns");
-            
+
         } catch (\Exception $e) {
             Log::error("Error applying center alignment: " . $e->getMessage());
         }
@@ -2406,10 +2406,10 @@ class SF2ReportController extends Controller
     {
         try {
             Log::info("Applying center alignment to total rows - Male: {$maleTotalRow}, Female: {$femaleTotalRow}, Combined: {$combinedTotalRow}");
-            
+
             // Define the daily attendance columns (D to AB for days 1-31)
             $dailyColumns = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'];
-            
+
             // Apply center alignment to MALE TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
                 $cell = "{$column}{$maleTotalRow}";
@@ -2418,7 +2418,7 @@ class SF2ReportController extends Controller
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
-            
+
             // Apply center alignment to FEMALE TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
                 $cell = "{$column}{$femaleTotalRow}";
@@ -2427,7 +2427,7 @@ class SF2ReportController extends Controller
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
-            
+
             // Apply center alignment to Combined TOTAL row (dynamic position)
             foreach ($dailyColumns as $column) {
                 $cell = "{$column}{$combinedTotalRow}";
@@ -2436,9 +2436,9 @@ class SF2ReportController extends Controller
                 $worksheet->getStyle($cell)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $worksheet->getStyle($cell)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
-            
+
             Log::info("Successfully applied center alignment to total rows");
-            
+
         } catch (\Exception $e) {
             Log::error("Error applying center alignment to total rows: " . $e->getMessage());
         }
