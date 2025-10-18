@@ -5,6 +5,172 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
+### **October 17, 2025 - SF2 Report Fixes & Teacher Dashboard Enhancements** ✅
+
+#### **1. SF2 Report Empty Days Bug Fix** ✅
+**Problem**: SF2 Summary Attendance Report was counting ALL empty days (days with no attendance session) as "absent", inflating absence counts incorrectly.
+
+**Root Cause**: Backend logic in `SF2ReportController.php` was marking any day without an attendance record as "absent" instead of skipping it.
+
+**Solution Implemented**:
+```php
+// OLD (WRONG):
+else {
+    $status = 'absent'; // Counted empty days as absent!
+}
+
+// NEW (CORRECT):
+else {
+    $status = null; // Skip days with no attendance data
+}
+
+// Only count and store days with actual attendance data
+if ($status !== null) {
+    // Count present/absent/late
+    $attendanceData[$dateKey] = $status;
+    $totalDays++;
+}
+```
+
+**Result**: 
+- ✅ Only actual absence records are counted
+- ✅ Empty days (no session held) are skipped
+- ✅ Accurate absence counts for all students
+- ✅ Students with no absences show 0, not inflated counts
+
+**Files Modified**: `lamms-backend/app/Http/Controllers/API/SF2ReportController.php` (lines 358-378)
+
+---
+
+#### **2. Include Dropped Out/Transferred Students in SF2 Reports** ✅
+**Problem**: Teachers requested to see ALL students (including dropped out and transferred out) in SF2 reports for historical tracking purposes.
+
+**Solution Implemented**:
+1. **Backend**: Removed enrollment status filtering to include all students:
+   ```php
+   // Now includes: active, dropped_out, transferred_out, withdrawn, etc.
+   $students = \DB::table('student_details as sd')
+       ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+       ->where('ss.section_id', $section->id)
+       ->where('ss.is_active', true)
+       ->select(
+           'sd.id',
+           'sd.firstName',
+           'sd.lastName',
+           // ... other fields
+           'sd.enrollment_status',
+           'sd.dropout_reason',
+           'sd.status_effective_date'
+       )
+   ```
+
+2. **Frontend**: Added remarks generation based on enrollment status:
+   ```javascript
+   if (student.enrollment_status === 'dropped_out') {
+       remarks = student.dropout_reason 
+           ? `Dropped Out: ${student.dropout_reason}` 
+           : 'Dropped Out';
+   } else if (student.enrollment_status === 'transferred_out') {
+       remarks = student.dropout_reason 
+           ? `Transferred Out: ${student.dropout_reason}` 
+           : 'Transferred Out';
+   }
+   ```
+
+**Result**:
+- ✅ All 21 students shown (including Daniel G. Sanchez - Dropped Out, Oliver G. Gonzales - Transferred Out)
+- ✅ Remarks column shows full dropout/transfer reason
+- ✅ Teachers can track historical attendance data
+- ✅ Complete class attendance picture throughout the year
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/SF2ReportController.php` (lines 157-188)
+- `src/views/pages/teacher/TeacherSummaryAttendanceReport.vue` (lines 441-465)
+
+---
+
+#### **3. SF2 Daily Attendance Report Section Fix** ✅
+**Problem**: SF2 Daily Attendance Report was failing with 500 error because it was hardcoded to use section ID 8, which doesn't exist or has issues.
+
+**Root Cause**: `loadReportData()` function had hardcoded fallback:
+```javascript
+if (!sectionId.value) {
+    sectionId.value = 8; // Hardcoded!
+}
+```
+
+**Solution Implemented**: Dynamic section loading from teacher data:
+```javascript
+if (!sectionId.value) {
+    const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+    
+    const homeroomSection = teacherData.teacher?.homeroom_section || 
+                           teacherData.homeroom_section ||
+                           teacherData.assignments?.find(a => a.is_primary)?.section;
+    
+    if (homeroomSection) {
+        sectionId.value = homeroomSection.id || homeroomSection.section_id;
+        console.log('📚 Using teacher homeroom section:', sectionId.value);
+    } else {
+        throw new Error('No section assigned to teacher');
+    }
+}
+```
+
+**Result**:
+- ✅ Loads teacher's actual homeroom section (e.g., Gumamela - section 219)
+- ✅ No more 500 errors
+- ✅ SF2 Daily Attendance Report works correctly
+- ✅ Consistent with Summary Attendance Report logic
+
+**Files Modified**: `src/views/pages/teacher/TeacherDailyAttendance.vue` (lines 215-241)
+
+---
+
+#### **4. Teacher Dashboard - Subject Dropdown Enhancement** ✅
+**Problem**: In the Progress Tracking dialog's "Weekly Attendance Overview", the subject dropdown only showed subjects that had attendance data, not all teacher-assigned subjects.
+
+**Root Cause**: `availableSubjects` was populated from weekly attendance data's subject breakdown, missing subjects without attendance.
+
+**Solution Implemented**: Load all teacher subjects from localStorage:
+```javascript
+function loadTeacherSubjects() {
+    const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+    const assignments = teacherData.assignments || [];
+    
+    const subjectsMap = new Map();
+    
+    assignments.forEach(assignment => {
+        // Handle homeroom
+        if (!assignment.subject_id && assignment.subject_name === 'Homeroom') {
+            subjectsMap.set('homeroom', {
+                id: null,
+                name: 'Homeroom'
+            });
+        }
+        // Handle regular subjects
+        else if (assignment.subject_id && assignment.subject_name) {
+            subjectsMap.set(assignment.subject_id, {
+                id: assignment.subject_id,
+                name: assignment.subject_name
+            });
+        }
+    });
+    
+    availableSubjects.value = Array.from(subjectsMap.values());
+}
+```
+
+**Result**:
+- ✅ Subject dropdown shows ALL teacher-assigned subjects
+- ✅ Includes Homeroom + all departmentalized subjects (English, Music, etc.)
+- ✅ Teachers can view individual subject attendance data
+- ✅ Works even if subject has no attendance data yet
+
+**Files Modified**: `src/components/Teachers/AttendanceInsights.vue` (lines 524-565)
+
+---
+
 ### **October 16, 2025 - Student Status Filter & SF2 Grade Level Fixes**
 
 #### **1. Admin Student Status Filter - COMPLETE FIX** ✅

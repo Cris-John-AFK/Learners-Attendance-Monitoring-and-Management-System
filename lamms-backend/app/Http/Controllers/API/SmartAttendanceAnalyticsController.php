@@ -580,6 +580,13 @@ class SmartAttendanceAnalyticsController extends Controller
             $uniqueDays = [];
 
             foreach ($weekRecords as $record) {
+                // Skip weekends (Saturday = 6, Sunday = 0)
+                $recordDate = \Carbon\Carbon::parse($record->session_date);
+                $dayOfWeek = $recordDate->dayOfWeek;
+                if ($dayOfWeek === 0 || $dayOfWeek === 6) {
+                    continue; // Skip weekends
+                }
+                
                 // Track unique days
                 $day = $record->session_date;
                 if (!isset($uniqueDays[$day])) {
@@ -623,8 +630,10 @@ class SmartAttendanceAnalyticsController extends Controller
                 $uniqueDays[$day][] = $subject;
             }
 
+            // Count late as present for percentage calculation (they attended, just late)
+            $totalAttended = $present + $late;
             $total = $present + $absent + $late + $excused;
-            $percentage = $total > 0 ? round(($present / $total) * 100) : 0;
+            $percentage = $total > 0 ? round(($totalAttended / $total) * 100) : 0;
             $totalDays = count($uniqueDays);
             $totalSubjects = count($subjectBreakdown);
 
@@ -648,7 +657,7 @@ class SmartAttendanceAnalyticsController extends Controller
     }
 
     /**
-     * Generate week ranges for the given period (includes partial weeks at month boundaries)
+     * Generate week ranges for the given period (WEEKDAYS ONLY - Monday to Friday)
      */
     private function generateWeekRanges($startDate, $endDate): array
     {
@@ -657,22 +666,25 @@ class SmartAttendanceAnalyticsController extends Controller
         // Find the first Monday on or before startDate
         $firstMonday = $startDate->copy()->startOfWeek();
         
-        // Find the last Sunday on or after endDate
-        $lastSunday = $endDate->copy()->endOfWeek();
+        // Find the last Friday (not Sunday) on or after endDate
+        $lastFriday = $endDate->copy();
+        while ($lastFriday->dayOfWeek !== 5) { // 5 = Friday
+            $lastFriday->addDay();
+        }
         
         $currentWeekStart = $firstMonday->copy();
 
-        while ($currentWeekStart->lte($lastSunday)) {
-            $weekStart = $currentWeekStart->copy();
-            $weekEnd = $currentWeekStart->copy()->endOfWeek();
+        while ($currentWeekStart->lte($lastFriday)) {
+            $weekStart = $currentWeekStart->copy(); // Monday
+            $weekEnd = $currentWeekStart->copy()->addDays(4); // Friday (Monday + 4 days)
 
-            // Only include weeks that have at least one day in the target period
+            // Only include weeks that have at least one weekday in the target period
             if ($weekEnd->gte($startDate) && $weekStart->lte($endDate)) {
                 $weekKey = $weekStart->format('Y-W');
                 $weeks[$weekKey] = [
                     'start' => $weekStart,
                     'end' => $weekEnd,
-                    'label' => $weekStart->format('M j') . ' - ' . $weekEnd->format('M j')
+                    'label' => $weekStart->format('M j') . ' - ' . $weekEnd->format('M j') // Monday - Friday
                 ];
             }
 

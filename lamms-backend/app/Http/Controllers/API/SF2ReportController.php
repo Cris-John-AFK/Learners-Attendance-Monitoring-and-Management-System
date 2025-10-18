@@ -155,21 +155,44 @@ class SF2ReportController extends Controller
      */
     private function getStudentsWithAttendance($section, $month)
     {
-        // Always try section name approach first (more reliable)
-        $students = Student::where('section', $section->name)
-                         ->orderBy('gender')
-                         ->orderBy('name')
-                         ->get();
+        // Use the correct student_section pivot table to get ALL students (including dropped out/transferred)
+        // This allows teachers to track historical attendance data
+        $students = \DB::table('student_details as sd')
+            ->join('student_section as ss', 'sd.id', '=', 'ss.student_id')
+            ->where('ss.section_id', $section->id)
+            ->where('ss.is_active', true)
+            ->select(
+                'sd.id',
+                'sd.firstName',
+                'sd.lastName',
+                'sd.middleName',
+                'sd.gender',
+                'sd.lrn',
+                'sd.student_id as student_number',
+                'sd.enrollment_status',
+                'sd.dropout_reason',
+                'sd.status_effective_date'
+            )
+            ->orderBy('sd.gender')
+            ->orderBy('sd.lastName')
+            ->get()
+            ->map(function($student) {
+                // Convert to object format expected by the rest of the code
+                return (object)[
+                    'id' => $student->id,
+                    'firstName' => $student->firstName,
+                    'lastName' => $student->lastName,
+                    'middleName' => $student->middleName,
+                    'gender' => $student->gender,
+                    'lrn' => $student->lrn,
+                    'student_number' => $student->student_number,
+                    'enrollment_status' => $student->enrollment_status,
+                    'dropout_reason' => $student->dropout_reason,
+                    'status_effective_date' => $student->status_effective_date
+                ];
+            });
 
-        Log::info("Found " . $students->count() . " students using section name '{$section->name}'");
-
-        // If no students found using section name, try pivot table relationship
-        if ($students->isEmpty()) {
-            Log::info("No students found using section name for section {$section->id}, trying pivot table approach");
-
-            $students = $section->students()->orderBy('gender')->orderBy('name')->get();
-            Log::info("Found " . $students->count() . " students using pivot table");
-        }
+        Log::info("Found " . $students->count() . " students in section {$section->id} using student_section pivot table");
 
         // If still no students found, use sample data for testing
         if ($students->isEmpty()) {
@@ -341,23 +364,26 @@ class SF2ReportController extends Controller
 
                             Log::info("Student {$student->id} on {$dateKey}: {$statusName} -> {$status}");
                         } else {
-                            // No attendance record means absent (no session was held or student was not marked)
-                            $status = 'absent';
+                            // No attendance record - skip this day (don't count as absent)
+                            $status = null;
                         }
                     }
 
-                    // Count the status for statistics
-                    if ($status === 'present') {
-                        $presentDays++;
-                    } elseif ($status === 'late') {
-                        $lateDays++;
-                        $presentDays++; // Late is still considered present for totals
-                    } else {
-                        $absentDays++;
-                    }
+                    // Only count and store days with actual attendance data
+                    if ($status !== null) {
+                        // Count the status for statistics
+                        if ($status === 'present') {
+                            $presentDays++;
+                        } elseif ($status === 'late') {
+                            $lateDays++;
+                            $presentDays++; // Late is still considered present for totals
+                        } else {
+                            $absentDays++;
+                        }
 
-                    $attendanceData[$dateKey] = $status;
-                    $totalDays++;
+                        $attendanceData[$dateKey] = $status;
+                        $totalDays++;
+                    }
                 }
                 $currentDate->addDay();
             }

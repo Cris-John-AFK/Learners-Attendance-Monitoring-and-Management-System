@@ -10,97 +10,122 @@
 
         <!-- Risk cards removed - now shown on main dashboard -->
 
-        <!-- Individual Student Plans -->
+        <!-- Risk Level Legend -->
+        <div class="risk-legend" v-if="studentsNeedingAttention && studentsNeedingAttention.length > 0">
+            <div class="legend-header">
+                <i class="pi pi-info-circle"></i>
+                <span>Risk Levels:</span>
+            </div>
+            <div class="legend-badges">
+                <div class="legend-badge-item critical">
+                    <i class="pi pi-exclamation-circle"></i>
+                    <span class="badge-label">Critical</span>
+                    <span class="badge-desc">5+ absences</span>
+                </div>
+                <div class="legend-badge-item high">
+                    <i class="pi pi-exclamation-triangle"></i>
+                    <span class="badge-label">High Risk</span>
+                    <span class="badge-desc">3-4 absences</span>
+                </div>
+                <div class="legend-badge-item low">
+                    <i class="pi pi-info-circle"></i>
+                    <span class="badge-label">Low Risk</span>
+                    <span class="badge-desc">1-2 absences</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students Requiring Attention - Clickable Cards -->
         <div class="student-plans-section" v-if="studentsNeedingAttention && studentsNeedingAttention.length > 0">
             <h4 class="section-title">
                 <i class="pi pi-users"></i>
                 Students Requiring Attention
             </h4>
 
-            <!-- Critical Risk Students -->
-            <div class="risk-group" v-if="groupedStudents.critical && groupedStudents.critical.length > 0">
-                <div class="risk-group-header critical" @click="toggleGroup('critical')">
-                    <div class="group-title">
-                        <i class="pi pi-exclamation-circle risk-icon"></i>
-                        <span>Critical Risk ({{ groupedStudents.critical.length }})</span>
-                        <i :class="expandedGroups.critical ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+            <div class="risk-cards-grid">
+                <!-- Critical Card -->
+                <div class="risk-card critical" v-if="groupedStudents.critical && groupedStudents.critical.length > 0" @click="openRiskDialog('critical')">
+                    <div class="risk-card-icon">
+                        <i class="pi pi-exclamation-circle"></i>
+                    </div>
+                    <div class="risk-card-content">
+                        <div class="risk-card-label">Critical</div>
+                        <div class="risk-card-count">{{ groupedStudents.critical.length }}</div>
+                        <div class="risk-card-desc">students</div>
                     </div>
                 </div>
-                <div class="risk-group-content" v-show="expandedGroups.critical">
-                    <div class="compact-student-cards">
-                        <div v-for="student in groupedStudents.critical" :key="student.student_id || student.id" class="compact-student-card critical" @click="viewStudentProfile(student)">
-                            <div class="student-compact-header">
-                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
-                                <div class="risk-badge critical">
-                                    <i class="pi pi-exclamation-circle"></i>
-                                </div>
-                            </div>
-                            <div class="student-stats-compact">
-                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
-                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
-                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- High Risk Students -->
-            <div class="risk-group" v-if="groupedStudents.high && groupedStudents.high.length > 0">
-                <div class="risk-group-header high" @click="toggleGroup('high')">
-                    <div class="group-title">
-                        <i class="pi pi-exclamation-triangle risk-icon"></i>
-                        <span>High Risk ({{ groupedStudents.high.length }})</span>
-                        <i :class="expandedGroups.high ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+                <!-- High Risk Card -->
+                <div class="risk-card high" v-if="groupedStudents.high && groupedStudents.high.length > 0" @click="openRiskDialog('high')">
+                    <div class="risk-card-icon">
+                        <i class="pi pi-exclamation-triangle"></i>
+                    </div>
+                    <div class="risk-card-content">
+                        <div class="risk-card-label">High Risk</div>
+                        <div class="risk-card-count">{{ groupedStudents.high.length }}</div>
+                        <div class="risk-card-desc">students</div>
                     </div>
                 </div>
-                <div class="risk-group-content" v-show="expandedGroups.high">
-                    <div class="compact-student-cards">
-                        <div v-for="student in groupedStudents.high" :key="student.student_id || student.id" class="compact-student-card high" @click="viewStudentProfile(student)">
-                            <div class="student-compact-header">
-                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
-                                <div class="risk-badge high">
-                                    <i class="pi pi-exclamation-triangle"></i>
-                                </div>
-                            </div>
-                            <div class="student-stats-compact">
-                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
-                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
-                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Medium Risk Students -->
-            <div class="risk-group" v-if="groupedStudents.medium && groupedStudents.medium.length > 0">
-                <div class="risk-group-header medium" @click="toggleGroup('medium')">
-                    <div class="group-title">
-                        <i class="pi pi-info-circle risk-icon"></i>
-                        <span>Medium Risk ({{ groupedStudents.medium.length }})</span>
-                        <i :class="expandedGroups.medium ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="toggle-icon"></i>
+                <!-- Low Risk Card -->
+                <div class="risk-card low" v-if="groupedStudents.low && groupedStudents.low.length > 0" @click="openRiskDialog('low')">
+                    <div class="risk-card-icon">
+                        <i class="pi pi-info-circle"></i>
                     </div>
-                </div>
-                <div class="risk-group-content" v-show="expandedGroups.medium">
-                    <div class="compact-student-cards">
-                        <div v-for="student in groupedStudents.medium" :key="student.student_id || student.id" class="compact-student-card medium" @click="viewStudentProfile(student)">
-                            <div class="student-compact-header">
-                                <div class="student-name-compact">{{ student.first_name }} {{ student.last_name }}</div>
-                                <div class="risk-badge medium">
-                                    <i class="pi pi-info-circle"></i>
-                                </div>
-                            </div>
-                            <div class="student-stats-compact">
-                                <span class="stat-compact">{{ student.total_absences || 0 }} total</span>
-                                <span class="stat-compact">{{ student.recent_absences || 0 }} recent</span>
-                                <span class="stat-compact" v-if="(student.consecutive_absences || 0) > 0">{{ student.consecutive_absences }} consecutive</span>
-                            </div>
-                        </div>
+                    <div class="risk-card-content">
+                        <div class="risk-card-label">Low Risk</div>
+                        <div class="risk-card-count">{{ groupedStudents.low.length }}</div>
+                        <div class="risk-card-desc">students</div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Risk Students Dialog -->
+        <Dialog v-model:visible="showRiskDialog" modal :header="getRiskDialogTitle()" style="width: 50rem" :dismissableMask="true">
+            <!-- Tab Navigation -->
+            <div class="risk-tabs">
+                <div class="risk-tab" :class="{ active: activeRiskTab === 'critical', disabled: !groupedStudents.critical || groupedStudents.critical.length === 0 }" @click="switchRiskTab('critical')" v-if="groupedStudents.critical && groupedStudents.critical.length > 0">
+                    <i class="pi pi-exclamation-circle"></i>
+                    <span>Critical ({{ groupedStudents.critical.length }})</span>
+                </div>
+                <div class="risk-tab" :class="{ active: activeRiskTab === 'high', disabled: !groupedStudents.high || groupedStudents.high.length === 0 }" @click="switchRiskTab('high')" v-if="groupedStudents.high && groupedStudents.high.length > 0">
+                    <i class="pi pi-exclamation-triangle"></i>
+                    <span>High Risk ({{ groupedStudents.high.length }})</span>
+                </div>
+                <div class="risk-tab" :class="{ active: activeRiskTab === 'low', disabled: !groupedStudents.low || groupedStudents.low.length === 0 }" @click="switchRiskTab('low')" v-if="groupedStudents.low && groupedStudents.low.length > 0">
+                    <i class="pi pi-info-circle"></i>
+                    <span>Low Risk ({{ groupedStudents.low.length }})</span>
+                </div>
+            </div>
+
+            <!-- Students List -->
+            <div class="risk-dialog-content">
+                <div class="students-list">
+                    <div v-for="student in getCurrentRiskStudents()" :key="student.student_id || student.id" class="student-item" :class="activeRiskTab" @click="viewStudentProfile(student)">
+                        <div class="student-item-icon">
+                            <i class="pi pi-user"></i>
+                        </div>
+                        <div class="student-item-info">
+                            <div class="student-item-name">{{ student.first_name }} {{ student.last_name }}</div>
+                            <div class="student-item-stats">
+                                <span class="stat-badge"><i class="pi pi-calendar"></i> {{ student.total_absences || 0 }} total</span>
+                                <span class="stat-badge"><i class="pi pi-clock"></i> {{ student.recent_absences || 0 }} recent</span>
+                                <span class="stat-badge" v-if="(student.consecutive_absences || 0) > 0"><i class="pi pi-exclamation-triangle"></i> {{ student.consecutive_absences }} consecutive</span>
+                            </div>
+                        </div>
+                        <div class="student-item-action">
+                            <i class="pi pi-chevron-right"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="getCurrentRiskStudents().length === 0" class="empty-state">
+                    <i class="pi pi-check-circle"></i>
+                    <p>No students in this risk category</p>
+                </div>
+            </div>
+        </Dialog>
 
         <!-- Success Stories -->
         <div class="success-section" v-if="improvingStudents.length > 0">
@@ -140,7 +165,7 @@
 
         <!-- Progress Tracking Dialog -->
         <Dialog v-model:visible="showProgressDialog" modal :header="`Progress Tracking - ${selectedStudentForProgress?.first_name} ${selectedStudentForProgress?.last_name}`" style="width: 60rem">
-            <div class="progress-content">
+            <div class="progress-content" ref="progressContentRef" @scroll="handleProgressScroll">
                 <!-- Weekly Attendance Chart -->
                 <div class="progress-section">
                     <div class="section-header-with-picker">
@@ -211,6 +236,11 @@
                     </div>
                 </div>
 
+                <!-- Scroll Indicator (Circular Floating Button) -->
+                <div class="scroll-indicator-circle" v-show="showScrollIndicator" @click="scrollDown">
+                    <i class="pi pi-chevron-down"></i>
+                </div>
+
                 <!-- Improvements Section -->
                 <div class="progress-section">
                     <h5><i class="pi pi-check-circle"></i> Positive Improvements</h5>
@@ -256,7 +286,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     students: {
@@ -284,6 +314,15 @@ const newPlan = ref({
 });
 
 const showProgressDialog = ref(false);
+
+// Watch for progress dialog closing to reopen risk dialog if it was open
+watch(showProgressDialog, (newVal, oldVal) => {
+    if (oldVal === true && newVal === false && wasRiskDialogOpen.value) {
+        // Progress dialog just closed and risk dialog was open before
+        showRiskDialog.value = true;
+        wasRiskDialogOpen.value = false;
+    }
+});
 const selectedStudentForProgress = ref(null);
 const selectedMonth = ref(new Date()); // Default to current month
 const selectedSubjectFilter = ref(null); // Default to all subjects
@@ -303,7 +342,7 @@ function getRiskLevel(student) {
 
     if (recentAbsences >= 5) return 'critical';
     if (recentAbsences >= 3) return 'high';
-    if (recentAbsences >= 1) return 'medium';
+    if (recentAbsences >= 1) return 'low';
     return 'normal';
 }
 
@@ -403,7 +442,7 @@ function getRiskIcon(riskLevel) {
     const icons = {
         critical: 'pi pi-exclamation-circle',
         high: 'pi pi-exclamation-triangle',
-        medium: 'pi pi-info-circle',
+        low: 'pi pi-info-circle',
         warning: 'pi pi-exclamation-triangle',
         normal: 'pi pi-check-circle'
     };
@@ -523,12 +562,54 @@ function referToCounselor(student) {
 }
 
 function trackProgress(student) {
+    // Remember if risk dialog was open
+    if (showRiskDialog.value) {
+        wasRiskDialogOpen.value = true;
+    }
+    
     selectedStudentForProgress.value = student;
     selectedMonth.value = new Date(); // Reset to current month when opening dialog
     selectedSubjectFilter.value = null; // Reset subject filter to show all subjects
-    availableSubjects.value = []; // Clear subjects list (will be populated when data loads)
+    
+    // Load all teacher subjects from localStorage
+    loadTeacherSubjects();
+    
     showProgressDialog.value = true;
+    showScrollIndicator.value = true; // Reset scroll indicator
     loadProgressData(student);
+}
+
+function loadTeacherSubjects() {
+    try {
+        const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+        const assignments = teacherData.assignments || [];
+        
+        // Extract all unique subjects from teacher assignments
+        const subjectsMap = new Map();
+        
+        assignments.forEach(assignment => {
+            // Handle homeroom (no subject_id)
+            if (!assignment.subject_id && assignment.subject_name === 'Homeroom') {
+                subjectsMap.set('homeroom', {
+                    id: null,
+                    name: 'Homeroom'
+                });
+            }
+            // Handle regular subjects
+            else if (assignment.subject_id && assignment.subject_name) {
+                subjectsMap.set(assignment.subject_id, {
+                    id: assignment.subject_id,
+                    name: assignment.subject_name
+                });
+            }
+        });
+        
+        availableSubjects.value = Array.from(subjectsMap.values());
+        console.log('📚 Loaded teacher subjects:', availableSubjects.value);
+    } catch (error) {
+        console.error('Error loading teacher subjects:', error);
+        availableSubjects.value = [];
+    }
 }
 
 function onMonthChange() {
@@ -1236,12 +1317,18 @@ function generateAttendanceReportHTML(student, currentDate) {
     `;
 }
 
-// Expanded groups state
-const expandedGroups = ref({ critical: false, high: false, medium: false });
+// Risk dialog state
+const showRiskDialog = ref(false);
+const activeRiskTab = ref('critical');
+const wasRiskDialogOpen = ref(false);
+
+// Scroll indicator state
+const showScrollIndicator = ref(true);
+const progressContentRef = ref(null);
 
 // Grouped students computed property
 const groupedStudents = computed(() => {
-    const groups = { critical: [], high: [], medium: [] };
+    const groups = { critical: [], high: [], low: [] };
 
     if (!studentsNeedingAttention.value || !Array.isArray(studentsNeedingAttention.value)) {
         return groups;
@@ -1254,8 +1341,8 @@ const groupedStudents = computed(() => {
             groups.critical.push(student);
         } else if (riskLevel === 'high') {
             groups.high.push(student);
-        } else if (riskLevel === 'medium') {
-            groups.medium.push(student);
+        } else if (riskLevel === 'low') {
+            groups.low.push(student);
         }
     });
 
@@ -1326,14 +1413,63 @@ function getStudentSection(student) {
     return student.section || 'Kinder One';
 }
 
-// Missing functions for the compact grouped view
-function toggleGroup(riskType) {
-    expandedGroups.value[riskType] = !expandedGroups.value[riskType];
+// Risk dialog functions
+function openRiskDialog(riskType) {
+    activeRiskTab.value = riskType;
+    showRiskDialog.value = true;
+}
+
+function switchRiskTab(riskType) {
+    if (groupedStudents.value[riskType] && groupedStudents.value[riskType].length > 0) {
+        activeRiskTab.value = riskType;
+    }
+}
+
+function getCurrentRiskStudents() {
+    return groupedStudents.value[activeRiskTab.value] || [];
+}
+
+function getRiskDialogTitle() {
+    const titles = {
+        critical: 'Critical Students',
+        high: 'High Risk Students',
+        low: 'Low Risk Students'
+    };
+    return titles[activeRiskTab.value] || 'Students Requiring Attention';
 }
 
 function viewStudentProfile(student) {
+    // Don't close risk dialog - keep it open in the background
     // Show detailed student profile - opens the progress dialog
     trackProgress(student);
+}
+
+// Handle scroll in progress dialog
+function handleProgressScroll(event) {
+    const element = event.target;
+    const scrollTop = element.scrollTop;
+    const scrollHeight = element.scrollHeight;
+    const clientHeight = element.clientHeight;
+    
+    // Hide indicator when scrolled near bottom (within 50px)
+    if (scrollTop + clientHeight >= scrollHeight - 50) {
+        showScrollIndicator.value = false;
+    } else {
+        showScrollIndicator.value = true;
+    }
+}
+
+// Scroll down smoothly when indicator is clicked
+function scrollDown() {
+    if (progressContentRef.value) {
+        const element = progressContentRef.value;
+        const scrollAmount = element.clientHeight * 0.8; // Scroll 80% of visible height
+        
+        element.scrollBy({
+            top: scrollAmount,
+            behavior: 'smooth'
+        });
+    }
 }
 </script>
 
@@ -1615,6 +1751,59 @@ function viewStudentProfile(student) {
 .progress-content {
     max-height: 70vh;
     overflow-y: auto;
+    overflow-x: hidden; /* Hide horizontal scrollbar */
+    position: relative;
+}
+
+/* Scroll Indicator - Circular Floating Button */
+.scroll-indicator-circle {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+    animation: floatBounce 2s ease-in-out infinite;
+    transition: all 0.3s ease;
+}
+
+.scroll-indicator-circle:hover {
+    transform: translateX(-50%) scale(1.1);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.scroll-indicator-circle i {
+    font-size: 1.5rem;
+    animation: chevronPulse 2s ease-in-out infinite;
+}
+
+@keyframes floatBounce {
+    0%, 100% {
+        transform: translateX(-50%) translateY(0);
+    }
+    50% {
+        transform: translateX(-50%) translateY(-10px);
+    }
+}
+
+@keyframes chevronPulse {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    50% {
+        transform: translateY(4px);
+        opacity: 0.7;
+    }
 }
 
 .progress-section {
@@ -1782,149 +1971,304 @@ function viewStudentProfile(student) {
     margin: 0;
 }
 
-/* Risk Group Styles */
-.risk-group {
-    margin-bottom: 1rem;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
+/* Risk Cards Grid */
+.risk-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.risk-card {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    position: relative;
     overflow: hidden;
 }
 
-.risk-group-header {
-    padding: 0.75rem 1rem;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-    border-left: 4px solid;
+.risk-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: transparent;
 }
 
-.risk-group-header:hover {
-    background-color: #f8f9fa;
+.risk-card.critical::before {
+    background: #dc3545;
 }
 
-.risk-group-header.critical {
+.risk-card.high::before {
+    background: #ffc107;
+}
+
+.risk-card.low::before {
+    background: #10b981;
+}
+
+.risk-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.risk-card.critical:hover {
+    border-color: #dc3545;
     background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
-    border-left-color: #dc3545;
 }
 
-.risk-group-header.high {
-    background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);
-    border-left-color: #ffc107;
+.risk-card.high:hover {
+    border-color: #ffc107;
+    background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
 }
 
-.risk-group-header.medium {
-    background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
-    border-left-color: #0ea5e9;
+.risk-card.low:hover {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
 }
 
-.group-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    color: #2c3e50;
-}
-
-.toggle-icon {
-    margin-left: auto;
-    transition: transform 0.2s ease;
-}
-
-.risk-group-content {
-    padding: 0.5rem;
-    background: #fafbfc;
-}
-
-.compact-student-cards {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.compact-student-card {
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    margin: 2px 0;
-    background: white;
-    border: 1px solid #e9ecef;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-left: 3px solid;
-}
-
-.compact-student-card:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
-}
-
-.compact-student-card.critical {
-    border-left-color: #dc3545;
-}
-
-.compact-student-card.high {
-    border-left-color: #ffc107;
-}
-
-.compact-student-card.medium {
-    border-left-color: #0ea5e9;
-}
-
-.student-compact-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex: 1;
-}
-
-.student-name-compact {
-    font-weight: 600;
-    color: #2c3e50;
-    font-size: 0.9rem;
-}
-
-.risk-badge {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
+.risk-card-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 1rem;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    font-size: 1.5rem;
+}
+
+.risk-card.critical .risk-card-icon {
+    background: #fee;
+    color: #dc3545;
+}
+
+.risk-card.high .risk-card-icon {
+    background: #fffbeb;
+    color: #ffc107;
+}
+
+.risk-card.low .risk-card-icon {
+    background: #f0fdf4;
+    color: #10b981;
+}
+
+.risk-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.risk-card-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.risk-card-count {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+}
+
+.risk-card-desc {
     font-size: 0.75rem;
-    flex-shrink: 0;
-    box-sizing: border-box;
+    color: #94a3b8;
 }
 
-.risk-badge.critical {
-    background: #dc3545;
-}
-
-.risk-badge.high {
-    background: #ffc107;
-}
-
-.risk-badge.medium {
-    background: #0ea5e9;
-}
-
-.student-stats-compact {
+/* Risk Dialog Styles */
+.risk-tabs {
     display: flex;
     gap: 0.5rem;
-    flex: 1;
-    justify-content: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0;
 }
 
-.stat-compact {
+.risk-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    color: #64748b;
+    background: transparent;
+    border-radius: 4px 4px 0 0;
+}
+
+.risk-tab:hover:not(.disabled) {
+    background: #f8fafc;
+    color: #1e293b;
+}
+
+.risk-tab.active {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.risk-tab.active.critical {
+    border-bottom-color: #dc3545;
+    color: #dc3545;
+}
+
+.risk-tab.active.high {
+    border-bottom-color: #ffc107;
+    color: #d97706;
+}
+
+.risk-tab.active.low {
+    border-bottom-color: #10b981;
+    color: #10b981;
+}
+
+.risk-tab.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.risk-tab i {
+    font-size: 1rem;
+}
+
+.risk-dialog-content {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.students-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.student-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.student-item:hover {
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transform: translateX(4px);
+}
+
+.student-item.critical {
+    border-left-color: #dc3545;
+}
+
+.student-item.high {
+    border-left-color: #ffc107;
+}
+
+.student-item.low {
+    border-left-color: #10b981;
+}
+
+.student-item-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.student-item.critical .student-item-icon {
+    background: #fee;
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.student-item.high .student-item-icon {
+    background: #fffbeb;
+    border-color: #ffc107;
+    color: #d97706;
+}
+
+.student-item.low .student-item-icon {
+    background: #f0fdf4;
+    border-color: #10b981;
+    color: #10b981;
+}
+
+.student-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.student-item-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+
+.student-item-stats {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
     font-size: 0.75rem;
-    color: #6c757d;
-    background: #f8f9fa;
-    padding: 2px 6px;
+    color: #64748b;
+    background: white;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
-    white-space: nowrap;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-badge i {
+    font-size: 0.7rem;
+}
+
+.student-item-action {
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #94a3b8;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #cbd5e1;
+}
+
+.empty-state p {
+    font-size: 1rem;
+    margin: 0;
 }
 
 .improvement-item,
@@ -1957,5 +2301,86 @@ function viewStudentProfile(student) {
 .next-step-item i {
     margin-top: 0.125rem;
     flex-shrink: 0;
+}
+
+/* Risk Legend Styles - Horizontal Badge Design */
+.risk-legend {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.875rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.legend-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.legend-header i {
+    color: #3b82f6;
+    font-size: 1rem;
+}
+
+.legend-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.legend-badge-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.legend-badge-item:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+.legend-badge-item i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.legend-badge-item.critical i {
+    color: #dc3545;
+}
+
+.legend-badge-item.high i {
+    color: #ffc107;
+}
+
+.legend-badge-item.low i {
+    color: #10b981;
+}
+
+.badge-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.badge-desc {
+    font-size: 0.75rem;
+    color: #64748b;
+    padding-left: 0.25rem;
+    border-left: 1px solid #e2e8f0;
 }
 </style>

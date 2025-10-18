@@ -1972,41 +1972,15 @@ async function showStudentProfile(student) {
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
-                        <div class="flex items-center mb-3">
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                        <div class="flex items-center">
                             <div class="mr-4 bg-green-100 p-3 rounded-lg">
                                 <i class="pi pi-check-circle text-green-600 text-xl"></i>
                             </div>
                             <div class="flex-1 p-2">
-                                <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                                <div class="text-sm text-gray-500 font-medium">Average Attendance</div>
                                 <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
                             </div>
-                        </div>
-                        <!-- Progress bar at bottom -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
-                                <div
-                                    class="h-2.5 rounded-full transition-all duration-500"
-                                    :class="{
-                                        'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                        'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
-                                        'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                        'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 60
-                                    }"
-                                    :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
-                                ></div>
-                            </div>
-                            <span
-                                class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
-                                :class="{
-                                    'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                    'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
-                                    'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                    'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 60
-                                }"
-                            >
-                                {{ (attendanceSummary?.averageAttendance || 0) >= 85 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Fair' : 'Needs Attention' }}
-                            </span>
                         </div>
                     </div>
 
@@ -2015,7 +1989,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">At Risk (3-4 absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">High Risk (3-4 absences)</div>
                             <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
                         </div>
                     </div>
@@ -2025,7 +1999,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Critical Risk (5+ absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Critical (5+ absences)</div>
                             <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
                         </div>
                     </div>
@@ -2165,12 +2139,8 @@ async function showStudentProfile(student) {
                         <p class="text-sm text-gray-500 mt-1">
                             <i class="pi pi-calendar mr-1"></i>
                             Showing recent absence tracking (Last 30 Days)
-                            <span v-if="selectedSubject" class="ml-2">
-                                • <i class="pi pi-book mr-1"></i>{{ selectedSubject.name }}
-                            </span>
-                            <span v-else-if="viewType === 'all_students'" class="ml-2">
-                                • <i class="pi pi-globe mr-1"></i>All Subjects
-                            </span>
+                            <span v-if="selectedSubject" class="ml-2"> • <i class="pi pi-book mr-1"></i>{{ selectedSubject.name }} </span>
+                            <span v-else-if="viewType === 'all_students'" class="ml-2"> • <i class="pi pi-globe mr-1"></i>All Subjects </span>
                         </p>
                     </div>
 
@@ -2356,13 +2326,7 @@ async function showStudentProfile(student) {
 
                     <Column header="Actions" style="width: 160px">
                         <template #body="slotProps">
-                            <Button 
-                                icon="pi pi-calendar" 
-                                label="View Details" 
-                                class="p-button-sm p-button-info" 
-                                @click="openStudentProfile(slotProps.data)" 
-                                v-tooltip.top="'View attendance calendar & history'"
-                            />
+                            <Button icon="pi pi-calendar" label="View Details" class="p-button-sm p-button-info" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View attendance calendar & history'" />
                         </template>
                     </Column>
                 </DataTable>
@@ -2453,16 +2417,7 @@ async function showStudentProfile(student) {
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2">
                             <label for="calendar-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
-                            <Dropdown
-                                id="calendar-subject-filter"
-                                v-model="calendarSubjectFilter"
-                                :options="calendarSubjectOptions"
-                                optionLabel="name"
-                                optionValue="id"
-                                placeholder="Select Subject"
-                                @change="onCalendarSubjectChange"
-                                class="w-48"
-                            />
+                            <Dropdown id="calendar-subject-filter" v-model="calendarSubjectFilter" :options="calendarSubjectOptions" optionLabel="name" optionValue="id" placeholder="Select Subject" @change="onCalendarSubjectChange" class="w-48" />
                         </div>
                     </div>
                 </div>

@@ -215,9 +215,21 @@ const combinedTotalPresent = computed(() => {
 const loadReportData = async () => {
     loading.value = true;
     try {
-        // If no sectionId, use default section ID 8 (Malikhain - Maria Santos' section)
+        // If no sectionId, get it from teacher's homeroom section
         if (!sectionId.value) {
-            sectionId.value = 8; // Default to section 8 (Grade 1 Malikhain)
+            const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+            
+            // Try to get homeroom section from teacher data
+            const homeroomSection = teacherData.teacher?.homeroom_section || 
+                                   teacherData.homeroom_section ||
+                                   teacherData.assignments?.find(a => a.is_primary)?.section;
+            
+            if (homeroomSection) {
+                sectionId.value = homeroomSection.id || homeroomSection.section_id;
+                console.log('📚 Using teacher homeroom section:', sectionId.value);
+            } else {
+                throw new Error('No section assigned to teacher');
+            }
         }
 
         const monthStr = selectedMonth.value.toISOString().slice(0, 7); // YYYY-MM format
@@ -233,7 +245,7 @@ const loadReportData = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load SF2 report data',
+            detail: error.message || 'Failed to load SF2 report data',
             life: 3000
         });
     } finally {
