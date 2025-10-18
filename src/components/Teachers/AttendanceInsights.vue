@@ -719,65 +719,104 @@ async function loadProgressData(student) {
                 weeklyData
             });
 
-            // 🤖 FETCH SMART ANALYTICS from AI-like analysis!
-            console.log('🧠 Fetching Smart Analytics insights...');
-            let improvements = [];
-            let concerns = [];
-            let nextSteps = [];
-
-            try {
-                const smartAnalytics = await SmartAnalyticsService.getStudentAnalytics(studentId);
-                console.log('🤖 Smart Analytics Response:', smartAnalytics);
-
-                if (smartAnalytics.success && smartAnalytics.data && smartAnalytics.data.recommendations) {
-                    const recs = smartAnalytics.data.recommendations;
-
-                    // Use AI-generated insights from the recommendations!
-                    improvements = (recs.positive_improvements || []).map((imp) => {
-                        return `${imp.icon || '✅'} ${imp.message}`;
-                    });
-
-                    concerns = (recs.areas_of_concern || []).map((concern) => {
-                        return `${concern.icon || '⚠️'} ${concern.title}: ${concern.message}`;
-                    });
-
-                    // Format recommended next steps with urgency
-                    nextSteps = (recs.recommended_next_steps || []).map((action) => {
-                        const urgencyEmoji =
-                            {
-                                critical: '🚨',
-                                high: '⚠️',
-                                medium: '📌',
-                                low: '💡'
-                            }[action.urgency] || '📋';
-
-                        return `${urgencyEmoji} ${action.action} (${action.timeline})`;
-                    });
-
-                    console.log('✅ Using Smart Analytics insights!', { improvements, concerns, nextSteps });
-                } else {
-                    throw new Error('Smart analytics not available');
-                }
-            } catch (error) {
-                console.warn('⚠️ Smart analytics failed, using basic fallback:', error);
-
-                // Fallback to basic logic if smart analytics fails
-                if (totalAbsences === 0) {
-                    improvements.push('Perfect attendance record maintained');
-                    nextSteps.push('Continue current attendance pattern');
-                } else if (totalAbsences <= 2) {
-                    improvements.push('Generally good attendance pattern');
-                    nextSteps.push('Monitor for any emerging patterns');
-                } else {
-                    if (recentAbsences > 0) concerns.push(`${recentAbsences} recent absences noted`);
-                    if (consecutiveAbsences >= 3) {
-                        concerns.push(`${consecutiveAbsences} consecutive days absent`);
-                        nextSteps.push('Schedule immediate parent conference');
-                    } else {
-                        nextSteps.push('Monitor attendance patterns closely');
-                    }
-                }
+            // 🤖 CLIENT-SIDE SMART ANALYTICS ENGINE
+            console.log('🧠 Generating Smart Analytics insights...');
+            
+            // Calculate comprehensive metrics
+            const totalSessions = weeklyData.reduce((sum, week) => sum + (week.total_days || 0), 0);
+            const totalPresent = weeklyData.reduce((sum, week) => sum + week.present, 0);
+            const totalLate = weeklyData.reduce((sum, week) => sum + week.late, 0);
+            const attendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0;
+            
+            const improvements = [];
+            const concerns = [];
+            const nextSteps = [];
+            
+            console.log('📊 Metrics:', { totalAbsences, recentAbsences, totalSessions, attendanceRate, totalLate });
+            
+            // === POSITIVE IMPROVEMENTS ===
+            if (totalAbsences === 0 && totalSessions > 0) {
+                improvements.push('🏆 Perfect attendance - no absences recorded!');
+            } else if (attendanceRate >= 95 && totalSessions >= 5) {
+                improvements.push(`📈 Excellent attendance: ${attendanceRate}%`);
+            } else if (attendanceRate >= 85 && totalSessions >= 5) {
+                improvements.push(`✅ Good attendance consistency: ${attendanceRate}%`);
             }
+            
+            if (totalLate === 0 && totalSessions > 0) {
+                improvements.push('⏰ Always punctual - no tardiness');
+            }
+            
+            // === AREAS OF CONCERN ===
+            // Determine risk level based on recent_absences (matches dashboard grouping)
+            const studentRiskLevel = selectedStudentForProgress.value?.recent_absences >= 5 ? 'critical' : 
+                                    selectedStudentForProgress.value?.recent_absences >= 3 ? 'high' : 'low';
+            
+            if (totalAbsences >= 18) {
+                concerns.push(`🚨 CRITICAL RISK: ${totalAbsences} total absences exceeds 18-day limit`);
+                concerns.push('⚠️ Immediate intervention required - risk of academic failure');
+            } else if (totalAbsences >= 10) {
+                concerns.push(`🚨 CRITICAL RISK: ${totalAbsences} total absences (approaching 18-day limit)`);
+                concerns.push('⚠️ Urgent attention needed');
+            } else if (totalAbsences >= 5) {
+                if (studentRiskLevel === 'critical') {
+                    concerns.push(`🚨 CRITICAL RISK: ${totalAbsences} total absences with ${selectedStudentForProgress.value?.recent_absences} recent absences`);
+                } else {
+                    concerns.push(`⚠️ AT RISK: ${totalAbsences} total absences - monitor closely`);
+                }
+            } else if (totalAbsences >= 3) {
+                concerns.push(`📊 LOW RISK: ${totalAbsences} absences - early monitoring recommended`);
+            }
+            
+            if (attendanceRate < 70 && totalSessions >= 5) {
+                concerns.push(`📉 Very low attendance: ${attendanceRate}% (below 70%)`);
+            } else if (attendanceRate < 80 && totalSessions >= 5) {
+                concerns.push(`📊 Low attendance: ${attendanceRate}% (below 80%)`);
+            }
+            
+            if (consecutiveAbsences >= 5) {
+                concerns.push(`🚨 Extended absence: ${consecutiveAbsences} consecutive days`);
+            } else if (consecutiveAbsences >= 3) {
+                concerns.push(`⚠️ Multiple consecutive absences: ${consecutiveAbsences} days`);
+            }
+            
+            if (totalLate >= 8) {
+                concerns.push(`⏰ Chronic tardiness: ${totalLate} late arrivals`);
+            } else if (totalLate >= 5) {
+                concerns.push(`⏰ Frequent tardiness: ${totalLate} late arrivals`);
+            }
+            
+            // === RECOMMENDED NEXT STEPS ===
+            if (totalAbsences >= 18) {
+                nextSteps.push('🚨 Schedule IMMEDIATE parent conference (within 24 hours)');
+                nextSteps.push('📋 Implement daily check-in system');
+                nextSteps.push('📄 Create formal attendance contract');
+                nextSteps.push('👥 Refer to school counselor');
+            } else if (totalAbsences >= 10) {
+                nextSteps.push('⚠️ Contact parents within 3 days');
+                nextSteps.push('🔍 Investigate barriers (health, transportation, family)');
+                nextSteps.push('📅 Set up weekly attendance monitoring');
+            } else if (totalAbsences >= 5) {
+                nextSteps.push('📞 Contact parents within 1 week');
+                nextSteps.push('📊 Monitor patterns for next 2 weeks');
+            } else if (attendanceRate < 80 && totalSessions >= 5) {
+                nextSteps.push('👨‍👩‍👧 Schedule parent meeting');
+            }
+            
+            if (consecutiveAbsences >= 3) {
+                nextSteps.push('🏥 Request medical documentation if health-related');
+                nextSteps.push('📚 Provide makeup work and catch-up support');
+            }
+            
+            if (totalLate >= 5) {
+                nextSteps.push('🌅 Discuss morning routine with family');
+            }
+            
+            if (attendanceRate >= 90 && totalSessions >= 5) {
+                nextSteps.push('🎉 Acknowledge positive attendance');
+            }
+            
+            console.log('✅ Analytics generated:', { improvements: improvements.length, concerns: concerns.length, nextSteps: nextSteps.length });
 
             // Ensure we always have content - but make it smart!
             if (improvements.length === 0) {
@@ -1837,12 +1876,68 @@ function scrollDown() {
 }
 
 .progress-section h5 {
-    margin: 0;
+    margin: 0 0 1rem 0;
     color: #495057;
     font-weight: 600;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    font-size: 1.1rem;
+}
+
+/* Improvements, Concerns, and Next Steps Lists */
+.improvement-list,
+.concern-list,
+.next-steps-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.improvement-item,
+.concern-item,
+.next-step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem;
+    background: white;
+    border-radius: 8px;
+    border-left: 4px solid;
+    transition: all 0.2s ease;
+    line-height: 1.6;
+}
+
+.improvement-item {
+    border-left-color: #10b981;
+    background: linear-gradient(to right, #f0fdf4 0%, #ffffff 100%);
+}
+
+.concern-item {
+    border-left-color: #f59e0b;
+    background: linear-gradient(to right, #fffbeb 0%, #ffffff 100%);
+}
+
+.next-step-item {
+    border-left-color: #3b82f6;
+    background: linear-gradient(to right, #eff6ff 0%, #ffffff 100%);
+}
+
+.improvement-item:hover,
+.concern-item:hover,
+.next-step-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.improvement-item i,
+.concern-item i,
+.next-step-item i {
+    margin-top: 0.125rem;
+    flex-shrink: 0;
 }
 
 .weekly-grid {
