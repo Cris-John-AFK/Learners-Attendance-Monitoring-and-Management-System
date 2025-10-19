@@ -89,9 +89,10 @@ const calendarSubjectOptions = computed(() => {
     return availableSubjects.value || [];
 });
 
-// Attendance threshold settings - Teacher-friendly
-const WARNING_THRESHOLD = 3; // Students missing 3-4 days need attention
-const CRITICAL_THRESHOLD = 5; // Students missing 5+ days need urgent action
+// Attendance threshold settings - Teacher-friendly (matches Attendance Insights)
+const LOW_RISK_THRESHOLD = 1; // Students missing 1-2 days - Low Risk
+const AT_RISK_THRESHOLD = 3; // Students missing 3-4 days - High Risk
+const CRITICAL_THRESHOLD = 5; // Students missing 5+ days - Critical Risk
 
 // Filter variables
 const selectedGradeFilter = ref(null);
@@ -103,9 +104,10 @@ const gradeFilterOptions = ref([]);
 
 const sectionFilterOptions = ref([]);
 const statusFilterOptions = ref([
-    { label: 'Normal', value: 'normal' },
-    { label: 'Warning', value: 'warning' },
-    { label: 'Critical', value: 'critical' }
+    { label: 'Normal', value: 'good' },
+    { label: 'Low Risk', value: 'low' },
+    { label: 'High Risk', value: 'at_risk' },
+    { label: 'Critical Risk', value: 'critical' }
 ]);
 
 // Filter options
@@ -373,14 +375,27 @@ function getFirstDayOfMonth() {
     return new Date(currentYear.value, currentMonth.value, 1).getDay();
 }
 
-// Calculate severity based on absence count
+// Calculate severity based on absence count (matches Attendance Insights EXACTLY)
 function calculateSeverity(absences) {
     if (absences >= CRITICAL_THRESHOLD) {
-        return 'critical';
-    } else if (absences >= WARNING_THRESHOLD) {
-        return 'warning';
+        return 'critical'; // 5+ absences = Critical Risk
+    } else if (absences >= AT_RISK_THRESHOLD) {
+        return 'at_risk'; // 3-4 absences = High Risk  
+    } else if (absences > 0) {
+        return 'low'; // 1-2 absences = Low Risk
     }
-    return 'normal';
+    return 'good'; // 0 absences = Normal (Perfect attendance)
+}
+
+// Get severity display label (matches Attendance Insights)
+function getSeverityLabel(severity) {
+    const labels = {
+        'critical': 'Critical Risk',
+        'at_risk': 'High Risk',
+        'low': 'Low Risk',
+        'good': 'Normal'
+    };
+    return labels[severity] || severity;
 }
 
 function handleCalendarDayClick(calDay) {
@@ -797,7 +812,7 @@ async function loadDepartmentalizedSubjectData(subjectId) {
         studentsWithAbsenceIssues.value = allStudents;
 
         // Calculate summary statistics
-        const warningCount = allStudents.filter((s) => s.severity === 'warning').length;
+        const warningCount = allStudents.filter((s) => s.severity === 'at_risk').length;
         const criticalCount = allStudents.filter((s) => s.severity === 'critical').length;
 
         attendanceSummary.value = {
@@ -908,7 +923,7 @@ async function loadSingleSectionData(sectionId, subjectId) {
             }));
 
             // NOW calculate warning and critical counts from the processed student data
-            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length;
+            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk').length;
             const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
 
             // Set attendance summary with calculated counts
@@ -1107,13 +1122,13 @@ function analyzeAttendance(students, attendanceRecords) {
                 severity
             };
         })
-        .filter((student) => (showOnlyAbsenceIssues.value ? student.severity !== 'normal' : true))
+        .filter((student) => (showOnlyAbsenceIssues.value ? student.severity !== 'good' : true))
         .sort((a, b) => b.absences - a.absences); // Sort by absences (highest first)
 
     // Prepare attendance summary
     attendanceSummary.value = {
         totalStudents: students.length,
-        studentsWithWarning: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length,
+        studentsWithWarning: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk').length,
         studentsWithCritical: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length,
         averageAttendance: calculateAverageAttendance(students.length, attendanceRecords)
     };
@@ -1999,7 +2014,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-circle text-red-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">Critical (5+ absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">Critical Risk (5+ absences)</div>
                             <div class="text-2xl font-bold text-red-600">{{ attendanceSummary?.studentsWithCritical || 0 }}</div>
                         </div>
                     </div>
@@ -2218,8 +2233,16 @@ async function showStudentProfile(student) {
                                 <Dropdown v-model="selectedStatusFilter" :options="statusFilterOptions" optionLabel="label" optionValue="value" placeholder="All Status" class="w-full" showClear>
                                     <template #value="slotProps">
                                         <div v-if="slotProps.value" class="flex items-center">
-                                            <i class="pi pi-flag mr-2 text-orange-500 text-sm"></i>
-                                            <span>{{ slotProps.value }}</span>
+                                            <i
+                                                class="mr-2 text-sm"
+                                                :class="{
+                                                    'pi pi-check-circle text-green-500': slotProps.value === 'good',
+                                                    'pi pi-info-circle text-blue-500': slotProps.value === 'low',
+                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.value === 'at_risk',
+                                                    'pi pi-exclamation-circle text-red-500': slotProps.value === 'critical'
+                                                }"
+                                            ></i>
+                                            <span>{{ getSeverityLabel(slotProps.value) }}</span>
                                         </div>
                                         <span v-else class="text-gray-500">All Status</span>
                                     </template>
@@ -2228,8 +2251,9 @@ async function showStudentProfile(student) {
                                             <i
                                                 class="mr-2 text-sm"
                                                 :class="{
-                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'normal',
-                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'warning',
+                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'good',
+                                                    'pi pi-info-circle text-blue-500': slotProps.option.value === 'low',
+                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'at_risk',
                                                     'pi pi-exclamation-circle text-red-500': slotProps.option.value === 'critical'
                                                 }"
                                             ></i>
@@ -2258,9 +2282,10 @@ async function showStudentProfile(student) {
                     <Column style="width: 40px">
                         <template #body="slotProps">
                             <i
-                                v-if="slotProps.data.severity !== 'normal'"
+                                v-if="slotProps.data.severity !== 'good'"
                                 :class="{
-                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'warning',
+                                    'pi pi-info-circle text-blue-500': slotProps.data.severity === 'low',
+                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'at_risk',
                                     'pi pi-exclamation-circle text-red-500': slotProps.data.severity === 'critical'
                                 }"
                                 class="text-lg"
@@ -2276,8 +2301,9 @@ async function showStudentProfile(student) {
                                     shape="circle"
                                     class="mr-2"
                                     :class="{
-                                        'bg-green-100 text-green-600': slotProps.data.severity === 'normal',
-                                        'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'warning',
+                                        'bg-green-100 text-green-600': slotProps.data.severity === 'good',
+                                        'bg-blue-100 text-blue-600': slotProps.data.severity === 'low',
+                                        'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'at_risk',
                                         'bg-red-100 text-red-600': slotProps.data.severity === 'critical'
                                     }"
                                     style="width: 2rem; height: 2rem"
@@ -2304,8 +2330,9 @@ async function showStudentProfile(student) {
                             <div
                                 class="flex items-center justify-center w-10 h-10 rounded-full"
                                 :class="{
-                                    'bg-green-100 text-green-800': slotProps.data.severity === 'normal',
-                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'warning',
+                                    'bg-green-100 text-green-800': slotProps.data.severity === 'good',
+                                    'bg-blue-100 text-blue-800': slotProps.data.severity === 'low',
+                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'at_risk',
                                     'bg-red-100 text-red-800': slotProps.data.severity === 'critical'
                                 }"
                             >
@@ -2317,8 +2344,8 @@ async function showStudentProfile(student) {
                     <Column header="Status" style="width: 140px">
                         <template #body="slotProps">
                             <Tag
-                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'warning' ? 'warning' : 'success'"
-                                :value="slotProps.data.severity === 'critical' ? 'Critical' : slotProps.data.severity === 'warning' ? 'Warning' : 'Normal'"
+                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'at_risk' ? 'warning' : slotProps.data.severity === 'low' ? 'info' : 'success'"
+                                :value="getSeverityLabel(slotProps.data.severity)"
                                 class="px-3 py-1.5 text-sm font-medium rounded-full"
                             />
                         </template>

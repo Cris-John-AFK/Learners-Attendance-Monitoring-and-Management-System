@@ -762,7 +762,7 @@ async function loadProgressData(student) {
                 if (studentRiskLevel === 'critical') {
                     concerns.push(`🚨 CRITICAL RISK: ${totalAbsences} total absences with ${selectedStudentForProgress.value?.recent_absences} recent absences`);
                 } else {
-                    concerns.push(`⚠️ AT RISK: ${totalAbsences} total absences - monitor closely`);
+                    concerns.push(`⚠️ HIGH RISK: ${totalAbsences} total absences - monitor closely`);
                 }
             } else if (totalAbsences >= 3) {
                 concerns.push(`📊 LOW RISK: ${totalAbsences} absences - early monitoring recommended`);
