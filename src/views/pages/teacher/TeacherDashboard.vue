@@ -82,9 +82,17 @@ const currentYear = ref(new Date().getFullYear());
 const calendarData = ref([]);
 const absentDays = ref([]);
 
-// Attendance threshold settings - Teacher-friendly
-const WARNING_THRESHOLD = 3; // Students missing 3-4 days need attention
-const CRITICAL_THRESHOLD = 5; // Students missing 5+ days need urgent action
+// Calendar subject filter (independent from main subject selection)
+const calendarSubjectFilter = ref(null);
+const calendarSubjectOptions = computed(() => {
+    // Only show actual subjects, no "All Subjects" option
+    return availableSubjects.value || [];
+});
+
+// Attendance threshold settings - Teacher-friendly (matches Attendance Insights)
+const LOW_RISK_THRESHOLD = 1; // Students missing 1-2 days - Low Risk
+const AT_RISK_THRESHOLD = 3; // Students missing 3-4 days - High Risk
+const CRITICAL_THRESHOLD = 5; // Students missing 5+ days - Critical Risk
 
 // Filter variables
 const selectedGradeFilter = ref(null);
@@ -96,9 +104,10 @@ const gradeFilterOptions = ref([]);
 
 const sectionFilterOptions = ref([]);
 const statusFilterOptions = ref([
-    { label: 'Normal', value: 'normal' },
-    { label: 'Warning', value: 'warning' },
-    { label: 'Critical', value: 'critical' }
+    { label: 'Normal', value: 'good' },
+    { label: 'Low Risk', value: 'low' },
+    { label: 'High Risk', value: 'at_risk' },
+    { label: 'Critical Risk', value: 'critical' }
 ]);
 
 // Filter options
@@ -366,14 +375,27 @@ function getFirstDayOfMonth() {
     return new Date(currentYear.value, currentMonth.value, 1).getDay();
 }
 
-// Calculate severity based on absence count
+// Calculate severity based on absence count (matches Attendance Insights EXACTLY)
 function calculateSeverity(absences) {
     if (absences >= CRITICAL_THRESHOLD) {
-        return 'critical';
-    } else if (absences >= WARNING_THRESHOLD) {
-        return 'warning';
+        return 'critical'; // 5+ absences = Critical Risk
+    } else if (absences >= AT_RISK_THRESHOLD) {
+        return 'at_risk'; // 3-4 absences = High Risk  
+    } else if (absences > 0) {
+        return 'low'; // 1-2 absences = Low Risk
     }
-    return 'normal';
+    return 'good'; // 0 absences = Normal (Perfect attendance)
+}
+
+// Get severity display label (matches Attendance Insights)
+function getSeverityLabel(severity) {
+    const labels = {
+        'critical': 'Critical Risk',
+        'at_risk': 'High Risk',
+        'low': 'Low Risk',
+        'good': 'Normal'
+    };
+    return labels[severity] || severity;
 }
 
 function handleCalendarDayClick(calDay) {
@@ -790,7 +812,7 @@ async function loadDepartmentalizedSubjectData(subjectId) {
         studentsWithAbsenceIssues.value = allStudents;
 
         // Calculate summary statistics
-        const warningCount = allStudents.filter((s) => s.severity === 'warning').length;
+        const warningCount = allStudents.filter((s) => s.severity === 'at_risk').length;
         const criticalCount = allStudents.filter((s) => s.severity === 'critical').length;
 
         attendanceSummary.value = {
@@ -866,8 +888,8 @@ async function loadSingleSectionData(sectionId, subjectId) {
         try {
             summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
                 period: 'week',
-                viewType: 'all_students',
-                subjectId: null
+                viewType: subjectId ? 'subject' : 'all_students', // Use 'subject' if subjectId exists
+                subjectId: subjectId // Pass the actual subject ID for filtering
             });
         } catch (err) {
             console.warn('⚠️ Summary API failed (non-critical):', err.message);
@@ -901,7 +923,7 @@ async function loadSingleSectionData(sectionId, subjectId) {
             }));
 
             // NOW calculate warning and critical counts from the processed student data
-            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length;
+            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk').length;
             const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
 
             // Set attendance summary with calculated counts
@@ -1100,13 +1122,13 @@ function analyzeAttendance(students, attendanceRecords) {
                 severity
             };
         })
-        .filter((student) => (showOnlyAbsenceIssues.value ? student.severity !== 'normal' : true))
+        .filter((student) => (showOnlyAbsenceIssues.value ? student.severity !== 'good' : true))
         .sort((a, b) => b.absences - a.absences); // Sort by absences (highest first)
 
     // Prepare attendance summary
     attendanceSummary.value = {
         totalStudents: students.length,
-        studentsWithWarning: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length,
+        studentsWithWarning: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk').length,
         studentsWithCritical: studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length,
         averageAttendance: calculateAverageAttendance(students.length, attendanceRecords)
     };
@@ -1427,6 +1449,9 @@ async function openStudentProfile(student) {
     // Load available subjects for this teacher
     profileAvailableSubjects.value = availableSubjects.value || [];
 
+    // Initialize calendar filter to currently selected subject
+    calendarSubjectFilter.value = selectedSubject.value?.id || null;
+
     await prepareCalendarData(student);
     studentProfileVisible.value = true;
 }
@@ -1436,6 +1461,88 @@ async function onProfileSubjectChange() {
     console.log('📚 Profile subject filter changed to:', profileSubjectFilter.value);
     if (selectedStudent.value) {
         await prepareCalendarData(selectedStudent.value);
+    }
+}
+
+// Handler for calendar subject filter change (independent filter)
+async function onCalendarSubjectChange() {
+    console.log('📅 Calendar subject filter changed to:', calendarSubjectFilter.value);
+    if (selectedStudent.value) {
+        await prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+    }
+}
+
+// Prepare calendar data with specific subject filter
+async function prepareCalendarDataForFilter(student, subjectId) {
+    if (!student) return;
+
+    // Generate calendar data for current month
+    const daysInMonth = new Date(currentYear.value, currentMonth.value + 1, 0).getDate();
+
+    // Initialize calendar data
+    calendarData.value = Array.from({ length: daysInMonth }, (_, i) => ({
+        date: new Date(currentYear.value, currentMonth.value, i + 1),
+        day: i + 1,
+        isAbsent: false,
+        status: null
+    }));
+
+    try {
+        // Get attendance records filtered by subject (null = all subjects)
+        const response = await StudentAttendanceService.getSubjectAttendanceRecords(
+            [student.id],
+            subjectId, // Use the calendar filter
+            currentMonth.value,
+            currentYear.value
+        );
+
+        const records = response.records || [];
+
+        // Find absent days
+        absentDays.value = records
+            .filter((record) => record.status === 'ABSENT' || record.status === 'EXCUSED' || record.status === 'LATE')
+            .map((record) => ({
+                date: new Date(record.date),
+                status: record.status,
+                time: record.time || 'N/A',
+                recordId: record.id,
+                reason: record.reason,
+                reason_notes: record.reason_notes,
+                reason_description: record.reason_description
+            }));
+
+        // Map attendance status to calendar
+        const statusPriority = {
+            ABSENT: 4,
+            EXCUSED: 3,
+            LATE: 2,
+            PRESENT: 1
+        };
+
+        const attendanceMap = {};
+        records.forEach((record) => {
+            const recordDate = new Date(record.date);
+            const day = recordDate.getDate();
+            const month = recordDate.getMonth();
+            const year = recordDate.getFullYear();
+
+            if (year === currentYear.value && month === currentMonth.value) {
+                const currentPriority = statusPriority[record.status] || 0;
+                const existingPriority = statusPriority[attendanceMap[day]] || 0;
+
+                if (currentPriority > existingPriority) {
+                    attendanceMap[day] = record.status;
+                }
+            }
+        });
+
+        // Update calendar data with attendance status
+        calendarData.value = calendarData.value.map((dayData) => ({
+            ...dayData,
+            status: attendanceMap[dayData.day] || null
+        }));
+    } catch (error) {
+        console.error('Error loading calendar data:', error);
     }
 }
 
@@ -1880,41 +1987,15 @@ async function showStudentProfile(student) {
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
-                        <div class="flex items-center mb-3">
+                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
+                        <div class="flex items-center">
                             <div class="mr-4 bg-green-100 p-3 rounded-lg">
                                 <i class="pi pi-check-circle text-green-600 text-xl"></i>
                             </div>
                             <div class="flex-1 p-2">
-                                <div class="text-sm text-gray-500 mb-1 font-medium">Average Attendance</div>
+                                <div class="text-sm text-gray-500 font-medium">Average Attendance</div>
                                 <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
                             </div>
-                        </div>
-                        <!-- Progress bar at bottom -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1 bg-gray-200 rounded-full h-2.5 mr-3">
-                                <div
-                                    class="h-2.5 rounded-full transition-all duration-500"
-                                    :class="{
-                                        'bg-green-500': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                        'bg-blue-500': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
-                                        'bg-yellow-500': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                        'bg-red-500': (attendanceSummary?.averageAttendance || 0) < 60
-                                    }"
-                                    :style="`width: ${attendanceSummary?.averageAttendance || 0}%`"
-                                ></div>
-                            </div>
-                            <span
-                                class="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
-                                :class="{
-                                    'bg-green-100 text-green-700': (attendanceSummary?.averageAttendance || 0) >= 85,
-                                    'bg-blue-100 text-blue-700': (attendanceSummary?.averageAttendance || 0) < 85 && (attendanceSummary?.averageAttendance || 0) >= 75,
-                                    'bg-yellow-100 text-yellow-700': (attendanceSummary?.averageAttendance || 0) < 75 && (attendanceSummary?.averageAttendance || 0) >= 60,
-                                    'bg-red-100 text-red-700': (attendanceSummary?.averageAttendance || 0) < 60
-                                }"
-                            >
-                                {{ (attendanceSummary?.averageAttendance || 0) >= 85 ? 'Excellent' : (attendanceSummary?.averageAttendance || 0) >= 75 ? 'Good' : (attendanceSummary?.averageAttendance || 0) >= 60 ? 'Fair' : 'Needs Attention' }}
-                            </span>
                         </div>
                     </div>
 
@@ -1923,7 +2004,7 @@ async function showStudentProfile(student) {
                             <i class="pi pi-exclamation-triangle text-yellow-600 text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-500 mb-1 font-medium">At Risk (3-4 absences)</div>
+                            <div class="text-sm text-gray-500 mb-1 font-medium">High Risk (3-4 absences)</div>
                             <div class="text-2xl font-bold">{{ attendanceSummary?.studentsWithWarning || 0 }}</div>
                         </div>
                     </div>
@@ -2065,10 +2146,18 @@ async function showStudentProfile(student) {
             <!-- Student List with Attendance Issues -->
             <div class="bg-white rounded-xl shadow-sm p-5">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                    <h2 class="text-lg font-semibold flex items-center">
-                        <i class="mr-2"></i>
-                        Student Attendance
-                    </h2>
+                    <div>
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i class="pi pi-users mr-2 text-blue-600"></i>
+                            Student Attendance Overview
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">
+                            <i class="pi pi-calendar mr-1"></i>
+                            Showing recent absence tracking (Last 30 Days)
+                            <span v-if="selectedSubject" class="ml-2"> • <i class="pi pi-book mr-1"></i>{{ selectedSubject.name }} </span>
+                            <span v-else-if="viewType === 'all_students'" class="ml-2"> • <i class="pi pi-globe mr-1"></i>All Subjects </span>
+                        </p>
+                    </div>
 
                     <div class="flex flex-col gap-4 mt-4 sm:mt-0">
                         <!-- Search Bar -->
@@ -2144,8 +2233,16 @@ async function showStudentProfile(student) {
                                 <Dropdown v-model="selectedStatusFilter" :options="statusFilterOptions" optionLabel="label" optionValue="value" placeholder="All Status" class="w-full" showClear>
                                     <template #value="slotProps">
                                         <div v-if="slotProps.value" class="flex items-center">
-                                            <i class="pi pi-flag mr-2 text-orange-500 text-sm"></i>
-                                            <span>{{ slotProps.value }}</span>
+                                            <i
+                                                class="mr-2 text-sm"
+                                                :class="{
+                                                    'pi pi-check-circle text-green-500': slotProps.value === 'good',
+                                                    'pi pi-info-circle text-blue-500': slotProps.value === 'low',
+                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.value === 'at_risk',
+                                                    'pi pi-exclamation-circle text-red-500': slotProps.value === 'critical'
+                                                }"
+                                            ></i>
+                                            <span>{{ getSeverityLabel(slotProps.value) }}</span>
                                         </div>
                                         <span v-else class="text-gray-500">All Status</span>
                                     </template>
@@ -2154,8 +2251,9 @@ async function showStudentProfile(student) {
                                             <i
                                                 class="mr-2 text-sm"
                                                 :class="{
-                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'normal',
-                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'warning',
+                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'good',
+                                                    'pi pi-info-circle text-blue-500': slotProps.option.value === 'low',
+                                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'at_risk',
                                                     'pi pi-exclamation-circle text-red-500': slotProps.option.value === 'critical'
                                                 }"
                                             ></i>
@@ -2184,9 +2282,10 @@ async function showStudentProfile(student) {
                     <Column style="width: 40px">
                         <template #body="slotProps">
                             <i
-                                v-if="slotProps.data.severity !== 'normal'"
+                                v-if="slotProps.data.severity !== 'good'"
                                 :class="{
-                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'warning',
+                                    'pi pi-info-circle text-blue-500': slotProps.data.severity === 'low',
+                                    'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'at_risk',
                                     'pi pi-exclamation-circle text-red-500': slotProps.data.severity === 'critical'
                                 }"
                                 class="text-lg"
@@ -2202,8 +2301,9 @@ async function showStudentProfile(student) {
                                     shape="circle"
                                     class="mr-2"
                                     :class="{
-                                        'bg-green-100 text-green-600': slotProps.data.severity === 'normal',
-                                        'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'warning',
+                                        'bg-green-100 text-green-600': slotProps.data.severity === 'good',
+                                        'bg-blue-100 text-blue-600': slotProps.data.severity === 'low',
+                                        'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'at_risk',
                                         'bg-red-100 text-red-600': slotProps.data.severity === 'critical'
                                     }"
                                     style="width: 2rem; height: 2rem"
@@ -2230,8 +2330,9 @@ async function showStudentProfile(student) {
                             <div
                                 class="flex items-center justify-center w-10 h-10 rounded-full"
                                 :class="{
-                                    'bg-green-100 text-green-800': slotProps.data.severity === 'normal',
-                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'warning',
+                                    'bg-green-100 text-green-800': slotProps.data.severity === 'good',
+                                    'bg-blue-100 text-blue-800': slotProps.data.severity === 'low',
+                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'at_risk',
                                     'bg-red-100 text-red-800': slotProps.data.severity === 'critical'
                                 }"
                             >
@@ -2243,16 +2344,16 @@ async function showStudentProfile(student) {
                     <Column header="Status" style="width: 140px">
                         <template #body="slotProps">
                             <Tag
-                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'warning' ? 'warning' : 'success'"
-                                :value="slotProps.data.severity === 'critical' ? 'Critical' : slotProps.data.severity === 'warning' ? 'Warning' : 'Normal'"
+                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'at_risk' ? 'warning' : slotProps.data.severity === 'low' ? 'info' : 'success'"
+                                :value="getSeverityLabel(slotProps.data.severity)"
                                 class="px-3 py-1.5 text-sm font-medium rounded-full"
                             />
                         </template>
                     </Column>
 
-                    <Column header="Actions" style="width: 100px">
+                    <Column header="Actions" style="width: 160px">
                         <template #body="slotProps">
-                            <Button icon="pi pi-eye" class="p-button-rounded p-button-text p-button-sm" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View student details'" />
+                            <Button icon="pi pi-calendar" label="View Details" class="p-button-sm p-button-info" @click="openStudentProfile(slotProps.data)" v-tooltip.top="'View attendance calendar & history'" />
                         </template>
                     </Column>
                 </DataTable>
@@ -2342,18 +2443,8 @@ async function showStudentProfile(student) {
                     </div>
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2">
-                            <label for="profile-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
-                            <Dropdown
-                                id="profile-subject-filter"
-                                v-model="profileSubjectFilter"
-                                :options="profileAvailableSubjects"
-                                optionLabel="name"
-                                optionValue="id"
-                                placeholder="All Subjects"
-                                @change="onProfileSubjectChange"
-                                showClear
-                                style="min-width: 150px"
-                            />
+                            <label for="calendar-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
+                            <Dropdown id="calendar-subject-filter" v-model="calendarSubjectFilter" :options="calendarSubjectOptions" optionLabel="name" optionValue="id" placeholder="Select Subject" @change="onCalendarSubjectChange" class="w-48" />
                         </div>
                     </div>
                 </div>

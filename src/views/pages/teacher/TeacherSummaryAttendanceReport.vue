@@ -5,10 +5,41 @@
             <div class="flex items-center gap-4">
                 <h2 class="text-xl font-bold text-gray-800">Summary Attendance Report</h2>
             </div>
-            <div class="flex items-center gap-3">
-                <!-- Date Range Selector -->
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Quarter Selector (User-Friendly for Elderly Teachers) -->
+                <div class="flex items-center gap-2 border-2 border-blue-400 rounded-lg px-4 py-3 bg-blue-50 shadow-sm">
+                    <i class="pi pi-calendar text-blue-600 text-lg"></i>
+                    <label class="text-base font-bold text-blue-900">School Quarter:</label>
+                    <Dropdown 
+                        v-model="selectedQuarter" 
+                        :options="quarters" 
+                        optionLabel="label" 
+                        placeholder="Choose Quarter"
+                        @change="onQuarterChange"
+                        class="w-64"
+                    >
+                        <template #value="slotProps">
+                            <div v-if="slotProps.value" class="flex items-center gap-2">
+                                <i class="pi pi-book text-blue-600"></i>
+                                <span class="font-semibold text-sm">{{ slotProps.value.label }}</span>
+                            </div>
+                            <span v-else class="text-gray-500">{{ slotProps.placeholder }}</span>
+                        </template>
+                        <template #option="slotProps">
+                            <div class="flex items-center gap-2 p-2 hover:bg-blue-50">
+                                <i class="pi pi-calendar text-blue-600"></i>
+                                <div>
+                                    <div class="font-semibold text-sm">{{ slotProps.option.label }}</div>
+                                    <div class="text-xs text-gray-600">{{ slotProps.option.dateRange }}</div>
+                                </div>
+                            </div>
+                        </template>
+                    </Dropdown>
+                </div>
+                
+                <!-- OR Custom Date Range -->
                 <div class="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2 bg-gray-50">
-                    <label class="text-sm font-medium text-gray-700">From:</label>
+                    <label class="text-sm font-bold text-gray-700">📅 From:</label>
                     <Calendar 
                         v-model="startDate" 
                         dateFormat="mm/dd/yy" 
@@ -17,8 +48,8 @@
                         class="w-40"
                         showIcon
                     />
-                    <span class="text-gray-500">-</span>
-                    <label class="text-sm font-medium text-gray-700">To:</label>
+                    <span class="text-gray-500 font-bold">to</span>
+                    <label class="text-sm font-bold text-gray-700">📅 To:</label>
                     <Calendar 
                         v-model="endDate" 
                         dateFormat="mm/dd/yy" 
@@ -28,7 +59,7 @@
                         showIcon
                     />
                 </div>
-                <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
+
             </div>
         </div>
 
@@ -57,11 +88,11 @@
                     </div>
                     <div class="info-field">
                         <label>Grade Level:</label>
-                        <input type="text" value="Kinder" class="input-compact" readonly />
+                        <input type="text" :value="gradeLevel" class="input-compact" readonly />
                     </div>
                     <div class="info-field">
                         <label>Section:</label>
-                        <input type="text" value="Malikhain" class="input-compact" readonly />
+                        <input type="text" :value="sectionName" class="input-compact" readonly />
                     </div>
                 </div>
             </div>
@@ -150,23 +181,61 @@
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { useRoute } from 'vue-router';
+import Calendar from 'primevue/calendar';
+import Dropdown from 'primevue/dropdown';
+import Button from 'primevue/button';
 import axios from 'axios';
+import TeacherAuthService from '@/services/TeacherAuthService';
 
 const route = useRoute();
 const toast = useToast();
 
-// Get section ID from route params or use hardcoded default
-// TODO: In production, this should come from a section selector or route param
-const sectionId = ref(route.params.sectionId || route.query.sectionId || 1); // Default to section ID 1
+// Get section ID from teacher's data
+const sectionId = ref(null); // Will be loaded from teacher authentication
 const teacherSections = ref([]);
 
 const reportData = ref(null);
 const loading = ref(false);
 const selectedMonth = ref(null); // Will be set when user selects dates
+const selectedQuarter = ref(null);
+const sectionName = ref('Loading...');
+const gradeLevel = ref('Loading...');
 
-// Date range for filtering - start empty
-const startDate = ref(null);
-const endDate = ref(null);
+// DepEd School Year 2025-2026 Quarters (Official Calendar)
+const quarters = ref([
+    {
+        label: '1st Quarter',
+        value: 'Q1',
+        dateRange: 'June 24 - August 29, 2025',
+        startDate: new Date(2025, 5, 24), // June 24, 2025
+        endDate: new Date(2025, 7, 29)    // August 29, 2025
+    },
+    {
+        label: '2nd Quarter',
+        value: 'Q2',
+        dateRange: 'September 1 - November 7, 2025',
+        startDate: new Date(2025, 8, 1),  // September 1, 2025
+        endDate: new Date(2025, 10, 7)    // November 7, 2025
+    },
+    {
+        label: '3rd Quarter',
+        value: 'Q3',
+        dateRange: 'November 10 - January 30, 2026',
+        startDate: new Date(2025, 10, 10), // November 10, 2025
+        endDate: new Date(2026, 0, 30)     // January 30, 2026
+    },
+    {
+        label: '4th Quarter',
+        value: 'Q4',
+        dateRange: 'February 2 - April 10, 2026',
+        startDate: new Date(2026, 1, 2),   // February 2, 2026
+        endDate: new Date(2026, 3, 10)     // April 10, 2026
+    }
+]);
+
+// Date range for filtering - default to First Quarter
+const startDate = ref(new Date(2025, 5, 24)); // June 24, 2025
+const endDate = ref(new Date(2025, 7, 29));   // August 29, 2025
 
 // Computed properties using SF2 Report data structure
 const students = computed(() => {
@@ -296,38 +365,127 @@ const fetchTeacherSections = async () => {
     }
 };
 
-// Load SF2 report data (same as SF2 Report page)
+// Load SF2 report data for ALL months in the selected date range
 const loadAttendanceData = async () => {
     loading.value = true;
     console.log('🔄 Loading attendance data...');
     console.log('Current sectionId:', sectionId.value);
-    console.log('Selected month:', selectedMonth.value);
+    console.log('Date range:', startDate.value, 'to', endDate.value);
     
     try {
-        // Section ID is already set (hardcoded or from route)
         console.log('🎯 Using section ID:', sectionId.value);
         
-        const monthStr = selectedMonth.value.toISOString().slice(0, 7); // YYYY-MM format
-        const apiUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`;
-        console.log('🌐 API URL:', apiUrl);
+        // Get all months in the date range
+        const months = [];
+        const start = new Date(startDate.value);
+        const end = new Date(endDate.value);
         
-        const response = await axios.get(apiUrl);
-        console.log('📦 API Response:', response.data);
+        let current = new Date(start.getFullYear(), start.getMonth(), 1);
+        const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
         
-        if (response.data.success) {
-            reportData.value = response.data.data;
-            console.log('📊 Summary Attendance: Loaded SF2 data:', response.data.data);
-            console.log('👥 Students count:', response.data.data.students?.length || 0);
-        } else {
-            throw new Error(response.data.message || 'Failed to load report data');
+        while (current <= endMonth) {
+            months.push({
+                year: current.getFullYear(),
+                month: current.getMonth() + 1,
+                monthStr: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`
+            });
+            current.setMonth(current.getMonth() + 1);
         }
+        
+        console.log('📅 Loading data for months:', months.map(m => m.monthStr).join(', '));
+        
+        // Load data for all months and merge
+        const allStudentsMap = new Map();
+        const allDays = [];
+        let sectionData = null;
+        
+        for (const monthInfo of months) {
+            try {
+                const apiUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId.value}/${monthInfo.monthStr}`;
+                console.log('🌐 Loading:', apiUrl);
+                
+                const response = await axios.get(apiUrl);
+                
+                if (response.data.success) {
+                    const data = response.data.data;
+                    
+                    // Store section data (same for all months)
+                    if (!sectionData) {
+                        sectionData = data.section;
+                    }
+                    
+                    // Merge days
+                    allDays.push(...data.days_in_month);
+                    
+                    // Merge student data
+                    data.students.forEach(student => {
+                        const studentId = student.id; // API returns 'id', not 'student_id'
+                        
+                        if (!allStudentsMap.has(studentId)) {
+                            // Create new student entry with their attendance data
+                            allStudentsMap.set(studentId, {
+                                ...student,
+                                attendance_data: { ...student.attendance_data } // Copy attendance data
+                            });
+                        } else {
+                            // Merge attendance data for existing student
+                            const existingStudent = allStudentsMap.get(studentId);
+                            Object.assign(existingStudent.attendance_data, student.attendance_data);
+                        }
+                    });
+                }
+            } catch (monthError) {
+                console.warn(`⚠️ Could not load data for ${monthInfo.monthStr}:`, monthError.message);
+            }
+        }
+        
+        // Build final report data with remarks for dropped out/transferred students
+        const studentsWithRemarks = Array.from(allStudentsMap.values()).map(student => {
+            let remarks = '';
+            
+            // Generate remarks based on enrollment status
+            if (student.enrollment_status === 'dropped_out') {
+                remarks = student.dropout_reason 
+                    ? `Dropped Out: ${student.dropout_reason}` 
+                    : 'Dropped Out';
+            } else if (student.enrollment_status === 'transferred_out') {
+                remarks = student.dropout_reason 
+                    ? `Transferred Out: ${student.dropout_reason}` 
+                    : 'Transferred Out';
+            } else if (student.enrollment_status === 'withdrawn') {
+                remarks = student.dropout_reason 
+                    ? `Withdrawn: ${student.dropout_reason}` 
+                    : 'Withdrawn';
+            }
+            
+            return {
+                ...student,
+                remarks: remarks || student.remarks || '-'
+            };
+        });
+        
+        reportData.value = {
+            section: sectionData,
+            month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+            month_name: `${start.toLocaleString('default', { month: 'long' })} ${start.getFullYear()} - ${end.toLocaleString('default', { month: 'long' })} ${end.getFullYear()}`,
+            students: studentsWithRemarks,
+            days_in_month: allDays,
+            summary: {
+                total_students: allStudentsMap.size,
+                total_days: allDays.length
+            }
+        };
+        
+        console.log('📊 Loaded attendance data for', months.length, 'months');
+        console.log('👥 Total students:', allStudentsMap.size);
+        console.log('📅 Total days:', allDays.length);
+        
     } catch (error) {
-        console.error('❌ Error loading SF2 report:', error);
-        console.error('Error details:', error.response?.data || error.message);
+        console.error('❌ Error loading attendance data:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: error.response?.data?.message || error.message || 'Failed to load attendance data',
+            detail: error.message || 'Failed to load attendance data',
             life: 3000
         });
     } finally {
@@ -386,9 +544,98 @@ const onDateRangeChange = () => {
     }
 };
 
-onMounted(() => {
-    console.log('🚀 Component mounted. Waiting for user to select dates...');
-    // Don't auto-load - wait for user to select dates
+// Quarter change handler
+const onQuarterChange = () => {
+    if (selectedQuarter.value) {
+        startDate.value = selectedQuarter.value.startDate;
+        endDate.value = selectedQuarter.value.endDate;
+        selectedMonth.value = new Date(selectedQuarter.value.startDate);
+        
+        toast.add({
+            severity: 'info',
+            summary: '📚 Quarter Selected',
+            detail: `Loading ${selectedQuarter.value.label} data (${selectedQuarter.value.dateRange})`,
+            life: 3000
+        });
+        
+        loadAttendanceData();
+    }
+};
+
+onMounted(async () => {
+    console.log('🚀 Component mounted. Loading teacher data...');
+    
+    // Get teacher's section ID from authentication
+    const teacherData = TeacherAuthService.getTeacherData();
+    console.log('👨‍🏫 Teacher data:', teacherData);
+    
+    // Try to get section from teacher.homeroom_section first, then from assignments
+    let homeroomSection = null;
+    
+    if (teacherData?.teacher?.homeroom_section) {
+        homeroomSection = teacherData.teacher.homeroom_section;
+        console.log('✅ Found homeroom section in teacher object:', homeroomSection);
+    } else if (teacherData?.assignments && teacherData.assignments.length > 0) {
+        // Find homeroom assignment (subject_id is null)
+        const homeroomAssignment = teacherData.assignments.find(a => a.subject_id === null || a.subject_name === 'Homeroom');
+        if (homeroomAssignment && homeroomAssignment.section) {
+            homeroomSection = homeroomAssignment.section;
+            console.log('✅ Found homeroom section in assignments:', homeroomSection);
+        }
+    }
+    
+    if (homeroomSection) {
+        sectionId.value = homeroomSection.id;
+        sectionName.value = homeroomSection.name || 'Unknown Section';
+        
+        // Extract grade_level - it might be nested in a grade object or directly available
+        if (homeroomSection.grade_level) {
+            gradeLevel.value = homeroomSection.grade_level;
+        } else if (homeroomSection.grade && homeroomSection.grade.name) {
+            gradeLevel.value = homeroomSection.grade.name;
+        } else if (homeroomSection.grade && homeroomSection.grade.grade_name) {
+            gradeLevel.value = homeroomSection.grade.grade_name;
+        } else {
+            gradeLevel.value = 'Unknown Grade';
+        }
+        
+        console.log('✅ Teacher section loaded:', {
+            id: sectionId.value,
+            name: sectionName.value,
+            grade: gradeLevel.value,
+            rawSection: homeroomSection
+        });
+        
+        // Set default to First Quarter
+        selectedQuarter.value = quarters.value[0];
+        selectedMonth.value = new Date(2025, 5, 24); // June 24, 2025
+        
+        // Auto-load First Quarter data
+        toast.add({
+            severity: 'success',
+            summary: '✅ Ready',
+            detail: `Loading 1st Quarter attendance for ${sectionName.value}...`,
+            life: 3000
+        });
+        
+        loadAttendanceData();
+    } else {
+        console.error('❌ No homeroom section found in teacher data');
+        console.log('Available data:', {
+            teacher: teacherData?.teacher,
+            assignments: teacherData?.assignments
+        });
+        
+        sectionName.value = 'No Section';
+        gradeLevel.value = 'N/A';
+        
+        toast.add({
+            severity: 'error',
+            summary: '❌ Error',
+            detail: 'Could not load your homeroom section. Please contact administrator.',
+            life: 5000
+        });
+    }
 });
 </script>
 
