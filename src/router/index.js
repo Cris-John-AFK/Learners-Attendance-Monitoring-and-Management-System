@@ -173,7 +173,7 @@ const router = createRouter({
                 {
                     path: '/admin-guardhouse-reports',
                     name: 'admin-guardhouse-reports',
-                    component: () => import('@/views/pages/admin/GuardHouseReports.vue')
+                    component: () => import('@/views/pages/Admin/GuardHouseReports.vue')
                 },
                 {
                     path: '/admin-school-calendar',
