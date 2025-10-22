@@ -168,7 +168,31 @@
         </div>
         <!-- Close report-card -->
 
-        <!-- Student Details Dialog - SF2 Style -->
+        <!-- Student Details Dialog - SF2 Style with Floating Navigation -->
+        <div v-if="showDetailsDialog" class="dialog-wrapper">
+            <!-- Floating Previous Button with Label -->
+            <div v-if="hasPreviousStudent" class="floating-nav-container floating-nav-left">
+                <Button 
+                    icon="pi pi-chevron-left" 
+                    @click="navigateToPreviousStudent" 
+                    class="floating-nav-btn p-button-rounded p-button-primary" 
+                    aria-label="Previous Student"
+                />
+                <span class="floating-nav-label">Previous<br/>Student</span>
+            </div>
+
+            <!-- Floating Next Button with Label -->
+            <div v-if="hasNextStudent" class="floating-nav-container floating-nav-right">
+                <Button 
+                    icon="pi pi-chevron-right" 
+                    @click="navigateToNextStudent" 
+                    class="floating-nav-btn p-button-rounded p-button-primary" 
+                    aria-label="Next Student"
+                />
+                <span class="floating-nav-label">Next<br/>Student</span>
+            </div>
+        </div>
+
         <Dialog v-model:visible="showDetailsDialog" :modal="true" :closable="false" :style="{ width: '90vw', maxWidth: '1200px' }" class="no-print sf2-dialog" @show="attachNavigationListeners" @hide="detachNavigationListeners">
             <template #header>
                 <div class="w-full">
@@ -179,7 +203,6 @@
                         </div>
                         <div class="flex-grow text-center">
                             <h3 class="text-lg font-bold m-0 text-gray-800">Student Attendance Report of Learners</h3>
-                            <p class="text-xs text-gray-600 italic m-0">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
                         </div>
                         <div class="flex-shrink-0">
                             <img src="/demo/images/deped-logo.png" alt="DepEd Logo" style="width: 60px; height: 60px" />
@@ -328,15 +351,19 @@
             </div>
 
             <template #footer>
-                <div class="flex justify-between items-center w-full mb-3">
-                    <Button label="Previous Student" icon="pi pi-chevron-left" @click="navigateToPreviousStudent" :disabled="!hasPreviousStudent" class="p-button-outlined p-button-secondary" />
-                    <span class="text-sm text-gray-600"> Student {{ currentStudentIndex + 1 }} of {{ students.length }} </span>
-                    <Button label="Next Student" icon="pi pi-chevron-right" iconPos="right" @click="navigateToNextStudent" :disabled="!hasNextStudent" class="p-button-outlined p-button-secondary" />
-                </div>
-                <div class="flex justify-center items-center gap-3 w-full">
-                    <Button label="Print This Student" icon="pi pi-print" @click="printCurrentStudent" class="p-button-success" />
-                    <Button label="Print All Students" icon="pi pi-file" @click="printAllStudents" class="p-button-info" />
-                    <Button label="Close" icon="pi pi-times" @click="showDetailsDialog = false" class="p-button-text" />
+                <!-- Clean Footer with Centered Actions -->
+                <div class="flex flex-col items-center gap-3 w-full">
+                    <!-- Student Counter -->
+                    <div class="text-center">
+                        <span class="text-sm font-semibold text-gray-700">Student {{ currentStudentIndex + 1 }} of {{ students.length }}</span>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-center items-center gap-3">
+                        <Button label="Print This Student" icon="pi pi-print" @click="printCurrentStudent" class="p-button-success" />
+                        <Button label="Print All Students" icon="pi pi-file" @click="printAllStudents" class="p-button-info" />
+                        <Button label="Close" icon="pi pi-times" @click="showDetailsDialog = false" class="p-button-secondary" />
+                    </div>
                 </div>
             </template>
         </Dialog>
@@ -757,43 +784,19 @@ const handleKeyDown = (event) => {
     }
 };
 
-// Handle mouse wheel navigation
-const handleWheel = (event) => {
-    // Only navigate if scrolling at the edges of the dialog content
-    const dialogContent = event.currentTarget;
-    const isAtTop = dialogContent.scrollTop === 0;
-    const isAtBottom = dialogContent.scrollHeight - dialogContent.scrollTop === dialogContent.clientHeight;
-
-    if (event.deltaY < 0 && isAtTop) {
-        // Scrolling up at the top - go to previous student
-        event.preventDefault();
-        navigateToPreviousStudent();
-    } else if (event.deltaY > 0 && isAtBottom) {
-        // Scrolling down at the bottom - go to next student
-        event.preventDefault();
-        navigateToNextStudent();
-    }
-};
+// Mouse wheel navigation REMOVED - users found it confusing
+// Now only keyboard arrows and floating buttons work
 
 // Attach event listeners when dialog opens
 const attachNavigationListeners = () => {
     document.addEventListener('keydown', handleKeyDown);
-    // Find the dialog content element and attach wheel listener
-    setTimeout(() => {
-        const dialogContent = document.querySelector('.sf2-dialog .p-dialog-content');
-        if (dialogContent) {
-            dialogContent.addEventListener('wheel', handleWheel, { passive: false });
-        }
-    }, 100);
+    // Wheel navigation removed - only keyboard arrows work now
 };
 
 // Detach event listeners when dialog closes
 const detachNavigationListeners = () => {
     document.removeEventListener('keydown', handleKeyDown);
-    const dialogContent = document.querySelector('.sf2-dialog .p-dialog-content');
-    if (dialogContent) {
-        dialogContent.removeEventListener('wheel', handleWheel);
-    }
+    // Wheel listener removed
 };
 
 // Get daily attendance for a specific student
@@ -894,7 +897,7 @@ const printCurrentStudent = () => {
                 <h2>Student Attendance Report of Learners</h2>
                 <img src="/demo/images/deped-logo.png" alt="DepEd" />
             </div>
-            
+
             <div class="info-grid">
                 <div class="info-field">
                     <label>Student Name:</label>
@@ -921,7 +924,7 @@ const printCurrentStudent = () => {
                     <input type="text" value="${sectionName.value}" readonly />
                 </div>
             </div>
-            
+
             <div class="student-info">
                 <div>
                     <label style="font-size: 10px; font-weight: bold;">Student Name</label>
@@ -940,7 +943,7 @@ const printCurrentStudent = () => {
                     <p style="margin: 0; font-size: 12px;">${studentData.enrollment_status || 'active'}</p>
                 </div>
             </div>
-            
+
             <table>
                 <thead>
                     <tr>
@@ -965,7 +968,7 @@ const printCurrentStudent = () => {
                         .join('')}
                 </tbody>
             </table>
-            
+
             <div class="summary">
                 <div class="summary-card" style="border-color: #28a745;">
                     <h4>Present</h4>
@@ -1033,7 +1036,7 @@ const printAllStudents = () => {
                     <h2>Student Attendance Report of Learners</h2>
                     <img src="/demo/images/deped-logo.png" alt="DepEd" />
                 </div>
-                
+
                 <div class="info-grid">
                     <div class="info-field">
                         <label>Student Name:</label>
@@ -1060,7 +1063,7 @@ const printAllStudents = () => {
                         <input type="text" value="${sectionName.value}" readonly />
                     </div>
                 </div>
-                
+
                 <div class="student-info">
                     <div>
                         <label style="font-size: 10px; font-weight: bold;">Student Name</label>
@@ -1079,7 +1082,7 @@ const printAllStudents = () => {
                         <p style="margin: 0; font-size: 12px;">${student.enrollment_status || 'active'}</p>
                     </div>
                 </div>
-                
+
                 <table>
                     <thead>
                         <tr>
@@ -1104,7 +1107,7 @@ const printAllStudents = () => {
                             .join('')}
                     </tbody>
                 </table>
-                
+
                 <div class="summary">
                     <div class="summary-card" style="border-color: #28a745;">
                         <h4>Present</h4>
@@ -1314,6 +1317,78 @@ onMounted(async () => {
     min-height: 100vh;
     background-color: #f8fafc;
     padding: 1rem;
+}
+
+/* Floating Navigation Buttons Wrapper */
+.dialog-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999 !important; /* Higher than dialog (1100) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dialog-wrapper .floating-nav-container {
+    pointer-events: auto !important;
+    position: absolute !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.dialog-wrapper .floating-nav-btn {
+    width: 56px !important;
+    height: 56px !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.3s ease !important;
+}
+
+.dialog-wrapper .floating-nav-btn:hover {
+    transform: scale(1.1) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dialog-wrapper .floating-nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+    text-align: center;
+    line-height: 1.3;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+}
+
+.dialog-wrapper .floating-nav-left {
+    left: calc(50% - 670px) !important;
+}
+
+.dialog-wrapper .floating-nav-right {
+    right: calc(50% - 670px) !important;
+}
+
+/* Ensure buttons are visible on smaller screens */
+@media (max-width: 1400px) {
+    .dialog-wrapper .floating-nav-left {
+        left: 10px !important;
+    }
+
+    .dialog-wrapper .floating-nav-right {
+        right: 10px !important;
+    }
+}
+
+/* Make sure dialog doesn't cover buttons */
+:deep(.sf2-dialog) {
+    z-index: 1100 !important;
 }
 
 .report-card {

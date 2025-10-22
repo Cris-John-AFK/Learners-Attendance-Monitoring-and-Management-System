@@ -265,7 +265,8 @@ export class AttendanceRecordsService {
                 id: student.id,
                 name: student.name || `${student.firstName} ${student.lastName}`,
                 gradeLevel: student.gradeLevel,
-                section: student.section?.name || 'Unknown'
+                section: student.section?.name || 'Unknown',
+                enrollment_status: student.enrollment_status || 'Active'
             };
 
             // Add attendance data for each date

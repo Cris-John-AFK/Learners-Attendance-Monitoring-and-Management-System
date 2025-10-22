@@ -27,19 +27,20 @@ class SimpleSF2Controller extends Controller
                 'teacher_id' => $teacherId
             ]);
 
-            // Get section info with grade name
+            // Get section info directly (no joins needed)
             $section = DB::table('sections')
-                ->join('curriculum_grades', 'sections.curriculum_grade_id', '=', 'curriculum_grades.id')
-                ->join('grades', 'curriculum_grades.grade_id', '=', 'grades.id')
-                ->where('sections.id', $sectionId)
-                ->select('sections.*', 'grades.name as grade_name')
+                ->where('id', $sectionId)
                 ->first();
+                
             if (!$section) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Section not found'
                 ], 404);
             }
+            
+            // Use section's grade_level field directly
+            $gradeName = $section->grade_level ?? 'Grade 1';
 
             // Get teacher info
             $teacher = DB::table('teachers')->where('id', $teacherId)->first();
@@ -82,7 +83,7 @@ class SimpleSF2Controller extends Controller
                 $submissionId = DB::table('submitted_sf2_reports')->insertGetId([
                     'section_id' => $sectionId,
                     'section_name' => $section->name,
-                    'grade_level' => $section->grade_name ?? 'Grade 1',
+                    'grade_level' => $gradeName,
                     'month' => $month,
                     'month_name' => $monthName,
                     'report_type' => 'SF2',
@@ -109,7 +110,7 @@ class SimpleSF2Controller extends Controller
                 'data' => [
                     'submission_id' => $submissionId,
                     'section_name' => $section->name,
-                    'grade_level' => $section->grade_name ?? 'Grade 1',
+                    'grade_level' => $gradeName,
                     'month' => $monthName,
                     'teacher_name' => $teacherName,
                     'status' => 'submitted',
