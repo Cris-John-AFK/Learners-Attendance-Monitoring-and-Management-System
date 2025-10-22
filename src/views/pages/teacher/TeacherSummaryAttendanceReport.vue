@@ -83,22 +83,26 @@
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">No.</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-left font-bold">Learner's Name<br />(Last Name, First Name, Middle Name)</th>
                             <th colspan="4" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Summary</th>
-                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Rate</th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">
+                                Attendance Rate<br />
+                                <span class="text-xs font-normal text-gray-600">(Out of {{ schoolDays }} sessions)</span>
+                            </th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Remarks</th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold no-print">Actions</th>
                         </tr>
                         <tr>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Present</th>
-                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Late</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Excused</th>
                         </tr>
                     </thead>
                     <tbody v-if="!loading && students.length > 0">
                         <!-- Male Students -->
                         <tr>
-                            <td colspan="8" class="border-2 border-gray-900 bg-blue-100 p-2 font-bold text-sm">MALE STUDENTS</td>
+                            <td colspan="9" class="border-2 border-gray-900 bg-blue-100 p-2 font-bold text-sm">MALE STUDENTS</td>
                         </tr>
-                        <tr v-for="(student, index) in maleStudents" :key="student.id" @click="showStudentDetails(student)" class="cursor-pointer hover:bg-blue-50 transition-colors">
+                        <tr v-for="(student, index) in maleStudents" :key="student.id" class="hover:bg-blue-50 transition-colors">
                             <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
                             <td class="border border-gray-900 p-2 text-sm">
                                 <div class="flex items-center gap-2">
@@ -107,19 +111,28 @@
                                 </div>
                             </td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100))">
-                                {{ Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100) }}%
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)">
+                                {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
+                            <td class="border border-gray-900 p-2 text-center no-print">
+                                <Button 
+                                    icon="pi pi-eye" 
+                                    label="View Details" 
+                                    @click="showStudentDetails(student)" 
+                                    class="p-button-sm p-button-info"
+                                    v-tooltip.top="'View detailed attendance report'"
+                                />
+                            </td>
                         </tr>
                         <!-- Female Students -->
                         <tr>
-                            <td colspan="8" class="border-2 border-gray-900 bg-pink-100 p-2 font-bold text-sm">FEMALE STUDENTS</td>
+                            <td colspan="9" class="border-2 border-gray-900 bg-pink-100 p-2 font-bold text-sm">FEMALE STUDENTS</td>
                         </tr>
-                        <tr v-for="(student, index) in femaleStudents" :key="student.id" @click="showStudentDetails(student)" class="cursor-pointer hover:bg-pink-50 transition-colors">
+                        <tr v-for="(student, index) in femaleStudents" :key="student.id" class="hover:bg-pink-50 transition-colors">
                             <td class="border border-gray-900 p-2 text-center text-sm">{{ index + 1 }}</td>
                             <td class="border border-gray-900 p-2 text-sm">
                                 <div class="flex items-center gap-2">
@@ -128,13 +141,22 @@
                                 </div>
                             </td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100))">
-                                {{ Math.round((calculateStudentTotal(student, 'present') / schoolDays) * 100) }}%
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)">
+                                {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
+                            <td class="border border-gray-900 p-2 text-center no-print">
+                                <Button 
+                                    icon="pi pi-eye" 
+                                    label="View Details" 
+                                    @click="showStudentDetails(student)" 
+                                    class="p-button-sm p-button-info"
+                                    v-tooltip.top="'View detailed attendance report'"
+                                />
+                            </td>
                         </tr>
                         <!-- Total Row -->
                         <tr class="bg-gray-100">
@@ -145,11 +167,12 @@
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalExcused }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ averageAttendanceRate }}%</td>
                             <td class="border-2 border-gray-900 p-1"></td>
+                            <td class="border-2 border-gray-900 p-1 no-print"></td>
                         </tr>
                     </tbody>
                     <tbody v-else-if="!loading && students.length === 0">
                         <tr>
-                            <td colspan="10" class="border border-gray-900 p-8 text-center text-gray-500">
+                            <td colspan="9" class="border border-gray-900 p-8 text-center text-gray-500">
                                 <i class="pi pi-info-circle text-4xl mb-2"></i>
                                 <p>No student data available</p>
                             </td>
@@ -157,7 +180,7 @@
                     </tbody>
                     <tbody v-else>
                         <tr>
-                            <td colspan="10" class="border border-gray-900 p-8 text-center">
+                            <td colspan="9" class="border border-gray-900 p-8 text-center">
                                 <ProgressSpinner style="width: 40px; height: 40px" strokeWidth="6" />
                                 <p class="mt-2 text-gray-600">Loading data...</p>
                             </td>
@@ -259,7 +282,7 @@
                         </div>
                         <div class="border-r border-gray-400 p-2">
                             <label class="text-xs font-semibold text-gray-600 block">Attendance Rate</label>
-                            <p class="text-sm font-bold text-green-700 m-0">{{ Math.round((calculateStudentTotal(selectedStudent, 'present') / schoolDays) * 100) }}%</p>
+                            <p class="text-sm font-bold text-green-700 m-0">{{ schoolDays > 0 ? Math.round(((calculateStudentTotal(selectedStudent, 'present') + calculateStudentTotal(selectedStudent, 'late')) / schoolDays) * 100) : 0 }}%</p>
                         </div>
                         <div class="p-2">
                             <label class="text-xs font-semibold text-gray-600 block">Status</label>
@@ -454,24 +477,33 @@ const femaleStudents = computed(() => {
 });
 
 const schoolDays = computed(() => {
-    if (!reportData.value?.days_in_month) return 0;
+    if (!reportData.value?.students || reportData.value.students.length === 0) return 0;
     if (!startDate.value || !endDate.value) return 0;
 
     const start = new Date(startDate.value);
-    start.setHours(0, 0, 0, 0); // Reset time to start of day
+    start.setHours(0, 0, 0, 0);
     const end = new Date(endDate.value);
-    end.setHours(23, 59, 59, 999); // Set time to end of day
+    end.setHours(23, 59, 59, 999);
 
-    // Count only days within the selected date range
-    let count = 0;
-    reportData.value.days_in_month.forEach((day) => {
-        const dayDate = new Date(day.date);
-        dayDate.setHours(0, 0, 0, 0); // Reset time for comparison
-        if (dayDate >= start && dayDate <= end) {
-            count++;
+    // Count unique dates where ANY student has attendance data (sessions were recorded)
+    const sessionDates = new Set();
+    
+    reportData.value.students.forEach((student) => {
+        if (student.attendance_data) {
+            Object.keys(student.attendance_data).forEach((dateStr) => {
+                const dayDate = new Date(dateStr);
+                dayDate.setHours(0, 0, 0, 0);
+                
+                // Only count if within date range and has a status
+                if (dayDate >= start && dayDate <= end && student.attendance_data[dateStr]) {
+                    sessionDates.add(dateStr);
+                }
+            });
         }
     });
-    console.log(`📅 School days in range: ${count}`);
+
+    const count = sessionDates.size;
+    console.log(`📅 Attendance sessions recorded: ${count}`);
     return count;
 });
 
@@ -675,13 +707,37 @@ const loadAttendanceData = async () => {
         const studentsWithRemarks = Array.from(allStudentsMap.values()).map((student) => {
             let remarks = '';
 
+            // Reason code mapping (DepEd guidelines)
+            const reasonMap = {
+                a1: 'a.1 Had to take care of siblings',
+                a2: 'a.2 Early marriage/pregnancy',
+                a3: "a.3 Parents' attitude toward schooling",
+                a4: 'a.4 Family problems',
+                b1: 'b.1 Illness',
+                b2: 'b.2 Disease',
+                b3: 'b.3 Disability',
+                b4: 'b.4 Death',
+                c1: 'c.1 Lack of personal interest',
+                c2: 'c.2 Employment/Job',
+                c3: 'c.3 Got married',
+                d1: 'd.1 Distance of school from home',
+                d2: 'd.2 High cost of education',
+                d3: 'd.3 Family income is insufficient',
+                e1: 'e.1 Transferred to another school',
+                e2: 'e.2 Moved to another place',
+                f1: 'f.1 Others (Specify)'
+            };
+
             // Generate remarks based on enrollment status
             if (student.enrollment_status === 'dropped_out') {
-                remarks = student.dropout_reason ? `Dropped Out: ${student.dropout_reason}` : 'Dropped Out';
+                const reasonText = student.dropout_reason ? reasonMap[student.dropout_reason] || student.dropout_reason : '';
+                remarks = reasonText ? `Dropped Out: ${reasonText}` : 'Dropped Out';
             } else if (student.enrollment_status === 'transferred_out') {
-                remarks = student.dropout_reason ? `Transferred Out: ${student.dropout_reason}` : 'Transferred Out';
+                const reasonText = student.dropout_reason ? reasonMap[student.dropout_reason] || student.dropout_reason : '';
+                remarks = reasonText ? `Transferred Out: ${reasonText}` : 'Transferred Out';
             } else if (student.enrollment_status === 'withdrawn') {
-                remarks = student.dropout_reason ? `Withdrawn: ${student.dropout_reason}` : 'Withdrawn';
+                const reasonText = student.dropout_reason ? reasonMap[student.dropout_reason] || student.dropout_reason : '';
+                remarks = reasonText ? `Withdrawn: ${reasonText}` : 'Withdrawn';
             }
 
             return {

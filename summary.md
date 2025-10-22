@@ -586,6 +586,132 @@ async function loadSingleSectionData(sectionId, subjectId) {
      - ✅ Professional appearance
    - **Now**: SF2 modal has floating navigation buttons and clean footer design
 
+21. **Added Actions Column to Summary Attendance Report** (COMPLETED):
+   - **Issue**: No clear way to view individual student details from the summary table
+   - **User Request**: "Make it more user friendly - add indication where to print each student's summary"
+   - **Solution**: Added "Actions" column with "View Details" button for each student
+   - **Changes**:
+     - Added 9th column header "Actions" (no-print class)
+     - Each student row now has a blue "View Details" button with eye icon
+     - Button opens the SF2 modal with detailed attendance report
+     - Tooltip shows "View detailed attendance report" on hover
+     - Removed row click handler (was confusing)
+     - Actions column hidden when printing
+   - **Benefits**:
+     - ✅ Clear call-to-action for each student
+     - ✅ Easy to find and print individual reports
+     - ✅ Better UX - explicit buttons instead of hidden click
+     - ✅ Tooltip provides guidance
+     - ✅ Professional appearance
+   - **Now**: Teachers can easily view and print each student's detailed SF2 report
+
+22. **Added Reason Code Descriptions to Remarks Column** (COMPLETED):
+   - **Issue**: Remarks showed cryptic codes like "Dropped Out: a1" without explanation
+   - **User Request**: "Include description for codes like a1 (death or something)"
+   - **Solution**: Added DepEd-compliant reason code mapping
+   - **Reason Codes Mapped**:
+     - **a1-a4**: Family reasons (siblings, marriage, parents' attitude, family problems)
+     - **b1-b4**: Health reasons (illness, disease, disability, death)
+     - **c1-c3**: Personal reasons (lack of interest, employment, marriage)
+     - **d1-d3**: Economic reasons (distance, cost, insufficient income)
+     - **e1-e2**: Transfer reasons (another school, moved)
+     - **f1**: Others (specify)
+   - **Example Transformations**:
+     - `a1` → `a.1 Had to take care of siblings`
+     - `b4` → `b.4 Death`
+     - `e1` → `e.1 Transferred to another school`
+   - **Benefits**:
+     - ✅ Clear, human-readable remarks
+     - ✅ DepEd-compliant reason codes
+     - ✅ Better understanding of student status
+     - ✅ Professional documentation
+   - **Now**: Remarks show full descriptions like "Dropped Out: a.1 Had to take care of siblings"
+
+23. **Added Sessions Count to Attendance Rate Header** (COMPLETED):
+   - **Issue**: Attendance Rate column didn't show context for the percentage
+   - **Instructor Recommendation**: "Put days based - like out of 100 days, 55 absence"
+   - **User Clarification**: "Count actual sessions recorded, not calendar days"
+   - **Solution**: Count unique dates where attendance sessions were recorded
+   - **Implementation**:
+     ```javascript
+     // Count unique dates where ANY student has attendance data
+     const sessionDates = new Set();
+     reportData.value.students.forEach((student) => {
+         if (student.attendance_data) {
+             Object.keys(student.attendance_data).forEach((dateStr) => {
+                 if (withinDateRange && hasStatus) {
+                     sessionDates.add(dateStr);
+                 }
+             });
+         }
+     });
+     return sessionDates.size;
+     ```
+   - **Example Display**:
+     ```
+     Attendance Rate
+     (Out of 5 sessions)
+     ```
+   - **Benefits**:
+     - ✅ Accurate count of actual attendance sessions
+     - ✅ Not counting days without sessions
+     - ✅ Clear context for percentages
+     - ✅ Better understanding of attendance data
+   - **Now**: Header shows "Attendance Rate (Out of X sessions)" where X = actual recorded sessions
+
+24. **Fixed NaN% Display When No Sessions Exist** (COMPLETED):
+   - **Issue**: When no sessions were recorded, attendance rate showed "NaN%"
+   - **Root Cause**: Division by zero (0 present / 0 sessions = NaN)
+   - **Solution**: Added conditional check before calculating percentage
+   - **Implementation**:
+     ```vue
+     {{ schoolDays > 0 ? Math.round((present / schoolDays) * 100) : 0 }}%
+     ```
+   - **Fixed Locations**:
+     - Male students table rows
+     - Female students table rows
+     - SF2 modal student info box
+   - **Benefits**:
+     - ✅ Shows "0%" instead of "NaN%"
+     - ✅ Clean, professional display
+     - ✅ No JavaScript errors
+     - ✅ Handles edge cases gracefully
+   - **Now**: When no sessions exist, shows "0%" instead of "NaN%"
+
+25. **Swapped Absent and Late Columns & Included Late in Attendance Rate** (COMPLETED):
+   - **Issue**: Column order was confusing, and Late students weren't counted as present in attendance rate
+   - **User Request**: "Exchange absent and late columns, and late should count as present!"
+   - **Changes Made**:
+     1. **Column Order Changed**:
+        - **Before**: Present | Absent | Late | Excused
+        - **After**: Present | Late | Absent | Excused
+     2. **Attendance Rate Formula Updated**:
+        - **Before**: `(Present / Sessions) * 100`
+        - **After**: `((Present + Late) / Sessions) * 100`
+   - **Rationale**: Late students are still present, just tardy
+   - **Implementation**:
+     ```javascript
+     // Old formula
+     Math.round((present / schoolDays) * 100)
+     
+     // New formula - includes late
+     Math.round(((present + late) / schoolDays) * 100)
+     ```
+   - **Updated Locations**:
+     - Male students table
+     - Female students table
+     - SF2 modal student info box
+   - **Example**:
+     - Student: 2 Present, 1 Late, 2 Absent (5 sessions total)
+     - **Old rate**: 2/5 = 40%
+     - **New rate**: (2+1)/5 = 60% ✅
+   - **Benefits**:
+     - ✅ More logical column order
+     - ✅ Accurate attendance calculation
+     - ✅ Late students properly counted
+     - ✅ Better reflects actual attendance
+   - **Now**: Late students count toward attendance rate, columns reordered
+
 ---
 
 ### **October 18-19, 2025 - Attendance Insights Smart Analytics & Complete Status Label System Overhaul** ✅
