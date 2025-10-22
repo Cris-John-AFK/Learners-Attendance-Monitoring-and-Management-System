@@ -297,11 +297,14 @@ const initializeAttendanceSession = async () => {
                 console.log('- Today date (UTC):', todayUTC);
                 console.log('- Is today?', isToday);
 
-                if (isToday) {
+                if (isToday && !isEditMode.value) {
+                    // Only auto-restore if not in edit mode
                     currentSession.value = matchingSession;
                     sessionActive.value = true;
                     console.log('Found active session from today:', matchingSession);
                     console.log('Session details - ID:', matchingSession.id, 'Date:', matchingSession.session_date, 'Status:', matchingSession.status);
+                } else if (isToday && isEditMode.value) {
+                    console.log('⏭️ Skipping session restoration - user is in edit mode');
                 } else {
                     console.log('Found old active session from', sessionDate.toDateString(), '- not resuming');
                     // Optionally auto-complete old sessions
@@ -411,13 +414,14 @@ const preloadData = async () => {
 
 // Function to load students data with caching
 const loadStudentsData = async () => {
-    // Prevent duplicate calls
+    // 🚀 PERFORMANCE: Prevent duplicate calls
     if (isLoadingStudents.value) {
-        console.log('Students already loading, skipping duplicate call');
+        console.log('⏸️ Students already loading, skipping duplicate call');
         return;
     }
 
     try {
+        // Set loading flag at the start
         isLoadingStudents.value = true;
 
         // Check cache first
@@ -443,10 +447,10 @@ const loadStudentsData = async () => {
 
             return true;
         }
-
+        
         console.log('🔄 Loading students from database...');
-
-        // Show loading animation
+        
+        // Set loading animation flags
         isLoadingSeating.value = true;
         loadingMessage.value = 'Loading students and seating arrangement...';
 
@@ -1282,7 +1286,23 @@ const autoCompleteSession = async () => {
     try {
         console.log('Auto-completing session - all students scanned');
 
-        // Close QR scanner first
+        // 🚨 CRITICAL FIX: Update seat plan with QR scan results BEFORE completing session
+        if (qrScanResults.value.length > 0) {
+            console.log('🎯 Transferring QR scan results to seat plan before session completion');
+            qrScanResults.value.forEach((result) => {
+                const seat = findSeatByStudentId(result.studentId);
+                if (seat) {
+                    seat.status = result.status;
+                    console.log(`✅ Updated seat for ${result.name}: ${result.status}`);
+                } else {
+                    console.warn(`⚠️ No seat found for student ${result.name} (ID: ${result.studentId})`);
+                }
+            });
+            // Force reactivity update
+            seatPlan.value = [...seatPlan.value];
+        }
+
+        // Close QR scanner UI
         showQRScanner.value = false;
         isScanning.value = false;
 
@@ -1301,10 +1321,22 @@ const autoCompleteSession = async () => {
         sessionCompletionProgress.value = 10;
         await new Promise((resolve) => setTimeout(resolve, 800));
 
-        // Step 2: Start API call
+        // Step 2: Send seat plan data to backend (skip if already saved)
         sessionCompletionProgress.value = 25;
+        console.log('📤 [AUTO-COMPLETE] Sending seat plan attendance to backend...');
+        try {
+            await AttendanceSessionService.markSeatPlanAttendance(
+                currentSession.value.id,
+                seatPlan.value,
+                attendanceStatuses.value
+            );
+            console.log('✅ [AUTO-COMPLETE] Attendance data sent successfully');
+        } catch (error) {
+            console.warn('⚠️ [AUTO-COMPLETE] Attendance already saved, skipping...', error.message);
+        }
         await new Promise((resolve) => setTimeout(resolve, 600));
 
+        // Step 3: Complete session
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
 
         // Step 3: Process response
@@ -2300,6 +2332,22 @@ const completeAttendanceSession = async () => {
         return;
     }
 
+    // 🚨 CRITICAL FIX: Update seat plan with QR scan results BEFORE completing session
+    if (qrScanResults.value.length > 0) {
+        console.log('🎯 Transferring QR scan results to seat plan before session completion');
+        qrScanResults.value.forEach((result) => {
+            const seat = findSeatByStudentId(result.studentId);
+            if (seat) {
+                seat.status = result.status;
+                console.log(`✅ Updated seat for ${result.name}: ${result.status}`);
+            } else {
+                console.warn(`⚠️ No seat found for student ${result.name} (ID: ${result.studentId})`);
+            }
+        });
+        // Force reactivity update
+        seatPlan.value = [...seatPlan.value];
+    }
+
     // Start loading animation
     isCompletingSession.value = true;
     sessionCompletionProgress.value = 0;
@@ -2316,10 +2364,22 @@ const completeAttendanceSession = async () => {
         sessionCompletionProgress.value = 10;
         await new Promise((resolve) => setTimeout(resolve, 800));
 
-        // Step 2: Start API call
+        // Step 2: Send seat plan data to backend (skip if already saved)
         sessionCompletionProgress.value = 25;
+        console.log('📤 [COMPLETE] Sending seat plan attendance to backend...');
+        try {
+            await AttendanceSessionService.markSeatPlanAttendance(
+                currentSession.value.id,
+                seatPlan.value,
+                attendanceStatuses.value
+            );
+            console.log('✅ [COMPLETE] Attendance data sent successfully');
+        } catch (error) {
+            console.warn('⚠️ [COMPLETE] Attendance already saved, skipping...', error.message);
+        }
         await new Promise((resolve) => setTimeout(resolve, 600));
 
+        // Step 3: Complete session
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
 
         // Step 3: Process response
@@ -2808,23 +2868,22 @@ const initializeComponent = async () => {
 
         // Skip subject info setting since it's already done
 
-        // Load students data in background (non-blocking)
-        loadStudentsData().then(() => {
-            // Clear any existing interval first
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
-            }
+        // 🚀 PERFORMANCE: Students already loaded in onMounted, skip duplicate call
+        // Set up auto-refresh interval (students already loaded)
+        // Clear any existing interval first
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
 
-            // Set up auto-refresh after initial load (much less frequent)
-            refreshInterval = setInterval(async () => {
-                console.log('Auto-refreshing student data...');
-                // Only refresh if not currently loading to prevent conflicts
-                if (!isLoadingSeating.value) {
-                    await loadStudentsData();
-                }
-            }, 300000); // Refresh every 5 minutes instead of 30 seconds
-        });
+        // Set up auto-refresh after initial load (much less frequent)
+        refreshInterval = setInterval(async () => {
+            console.log('Auto-refreshing student data...');
+            // Only refresh if not currently loading to prevent conflicts
+            if (!isLoadingSeating.value && !isLoadingStudents.value) {
+                await loadStudentsData();
+            }
+        }, 300000); // Refresh every 5 minutes instead of 30 seconds
 
         // Only initialize empty seat plan if no students are loaded yet
         if (students.value.length === 0) {
@@ -3589,12 +3648,15 @@ const cancelAttendanceSession = async () => {
             showQRScanner.value = false;
         }
 
-        // Cancel session on backend if it exists
+        // Mark session as completed on backend (cancel endpoint doesn't exist)
         if (currentSession.value?.id) {
             try {
-                await AttendanceSessionService.cancelSession(currentSession.value.id);
+                // Use complete endpoint to mark session as finished
+                await AttendanceSessionService.completeSession(currentSession.value.id);
+                console.log('✅ Session marked as completed in database');
             } catch (error) {
-                console.warn('Backend cancel not available, proceeding with frontend cleanup:', error);
+                console.warn('Could not update session status in database:', error);
+                // Continue with frontend cleanup anyway
             }
         }
 
@@ -3762,10 +3824,14 @@ const onQRDecode = async (decodedText) => {
 
         console.log('Found student:', student);
         console.log('Debug - Extracted ID:', extractedStudentId);
-        console.log(
-            'Debug - Available student IDs:',
-            students.value.map((s) => ({ id: s.id, studentId: s.studentId, student_id: s.student_id }))
-        );
+        const availableIds = students.value.map((s) => ({ 
+            id: s.id, 
+            studentId: s.studentId, 
+            student_id: s.student_id,
+            name: s.name 
+        }));
+        console.log('Debug - Available student IDs:', availableIds);
+        console.log('Debug - Total students loaded:', students.value.length);
 
         if (student) {
             // Check if already scanned
@@ -3906,7 +3972,23 @@ const testQRDetection = async () => {
 
 const completeQRSession = async () => {
     try {
-        // Close QR scanner first
+        // 🚨 CRITICAL FIX: Update seat plan with QR scan results BEFORE completing session
+        if (qrScanResults.value.length > 0) {
+            console.log('🎯 Transferring QR scan results to seat plan before session completion');
+            qrScanResults.value.forEach((result) => {
+                const seat = findSeatByStudentId(result.studentId);
+                if (seat) {
+                    seat.status = result.status;
+                    console.log(`✅ Updated seat for ${result.name}: ${result.status}`);
+                } else {
+                    console.warn(`⚠️ No seat found for student ${result.name} (ID: ${result.studentId})`);
+                }
+            });
+            // Force reactivity update
+            seatPlan.value = [...seatPlan.value];
+        }
+
+        // Close QR scanner UI
         showQRScanner.value = false;
 
         // Start loading animation (same as seating plan method)
@@ -3924,10 +4006,23 @@ const completeQRSession = async () => {
         sessionCompletionProgress.value = 10;
         await new Promise((resolve) => setTimeout(resolve, 800));
 
-        // Step 2: Start API call
+        // Step 2: Send seat plan data to backend (skip if already saved via QR)
         sessionCompletionProgress.value = 25;
+        console.log('📤 [QR-COMPLETE] Sending seat plan attendance to backend...');
+        try {
+            await AttendanceSessionService.markSeatPlanAttendance(
+                currentSession.value.id,
+                seatPlan.value,
+                attendanceStatuses.value
+            );
+            console.log('✅ [QR-COMPLETE] Attendance data sent successfully');
+        } catch (error) {
+            console.warn('⚠️ [QR-COMPLETE] Seat plan attendance already saved via QR scans, skipping...', error.message);
+            // Continue anyway - data is already in backend from QR scans
+        }
         await new Promise((resolve) => setTimeout(resolve, 600));
 
+        // Step 3: Complete session
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
 
         // Step 3: Process response
@@ -4259,10 +4354,22 @@ const processQRCode = async (qrData) => {
 
 // Helper function to find seat by student ID
 const findSeatByStudentId = (studentId) => {
+    // Normalize the search ID to handle both numeric and string formats
+    const searchId = studentId?.toString();
+    
     for (let i = 0; i < seatPlan.value.length; i++) {
         for (let j = 0; j < seatPlan.value[i].length; j++) {
-            if (seatPlan.value[i][j].studentId === studentId) {
-                return seatPlan.value[i][j];
+            const seat = seatPlan.value[i][j];
+            const seatStudentId = seat.studentId?.toString();
+            
+            // Match if:
+            // 1. Exact match (e.g., "3237" === "3237" or "NCS-2025-03237" === "NCS-2025-03237")
+            // 2. Numeric ID matches the end of prefixed ID (e.g., "3237" matches "NCS-2025-03237")
+            // 3. Prefixed ID ends with the numeric ID (e.g., "NCS-2025-03237" ends with "3237")
+            if (seatStudentId === searchId || 
+                seatStudentId?.endsWith(searchId) || 
+                searchId?.endsWith(seatStudentId)) {
+                return seat;
             }
         }
     }
@@ -4836,62 +4943,57 @@ const titleRef = ref(null);
             </div>
         </div>
 
-        <!-- Action Buttons -->
+        <!-- Action Buttons - Smart Contextual Display -->
         <div class="action-buttons flex flex-wrap gap-2 mb-4">
-            <Button icon="pi pi-pencil" label="Edit Seats" class="p-button-success" :class="{ 'p-button-outlined': !isEditMode }" @click="toggleEditMode" :disabled="sessionActive" />
+            <!-- EDIT MODE BUTTONS - Only show when NOT in session -->
+            <template v-if="!sessionActive">
+                <Button icon="pi pi-pencil" label="Edit Seats" class="p-button-success" :class="{ 'p-button-outlined': !isEditMode }" @click="toggleEditMode" />
 
-            <!-- Auto Assignment with Options -->
-            <div class="auto-assign-container">
-                <Button icon="pi pi-users" label="Auto Assign Students" class="p-button-info" @click="showAssignmentOptions = !showAssignmentOptions" :disabled="sessionActive || !isEditMode" />
-
-                <!-- Assignment Options Overlay -->
-                <div v-if="showAssignmentOptions" class="assignment-options-overlay">
-                    <div class="assignment-options-panel">
-                        <h4 class="mb-3">Choose Assignment Method</h4>
-
-                        <div class="assignment-methods">
-                            <div v-for="method in assignmentMethods" :key="method.value" class="assignment-method-item" @click="autoAssignStudents(method.value)">
-                                <i :class="method.icon" class="method-icon"></i>
-                                <span class="method-label">{{ method.label }}</span>
+                <!-- Auto Assignment - Only in Edit Mode -->
+                <div v-if="isEditMode" class="auto-assign-container">
+                    <Button icon="pi pi-users" label="Auto Assign" class="p-button-info" @click="showAssignmentOptions = !showAssignmentOptions" />
+                    <div v-if="showAssignmentOptions" class="assignment-options-overlay">
+                        <div class="assignment-options-panel">
+                            <h4 class="mb-3">Choose Assignment Method</h4>
+                            <div class="assignment-methods">
+                                <div v-for="method in assignmentMethods" :key="method.value" class="assignment-method-item" @click="autoAssignStudents(method.value)">
+                                    <i :class="method.icon" class="method-icon"></i>
+                                    <span class="method-label">{{ method.label }}</span>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="assignment-options-footer">
-                            <Button label="Cancel" class="p-button-text p-button-sm" @click="showAssignmentOptions = false" />
+                            <div class="assignment-options-footer">
+                                <Button label="Cancel" class="p-button-text p-button-sm" @click="showAssignmentOptions = false" />
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <Button icon="pi pi-save" label="Save as Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" :disabled="sessionActive" />
+                <Button v-if="isEditMode" icon="pi pi-save" label="Save Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" />
+                <Button v-if="isEditMode" icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
 
-            <Button icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" :disabled="sessionActive" />
+                <!-- Start Session - Only when NOT editing -->
+                <Button v-if="!isEditMode" icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" />
+                <Button v-if="!isEditMode" icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
+            </template>
 
-            <Button icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" v-if="!sessionActive" :disabled="isEditMode" />
-
-            <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession || !sessionActive" />
-
-            <!-- Change Method button - shows when session is active -->
-            <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" v-if="sessionActive" :disabled="isCompletingSession" />
-
-            <!-- Reopen Scanner button - only shows when QR session is active but scanner is closed -->
-            <Button icon="pi pi-qrcode" label="Reopen Scanner" class="p-button-info" @click="reopenQRScanner" v-if="sessionActive && attendanceMethod === 'qr' && !showQRScanner" :disabled="isCompletingSession" />
-
-            <!-- Cancel Session button - shows when session is active -->
-            <Button icon="pi pi-times" label="Cancel Session" class="p-button-danger p-button-outlined" @click="cancelAttendanceSession" v-if="sessionActive" :disabled="isCompletingSession" />
-
-            <Button
-                :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
-                :label="isCompletingSession ? 'Completing...' : 'Complete Session'"
-                class="p-button-warning"
-                @click="completeAttendanceSession"
-                v-if="sessionActive"
-                :disabled="isCompletingSession"
-            />
-
-            <Button icon="pi pi-refresh" label="Reset Attendance" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession || !sessionActive || isEditMode" />
-
-            <Button icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" :disabled="sessionActive || isEditMode" />
+            <!-- ACTIVE SESSION BUTTONS - Only show during session -->
+            <template v-if="sessionActive">
+                <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
+                <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" :disabled="isCompletingSession" />
+                
+                <!-- QR Scanner specific -->
+                <Button v-if="attendanceMethod === 'qr' && !showQRScanner" icon="pi pi-qrcode" label="Reopen Scanner" class="p-button-info" @click="reopenQRScanner" :disabled="isCompletingSession" />
+                
+                <Button icon="pi pi-refresh" label="Reset" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession" />
+                <Button
+                    :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
+                    :label="isCompletingSession ? 'Completing...' : 'Complete Session'"
+                    class="p-button-warning"
+                    @click="completeAttendanceSession"
+                    :disabled="isCompletingSession"
+                />
+                <Button icon="pi pi-times" label="Cancel Session" class="p-button-danger p-button-outlined" @click="cancelAttendanceSession" :disabled="isCompletingSession" />
+            </template>
         </div>
 
         <!-- Main content with seat plan - always visible -->

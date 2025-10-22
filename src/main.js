@@ -23,6 +23,8 @@ import ToastService from 'primevue/toastservice';
 import VCalendar from 'v-calendar';
 import 'v-calendar/style.css';
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import App from './App.vue';
 import CustomDialog from './components/CustomDialog.vue';
 import router from './router';
@@ -30,6 +32,11 @@ import TeacherAuthService from './services/TeacherAuthService';
 
 const app = createApp(App);
 
+// Initialize Pinia for state management
+const pinia = createPinia();
+pinia.use(piniaPluginPersistedstate);
+
+app.use(pinia); // Register Pinia BEFORE other plugins
 app.use(VCalendar, {});
 app.use(router);
 app.use(PrimeVue, {

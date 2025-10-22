@@ -59,8 +59,9 @@ class StudentManagementController extends Controller
             }
 
             // Get students assigned to this section through the pivot table
+            // Include ALL students (active and inactive) for attendance records
             $section = Section::findOrFail($sectionId);
-            $students = $section->activeStudents()->get();
+            $students = $section->students()->get(); // Changed from activeStudents() to students()
 
             Log::info("Found students for section", [
                 'section_id' => $sectionId,
@@ -81,6 +82,7 @@ class StudentManagementController extends Controller
                         'gender' => $student->gender,
                         'qrCode' => $student->qr_code_path ?? $student->qr_code,
                         'status' => $student->status ?? 'active',
+                        'enrollment_status' => $student->enrollment_status ?? $student->status ?? 'Active', // Add enrollment_status
                         'enrollmentDate' => $student->created_at ? $student->created_at->format('Y-m-d') : null
                     ];
                 }),

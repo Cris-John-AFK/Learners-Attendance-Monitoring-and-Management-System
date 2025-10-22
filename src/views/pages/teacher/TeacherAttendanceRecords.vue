@@ -104,12 +104,20 @@ const loading = ref(true);
 const isLoading = ref(false);
 const quickRangeLoading = ref(false);
 let loadingTimeout = null;
+let isInitializing = true; // Flag to prevent watcher from firing during initialization
+// Simple in-memory cache for API responses (5 minute TTL)
+const apiCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const searchQuery = ref('');
 const attendanceRecords = ref([]);
 const subjects = ref([]);
 const selectedSubject = ref(null);
-const startDate = ref(new Date(new Date().setDate(1))); // First day of current month
-const endDate = ref(new Date()); // Today
+// Default to last 7 days for faster loading (instead of full month)
+const today = new Date();
+const sevenDaysAgo = new Date(today);
+sevenDaysAgo.setDate(today.getDate() - 6); // Last 7 days including today
+const startDate = ref(sevenDaysAgo);
+const endDate = ref(today);
 const showOnlyIssues = ref(false);
 const showStudentDialog = ref(false);
 const selectedStudentDetails = ref(null);
@@ -328,6 +336,18 @@ const loadAttendanceRecords = async () => {
         return;
     }
 
+    // Create cache key
+    const cacheKey = `attendance_${selectedSection.value.id}_${selectedSubject.value?.id || 'all'}_${startDate.value.toISOString().split('T')[0]}_${endDate.value.toISOString().split('T')[0]}`;
+
+    // Check cache first
+    const cached = apiCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log('✅ Using cached attendance data (age:', Math.round((Date.now() - cached.timestamp) / 1000), 'seconds)');
+        students.value = cached.data;
+        isLoading.value = false;
+        return;
+    }
+
     isLoading.value = true;
 
     try {
@@ -338,6 +358,7 @@ const loadAttendanceRecords = async () => {
         try {
             studentsResponse = await AttendanceRecordsService.getStudentsInSection(selectedSection.value.id, teacherId.value);
             console.log('Students response:', studentsResponse);
+            console.log('First student data structure:', studentsResponse.students?.[0]);
         } catch (error) {
             console.error('Student management endpoint failed:', error);
             // Try alternative endpoint - use TeacherAttendanceService
@@ -350,7 +371,8 @@ const loadAttendanceRecords = async () => {
                             name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
                             firstName: student.first_name || student.firstName || '',
                             lastName: student.last_name || student.lastName || '',
-                            gradeLevel: student.gradeLevel || 'K'
+                            gradeLevel: student.gradeLevel || 'K',
+                            enrollment_status: student.enrollment_status || student.status || 'Active'
                         }))
                     };
                     console.log('Alternative students response:', studentsResponse);
@@ -411,6 +433,13 @@ const loadAttendanceRecords = async () => {
         console.log('Transformed students data:', students.value);
         console.log('Date range used:', dateRange);
         console.log('Sample student data for debugging:', students.value[0]);
+
+        // Cache the result for future use
+        apiCache.set(cacheKey, {
+            data: students.value,
+            timestamp: Date.now()
+        });
+        console.log('💾 Cached attendance data for', dateRange.length, 'days');
 
         if (students.value.length === 0) {
             toast.add({
@@ -879,16 +908,6 @@ const initializeComponent = async () => {
 
         console.log('Loading data for teacher ID:', teacherId.value);
 
-        // First, let's check what teachers exist in the database
-        console.log('Checking available teachers...');
-        const teachersResponse = await axios.get('http://127.0.0.1:8000/api/teachers');
-        console.log('Available teachers:', teachersResponse.data);
-
-        // Check what sections exist
-        console.log('Checking available sections...');
-        const sectionsResponse = await axios.get('http://127.0.0.1:8000/api/sections');
-        console.log('Available sections:', sectionsResponse.data);
-
         // Use caching service for better performance
         try {
             console.log(`Loading cached data for teacher ID: ${teacherId.value}`);
@@ -1065,6 +1084,10 @@ const initializeComponent = async () => {
         if (selectedSection.value && selectedSubject.value) {
             await loadAttendanceRecords();
         }
+
+        // Mark initialization as complete - allow watchers to fire now
+        isInitializing = false;
+        console.log('✅ Component initialization complete, watchers enabled');
     } catch (error) {
         console.error('Error loading teacher data:', error);
         toast.add({
@@ -1073,6 +1096,7 @@ const initializeComponent = async () => {
             detail: 'Failed to load teacher assignments',
             life: 3000
         });
+        isInitializing = false; // Enable watchers even on error
     } finally {
         loading.value = false;
     }
@@ -1080,8 +1104,8 @@ const initializeComponent = async () => {
 
 // Load teacher data and sections on component mount
 onMounted(() => {
-    // Clear cache to ensure fresh data on page load
-    AttendanceRecordsService.cache.clear();
+    // Don't clear cache - use in-memory cache for faster loads
+    // Users can manually refresh if they need fresh data
     initializeComponent();
 });
 
@@ -1104,32 +1128,37 @@ const loadAvailableDates = async () => {
     }
 };
 
-// Watch for changes in section, subject or date range
-watch([selectedSection, selectedSubject, startDate, endDate], async () => {
-    if (selectedSection.value && selectedSubject.value) {
+// CONSOLIDATED WATCHER: Single debounced watcher to prevent duplicate API calls
+// Watches section, subject, and date range changes
+watch([selectedSection, selectedSubject, startDate, endDate], async (newValues, oldValues) => {
+    // Skip if component is still initializing
+    if (isInitializing) {
+        console.log('⏭️ Skipping watcher during initialization');
+        return;
+    }
+
+    // Clear any pending timeout
+    if (loadingTimeout) clearTimeout(loadingTimeout);
+
+    // Only proceed if we have required data
+    if (!selectedSection.value || !selectedSubject.value) {
+        return;
+    }
+
+    // Log what changed for debugging
+    const [newSection, newSubject, newStart, newEnd] = newValues;
+    const [oldSection, oldSubject, oldStart, oldEnd] = oldValues || [];
+
+    if (newSubject !== oldSubject) {
+        console.log('Subject changed to:', newSubject?.name);
+    }
+
+    // Debounce the API calls to prevent rapid-fire requests
+    loadingTimeout = setTimeout(async () => {
+        console.log('🔄 Loading attendance data (debounced)...');
         await loadAvailableDates();
         await loadAttendanceRecords();
-    }
-});
-
-// Watch specifically for subject changes to reload data immediately
-watch(selectedSubject, async (newSubject, oldSubject) => {
-    if (newSubject && selectedSection.value && newSubject !== oldSubject) {
-        console.log('Subject changed to:', newSubject.name);
-        // Add small delay to prevent multiple rapid calls
-        if (loadingTimeout) clearTimeout(loadingTimeout);
-        loadingTimeout = setTimeout(async () => {
-            await loadAttendanceRecords();
-        }, 300);
-    }
-});
-
-// Watch for date changes to reload attendance records
-watch([startDate, endDate, selectedSubject], () => {
-    if (selectedSection.value) {
-        loadAttendanceRecords();
-        loadAvailableDates();
-    }
+    }, 300); // 300ms debounce delay
 });
 
 // Helper functions for status display
@@ -1322,6 +1351,17 @@ const formatDate = (dateString) => {
     });
 };
 
+// Format enrollment status for display (capitalize and clean up)
+const formatEnrollmentStatus = (status) => {
+    if (!status) return 'Active';
+
+    // Convert to title case and replace underscores with spaces
+    return status
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+};
+
 // Function to view student details
 const viewStudentDetails = (student) => {
     selectedStudentDetails.value = {
@@ -1477,6 +1517,12 @@ const openSF2Report = () => {
                     </div>
                     <span class="text-sm">No Data</span>
                 </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">
+                        <i class="pi pi-ban text-white text-xs"></i>
+                    </div>
+                    <span class="text-sm">Inactive Student</span>
+                </div>
             </div>
         </div>
 
@@ -1559,9 +1605,12 @@ const openSF2Report = () => {
                 </template>
             </Column>
             <Column field="id" header="ID" :sortable="true" style="width: 80px"></Column>
-            <Column field="status" header="Status" :sortable="true" style="width: 120px">
+            <Column field="status" header="Status" :sortable="true" style="width: 150px">
                 <template #body="slotProps">
-                    <Tag :value="getOverallStatus(slotProps.data)" :severity="getStatusSeverity(getOverallStatus(slotProps.data))" />
+                    <!-- Show formatted enrollment status if student is not Active (case-insensitive) -->
+                    <Tag v-if="slotProps.data.enrollment_status && slotProps.data.enrollment_status.toLowerCase() !== 'active'" :value="formatEnrollmentStatus(slotProps.data.enrollment_status)" severity="secondary" class="text-xs" />
+                    <!-- Otherwise show attendance status -->
+                    <Tag v-else :value="getOverallStatus(slotProps.data)" :severity="getStatusSeverity(getOverallStatus(slotProps.data))" />
                 </template>
             </Column>
             <Column field="absences" header="Total Absences" :sortable="true" style="width: 120px">
@@ -1581,7 +1630,16 @@ const openSF2Report = () => {
             <Column v-for="date in dateColumns" :key="date" :field="date" :header="formatDate(date)" style="min-width: 100px">
                 <template #body="{ data, field }">
                     <div class="flex justify-center">
-                        <div :class="getAttendanceStatusClass(data[field])" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm cursor-pointer" @click="showDayDetails(data, field)">
+                        <!-- Show gray user-slash icon for inactive students (case-insensitive check) -->
+                        <div
+                            v-if="data.enrollment_status && data.enrollment_status.toLowerCase() !== 'active'"
+                            class="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white font-bold text-xs"
+                            :title="`Student ${formatEnrollmentStatus(data.enrollment_status)}`"
+                        >
+                            <i class="pi pi-ban"></i>
+                        </div>
+                        <!-- Normal attendance indicator for active students -->
+                        <div v-else :class="getAttendanceStatusClass(data[field])" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm cursor-pointer" @click="showDayDetails(data, field)">
                             <i v-if="data[field] === 'Present'" class="pi pi-check"></i>
                             <i v-else-if="data[field] === 'Absent'" class="pi pi-times"></i>
                             <i v-else-if="data[field] === 'Late'" class="pi pi-clock"></i>

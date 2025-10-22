@@ -1,6 +1,6 @@
 <script setup>
-import BookFlipLoader from '@/components/BookFlipLoader.vue';
-import AttendanceInsights from '@/components/Teachers/AttendanceInsights.vue';
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
+// 🚀 LAZY LOAD: Non-critical component loaded only when needed
 import ScheduleStatusWidget from '@/components/Teachers/ScheduleStatusWidget.vue';
 import api from '@/config/axios';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService.js';
@@ -19,10 +19,17 @@ import ProgressBar from 'primevue/progressbar';
 import ProgressSpinner from 'primevue/progressspinner';
 import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+const AttendanceInsights = defineAsyncComponent(() => import('@/components/Teachers/AttendanceInsights.vue'));
 
 // Import teacher authentication service
 import TeacherAuthService from '@/services/TeacherAuthService';
+
+// Import Pinia stores (NEW - doesn't break existing code)
+import { useAttendanceStore } from '@/stores/attendance';
+import { useAuthStore } from '@/stores/auth';
+import { useUIStore } from '@/stores/ui';
 
 // Import our new smart analytics services
 import AttendanceIndexingService from '@/services/AttendanceIndexingService';
@@ -33,7 +40,15 @@ import SmartAnalyticsService from '@/services/SmartAnalyticsService';
 // Import new components
 // Sticky notes panel removed
 
-// Dashboard components
+// Initialize router for prefetching
+const router = useRouter();
+
+// Initialize Pinia stores (NEW - adds reactive state management)
+const authStore = useAuthStore();
+const attendanceStore = useAttendanceStore();
+const uiStore = useUIStore();
+
+// Dashboard components (EXISTING - keeping all original refs)
 const currentTeacher = ref(null);
 const teacherSubjects = ref([]);
 const attendanceSummary = ref(null);
@@ -380,7 +395,7 @@ function calculateSeverity(absences) {
     if (absences >= CRITICAL_THRESHOLD) {
         return 'critical'; // 5+ absences = Critical Risk
     } else if (absences >= AT_RISK_THRESHOLD) {
-        return 'at_risk'; // 3-4 absences = High Risk  
+        return 'at_risk'; // 3-4 absences = High Risk
     } else if (absences > 0) {
         return 'low'; // 1-2 absences = Low Risk
     }
@@ -390,10 +405,10 @@ function calculateSeverity(absences) {
 // Get severity display label (matches Attendance Insights)
 function getSeverityLabel(severity) {
     const labels = {
-        'critical': 'Critical Risk',
-        'at_risk': 'High Risk',
-        'low': 'Low Risk',
-        'good': 'Normal'
+        critical: 'Critical Risk',
+        at_risk: 'High Risk',
+        low: 'Low Risk',
+        good: 'Normal'
     };
     return labels[severity] || severity;
 }
@@ -529,23 +544,59 @@ onMounted(async () => {
             selectedSubject: selectedSubject.value,
             currentTeacher: currentTeacher.value
         });
-        await loadAttendanceData();
-        // Prepare chart data which includes setting up chart options
-        await prepareChartData();
+
+        // 🚀 PERFORMANCE: Parallelize API calls instead of sequential
+        await Promise.all([loadAttendanceData(), prepareChartData()]);
 
         // Background indexing DISABLED - causes 220+ requests!
         // Subjects will load on-demand when user switches
         console.log('📌 On-demand loading enabled - subjects load when selected');
 
-        // Load analytics in background (non-blocking)
-        loadSmartAnalytics().catch((err) => console.warn('Analytics failed (non-critical):', err));
-        loadCriticalStudents().catch((err) => console.warn('Critical students failed (non-critical):', err));
+        // 🚫 DISABLED: SmartAnalyticsService calls causing 500 errors and slowing down page
+        // These are non-critical and can be re-enabled when backend is fixed
+        // loadSmartAnalytics().catch((err) => console.warn('Analytics failed (non-critical):', err));
+        // loadCriticalStudents().catch((err) => console.warn('Critical students failed (non-critical):', err));
+
+        // 🚀 PREFETCH: Preload likely next pages after initial load (non-blocking)
+        setTimeout(() => {
+            prefetchLikelyRoutes();
+        }, 2000); // Wait 2s after page load
     } catch (error) {
         console.error('Error in onMounted:', error);
     } finally {
         loading.value = false;
     }
 });
+
+// 🚀 PERFORMANCE: Preload likely next routes using link tags
+function prefetchLikelyRoutes() {
+    try {
+        // Create link preload tags for likely next pages
+        const routes = [];
+
+        // Prefetch attendance taking page (most common next action)
+        if (availableSubjects.value.length > 0) {
+            const firstSubject = availableSubjects.value[0];
+            routes.push(`/subject/${firstSubject.id}`);
+        }
+
+        // Prefetch summary report (second most common)
+        routes.push('/teacher/summary-attendance');
+
+        // Add prefetch link tags to head
+        routes.forEach((route) => {
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = route;
+            document.head.appendChild(link);
+        });
+
+        console.log('🔮 Prefetched', routes.length, 'likely routes');
+    } catch (error) {
+        // Prefetch is optional, don't break if it fails
+        console.warn('Prefetch failed (non-critical):', error);
+    }
+}
 // Clean up interval on unmount
 onUnmounted(() => {
     if (refreshInterval) {
@@ -833,6 +884,102 @@ async function loadDepartmentalizedSubjectData(subjectId) {
 // Load data for single section (homeroom or single subject assignment)
 async function loadSingleSectionData(sectionId, subjectId) {
     try {
+        // 🚀 NEW: Try Pinia store first (with intelligent caching)
+        console.log('🎯 Attempting to load from Pinia store...');
+        try {
+            const storeStudents = await attendanceStore.loadStudents(sectionId, subjectId);
+
+            if (storeStudents && storeStudents.length > 0) {
+                console.log('✅ Loaded from Pinia store (cached):', storeStudents.length, 'students');
+
+                // 🚀 PERFORMANCE FIX: Pinia cache has student list but NOT attendance stats
+                // Fetch attendance statistics from summary API
+                let summaryResponse = null;
+                try {
+                    summaryResponse = await AttendanceSummaryService.getTeacherAttendanceSummary(currentTeacher.value.id, {
+                        period: 'week',
+                        viewType: subjectId ? 'subject' : 'all_students',
+                        subjectId: subjectId
+                    });
+                    console.log('📊 Summary response students:', summaryResponse?.data?.students?.length || 0);
+                } catch (summaryError) {
+                    console.warn('⚠️ Failed to fetch attendance summary, using cached data only:', summaryError);
+                }
+
+                // Map store data to component format with attendance stats from summary
+                let matchedCount = 0;
+                studentsWithAbsenceIssues.value = storeStudents.map((student) => {
+                    // Find matching student in summary response for attendance stats
+                    const summaryStudent = summaryResponse?.data?.students?.find((s) => (s.student_id || s.id) === (student.student_id || student.id));
+
+                    if (summaryStudent) matchedCount++;
+
+                    const recentAbsences = summaryStudent?.recent_absences || student.recent_absences || 0;
+
+                    // Build name from summary data (more reliable) or cached data
+                    const studentName =
+                        summaryStudent?.name ||
+                        student.name ||
+                        (summaryStudent?.first_name && summaryStudent?.last_name
+                            ? `${summaryStudent.first_name} ${summaryStudent.last_name}`
+                            : `${student.first_name || student.firstName || ''} ${student.last_name || student.lastName || ''}`.trim()) ||
+                        'Unknown Student';
+
+                    return {
+                        id: student.student_id || student.id,
+                        student_id: student.student_id || student.id, // Add for component compatibility
+                        name: studentName,
+                        first_name: summaryStudent?.first_name || student.first_name || student.firstName,
+                        last_name: summaryStudent?.last_name || student.last_name || student.lastName,
+                        gradeLevel: student.grade_name || student.gradeLevel || 'Unknown Grade',
+                        section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
+                        absences: summaryStudent?.total_absences || student.total_absences || 0,
+                        total_absences: summaryStudent?.total_absences || student.total_absences || 0, // Add for component compatibility
+                        recent_absences: recentAbsences,
+                        severity: calculateSeverity(recentAbsences),
+                        attendanceRate: summaryStudent?.attendance_rate || student.attendance_rate || 0,
+                        attendance_rate: summaryStudent?.attendance_rate || student.attendance_rate || 0, // Add for component compatibility
+                        totalPresent: summaryStudent?.total_present || student.total_present || 0,
+                        total_present: summaryStudent?.total_present || student.total_present || 0, // Add for component compatibility
+                        totalLate: summaryStudent?.total_late || student.total_late || 0,
+                        total_late: summaryStudent?.total_late || student.total_late || 0 // Add for component compatibility
+                    };
+                });
+                console.log(`📊 Matched ${matchedCount}/${storeStudents.length} students with summary data`);
+
+                // Update summary
+                const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk').length;
+                const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
+                console.log(`📊 Severity counts - Warning: ${warningCount}, Critical: ${criticalCount}`);
+                const atRiskStudents = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk');
+                console.log(
+                    '📊 Students with at_risk:',
+                    atRiskStudents.map((s) => `${s.name} (${s.recent_absences} absences)`)
+                );
+                console.log('📊 First at_risk student full data:', atRiskStudents[0]);
+
+                // Calculate average attendance from summary data
+                const avgAttendance =
+                    summaryResponse?.data?.average_attendance ||
+                    (studentsWithAbsenceIssues.value.length > 0 ? Math.round(studentsWithAbsenceIssues.value.reduce((sum, s) => sum + (s.attendanceRate || 0), 0) / studentsWithAbsenceIssues.value.length) : 0);
+
+                attendanceSummary.value = {
+                    totalStudents: storeStudents.length,
+                    averageAttendance: avgAttendance,
+                    studentsWithWarning: warningCount,
+                    studentsWithCritical: criticalCount,
+                    students: studentsWithAbsenceIssues.value
+                };
+
+                console.log('📊 Pinia store stats:', attendanceStore.cacheStats);
+                console.log('📊 Average attendance:', avgAttendance + '%');
+                return; // Success! No need for old code
+            }
+        } catch (storeError) {
+            console.warn('⚠️ Pinia store failed, falling back to old method:', storeError);
+        }
+
+        // 📦 FALLBACK: Original code (kept as backup)
         const params = {
             teacherId: currentTeacher.value.id,
             sectionId: sectionId,
@@ -1939,9 +2086,9 @@ async function showStudentProfile(student) {
 
 <template>
     <div class="grid" style="margin: 0 1rem">
-        <!-- Loading State -->
-        <div v-if="loading" class="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
-            <BookFlipLoader size="medium" text="Loading dashboard data..." :show-text="true" />
+        <!-- Loading State - Using skeleton for better perceived performance -->
+        <div v-if="loading" class="col-span-12">
+            <LoadingSkeleton />
         </div>
 
         <div v-else>
@@ -1993,7 +2140,16 @@ async function showStudentProfile(student) {
                                 <i class="pi pi-check-circle text-green-600 text-xl"></i>
                             </div>
                             <div class="flex-1 p-2">
-                                <div class="text-sm text-gray-500 font-medium">Average Attendance</div>
+                                <div class="text-sm text-gray-500 font-medium flex items-center gap-2">
+                                    Average Attendance
+                                    <i 
+                                        class="pi pi-info-circle text-blue-500 cursor-help" 
+                                        v-tooltip.top="{
+                                            value: 'Calculated as: (Present + Late + Excused) ÷ Total Possible Days × 100%<br/>Based on actual attendance records for this subject.',
+                                            escape: false
+                                        }"
+                                    ></i>
+                                </div>
                                 <div class="text-2xl font-bold">{{ attendanceSummary?.averageAttendance || 0 }}%</div>
                             </div>
                         </div>
@@ -2408,7 +2564,16 @@ async function showStudentProfile(student) {
                     </div>
 
                     <div class="bg-gray-50 p-4 rounded-xl shadow-sm">
-                        <p class="text-gray-500 text-sm mb-1">Attendance Rate</p>
+                        <p class="text-gray-500 text-sm mb-1 flex items-center gap-2">
+                            Attendance Rate
+                            <i 
+                                class="pi pi-info-circle text-blue-500 cursor-help text-xs" 
+                                v-tooltip.top="{
+                                    value: 'Formula: (Days Present + Late + Excused) ÷ Total School Days × 100%',
+                                    escape: false
+                                }"
+                            ></i>
+                        </p>
                         <div class="flex items-center">
                             <div class="w-12 h-12 relative mr-3">
                                 <div

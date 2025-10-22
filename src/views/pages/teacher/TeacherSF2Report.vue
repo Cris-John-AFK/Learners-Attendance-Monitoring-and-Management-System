@@ -302,12 +302,16 @@ const submitToAdmin = async () => {
     submitting.value = true;
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
+        
+        // Get authenticated teacher ID
+        const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
+        const teacherId = teacherData?.teacher?.id || teacherData?.id || 1;
 
         // Use the simple working endpoint
         const response = await axios.post('http://127.0.0.1:8000/api/sf2/submit', {
             section_id: parseInt(sectionId),
             month: monthStr,
-            teacher_id: 2 // Maria Santos ID
+            teacher_id: teacherId
         });
 
         if (response.data.success) {
