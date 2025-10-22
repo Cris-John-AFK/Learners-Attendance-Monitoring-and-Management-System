@@ -170,25 +170,29 @@
 
         <!-- Student Details Dialog - SF2 Style with Floating Navigation -->
         <div v-if="showDetailsDialog" class="dialog-wrapper">
-            <!-- Floating Previous Button -->
-            <Button 
-                v-if="hasPreviousStudent"
-                icon="pi pi-chevron-left" 
-                @click="navigateToPreviousStudent" 
-                class="floating-nav-btn floating-nav-left p-button-rounded p-button-primary"
-                aria-label="Previous Student"
-            />
-            
-            <!-- Floating Next Button -->
-            <Button 
-                v-if="hasNextStudent"
-                icon="pi pi-chevron-right" 
-                @click="navigateToNextStudent" 
-                class="floating-nav-btn floating-nav-right p-button-rounded p-button-primary"
-                aria-label="Next Student"
-            />
+            <!-- Floating Previous Button with Label -->
+            <div v-if="hasPreviousStudent" class="floating-nav-container floating-nav-left">
+                <Button 
+                    icon="pi pi-chevron-left" 
+                    @click="navigateToPreviousStudent" 
+                    class="floating-nav-btn p-button-rounded p-button-primary" 
+                    aria-label="Previous Student"
+                />
+                <span class="floating-nav-label">Previous<br/>Student</span>
+            </div>
+
+            <!-- Floating Next Button with Label -->
+            <div v-if="hasNextStudent" class="floating-nav-container floating-nav-right">
+                <Button 
+                    icon="pi pi-chevron-right" 
+                    @click="navigateToNextStudent" 
+                    class="floating-nav-btn p-button-rounded p-button-primary" 
+                    aria-label="Next Student"
+                />
+                <span class="floating-nav-label">Next<br/>Student</span>
+            </div>
         </div>
-        
+
         <Dialog v-model:visible="showDetailsDialog" :modal="true" :closable="false" :style="{ width: '90vw', maxWidth: '1200px' }" class="no-print sf2-dialog" @show="attachNavigationListeners" @hide="detachNavigationListeners">
             <template #header>
                 <div class="w-full">
@@ -199,7 +203,6 @@
                         </div>
                         <div class="flex-grow text-center">
                             <h3 class="text-lg font-bold m-0 text-gray-800">Student Attendance Report of Learners</h3>
-                            <p class="text-xs text-gray-600 italic m-0">(This replaces Form 1, Form 2 & Form 3 used in previous years)</p>
                         </div>
                         <div class="flex-shrink-0">
                             <img src="/demo/images/deped-logo.png" alt="DepEd Logo" style="width: 60px; height: 60px" />
@@ -354,7 +357,7 @@
                     <div class="text-center">
                         <span class="text-sm font-semibold text-gray-700">Student {{ currentStudentIndex + 1 }} of {{ students.length }}</span>
                     </div>
-                    
+
                     <!-- Action Buttons -->
                     <div class="flex justify-center items-center gap-3">
                         <Button label="Print This Student" icon="pi pi-print" @click="printCurrentStudent" class="p-button-success" />
@@ -894,7 +897,7 @@ const printCurrentStudent = () => {
                 <h2>Student Attendance Report of Learners</h2>
                 <img src="/demo/images/deped-logo.png" alt="DepEd" />
             </div>
-            
+
             <div class="info-grid">
                 <div class="info-field">
                     <label>Student Name:</label>
@@ -921,7 +924,7 @@ const printCurrentStudent = () => {
                     <input type="text" value="${sectionName.value}" readonly />
                 </div>
             </div>
-            
+
             <div class="student-info">
                 <div>
                     <label style="font-size: 10px; font-weight: bold;">Student Name</label>
@@ -940,7 +943,7 @@ const printCurrentStudent = () => {
                     <p style="margin: 0; font-size: 12px;">${studentData.enrollment_status || 'active'}</p>
                 </div>
             </div>
-            
+
             <table>
                 <thead>
                     <tr>
@@ -965,7 +968,7 @@ const printCurrentStudent = () => {
                         .join('')}
                 </tbody>
             </table>
-            
+
             <div class="summary">
                 <div class="summary-card" style="border-color: #28a745;">
                     <h4>Present</h4>
@@ -1033,7 +1036,7 @@ const printAllStudents = () => {
                     <h2>Student Attendance Report of Learners</h2>
                     <img src="/demo/images/deped-logo.png" alt="DepEd" />
                 </div>
-                
+
                 <div class="info-grid">
                     <div class="info-field">
                         <label>Student Name:</label>
@@ -1060,7 +1063,7 @@ const printAllStudents = () => {
                         <input type="text" value="${sectionName.value}" readonly />
                     </div>
                 </div>
-                
+
                 <div class="student-info">
                     <div>
                         <label style="font-size: 10px; font-weight: bold;">Student Name</label>
@@ -1079,7 +1082,7 @@ const printAllStudents = () => {
                         <p style="margin: 0; font-size: 12px;">${student.enrollment_status || 'active'}</p>
                     </div>
                 </div>
-                
+
                 <table>
                     <thead>
                         <tr>
@@ -1104,7 +1107,7 @@ const printAllStudents = () => {
                             .join('')}
                     </tbody>
                 </table>
-                
+
                 <div class="summary">
                     <div class="summary-card" style="border-color: #28a745;">
                         <h4>Present</h4>
@@ -1330,9 +1333,16 @@ onMounted(async () => {
     justify-content: center;
 }
 
-.dialog-wrapper .floating-nav-btn {
+.dialog-wrapper .floating-nav-container {
     pointer-events: auto !important;
     position: absolute !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.dialog-wrapper .floating-nav-btn {
     width: 56px !important;
     height: 56px !important;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2) !important;
@@ -1342,6 +1352,19 @@ onMounted(async () => {
 .dialog-wrapper .floating-nav-btn:hover {
     transform: scale(1.1) !important;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dialog-wrapper .floating-nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+    text-align: center;
+    line-height: 1.3;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
 }
 
 .dialog-wrapper .floating-nav-left {
@@ -1357,7 +1380,7 @@ onMounted(async () => {
     .dialog-wrapper .floating-nav-left {
         left: 10px !important;
     }
-    
+
     .dialog-wrapper .floating-nav-right {
         right: 10px !important;
     }
