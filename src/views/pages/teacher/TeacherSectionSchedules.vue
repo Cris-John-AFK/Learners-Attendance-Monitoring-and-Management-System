@@ -1,12 +1,26 @@
 <template>
     <div class="teacher-schedules-container">
         <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="pi pi-calendar mr-2"></i>
-                    My Subject Schedules
-                </h2>
-                <p class="card-subtitle">View your assigned subject schedules across all sections. This shows when you're scheduled to teach each subject.</p>
+            <div class="card-header blue-gradient-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="icon-circle">
+                            <i class="pi pi-calendar"></i>
+                        </div>
+                        <div class="header-text">
+                            <h2 class="card-title">Teacher Schedule Management</h2>
+                            <p class="card-subtitle">Naawan Central School</p>
+                            <div class="total-teachers-badge">
+                                <i class="pi pi-book"></i>
+                                <span class="badge-label">Total Assignments:</span>
+                                <span class="badge-count">{{ teacherAssignments.length }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <Button label="Create Schedule" icon="pi pi-plus" severity="success" @click="openCreateScheduleModal" class="create-schedule-header-btn" />
+                    </div>
+                </div>
             </div>
 
             <!-- Loading State -->
@@ -25,13 +39,6 @@
 
             <!-- Assignments Without Schedules -->
             <div v-else-if="schedules.length === 0 && teacherAssignments.length > 0" class="assignments-without-schedules">
-                <div class="text-center py-4 mb-6">
-                    <i class="pi pi-calendar-plus text-6xl text-blue-400 mb-4"></i>
-                    <h3 class="text-xl font-semibold text-gray-700 mb-2">Create Your Schedules</h3>
-                    <p class="text-gray-600 mb-4">You have {{ teacherAssignments.length }} subject assignments that need schedules.</p>
-                    <p class="text-sm text-gray-500">Click "Create Schedule" below to set up your teaching times.</p>
-                </div>
-
                 <div class="assignments-grid">
                     <h4 class="text-lg font-semibold mb-4">Your Subject Assignments</h4>
                     <div class="grid">
@@ -49,14 +56,14 @@
                                     <Tag v-if="assignment.hasSchedule" value="Scheduled" severity="success" />
                                     <Tag v-else value="No Schedule" severity="warning" />
                                 </div>
-                                <Button 
-                                    v-if="!assignment.hasSchedule" 
-                                    :label="creatingScheduleFor === assignment.id ? 'Loading...' : 'Create Schedule'" 
-                                    :icon="creatingScheduleFor === assignment.id ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'" 
-                                    size="small" 
-                                    class="w-full mt-3" 
-                                    @click="openCreateScheduleDialog(assignment)" 
-                                    :disabled="creatingScheduleFor === assignment.id" 
+                                <Button
+                                    v-if="!assignment.hasSchedule"
+                                    :label="creatingScheduleFor === assignment.id ? 'Loading...' : 'Create Schedule'"
+                                    :icon="creatingScheduleFor === assignment.id ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'"
+                                    size="small"
+                                    class="w-full mt-3"
+                                    @click="openCreateScheduleDialog(assignment)"
+                                    :disabled="creatingScheduleFor === assignment.id"
                                     :loading="creatingScheduleFor === assignment.id"
                                 />
                             </div>
@@ -67,100 +74,67 @@
 
             <!-- Schedules Display -->
             <div v-else class="schedule-content">
-                <!-- Create Schedule Button -->
-                <div class="create-schedule-section mb-6">
-                    <div class="flex justify-content-between align-items-center gap-3">
-                        <h3 class="text-lg font-semibold mb-0">My Schedules</h3>
-                        <Button 
-                            label="Create Schedule" 
-                            icon="pi pi-plus" 
-                            severity="success" 
-                            @click="openCreateScheduleModal" 
-                            class="create-schedule-btn flex-shrink-0"
-                        />
+                <!-- Weekly Schedule Overview -->
+                <div class="schedule-expansion-header">
+                    <h3 class="text-lg font-semibold">Weekly Schedule Overview</h3>
+                    <div class="expansion-controls">
+                        <Button label="Expand All" icon="pi pi-plus" @click="expandAll" text class="p-button-success" size="small" />
+                        <Button label="Collapse All" icon="pi pi-minus" @click="collapseAll" text class="p-button-secondary" size="small" />
                     </div>
                 </div>
 
-                <!-- Weekly Schedule Overview -->
-                <h3 class="text-lg font-semibold mb-4">Weekly Schedule Overview</h3>
-                <div class="schedule-grid">
-                    <div class="grid">
-                        <div v-for="day in weekdays" :key="day.value" class="col-12 md:col-2">
-                            <div class="day-column">
-                                <div class="day-header">
-                                    {{ day.label }}
+                <div class="schedule-expansion-container">
+                    <div v-for="day in weekdays" :key="day.value" class="day-expansion-row">
+                        <div class="day-row-header" @click="toggleDay(day.value)" :class="{ expanded: expandedDays.includes(day.value) }">
+                            <div class="day-row-left">
+                                <i class="pi" :class="expandedDays.includes(day.value) ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
+                                <span class="day-name">{{ day.label }}</span>
+                                <span class="day-count">{{ getSchedulesForDay(day.value).length }} {{ getSchedulesForDay(day.value).length === 1 ? 'class' : 'classes' }}</span>
+                            </div>
+                            <div class="day-row-right">
+                                <Tag v-if="getSchedulesForDay(day.value).length > 0" :value="getSchedulesForDay(day.value).length + ' scheduled'" severity="info" />
+                                <Tag v-else value="No classes" severity="secondary" />
+                            </div>
+                        </div>
+
+                        <div v-if="expandedDays.includes(day.value)" class="day-expansion-content">
+                            <div v-if="getSchedulesForDay(day.value).length > 0" class="schedules-list">
+                                <!-- Table Header -->
+                                <div class="schedule-table-header">
+                                    <div class="header-time">Time</div>
+                                    <div class="header-subject">Subject</div>
+                                    <div class="header-section">Section</div>
+                                    <div class="header-actions">Actions</div>
                                 </div>
-                                <div class="day-content">
-                                    <div v-for="schedule in getSchedulesForDay(day.value)" :key="schedule.id" class="schedule-item" :class="getScheduleItemClass(schedule)">
-                                        <div class="schedule-time">
+                                <!-- Schedule Items -->
+                                <div v-for="schedule in getSchedulesForDay(day.value)" :key="schedule.id" class="schedule-expansion-item">
+                                    <div class="schedule-item-row">
+                                        <div class="schedule-time-col">
+                                            <i class="pi pi-clock"></i>
                                             {{ SubjectScheduleService.formatTimeRange(schedule.start_time, schedule.end_time) }}
                                         </div>
-                                        <div class="schedule-subject">
+                                        <div class="schedule-subject-col">
+                                            <i class="pi pi-book"></i>
                                             {{ schedule.subject_name }}
                                         </div>
-                                        <div class="schedule-section">
+                                        <div class="schedule-section-col">
+                                            <i class="pi pi-users"></i>
                                             {{ schedule.section_name }}
                                         </div>
-                                    </div>
-
-                                    <div v-if="getSchedulesForDay(day.value).length === 0" class="no-schedule">
-                                        <i class="pi pi-minus text-gray-400"></i>
-                                        <span class="text-gray-500 text-sm">No classes</span>
+                                        <div class="schedule-actions-col">
+                                            <Button icon="pi pi-search" @click="viewScheduleDetails(schedule)" rounded size="small" severity="info" />
+                                            <Button icon="pi pi-pencil" @click="editSchedule(schedule)" rounded size="small" severity="warning" />
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+                            <div v-else class="no-schedule-message">
+                                <i class="pi pi-info-circle"></i>
+                                <span>No classes scheduled for this day</span>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Detailed Schedule Table -->
-            <div class="detailed-schedule">
-                <h3 class="text-lg font-semibold mb-4">Detailed Schedule List</h3>
-
-                <DataTable :value="schedules" :loading="loading" responsiveLayout="scroll" class="p-datatable-sm" :sortField="'day'" :sortOrder="1">
-                    <Column field="day" header="Day" sortable>
-                        <template #body="{ data }">
-                            <Tag :value="SubjectScheduleService.getDayDisplayName(data.day)" :severity="getDaySeverity(data.day)" />
-                        </template>
-                    </Column>
-
-                    <Column field="time_range" header="Time" sortable>
-                        <template #body="{ data }">
-                            <span class="font-mono font-semibold">
-                                {{ SubjectScheduleService.formatTimeRange(data.start_time, data.end_time) }}
-                            </span>
-                        </template>
-                    </Column>
-
-                    <Column field="subject_name" header="Subject" sortable>
-                        <template #body="{ data }">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-book mr-2 text-blue-600"></i>
-                                <span class="font-semibold">{{ data.subject_name }}</span>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <Column field="section_name" header="Section" sortable>
-                        <template #body="{ data }">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-users mr-2 text-green-600"></i>
-                                <span>{{ data.section_name }}</span>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <Column header="Actions" :exportable="false">
-                        <template #body="{ data }">
-                            <div class="flex gap-2">
-                                <Button icon="pi pi-eye" size="small" severity="info" @click="viewScheduleDetails(data)" v-tooltip.top="'View Details'" />
-                                <Button icon="pi pi-pencil" size="small" severity="warning" @click="editSchedule(data)" v-tooltip.top="'Edit Schedule'" />
-                                <Button icon="pi pi-calendar-plus" size="small" severity="success" @click="createAttendanceSession(data)" v-tooltip.top="'Create Attendance Session'" :disabled="!isCurrentTimeSlot(data)" />
-                            </div>
-                        </template>
-                    </Column>
-                </DataTable>
             </div>
 
             <!-- Current/Next Class Info -->
@@ -207,7 +181,13 @@
     </div>
 
     <!-- Schedule Details Dialog -->
-    <Dialog v-model:visible="showDetailsDialog" header="Schedule Details" :modal="true" :closable="true" :style="{ width: '500px' }">
+    <Dialog v-model:visible="showDetailsDialog" :modal="true" :closable="false" :dismissableMask="true" :style="{ width: '500px' }">
+        <template #header>
+            <div class="dialog-header-clickable" @click="switchToEditFromDetails">
+                <span>Schedule Details</span>
+                <i class="pi pi-arrow-right ml-2"></i>
+            </div>
+        </template>
         <div v-if="selectedSchedule" class="schedule-details">
             <div class="detail-item">
                 <label>Subject:</label>
@@ -240,7 +220,13 @@
     </Dialog>
 
     <!-- Edit Schedule Dialog -->
-    <Dialog v-model:visible="showEditDialog" header="Edit Schedule" :modal="true" :closable="true" :style="{ width: '600px' }">
+    <Dialog v-model:visible="showEditDialog" :modal="true" :closable="false" :dismissableMask="true" :style="{ width: '600px' }">
+        <template #header>
+            <div class="dialog-header-clickable" @click="switchToDetailsFromEdit">
+                <span>Edit Schedule</span>
+                <i class="pi pi-arrow-left ml-2"></i>
+            </div>
+        </template>
         <div v-if="editingSchedule" class="edit-schedule-form">
             <div class="field">
                 <label for="edit-subject" class="block text-900 font-medium mb-2">Subject</label>
@@ -305,9 +291,7 @@ import { useRouter } from 'vue-router';
 
 // PrimeVue Components
 import Button from 'primevue/button';
-import Column from 'primevue/column';
 import Calendar from 'primevue/calendar';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -331,6 +315,7 @@ const showCreateScheduleDialog = ref(false);
 const selectedSchedule = ref(null);
 const selectedAssignment = ref(null);
 const currentTime = ref(new Date());
+const expandedDays = ref([]); // Track which days are expanded
 
 // Edit Schedule Data
 const showEditDialog = ref(false);
@@ -506,7 +491,7 @@ const loadTeacherAssignments = async (teacherId) => {
         // Get teacher assignments from TeacherAuthService
         const teacherData = TeacherAuthService.getTeacherData();
         console.log('Teacher data for assignments:', teacherData);
-        
+
         if (teacherData?.assignments) {
             teacherAssignments.value = teacherData.assignments
                 // Filter out homeroom assignments - homeroom is not a subject that needs scheduling
@@ -516,14 +501,10 @@ const loadTeacherAssignments = async (teacherId) => {
                 })
                 .map((assignment) => {
                     // Get subject and section info from assignment or section object
-                    const subjectName = assignment.subject_name 
-                        || assignment.subject?.name 
-                        || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
-                    
-                    const sectionName = assignment.section_name 
-                        || assignment.section?.name 
-                        || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
-                    
+                    const subjectName = assignment.subject_name || assignment.subject?.name || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
+
+                    const sectionName = assignment.section_name || assignment.section?.name || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
+
                     return {
                         id: `${assignment.section_id}_${assignment.subject_id}`,
                         section_id: assignment.section_id,
@@ -616,6 +597,24 @@ const getTimeUntilNext = (schedule) => {
     return 'Tomorrow or later';
 };
 
+// Expand/Collapse functions
+const toggleDay = (dayValue) => {
+    const index = expandedDays.value.indexOf(dayValue);
+    if (index > -1) {
+        expandedDays.value.splice(index, 1);
+    } else {
+        expandedDays.value.push(dayValue);
+    }
+};
+
+const expandAll = () => {
+    expandedDays.value = weekdays.value.map((day) => day.value);
+};
+
+const collapseAll = () => {
+    expandedDays.value = [];
+};
+
 const getScheduleDuration = (schedule) => {
     const [startHours, startMinutes] = schedule.start_time.split(':').map(Number);
     const [endHours, endMinutes] = schedule.end_time.split(':').map(Number);
@@ -629,6 +628,31 @@ const getScheduleDuration = (schedule) => {
 const viewScheduleDetails = (schedule) => {
     selectedSchedule.value = schedule;
     showDetailsDialog.value = true;
+};
+
+// Switch between dialogs
+const switchToEditFromDetails = () => {
+    console.log('🔄 Switching from Details to Edit', selectedSchedule.value);
+    if (selectedSchedule.value) {
+        showDetailsDialog.value = false;
+        editingSchedule.value = { ...selectedSchedule.value };
+        showEditDialog.value = true;
+        console.log('✅ Switched to Edit dialog');
+    } else {
+        console.log('❌ No selected schedule');
+    }
+};
+
+const switchToDetailsFromEdit = () => {
+    console.log('🔄 Switching from Edit to Details', editingSchedule.value);
+    if (editingSchedule.value) {
+        showEditDialog.value = false;
+        selectedSchedule.value = { ...editingSchedule.value };
+        showDetailsDialog.value = true;
+        console.log('✅ Switched to Details dialog');
+    } else {
+        console.log('❌ No editing schedule');
+    }
 };
 
 const editSchedule = (schedule) => {
@@ -668,13 +692,13 @@ const validateScheduleEdit = () => {
     // Validate that end time is after start time
     // Handle both Date objects (from Calendar component) and string values
     let startTime, endTime;
-    
+
     if (editingSchedule.value.start_time instanceof Date) {
         startTime = editingSchedule.value.start_time;
     } else {
         startTime = new Date(`2000-01-01 ${editingSchedule.value.start_time}:00`);
     }
-    
+
     if (editingSchedule.value.end_time instanceof Date) {
         endTime = editingSchedule.value.end_time;
     } else {
@@ -691,19 +715,19 @@ const validateScheduleEdit = () => {
 // Helper function to convert Date object to HH:MM format
 const formatTimeForAPI = (timeValue) => {
     if (!timeValue) return '';
-    
+
     // If it's already a string in HH:MM format, return it
     if (typeof timeValue === 'string' && timeValue.match(/^\d{2}:\d{2}$/)) {
         return timeValue + ':00';
     }
-    
+
     // If it's a Date object, convert it
     if (timeValue instanceof Date) {
         const hours = String(timeValue.getHours()).padStart(2, '0');
         const minutes = String(timeValue.getMinutes()).padStart(2, '0');
         return `${hours}:${minutes}:00`;
     }
-    
+
     return timeValue;
 };
 
@@ -769,19 +793,21 @@ const saveScheduleChanges = async () => {
 // Create Schedule Methods
 const openCreateScheduleModal = () => {
     console.log('🆕 Navigating to create schedule page');
-    
+
     // Navigate to create schedule page without pre-selected assignment
-    router.push({
-        path: '/teacher/create-schedule'
-    }).catch((error) => {
-        console.error('Navigation error:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Navigation Error',
-            detail: 'Failed to navigate to schedule creation page',
-            life: 3000
+    router
+        .push({
+            path: '/teacher/create-schedule'
+        })
+        .catch((error) => {
+            console.error('Navigation error:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Navigation Error',
+                detail: 'Failed to navigate to schedule creation page',
+                life: 3000
+            });
         });
-    });
 };
 
 const resetCreateForm = () => {
@@ -907,7 +933,7 @@ const createAttendanceSession = (schedule) => {
 
 const openCreateScheduleDialog = (assignment) => {
     console.log('🔧 Create Schedule button clicked!', assignment);
-    
+
     // Set loading state for this specific button
     creatingScheduleFor.value = assignment.id;
 
@@ -934,25 +960,27 @@ const openCreateScheduleDialog = (assignment) => {
         console.log('🚀 Redirecting to teacher schedule creation interface...');
 
         // Navigate to teacher schedule creation with query parameters
-        router.push({
-            path: '/teacher/create-schedule',
-            query: {
-                section_id: assignment.section_id,
-                subject_id: assignment.subject_id,
-                section_name: assignment.section_name,
-                subject_name: assignment.subject_name
-            }
-        }).catch((error) => {
-            // Clear loading state if navigation fails
-            console.error('Navigation error:', error);
-            creatingScheduleFor.value = null;
-            toast.add({
-                severity: 'error',
-                summary: 'Navigation Error',
-                detail: 'Failed to navigate to schedule creation page',
-                life: 3000
+        router
+            .push({
+                path: '/teacher/create-schedule',
+                query: {
+                    section_id: assignment.section_id,
+                    subject_id: assignment.subject_id,
+                    section_name: assignment.section_name,
+                    subject_name: assignment.subject_name
+                }
+            })
+            .catch((error) => {
+                // Clear loading state if navigation fails
+                console.error('Navigation error:', error);
+                creatingScheduleFor.value = null;
+                toast.add({
+                    severity: 'error',
+                    summary: 'Navigation Error',
+                    detail: 'Failed to navigate to schedule creation page',
+                    life: 3000
+                });
             });
-        });
     }, 500); // Reduced from 1500ms to 500ms for better UX
 };
 
@@ -1239,5 +1267,514 @@ onUnmounted(() => {
     .schedule-item {
         font-size: 0.6875rem;
     }
+}
+
+/* Blue Gradient Header - Picture 2 Style */
+.blue-gradient-header {
+    background: linear-gradient(135deg, #4169e1 0%, #1e3a8a 100%) !important;
+    padding: 2rem 2.5rem !important;
+    border-radius: 12px !important;
+    margin-bottom: 2rem !important;
+    box-shadow: 0 4px 12px rgba(65, 105, 225, 0.3) !important;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.create-schedule-header-btn {
+    background-color: #10b981 !important;
+    border-color: #10b981 !important;
+    color: #ffffff !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+    transition: all 0.2s ease !important;
+}
+
+.create-schedule-header-btn:hover {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.icon-circle {
+    width: 64px;
+    height: 64px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+}
+
+.icon-circle i {
+    font-size: 32px;
+    color: #ffffff;
+}
+
+.header-text h2 {
+    color: #ffffff !important;
+    font-size: 1.75rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 0.25rem 0 !important;
+}
+
+.header-text p {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 1rem !important;
+    margin: 0 !important;
+}
+
+.blue-gradient-header .card-title {
+    color: #ffffff !important;
+}
+
+.blue-gradient-header .card-subtitle {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Total Teachers Badge */
+.total-teachers-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.25);
+    padding: 0.5rem 1.25rem;
+    border-radius: 24px;
+    margin-top: 0.75rem;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.total-teachers-badge i {
+    color: #ffffff;
+    font-size: 1rem;
+}
+
+.total-teachers-badge .badge-label {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.total-teachers-badge .badge-count {
+    background: #ffffff;
+    color: #4169e1;
+    padding: 0.25rem 0.75rem;
+    border-radius: 16px;
+    font-weight: 700;
+    font-size: 0.875rem;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Expandable Row Design - Picture 2 Style */
+.schedule-content {
+    background-color: #e5c95f !important;
+    padding: 2rem;
+    border-radius: 8px;
+}
+
+.schedule-expansion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.expansion-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.expansion-controls :deep(.p-button) {
+    background-color: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    padding: 0.5rem 1rem !important;
+}
+
+.expansion-controls :deep(.p-button:hover) {
+    background-color: #f3f4f6 !important;
+}
+
+.expansion-controls :deep(.p-button:active),
+.expansion-controls :deep(.p-button:focus) {
+    background-color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+}
+
+.expansion-controls :deep(.p-button:active .p-button-label),
+.expansion-controls :deep(.p-button:focus .p-button-label),
+.expansion-controls :deep(.p-button:active .p-button-icon),
+.expansion-controls :deep(.p-button:focus .p-button-icon) {
+    color: #ffffff !important;
+}
+
+.schedule-expansion-container {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.day-expansion-row {
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.day-expansion-row:last-child {
+    border-bottom: none;
+}
+
+.day-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    background: white;
+}
+
+.day-row-header:hover {
+    background: #f9fafb;
+}
+
+.day-row-header.expanded {
+    background: #f3f4f6;
+}
+
+.day-row-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.day-row-left i {
+    color: #6b7280;
+    font-size: 0.875rem;
+    transition: transform 0.2s ease;
+}
+
+.day-row-header.expanded .day-row-left i {
+    transform: rotate(0deg);
+}
+
+.day-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1f2937;
+}
+
+.day-count {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-left: 0.5rem;
+}
+
+.day-row-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.day-expansion-content {
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 1000px;
+    }
+}
+
+.schedules-list {
+    padding: 0.5rem;
+}
+
+/* Table Header */
+.schedule-table-header {
+    display: grid;
+    grid-template-columns: 2fr 2fr 2fr 1fr;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: #3b82f6 !important;
+    border-bottom: 2px solid #2563eb;
+    font-weight: 600;
+    color: #ffffff !important;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.header-time,
+.header-subject,
+.header-section,
+.header-actions {
+    display: flex;
+    align-items: center;
+    color: #ffffff !important;
+}
+
+.header-actions {
+    justify-content: flex-end;
+}
+
+.schedule-expansion-item {
+    background: white;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.schedule-expansion-item:last-child {
+    margin-bottom: 0;
+}
+
+.schedule-item-row {
+    display: grid;
+    grid-template-columns: 2fr 2fr 2fr 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    align-items: center;
+}
+
+.schedule-time-col,
+.schedule-subject-col,
+.schedule-section-col {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.schedule-time-col i {
+    color: #3b82f6;
+}
+
+.schedule-subject-col i {
+    color: #10b981;
+}
+
+.schedule-section-col i {
+    color: #f59e0b;
+}
+
+/* Ensure all icons are always visible and don't blink */
+.schedule-item-row .pi {
+    font-family: 'primeicons' !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.schedule-item-row .pi::before {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.schedule-time-col {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.schedule-subject-col {
+    font-weight: 500;
+    color: #374151;
+}
+
+.schedule-section-col {
+    color: #6b7280;
+}
+
+.schedule-actions-col {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.25rem;
+}
+
+.schedule-actions-col :deep(.p-button) {
+    border: 1px solid #e5e7eb !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    position: relative !important;
+    z-index: 10 !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-info) {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+    border-color: #3b82f6 !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-info:hover) {
+    background-color: #2563eb !important;
+    border-color: #2563eb !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-warning) {
+    background-color: #f59e0b !important;
+    color: #ffffff !important;
+    border-color: #f59e0b !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-warning:hover) {
+    background-color: #d97706 !important;
+    border-color: #d97706 !important;
+}
+
+.schedule-actions-col :deep(.p-button .p-button-icon) {
+    font-size: 1.1rem !important;
+}
+
+.schedule-actions-col :deep(.p-button-icon) {
+    color: inherit !important;
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-rounded) {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+}
+
+.schedule-actions-col :deep(.p-button .pi) {
+    font-size: 1.1rem !important;
+    line-height: 1 !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-info .pi) {
+    color: #ffffff !important;
+}
+
+.schedule-actions-col :deep(.p-button.p-button-warning .pi) {
+    color: #ffffff !important;
+}
+
+.schedule-actions-col :deep(.p-button .pi) {
+    font-family: 'primeicons' !important;
+    speak: none !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.schedule-actions-col :deep(.p-button .pi::before) {
+    color: inherit !important;
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.no-schedule-message {
+    padding: 2rem;
+    text-align: center;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.no-schedule-message i {
+    font-size: 1.25rem;
+}
+
+@media (max-width: 768px) {
+    .schedule-item-row {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .schedule-actions-col {
+        justify-content: flex-start;
+    }
+}
+
+/* Hide Dialog Close Button (X) */
+:deep(.p-dialog .p-dialog-header-close) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+:deep(.p-dialog-header-icon) {
+    display: none !important;
+}
+
+:deep(.p-dialog-header-icons) {
+    display: none !important;
+}
+
+:deep(.p-dialog .p-dialog-header .p-dialog-header-icon) {
+    display: none !important;
+}
+
+/* Clickable Dialog Headers */
+.dialog-header-clickable {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.dialog-header-clickable:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    transform: scale(1.02);
+}
+
+.dialog-header-clickable span {
+    font-weight: 600;
+    font-size: 1.25rem;
+    color: #1f2937;
+}
+
+.dialog-header-clickable:hover span {
+    color: #3b82f6;
 }
 </style>

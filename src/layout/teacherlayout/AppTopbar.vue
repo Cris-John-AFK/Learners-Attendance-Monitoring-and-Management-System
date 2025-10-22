@@ -310,13 +310,14 @@ onUnmounted(() => {
             </div>
 
             <div class="layout-topbar-actions">
+                <!-- Schedules Button -->
+                <button type="button" class="layout-topbar-action create-button" @click="$router.push('/teacher/schedules')">
+                    <i class="pi pi-calendar"></i>
+                    <span>Schedules</span>
+                </button>
+
                 <!-- Notification Bell -->
                 <NotificationBell :notifications="notifications" @notification-clicked="handleNotificationClick" @mark-all-read="handleMarkAllRead" @remove-notification="handleRemoveNotification" />
-
-                <button type="button" class="layout-topbar-action" @click="$router.push('/teacher/schedules')">
-                    <i class="pi pi-calendar-clock"></i>
-                    <span>My Schedules</span>
-                </button>
 
                 <!-- Profile Button with Dropdown -->
                 <div class="relative">
@@ -826,6 +827,70 @@ onUnmounted(() => {
 .status-badge.late {
     background: #fff3e0;
     color: #ef6c00;
+}
+
+/* Create Event Calendar Button - White Pill Style */
+.create-button {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 24px !important;
+    padding: 10px 24px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+    min-width: auto !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+.create-button:hover {
+    background: #3b82f6 !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+    transform: translateY(-1px);
+    border-color: #3b82f6 !important;
+}
+
+.create-button:hover i,
+.create-button:hover span {
+    color: #ffffff !important;
+}
+
+.create-button i {
+    font-size: 20px !important;
+    color: #3b82f6 !important;
+    font-weight: bold !important;
+    display: inline-block !important;
+    width: auto !important;
+    height: auto !important;
+    line-height: 1 !important;
+    margin-right: 4px !important;
+}
+
+.create-button .pi-calendar:before {
+    content: "\e927" !important;
+    font-family: 'primeicons' !important;
+    speak: none !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+}
+
+.create-button span {
+    color: #1f2937 !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 /* Hide topbar when printing */
