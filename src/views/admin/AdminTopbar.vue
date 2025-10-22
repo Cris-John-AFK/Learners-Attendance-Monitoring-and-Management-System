@@ -811,9 +811,27 @@ onUnmounted(() => {
 
 .create-button i {
     font-size: 20px !important;
-    color: #1f2937 !important;
+    color: #3b82f6 !important;
     font-weight: bold !important;
     display: inline-block !important;
+    width: auto !important;
+    height: auto !important;
+    line-height: 1 !important;
+    margin-right: 4px !important;
+}
+
+.create-button .pi-calendar:before {
+    content: "\e927" !important;
+    font-family: 'primeicons' !important;
+    speak: none !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-variant: normal !important;
+    text-transform: none !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
 }
 
 .create-button span {

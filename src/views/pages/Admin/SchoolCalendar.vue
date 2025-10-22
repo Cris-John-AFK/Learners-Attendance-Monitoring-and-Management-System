@@ -1,7 +1,7 @@
 <template>
     <div class="school-calendar-manager p-4">
         <div class="card">
-            <div class="flex justify-between items-center mb-4 p-4 border-b">
+            <div class="flex justify-between items-center mb-4 p-4 border-b calendar-header">
                 <div>
                     <h2 class="text-2xl font-bold text-gray-800">School Calendar Management</h2>
                     <p class="text-sm text-gray-600 mt-1">Manage holidays, half-days, and special events</p>
@@ -10,7 +10,7 @@
             </div>
 
             <!-- Event Type Filter -->
-            <div class="flex gap-3 p-4 bg-gray-50 mb-4">
+            <div class="flex gap-3 p-4 bg-gray-50 mb-4 event-filter-buttons">
                 <Button 
                     v-for="type in eventTypes" 
                     :key="type.value"
@@ -396,5 +396,47 @@ onMounted(() => {
     display: block;
     margin-bottom: 0.5rem;
     color: #374151;
+}
+
+/* Calendar Header - Blue Background */
+.calendar-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+.calendar-header h2 {
+    color: #ffffff !important;
+}
+
+.calendar-header p {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Event Filter Buttons - Yellow Background */
+.event-filter-buttons {
+    background-color: #FFFD8F !important;
+}
+
+.event-filter-buttons :deep(.p-button) {
+    background-color: #ffffff !important;
+    border-color: #d1d5db !important;
+}
+
+.event-filter-buttons :deep(.p-button:hover) {
+    background-color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: white !important;
+}
+
+.event-filter-buttons :deep(.p-button:hover .p-button-label),
+.event-filter-buttons :deep(.p-button:hover .p-button-icon) {
+    color: white !important;
+}
+
+.event-filter-buttons :deep(.p-button.p-button-primary) {
+    background-color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: white !important;
 }
 </style>
