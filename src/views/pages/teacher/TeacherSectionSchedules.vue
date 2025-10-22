@@ -17,6 +17,9 @@
                             </div>
                         </div>
                     </div>
+                    <div class="header-right">
+                        <Button label="Create Schedule" icon="pi pi-plus" severity="success" @click="openCreateScheduleModal" class="create-schedule-header-btn" />
+                    </div>
                 </div>
             </div>
 
@@ -36,7 +39,6 @@
 
             <!-- Assignments Without Schedules -->
             <div v-else-if="schedules.length === 0 && teacherAssignments.length > 0" class="assignments-without-schedules">
-
                 <div class="assignments-grid">
                     <h4 class="text-lg font-semibold mb-4">Your Subject Assignments</h4>
                     <div class="grid">
@@ -54,14 +56,14 @@
                                     <Tag v-if="assignment.hasSchedule" value="Scheduled" severity="success" />
                                     <Tag v-else value="No Schedule" severity="warning" />
                                 </div>
-                                <Button 
-                                    v-if="!assignment.hasSchedule" 
-                                    :label="creatingScheduleFor === assignment.id ? 'Loading...' : 'Create Schedule'" 
-                                    :icon="creatingScheduleFor === assignment.id ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'" 
-                                    size="small" 
-                                    class="w-full mt-3" 
-                                    @click="openCreateScheduleDialog(assignment)" 
-                                    :disabled="creatingScheduleFor === assignment.id" 
+                                <Button
+                                    v-if="!assignment.hasSchedule"
+                                    :label="creatingScheduleFor === assignment.id ? 'Loading...' : 'Create Schedule'"
+                                    :icon="creatingScheduleFor === assignment.id ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'"
+                                    size="small"
+                                    class="w-full mt-3"
+                                    @click="openCreateScheduleDialog(assignment)"
+                                    :disabled="creatingScheduleFor === assignment.id"
                                     :loading="creatingScheduleFor === assignment.id"
                                 />
                             </div>
@@ -72,20 +74,6 @@
 
             <!-- Schedules Display -->
             <div v-else class="schedule-content">
-                <!-- Create Schedule Button -->
-                <div class="create-schedule-section mb-6">
-                    <div class="flex justify-content-between align-items-center gap-3">
-                        <h3 class="text-lg font-semibold mb-0">My Schedules</h3>
-                        <Button 
-                            label="Create Schedule" 
-                            icon="pi pi-plus" 
-                            severity="success" 
-                            @click="openCreateScheduleModal" 
-                            class="create-schedule-btn flex-shrink-0"
-                        />
-                    </div>
-                </div>
-
                 <!-- Weekly Schedule Overview -->
                 <div class="schedule-expansion-header">
                     <h3 class="text-lg font-semibold">Weekly Schedule Overview</h3>
@@ -97,7 +85,7 @@
 
                 <div class="schedule-expansion-container">
                     <div v-for="day in weekdays" :key="day.value" class="day-expansion-row">
-                        <div class="day-row-header" @click="toggleDay(day.value)" :class="{ 'expanded': expandedDays.includes(day.value) }">
+                        <div class="day-row-header" @click="toggleDay(day.value)" :class="{ expanded: expandedDays.includes(day.value) }">
                             <div class="day-row-left">
                                 <i class="pi" :class="expandedDays.includes(day.value) ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
                                 <span class="day-name">{{ day.label }}</span>
@@ -149,55 +137,6 @@
                 </div>
             </div>
 
-            <!-- Detailed Schedule Table -->
-            <div class="detailed-schedule">
-                <h3 class="text-lg font-semibold mb-4">Detailed Schedule List</h3>
-
-                <DataTable :value="schedules" :loading="loading" responsiveLayout="scroll" class="p-datatable-sm" :sortField="'day'" :sortOrder="1">
-                    <Column field="day" header="Day" sortable>
-                        <template #body="{ data }">
-                            <Tag :value="SubjectScheduleService.getDayDisplayName(data.day)" :severity="getDaySeverity(data.day)" />
-                        </template>
-                    </Column>
-
-                    <Column field="time_range" header="Time" sortable>
-                        <template #body="{ data }">
-                            <span class="font-mono font-semibold">
-                                {{ SubjectScheduleService.formatTimeRange(data.start_time, data.end_time) }}
-                            </span>
-                        </template>
-                    </Column>
-
-                    <Column field="subject_name" header="Subject" sortable>
-                        <template #body="{ data }">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-book mr-2 text-blue-600"></i>
-                                <span class="font-semibold">{{ data.subject_name }}</span>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <Column field="section_name" header="Section" sortable>
-                        <template #body="{ data }">
-                            <div class="flex align-items-center">
-                                <i class="pi pi-users mr-2 text-green-600"></i>
-                                <span>{{ data.section_name }}</span>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <Column header="Actions" :exportable="false">
-                        <template #body="{ data }">
-                            <div class="flex gap-2">
-                                <Button icon="pi pi-eye" size="small" severity="info" @click="viewScheduleDetails(data)" v-tooltip.top="'View Details'" />
-                                <Button icon="pi pi-pencil" size="small" severity="warning" @click="editSchedule(data)" v-tooltip.top="'Edit Schedule'" />
-                                <Button icon="pi pi-calendar-plus" size="small" severity="success" @click="createAttendanceSession(data)" v-tooltip.top="'Create Attendance Session'" :disabled="!isCurrentTimeSlot(data)" />
-                            </div>
-                        </template>
-                    </Column>
-                </DataTable>
-            </div>
-
             <!-- Current/Next Class Info -->
             <div v-if="currentSchedule || nextSchedule" class="current-schedule-info mt-6">
                 <div class="grid">
@@ -242,7 +181,13 @@
     </div>
 
     <!-- Schedule Details Dialog -->
-    <Dialog v-model:visible="showDetailsDialog" header="Schedule Details" :modal="true" :closable="true" :style="{ width: '500px' }">
+    <Dialog v-model:visible="showDetailsDialog" :modal="true" :closable="false" :dismissableMask="true" :style="{ width: '500px' }">
+        <template #header>
+            <div class="dialog-header-clickable" @click="switchToEditFromDetails">
+                <span>Schedule Details</span>
+                <i class="pi pi-arrow-right ml-2"></i>
+            </div>
+        </template>
         <div v-if="selectedSchedule" class="schedule-details">
             <div class="detail-item">
                 <label>Subject:</label>
@@ -275,7 +220,13 @@
     </Dialog>
 
     <!-- Edit Schedule Dialog -->
-    <Dialog v-model:visible="showEditDialog" header="Edit Schedule" :modal="true" :closable="true" :style="{ width: '600px' }">
+    <Dialog v-model:visible="showEditDialog" :modal="true" :closable="false" :dismissableMask="true" :style="{ width: '600px' }">
+        <template #header>
+            <div class="dialog-header-clickable" @click="switchToDetailsFromEdit">
+                <span>Edit Schedule</span>
+                <i class="pi pi-arrow-left ml-2"></i>
+            </div>
+        </template>
         <div v-if="editingSchedule" class="edit-schedule-form">
             <div class="field">
                 <label for="edit-subject" class="block text-900 font-medium mb-2">Subject</label>
@@ -340,9 +291,7 @@ import { useRouter } from 'vue-router';
 
 // PrimeVue Components
 import Button from 'primevue/button';
-import Column from 'primevue/column';
 import Calendar from 'primevue/calendar';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -542,7 +491,7 @@ const loadTeacherAssignments = async (teacherId) => {
         // Get teacher assignments from TeacherAuthService
         const teacherData = TeacherAuthService.getTeacherData();
         console.log('Teacher data for assignments:', teacherData);
-        
+
         if (teacherData?.assignments) {
             teacherAssignments.value = teacherData.assignments
                 // Filter out homeroom assignments - homeroom is not a subject that needs scheduling
@@ -552,14 +501,10 @@ const loadTeacherAssignments = async (teacherId) => {
                 })
                 .map((assignment) => {
                     // Get subject and section info from assignment or section object
-                    const subjectName = assignment.subject_name 
-                        || assignment.subject?.name 
-                        || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
-                    
-                    const sectionName = assignment.section_name 
-                        || assignment.section?.name 
-                        || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
-                    
+                    const subjectName = assignment.subject_name || assignment.subject?.name || (assignment.subject_id ? `Subject ${assignment.subject_id}` : 'Unknown Subject');
+
+                    const sectionName = assignment.section_name || assignment.section?.name || (assignment.section_id ? `Section ${assignment.section_id}` : 'Unknown Section');
+
                     return {
                         id: `${assignment.section_id}_${assignment.subject_id}`,
                         section_id: assignment.section_id,
@@ -663,7 +608,7 @@ const toggleDay = (dayValue) => {
 };
 
 const expandAll = () => {
-    expandedDays.value = weekdays.value.map(day => day.value);
+    expandedDays.value = weekdays.value.map((day) => day.value);
 };
 
 const collapseAll = () => {
@@ -683,6 +628,31 @@ const getScheduleDuration = (schedule) => {
 const viewScheduleDetails = (schedule) => {
     selectedSchedule.value = schedule;
     showDetailsDialog.value = true;
+};
+
+// Switch between dialogs
+const switchToEditFromDetails = () => {
+    console.log('🔄 Switching from Details to Edit', selectedSchedule.value);
+    if (selectedSchedule.value) {
+        showDetailsDialog.value = false;
+        editingSchedule.value = { ...selectedSchedule.value };
+        showEditDialog.value = true;
+        console.log('✅ Switched to Edit dialog');
+    } else {
+        console.log('❌ No selected schedule');
+    }
+};
+
+const switchToDetailsFromEdit = () => {
+    console.log('🔄 Switching from Edit to Details', editingSchedule.value);
+    if (editingSchedule.value) {
+        showEditDialog.value = false;
+        selectedSchedule.value = { ...editingSchedule.value };
+        showDetailsDialog.value = true;
+        console.log('✅ Switched to Details dialog');
+    } else {
+        console.log('❌ No editing schedule');
+    }
 };
 
 const editSchedule = (schedule) => {
@@ -722,13 +692,13 @@ const validateScheduleEdit = () => {
     // Validate that end time is after start time
     // Handle both Date objects (from Calendar component) and string values
     let startTime, endTime;
-    
+
     if (editingSchedule.value.start_time instanceof Date) {
         startTime = editingSchedule.value.start_time;
     } else {
         startTime = new Date(`2000-01-01 ${editingSchedule.value.start_time}:00`);
     }
-    
+
     if (editingSchedule.value.end_time instanceof Date) {
         endTime = editingSchedule.value.end_time;
     } else {
@@ -745,19 +715,19 @@ const validateScheduleEdit = () => {
 // Helper function to convert Date object to HH:MM format
 const formatTimeForAPI = (timeValue) => {
     if (!timeValue) return '';
-    
+
     // If it's already a string in HH:MM format, return it
     if (typeof timeValue === 'string' && timeValue.match(/^\d{2}:\d{2}$/)) {
         return timeValue + ':00';
     }
-    
+
     // If it's a Date object, convert it
     if (timeValue instanceof Date) {
         const hours = String(timeValue.getHours()).padStart(2, '0');
         const minutes = String(timeValue.getMinutes()).padStart(2, '0');
         return `${hours}:${minutes}:00`;
     }
-    
+
     return timeValue;
 };
 
@@ -823,19 +793,21 @@ const saveScheduleChanges = async () => {
 // Create Schedule Methods
 const openCreateScheduleModal = () => {
     console.log('🆕 Navigating to create schedule page');
-    
+
     // Navigate to create schedule page without pre-selected assignment
-    router.push({
-        path: '/teacher/create-schedule'
-    }).catch((error) => {
-        console.error('Navigation error:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Navigation Error',
-            detail: 'Failed to navigate to schedule creation page',
-            life: 3000
+    router
+        .push({
+            path: '/teacher/create-schedule'
+        })
+        .catch((error) => {
+            console.error('Navigation error:', error);
+            toast.add({
+                severity: 'error',
+                summary: 'Navigation Error',
+                detail: 'Failed to navigate to schedule creation page',
+                life: 3000
+            });
         });
-    });
 };
 
 const resetCreateForm = () => {
@@ -961,7 +933,7 @@ const createAttendanceSession = (schedule) => {
 
 const openCreateScheduleDialog = (assignment) => {
     console.log('🔧 Create Schedule button clicked!', assignment);
-    
+
     // Set loading state for this specific button
     creatingScheduleFor.value = assignment.id;
 
@@ -988,25 +960,27 @@ const openCreateScheduleDialog = (assignment) => {
         console.log('🚀 Redirecting to teacher schedule creation interface...');
 
         // Navigate to teacher schedule creation with query parameters
-        router.push({
-            path: '/teacher/create-schedule',
-            query: {
-                section_id: assignment.section_id,
-                subject_id: assignment.subject_id,
-                section_name: assignment.section_name,
-                subject_name: assignment.subject_name
-            }
-        }).catch((error) => {
-            // Clear loading state if navigation fails
-            console.error('Navigation error:', error);
-            creatingScheduleFor.value = null;
-            toast.add({
-                severity: 'error',
-                summary: 'Navigation Error',
-                detail: 'Failed to navigate to schedule creation page',
-                life: 3000
+        router
+            .push({
+                path: '/teacher/create-schedule',
+                query: {
+                    section_id: assignment.section_id,
+                    subject_id: assignment.subject_id,
+                    section_name: assignment.section_name,
+                    subject_name: assignment.subject_name
+                }
+            })
+            .catch((error) => {
+                // Clear loading state if navigation fails
+                console.error('Navigation error:', error);
+                creatingScheduleFor.value = null;
+                toast.add({
+                    severity: 'error',
+                    summary: 'Navigation Error',
+                    detail: 'Failed to navigate to schedule creation page',
+                    life: 3000
+                });
             });
-        });
     }, 500); // Reduced from 1500ms to 500ms for better UX
 };
 
@@ -1297,7 +1271,7 @@ onUnmounted(() => {
 
 /* Blue Gradient Header - Picture 2 Style */
 .blue-gradient-header {
-    background: linear-gradient(135deg, #4169E1 0%, #1E3A8A 100%) !important;
+    background: linear-gradient(135deg, #4169e1 0%, #1e3a8a 100%) !important;
     padding: 2rem 2.5rem !important;
     border-radius: 12px !important;
     margin-bottom: 2rem !important;
@@ -1308,6 +1282,30 @@ onUnmounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    width: 100%;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.create-schedule-header-btn {
+    background-color: #10b981 !important;
+    border-color: #10b981 !important;
+    color: #ffffff !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+    transition: all 0.2s ease !important;
+}
+
+.create-schedule-header-btn:hover {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
 }
 
 .header-left {
@@ -1379,7 +1377,7 @@ onUnmounted(() => {
 
 .total-teachers-badge .badge-count {
     background: #ffffff;
-    color: #4169E1;
+    color: #4169e1;
     padding: 0.25rem 0.75rem;
     border-radius: 16px;
     font-weight: 700;
@@ -1390,7 +1388,7 @@ onUnmounted(() => {
 
 /* Expandable Row Design - Picture 2 Style */
 .schedule-content {
-    background-color: #E5C95F !important;
+    background-color: #e5c95f !important;
     padding: 2rem;
     border-radius: 8px;
 }
@@ -1711,8 +1709,6 @@ onUnmounted(() => {
     opacity: 1 !important;
 }
 
-
-
 .no-schedule-message {
     padding: 2rem;
     text-align: center;
@@ -1736,5 +1732,49 @@ onUnmounted(() => {
     .schedule-actions-col {
         justify-content: flex-start;
     }
+}
+
+/* Hide Dialog Close Button (X) */
+:deep(.p-dialog .p-dialog-header-close) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+:deep(.p-dialog-header-icon) {
+    display: none !important;
+}
+
+:deep(.p-dialog-header-icons) {
+    display: none !important;
+}
+
+:deep(.p-dialog .p-dialog-header .p-dialog-header-icon) {
+    display: none !important;
+}
+
+/* Clickable Dialog Headers */
+.dialog-header-clickable {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.dialog-header-clickable:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    transform: scale(1.02);
+}
+
+.dialog-header-clickable span {
+    font-weight: 600;
+    font-size: 1.25rem;
+    color: #1f2937;
+}
+
+.dialog-header-clickable:hover span {
+    color: #3b82f6;
 }
 </style>
