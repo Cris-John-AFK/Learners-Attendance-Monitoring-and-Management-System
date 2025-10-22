@@ -177,8 +177,11 @@ const goToCollectedReports = (reportId = null) => {
     }
 };
 
-// Navigate to school calendar
+// Navigate to school calendar or create event
 const openSchoolCalendar = () => {
+    console.log('🎯 Create Event button clicked!');
+    // For now, navigate to school calendar
+    // TODO: Open create event dialog/modal
     router.push('/admin-school-calendar');
 };
 
@@ -330,9 +333,9 @@ onUnmounted(() => {
             </div>
 
             <div class="layout-topbar-actions">
-                <button type="button" class="layout-topbar-action" @click="openSchoolCalendar">
+                <button type="button" class="layout-topbar-action create-button" @click="openSchoolCalendar">
                     <i class="pi pi-calendar"></i>
-                    <span>Calendar</span>
+                    <span>Event calendar</span>
                 </button>
 
                 <!-- SF2 Reports Notification Button with Badge -->
@@ -775,5 +778,51 @@ onUnmounted(() => {
 
 .relative {
     position: relative;
+}
+
+/* Create Event Button - White Pill Style */
+.create-button {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 24px !important;
+    padding: 10px 24px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+    min-width: auto !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+.create-button:hover {
+    background: #3b82f6 !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+    transform: translateY(-1px);
+    border-color: #3b82f6 !important;
+}
+
+.create-button:hover i,
+.create-button:hover span {
+    color: #ffffff !important;
+}
+
+.create-button i {
+    font-size: 20px !important;
+    color: #1f2937 !important;
+    font-weight: bold !important;
+    display: inline-block !important;
+}
+
+.create-button span {
+    color: #1f2937 !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 </style>
