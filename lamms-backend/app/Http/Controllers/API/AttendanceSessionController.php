@@ -215,7 +215,13 @@ class AttendanceSessionController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error marking session attendance: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to mark attendance'], 500);
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Request data: ' . json_encode($request->all()));
+            return response()->json([
+                'error' => 'Failed to mark attendance',
+                'message' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
         }
     }
 

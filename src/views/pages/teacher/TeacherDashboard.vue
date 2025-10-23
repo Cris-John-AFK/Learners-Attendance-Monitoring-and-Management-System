@@ -1938,6 +1938,12 @@ const filteredStudents = computed(() => {
     return filtered;
 });
 
+// Calculate total absences across all filtered students
+const totalAbsencesCount = computed(() => {
+    if (!filteredStudents.value || filteredStudents.value.length === 0) return 0;
+    return filteredStudents.value.reduce((sum, student) => sum + (student.total_absences || student.absences || 0), 0);
+});
+
 // Get severity icon for student absence
 function getSeverityIcon(severity) {
     switch (severity) {
@@ -1986,6 +1992,14 @@ function applyDateFilter() {
     showDatePicker.value = false;
     loadAttendanceData();
     prepareChartData();
+}
+
+// Scroll to Student Attendance Overview section
+function scrollToStudentOverview() {
+    const overviewSection = document.getElementById('student-attendance-overview');
+    if (overviewSection) {
+        overviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 // Add this function after getAttendanceRecords to ensure we have data
@@ -2124,13 +2138,22 @@ async function showStudentProfile(student) {
 
                 <!-- Attendance Stats Cards -->
                 <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow flex items-center">
-                        <div class="mr-4 bg-blue-100 p-3 rounded-lg">
+                    <!-- Total Students Card - Clickable -->
+                    <div 
+                        @click="scrollToStudentOverview" 
+                        class="bg-white rounded-xl shadow-sm p-5 hover:shadow-lg transition-all cursor-pointer flex items-center relative group"
+                        title="Click to view student list"
+                    >
+                        <div class="mr-4 bg-blue-100 p-3 rounded-lg group-hover:bg-blue-200 transition-colors">
                             <i class="pi pi-users text-blue-600 text-xl"></i>
                         </div>
-                        <div>
+                        <div class="flex-1">
                             <div class="text-sm text-gray-500 mb-1 font-medium">Total Students</div>
                             <div class="text-2xl font-bold">{{ attendanceSummary?.totalStudents || 0 }}</div>
+                        </div>
+                        <!-- Scroll indicator -->
+                        <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="pi pi-angle-down text-blue-600 text-sm animate-bounce"></i>
                         </div>
                     </div>
 
@@ -2300,7 +2323,7 @@ async function showStudentProfile(student) {
             </div>
 
             <!-- Student List with Attendance Issues -->
-            <div class="bg-white rounded-xl shadow-sm p-5">
+            <div id="student-attendance-overview" class="bg-white rounded-xl shadow-sm p-5 scroll-mt-20">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold flex items-center">
@@ -2309,7 +2332,7 @@ async function showStudentProfile(student) {
                         </h2>
                         <p class="text-sm text-gray-500 mt-1">
                             <i class="pi pi-calendar mr-1"></i>
-                            Showing recent absence tracking (Last 30 Days)
+                            {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}
                             <span v-if="selectedSubject" class="ml-2"> • <i class="pi pi-book mr-1"></i>{{ selectedSubject.name }} </span>
                             <span v-else-if="viewType === 'all_students'" class="ml-2"> • <i class="pi pi-globe mr-1"></i>All Subjects </span>
                         </p>

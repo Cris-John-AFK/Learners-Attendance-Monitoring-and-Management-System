@@ -286,16 +286,27 @@ const loadSessionDetails = async (session) => {
 
 // Update student attendance status
 const updateStudentStatus = async (studentId, newStatus) => {
+    console.log('🔄 Updating student status:', { studentId, newStatus });
+    
     // Show reason dialog for Late or Excused status
     if (newStatus === 'Late' || newStatus === 'Excused') {
         const student = sessionStudents.value.find((s) => s.id === studentId);
+        console.log('📝 Found student for reason dialog:', student);
+        
+        // Get student name from available fields
+        const studentName = student?.name || 
+                           (student?.first_name && student?.last_name ? `${student.first_name} ${student.last_name}` : '') ||
+                           student?.student_name ||
+                           'Student';
+        
         pendingStatusChange.value = {
             studentId,
-            studentName: student?.name || `${student?.first_name} ${student?.last_name}`,
+            studentName,
             newStatus
         };
         reasonDialogType.value = newStatus.toLowerCase();
         showReasonDialog.value = true;
+        console.log('✅ Showing reason dialog:', { studentName, type: reasonDialogType.value });
         return;
     }
 
@@ -328,12 +339,24 @@ const updateStudentStatus = async (studentId, newStatus) => {
 
 // Handle reason dialog confirmation
 const onReasonConfirmed = async (reasonData) => {
-    if (!pendingStatusChange.value) return;
+    console.log('✅ Reason dialog confirmed:', reasonData);
+    
+    if (!pendingStatusChange.value) {
+        console.warn('⚠️ No pending status change found');
+        return;
+    }
 
     const { studentId, newStatus, studentName } = pendingStatusChange.value;
+    console.log('📝 Updating attendance with reason:', { studentId, newStatus, studentName, reasonData });
 
     try {
-        await TeacherAttendanceService.updateStudentAttendance(selectedSession.value.id, studentId, newStatus, reasonData.reason_id, reasonData.reason_notes);
+        await TeacherAttendanceService.updateStudentAttendance(
+            selectedSession.value.id, 
+            studentId, 
+            newStatus, 
+            reasonData.reason_id, 
+            reasonData.reason_notes
+        );
 
         // Update local data with reason
         const student = sessionStudents.value.find((s) => s.id === studentId);
@@ -347,6 +370,7 @@ const onReasonConfirmed = async (reasonData) => {
                 reason_name: reasonData.reason_name,
                 status: 'active'
             };
+            console.log('✅ Student data updated locally:', student);
         }
 
         toast.add({
@@ -356,7 +380,7 @@ const onReasonConfirmed = async (reasonData) => {
             life: 3000
         });
     } catch (error) {
-        console.error('Error updating attendance with reason:', error);
+        console.error('❌ Error updating attendance with reason:', error);
         toast.add({
             severity: 'error',
             summary: 'Error',
@@ -367,6 +391,7 @@ const onReasonConfirmed = async (reasonData) => {
 
     // Clear pending
     pendingStatusChange.value = null;
+    console.log('🧹 Cleared pending status change');
 };
 
 // Bulk update selected students
@@ -634,10 +659,16 @@ onUnmounted(() => {
                 </h3>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Card v-for="session in dateSessions" :key="session.id" class="session-card cursor-pointer hover:shadow-lg transition-shadow duration-200" @click="loadSessionDetails(session)">
+                    <Card v-for="session in dateSessions" :key="session.id" class="session-card cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105" @click="loadSessionDetails(session)">
                         <template #header>
-                            <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-t-lg">
-                                <div class="flex justify-between items-start">
+                            <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-t-lg relative">
+                                <!-- Click to View Indicator -->
+                                <div class="absolute top-2 right-2 bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1 text-xs">
+                                    <i class="pi pi-hand-pointer"></i>
+                                    <span>Click to view</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-start mt-6">
                                     <div>
                                         <h4 class="font-semibold text-lg">{{ session.subject_name }}</h4>
                                         <p class="text-blue-100 text-sm">{{ session.section_name }}</p>
@@ -694,7 +725,13 @@ onUnmounted(() => {
                         </template>
 
                         <template #footer>
-                            <div class="px-4 pb-4"></div>
+                            <div class="px-4 pb-4 pt-2 border-t">
+                                <div class="flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 transition-colors">
+                                    <i class="pi pi-eye text-sm"></i>
+                                    <span class="text-sm font-medium">Click to view & edit details</span>
+                                    <i class="pi pi-arrow-right text-xs"></i>
+                                </div>
+                            </div>
                         </template>
                     </Card>
                 </div>
@@ -775,19 +812,8 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <!-- Bulk Actions -->
-                <div class="flex justify-between items-center mb-4 p-3 bg-blue-50 rounded-lg">
-                    <div class="flex items-center gap-3">
-                        <span class="text-sm font-medium">Bulk Actions:</span>
-                        <Dropdown v-model="bulkStatus" :options="statusOptions" optionLabel="label" optionValue="value" class="w-32" />
-                        <Button label="Apply to Selected" icon="pi pi-check" @click="bulkUpdateStatus" :disabled="selectedStudents.length === 0" class="p-button-sm" />
-                    </div>
-                    <div class="text-sm text-gray-600">{{ selectedStudents.length }} student(s) selected</div>
-                </div>
-
                 <!-- Students Table -->
-                <DataTable :value="filteredStudents" v-model:selection="selectedStudents" dataKey="id" :paginator="true" :rows="10" class="p-datatable-sm" responsiveLayout="scroll">
-                    <Column selectionMode="multiple" headerStyle="width: 3rem"></Column>
+                <DataTable :value="filteredStudents" dataKey="id" :paginator="true" :rows="10" class="p-datatable-sm" responsiveLayout="scroll">
 
                     <Column field="student_id" header="Student ID" sortable>
                         <template #body="{ data }">
@@ -819,7 +845,15 @@ onUnmounted(() => {
 
                     <Column header="Update Status">
                         <template #body="{ data }">
-                            <Dropdown :modelValue="data.status" @update:modelValue="updateStudentStatus(data.id, $event)" :options="statusOptions" optionLabel="label" optionValue="value" class="w-full" />
+                            <Dropdown 
+                                :modelValue="data.status" 
+                                @change="(e) => updateStudentStatus(data.id, e.value)" 
+                                :options="statusOptions" 
+                                optionLabel="label" 
+                                optionValue="value" 
+                                class="w-full" 
+                                placeholder="Select status"
+                            />
                         </template>
                     </Column>
                 </DataTable>

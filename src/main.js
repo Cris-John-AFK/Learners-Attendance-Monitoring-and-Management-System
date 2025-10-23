@@ -13,6 +13,8 @@ axios.defaults.withCredentials = true;
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 import '@/assets/css/global-overrides.css'; // Import global overrides last to ensure they take precedence
+import { createPinia } from 'pinia';
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
@@ -23,8 +25,6 @@ import ToastService from 'primevue/toastservice';
 import VCalendar from 'v-calendar';
 import 'v-calendar/style.css';
 import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import App from './App.vue';
 import CustomDialog from './components/CustomDialog.vue';
 import router from './router';

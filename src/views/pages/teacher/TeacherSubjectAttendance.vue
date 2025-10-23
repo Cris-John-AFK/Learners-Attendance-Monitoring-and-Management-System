@@ -2364,19 +2364,9 @@ const completeAttendanceSession = async () => {
         sessionCompletionProgress.value = 10;
         await new Promise((resolve) => setTimeout(resolve, 800));
 
-        // Step 2: Send seat plan data to backend (skip if already saved)
+        // Step 2: Skip sending attendance data (already saved during marking)
         sessionCompletionProgress.value = 25;
-        console.log('📤 [COMPLETE] Sending seat plan attendance to backend...');
-        try {
-            await AttendanceSessionService.markSeatPlanAttendance(
-                currentSession.value.id,
-                seatPlan.value,
-                attendanceStatuses.value
-            );
-            console.log('✅ [COMPLETE] Attendance data sent successfully');
-        } catch (error) {
-            console.warn('⚠️ [COMPLETE] Attendance already saved, skipping...', error.message);
-        }
+        console.log('⏭️ [COMPLETE] Skipping attendance save - already saved during marking');
         await new Promise((resolve) => setTimeout(resolve, 600));
 
         // Step 3: Complete session
@@ -2556,11 +2546,18 @@ const markAllPresent = async () => {
                     // Update visual status
                     seat.status = 1; // Present status
 
-                    // Find Present status ID from attendanceStatuses
-                    const presentStatus = attendanceStatuses.value.find((status) => status.code === 'P' || status.name === 'Present' || status.id === 1);
+                    // Find Present status ID from attendanceStatuses with better matching
+                    const presentStatus = attendanceStatuses.value.find((status) => {
+                        return status.code === 'P' || 
+                               status.name === 'Present' || 
+                               status.id === 1 ||
+                               (status.name && status.name.toLowerCase() === 'present');
+                    });
 
                     if (!presentStatus) {
                         console.error('Present status not found in attendanceStatuses');
+                        console.error('Available statuses:', JSON.stringify(attendanceStatuses.value, null, 2));
+                        // Skip this student but continue with others
                         return;
                     }
 
@@ -3314,6 +3311,9 @@ const handleSeatHover = (rowIndex, colIndex, event) => {
     const seat = seatPlan.value[rowIndex][colIndex];
     if (!seat.isOccupied || !sessionActive.value || isEditMode.value || justClicked.value) return;
 
+    // Clear any existing hover immediately for instant transition
+    hoveredSeat.value = null;
+
     // Get total columns in the grid
     const totalColumns = seatPlan.value[0]?.length || 0;
     const totalRows = seatPlan.value.length || 0;
@@ -3345,20 +3345,21 @@ const handleSeatHover = (rowIndex, colIndex, event) => {
         transformOrigin += ' center';
     }
 
-    hoveredSeat.value = {
-        row: rowIndex,
-        col: colIndex,
-        transformOrigin
-    };
+    // Use nextTick to ensure immediate update
+    nextTick(() => {
+        hoveredSeat.value = {
+            row: rowIndex,
+            col: colIndex,
+            transformOrigin
+        };
+    });
 };
 
 const handleSeatLeave = () => {
-    // Hide after a delay, but only if not hovering over actions
-    setTimeout(() => {
-        if (!showReasonDialog.value) {
-            hoveredSeat.value = null;
-        }
-    }, 150);
+    // Clear immediately for responsive hover behavior
+    if (!showReasonDialog.value) {
+        hoveredSeat.value = null;
+    }
 };
 
 const justClicked = ref(false);
@@ -3366,9 +3367,10 @@ const justClicked = ref(false);
 const clearHoveredSeat = () => {
     hoveredSeat.value = null;
     justClicked.value = true;
+    // Reduce delay from 300ms to 50ms for faster hover response
     setTimeout(() => {
         justClicked.value = false;
-    }, 300);
+    }, 50);
 };
 
 const handleSeatClick = async (rowIndex, colIndex) => {
@@ -4128,22 +4130,41 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '', reasonI
             throw new Error('No active session found');
         }
 
-        // Find status ID from loaded attendanceStatuses
+        // Find status ID from loaded attendanceStatuses with comprehensive matching
         let attendanceStatusId;
+        
+        // First, ensure attendanceStatuses is loaded
+        if (!attendanceStatuses.value || attendanceStatuses.value.length === 0) {
+            console.warn('Attendance statuses not loaded, reloading...');
+            attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
+            console.log('Reloaded attendance statuses:', attendanceStatuses.value);
+        }
+        
         const statusRecord = attendanceStatuses.value.find((s) => {
+            // Convert status to number if it's a numeric ID
+            const statusNum = typeof status === 'number' ? status : parseInt(status);
+            
             // Try multiple matching strategies
             return (
+                s.id === statusNum ||
+                s.id === status ||
                 s.name === status ||
-                s.code === status.charAt(0).toUpperCase() ||
-                (status === 'Present' && (s.code === 'P' || s.name === 'Present')) ||
-                (status === 'Absent' && (s.code === 'A' || s.name === 'Absent')) ||
-                (status === 'Late' && (s.code === 'L' || s.name === 'Late')) ||
-                (status === 'Excused' && (s.code === 'E' || s.name === 'Excused'))
+                (s.name && s.name.toLowerCase() === (typeof status === 'string' ? status.toLowerCase() : '')) ||
+                s.code === (typeof status === 'string' ? status.charAt(0).toUpperCase() : '') ||
+                (status === 'Present' && (s.code === 'P' || (s.name && s.name.toLowerCase() === 'present') || s.id === 1)) ||
+                (status === 'Absent' && (s.code === 'A' || (s.name && s.name.toLowerCase() === 'absent') || s.id === 2)) ||
+                (status === 'Late' && (s.code === 'L' || (s.name && s.name.toLowerCase() === 'late') || s.id === 3)) ||
+                (status === 'Excused' && (s.code === 'E' || (s.name && s.name.toLowerCase() === 'excused') || s.id === 4)) ||
+                (status === 1 && (s.code === 'P' || s.id === 1)) ||
+                (status === 2 && (s.code === 'A' || s.id === 2)) ||
+                (status === 3 && (s.code === 'L' || s.id === 3)) ||
+                (status === 4 && (s.code === 'E' || s.id === 4))
             );
         });
 
         if (!statusRecord) {
-            console.error('Available attendance statuses:', attendanceStatuses.value);
+            console.error('Status lookup failed for:', status, 'Type:', typeof status);
+            console.error('Available attendance statuses:', JSON.stringify(attendanceStatuses.value, null, 2));
             throw new Error(`Status not found in database: ${status}`);
         }
 

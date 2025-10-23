@@ -1,13 +1,49 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
 
 const { layoutConfig, layoutState, isSidebarActive } = useLayout();
+const route = useRoute();
 
 const outsideClickListener = ref(null);
+
+// Scroll progress indicator
+const scrollProgress = ref(0);
+const showScrollIndicator = ref(true);
+
+function updateScrollProgress() {
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const scrollPercent = (scrollTop / (documentHeight - windowHeight)) * 100;
+    scrollProgress.value = Math.min(100, Math.max(0, scrollPercent));
+
+    // Hide scroll indicator only when scrolled past 50% of the page
+    showScrollIndicator.value = scrollPercent < 80;
+}
+
+// Scroll down one screen when arrow is clicked
+function scrollDown() {
+    window.scrollTo({
+        top: window.scrollY + window.innerHeight,
+        behavior: 'smooth'
+    });
+}
+
+// Reset scroll progress when route changes
+watch(() => route.path, () => {
+    // Scroll to top on route change
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    // Reset progress immediately
+    scrollProgress.value = 0;
+    showScrollIndicator.value = true;
+    // Update after a brief delay to ensure page is rendered
+    setTimeout(updateScrollProgress, 100);
+});
 
 watch(isSidebarActive, (newVal) => {
     if (newVal) {
@@ -55,9 +91,39 @@ const isOutsideClicked = (event) => {
     const topbarEl = document.querySelector('.layout-topbar');
     return !(sidebarEl.isSameNode(event.target) || sidebarEl.contains(event.target) || topbarEl.isSameNode(event.target) || topbarEl.contains(event.target));
 };
+
+// Lifecycle hooks for scroll progress
+onMounted(() => {
+    window.addEventListener('scroll', updateScrollProgress);
+    updateScrollProgress(); // Initial calculation
+});
+
+onUnmounted(() => {
+    window.removeEventListener('scroll', updateScrollProgress);
+});
 </script>
 
 <template>
+    <!-- Scroll Progress Bar - At the VERY top -->
+    <div class="fixed top-0 left-0 right-0 h-1 bg-gray-200" style="z-index: 9999">
+        <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out shadow-lg" :style="{ width: scrollProgress + '%' }"></div>
+    </div>
+
+    <!-- Scroll Down Indicator -->
+    <Transition name="fade">
+        <div
+            v-if="showScrollIndicator"
+            class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center animate-bounce cursor-pointer"
+            style="z-index: 9998"
+            @click="scrollDown"
+        >
+            <div class="bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700 transition-colors">
+                <i class="pi pi-angle-down text-xl"></i>
+            </div>
+            <span class="text-xs text-gray-600 mt-2 font-medium">Scroll Down</span>
+        </div>
+    </Transition>
+
     <div class="app-layout-container">
         <div class="layout-wrapper teacher-route" :class="containerClass">
             <AppTopbar />
@@ -76,6 +142,17 @@ const isOutsideClicked = (event) => {
 <style lang="scss">
 @import '@/assets/layout/layout.scss';
 
+/* Fade transition for scroll indicator */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
 /* Print styles - hide navigation for QR code printing */
 @media print {
     .layout-topbar,
@@ -85,12 +162,12 @@ const isOutsideClicked = (event) => {
         display: none !important;
         visibility: hidden !important;
     }
-    
+
     .layout-main-container {
         margin: 0 !important;
         padding: 0 !important;
     }
-    
+
     .layout-main {
         margin: 0 !important;
         padding: 0 !important;
