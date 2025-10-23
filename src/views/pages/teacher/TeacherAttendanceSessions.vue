@@ -316,9 +316,13 @@ const updateStudentStatus = async (studentId, newStatus) => {
 
         // Update local data
         const student = sessionStudents.value.find((s) => s.id === studentId);
+        const oldStatus = student?.status;
         if (student) {
             student.status = newStatus;
         }
+
+        // Update session counts in the card
+        updateSessionCounts(selectedSession.value, oldStatus, newStatus);
 
         toast.add({
             severity: 'success',
@@ -360,6 +364,7 @@ const onReasonConfirmed = async (reasonData) => {
 
         // Update local data with reason
         const student = sessionStudents.value.find((s) => s.id === studentId);
+        const oldStatus = student?.status;
         if (student) {
             student.status = newStatus;
             student.reason_id = reasonData.reason_id;
@@ -372,6 +377,9 @@ const onReasonConfirmed = async (reasonData) => {
             };
             console.log('✅ Student data updated locally:', student);
         }
+
+        // Update session counts in the card
+        updateSessionCounts(selectedSession.value, oldStatus, newStatus);
 
         toast.add({
             severity: 'success',
@@ -504,6 +512,49 @@ const formatDate = (dateString) => {
     } catch (error) {
         return dateString;
     }
+};
+
+// Update session counts after status change
+const updateSessionCounts = (session, oldStatus, newStatus) => {
+    if (!session) return;
+    
+    // Normalize status strings to match count properties
+    const normalizeStatus = (status) => {
+        if (!status) return null;
+        return status.toLowerCase();
+    };
+    
+    const oldStatusNorm = normalizeStatus(oldStatus);
+    const newStatusNorm = normalizeStatus(newStatus);
+    
+    // Decrease old status count
+    if (oldStatusNorm === 'present' && session.present_count > 0) {
+        session.present_count--;
+    } else if (oldStatusNorm === 'absent' && session.absent_count > 0) {
+        session.absent_count--;
+    } else if (oldStatusNorm === 'late' && session.late_count > 0) {
+        session.late_count--;
+    } else if (oldStatusNorm === 'excused' && session.excused_count > 0) {
+        session.excused_count--;
+    }
+    
+    // Increase new status count
+    if (newStatusNorm === 'present') {
+        session.present_count = (session.present_count || 0) + 1;
+    } else if (newStatusNorm === 'absent') {
+        session.absent_count = (session.absent_count || 0) + 1;
+    } else if (newStatusNorm === 'late') {
+        session.late_count = (session.late_count || 0) + 1;
+    } else if (newStatusNorm === 'excused') {
+        session.excused_count = (session.excused_count || 0) + 1;
+    }
+    
+    console.log('📊 Session counts updated:', {
+        present: session.present_count,
+        absent: session.absent_count,
+        late: session.late_count,
+        excused: session.excused_count
+    });
 };
 
 // Get attendance summary for a session

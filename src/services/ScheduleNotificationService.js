@@ -71,7 +71,35 @@ class ScheduleNotificationService {
             if (!teacherData?.teacher?.id) return;
 
             const response = await axios.get(`/api/schedule-notifications/teacher/${teacherData.teacher.id}/upcoming`);
-            const schedules = response.data.data || [];
+            const allSchedules = response.data.data || [];
+            
+            // Filter out old schedules - only keep today's schedules that haven't ended yet
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            
+            const schedules = allSchedules.filter(schedule => {
+                const endTime = new Date(schedule.schedule_datetime_end);
+                const startTime = new Date(schedule.schedule_datetime_start);
+                
+                // Debug logging
+                console.log(`🔍 Checking schedule:`, {
+                    subject: schedule.subject_name,
+                    startTime: startTime.toLocaleString(),
+                    endTime: endTime.toLocaleString(),
+                    isToday: startTime >= todayStart && startTime <= todayEnd,
+                    hasNotEnded: endTime > now,
+                    willKeep: startTime >= todayStart && startTime <= todayEnd && endTime > now
+                });
+                
+                // Only keep schedules that:
+                // 1. Start today (between midnight and 11:59 PM)
+                // 2. Haven't ended yet
+                return startTime >= todayStart && startTime <= todayEnd && endTime > now;
+            });
+            
+            console.log(`📅 Today is: ${now.toLocaleDateString()}`);
+            console.log(`📅 Filtered ${allSchedules.length} schedules to ${schedules.length} valid today's schedules`);
             
             this.currentSchedules = schedules;
             this.processScheduleNotifications(schedules);
@@ -422,9 +450,15 @@ class ScheduleNotificationService {
             };
         }
 
-        // Find next upcoming schedule
+        // Find next upcoming schedule (must start in the future AND not have ended yet)
         const nextSchedule = this.currentSchedules
-            .filter(schedule => new Date(schedule.schedule_datetime_start) > now)
+            .filter(schedule => {
+                const startTime = new Date(schedule.schedule_datetime_start);
+                const endTime = new Date(schedule.schedule_datetime_end);
+                // Only show schedules that haven't started yet OR are currently active
+                return startTime > now || (now >= startTime && now <= endTime);
+            })
+            .filter(schedule => new Date(schedule.schedule_datetime_start) > now) // Only future schedules for "next"
             .sort((a, b) => new Date(a.schedule_datetime_start) - new Date(b.schedule_datetime_start))[0];
 
         if (nextSchedule) {

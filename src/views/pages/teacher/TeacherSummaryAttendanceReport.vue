@@ -6,11 +6,43 @@
                 <h2 class="text-xl font-bold text-gray-800">Summary Attendance Report</h2>
             </div>
             <div class="flex flex-wrap items-center gap-3">
+                <!-- Section Selector (for teachers with multiple sections) -->
+                <div v-if="teacherSections.length > 1" class="flex items-center gap-2 border-2 border-purple-400 rounded-lg px-4 py-3 bg-purple-50 shadow-sm">
+                    <i class="pi pi-users text-purple-600 text-lg"></i>
+                    <label class="text-base font-bold text-purple-900">Section:</label>
+                    <Dropdown 
+                        v-model="sectionId" 
+                        :options="teacherSections" 
+                        optionLabel="name" 
+                        optionValue="id" 
+                        placeholder="Select Section" 
+                        @change="onSectionChange" 
+                        class="w-48"
+                    >
+                        <template #value="slotProps">
+                            <div v-if="slotProps.value" class="flex items-center gap-2">
+                                <i class="pi pi-users text-purple-600"></i>
+                                <span class="font-semibold text-sm">{{ getSectionName(slotProps.value) }}</span>
+                            </div>
+                            <span v-else class="text-gray-500">{{ slotProps.placeholder }}</span>
+                        </template>
+                        <template #option="slotProps">
+                            <div class="flex items-center gap-2 p-2 hover:bg-purple-50">
+                                <i class="pi pi-users text-purple-600"></i>
+                                <div>
+                                    <div class="font-semibold text-sm">{{ slotProps.option.name }}</div>
+                                    <div class="text-xs text-gray-600">{{ slotProps.option.grade_level }}</div>
+                                </div>
+                            </div>
+                        </template>
+                    </Dropdown>
+                </div>
+
                 <!-- Quarter Selector (User-Friendly for Elderly Teachers) -->
-                <div class="flex items-center gap-2 border-2 border-blue-400 rounded-lg px-4 py-3 bg-blue-50 shadow-sm">
-                    <i class="pi pi-calendar text-blue-600 text-lg"></i>
-                    <label class="text-base font-bold text-blue-900">School Quarter:</label>
-                    <Dropdown v-model="selectedQuarter" :options="quarters" optionLabel="label" placeholder="Choose Quarter" @change="onQuarterChange" class="w-64">
+                <div class="flex items-center gap-2 border-2 rounded-lg px-4 py-3 shadow-sm transition-all" :class="isQuarterMode ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'">
+                    <i class="pi pi-calendar text-lg" :class="isQuarterMode ? 'text-blue-600' : 'text-gray-400'"></i>
+                    <label class="text-base font-bold" :class="isQuarterMode ? 'text-blue-900' : 'text-gray-700'">School Quarter:</label>
+                    <Dropdown v-model="selectedQuarter" :options="quarters" optionLabel="label" placeholder="Choose Quarter" @change="onQuarterChange" class="w-64" showClear>
                         <template #value="slotProps">
                             <div v-if="slotProps.value" class="flex items-center gap-2">
                                 <i class="pi pi-book text-blue-600"></i>
@@ -31,11 +63,11 @@
                 </div>
 
                 <!-- OR Custom Date Range -->
-                <div class="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2 bg-gray-50">
-                    <label class="text-sm font-bold text-gray-700">📅 From:</label>
+                <div class="flex items-center gap-2 border-2 rounded-lg px-3 py-2 shadow-sm transition-all" :class="isCustomDateMode ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'">
+                    <label class="text-sm font-bold" :class="isCustomDateMode ? 'text-green-700' : 'text-gray-700'">📅 From:</label>
                     <Calendar v-model="startDate" dateFormat="mm/dd/yy" placeholder="Start Date" @date-select="onDateRangeChange" class="w-40" showIcon />
-                    <span class="text-gray-500 font-bold">to</span>
-                    <label class="text-sm font-bold text-gray-700">📅 To:</label>
+                    <span class="font-bold" :class="isCustomDateMode ? 'text-green-600' : 'text-gray-500'">to</span>
+                    <label class="text-sm font-bold" :class="isCustomDateMode ? 'text-green-700' : 'text-gray-700'">📅 To:</label>
                     <Calendar v-model="endDate" dateFormat="mm/dd/yy" placeholder="End Date" @date-select="onDateRangeChange" class="w-40" showIcon />
                 </div>
             </div>
@@ -50,7 +82,7 @@
                 </div>
                 <div class="header-center">
                     <h2 class="report-title">Summary Attendance Report of Learners</h2>
-                    <p class="report-subtitle">(Monthly attendance summary for all students)</p>
+                    <p class="report-subtitle">{{ reportSubtitle }}</p>
                 </div>
                 <div class="header-logo-right">
                     <img src="/demo/images/deped-logo.png" alt="DepEd Logo" class="logo-large" />
@@ -114,18 +146,15 @@
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)">
+                            <td
+                                class="border border-gray-900 p-1 text-center text-sm font-bold"
+                                :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)"
+                            >
                                 {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                             <td class="border border-gray-900 p-2 text-center no-print">
-                                <Button 
-                                    icon="pi pi-eye" 
-                                    label="View Details" 
-                                    @click="showStudentDetails(student)" 
-                                    class="p-button-sm p-button-info"
-                                    v-tooltip.top="'View detailed attendance report'"
-                                />
+                                <Button icon="pi pi-eye" label="View Details" @click="showStudentDetails(student)" class="p-button-sm p-button-info" v-tooltip.top="'View detailed attendance report'" />
                             </td>
                         </tr>
                         <!-- Female Students -->
@@ -144,18 +173,15 @@
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)">
+                            <td
+                                class="border border-gray-900 p-1 text-center text-sm font-bold"
+                                :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)"
+                            >
                                 {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                             <td class="border border-gray-900 p-2 text-center no-print">
-                                <Button 
-                                    icon="pi pi-eye" 
-                                    label="View Details" 
-                                    @click="showStudentDetails(student)" 
-                                    class="p-button-sm p-button-info"
-                                    v-tooltip.top="'View detailed attendance report'"
-                                />
+                                <Button icon="pi pi-eye" label="View Details" @click="showStudentDetails(student)" class="p-button-sm p-button-info" v-tooltip.top="'View detailed attendance report'" />
                             </td>
                         </tr>
                         <!-- Total Row -->
@@ -195,24 +221,14 @@
         <div v-if="showDetailsDialog" class="dialog-wrapper">
             <!-- Floating Previous Button with Label -->
             <div v-if="hasPreviousStudent" class="floating-nav-container floating-nav-left">
-                <Button 
-                    icon="pi pi-chevron-left" 
-                    @click="navigateToPreviousStudent" 
-                    class="floating-nav-btn p-button-rounded p-button-primary" 
-                    aria-label="Previous Student"
-                />
-                <span class="floating-nav-label">Previous<br/>Student</span>
+                <Button icon="pi pi-chevron-left" @click="navigateToPreviousStudent" class="floating-nav-btn p-button-rounded p-button-primary" aria-label="Previous Student" />
+                <span class="floating-nav-label">Previous<br />Student</span>
             </div>
 
             <!-- Floating Next Button with Label -->
             <div v-if="hasNextStudent" class="floating-nav-container floating-nav-right">
-                <Button 
-                    icon="pi pi-chevron-right" 
-                    @click="navigateToNextStudent" 
-                    class="floating-nav-btn p-button-rounded p-button-primary" 
-                    aria-label="Next Student"
-                />
-                <span class="floating-nav-label">Next<br/>Student</span>
+                <Button icon="pi pi-chevron-right" @click="navigateToNextStudent" class="floating-nav-btn p-button-rounded p-button-primary" aria-label="Next Student" />
+                <span class="floating-nav-label">Next<br />Student</span>
             </div>
         </div>
 
@@ -243,7 +259,7 @@
                             <input type="text" value="2024-2025" class="flex-1 border border-gray-400 px-2 py-1 text-xs" readonly />
                         </div>
                         <div class="flex items-center gap-2">
-                            <label class="text-xs font-semibold text-gray-700 whitespace-nowrap">Report for the Month of:</label>
+                            <label class="text-xs font-semibold text-gray-700 whitespace-nowrap">Report Period:</label>
                             <input type="text" :value="getMonthName()" class="flex-1 border border-gray-400 px-2 py-1 text-xs" readonly />
                         </div>
                     </div>
@@ -375,14 +391,16 @@
 
             <template #footer>
                 <!-- Clean Footer with Centered Actions -->
-                <div class="flex flex-col items-center gap-3 w-full">
+                <div class="flex flex-col items-center gap-3 w-full bg-white pt-4 pb-2" style="position: relative; z-index: 10;">
                     <!-- Student Counter -->
-                    <div class="text-center">
-                        <span class="text-sm font-semibold text-gray-700">Student {{ currentStudentIndex + 1 }} of {{ students.length }}</span>
+                    <div class="text-center mb-2">
+                        <span class="text-sm font-semibold text-gray-700 bg-white px-3 py-1 rounded-full border border-gray-300">
+                            Student {{ currentStudentIndex + 1 }} of {{ students.length }}
+                        </span>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="flex justify-center items-center gap-3">
+                    <div class="flex justify-center items-center gap-3 flex-wrap">
                         <Button label="Print This Student" icon="pi pi-print" @click="printCurrentStudent" class="p-button-success" />
                         <Button label="Print All Students" icon="pi pi-file" @click="printAllStudents" class="p-button-info" />
                         <Button label="Close" icon="pi pi-times" @click="showDetailsDialog = false" class="p-button-secondary" />
@@ -460,6 +478,28 @@ const quarters = ref([
 const startDate = ref(new Date(2025, 5, 24)); // June 24, 2025
 const endDate = ref(new Date(2025, 7, 29)); // August 29, 2025
 
+// Computed property to detect which mode is active
+const isQuarterMode = computed(() => {
+    return selectedQuarter.value !== null;
+});
+
+const isCustomDateMode = computed(() => {
+    return !!startDate.value && !!endDate.value;
+});
+
+// Dynamic subtitle based on selected mode
+const reportSubtitle = computed(() => {
+    if (selectedQuarter.value) {
+        return `(${selectedQuarter.value.label} - ${selectedQuarter.value.dateRange})`;
+    } else if (startDate.value && endDate.value) {
+        const formatDate = (date) => {
+            return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        };
+        return `(Custom Date Range: ${formatDate(startDate.value)} to ${formatDate(endDate.value)})`;
+    }
+    return '(Quarterly attendance summary for all students)';
+});
+
 // Computed properties using SF2 Report data structure
 const students = computed(() => {
     if (!reportData.value?.students) return [];
@@ -487,13 +527,13 @@ const schoolDays = computed(() => {
 
     // Count unique dates where ANY student has attendance data (sessions were recorded)
     const sessionDates = new Set();
-    
+
     reportData.value.students.forEach((student) => {
         if (student.attendance_data) {
             Object.keys(student.attendance_data).forEach((dateStr) => {
                 const dayDate = new Date(dateStr);
                 dayDate.setHours(0, 0, 0, 0);
-                
+
                 // Only count if within date range and has a status
                 if (dayDate >= start && dayDate <= end && student.attendance_data[dateStr]) {
                     sessionDates.add(dateStr);
@@ -1237,11 +1277,31 @@ const printAllStudents = () => {
 };
 
 const getMonthName = () => {
-    if (!selectedMonth.value) return '';
+    // Show date range instead of just one month
+    if (!startDate.value || !endDate.value) return '';
+    
     const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-    const month = selectedMonth.value.getMonth();
-    const year = selectedMonth.value.getFullYear();
-    return `${months[month]} ${year}`;
+    
+    const startMonth = months[startDate.value.getMonth()];
+    const startDay = startDate.value.getDate();
+    const startYear = startDate.value.getFullYear();
+    
+    const endMonth = months[endDate.value.getMonth()];
+    const endDay = endDate.value.getDate();
+    const endYear = endDate.value.getFullYear();
+    
+    // If same month and year, show: "JUNE 24-29, 2025"
+    if (startMonth === endMonth && startYear === endYear) {
+        return `${startMonth} ${startDay}-${endDay}, ${startYear}`;
+    }
+    
+    // If different months, show: "JUNE 24 - AUGUST 29, 2025"
+    if (startYear === endYear) {
+        return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${startYear}`;
+    }
+    
+    // If different years, show full dates: "JUNE 24, 2025 - AUGUST 29, 2026"
+    return `${startMonth} ${startDay}, ${startYear} - ${endMonth} ${endDay}, ${endYear}`;
 };
 
 const getAttendanceRateClass = (rate) => {
@@ -1252,6 +1312,8 @@ const getAttendanceRateClass = (rate) => {
 };
 
 const onDateRangeChange = () => {
+    // Don't clear quarter - let both work independently
+    
     // Only load if both dates are selected
     if (startDate.value && endDate.value) {
         // Validate that end date is after start date
@@ -1271,6 +1333,52 @@ const onDateRangeChange = () => {
     } else {
         console.log('⏳ Waiting for both dates to be selected...');
     }
+};
+
+// Clear custom dates and go back to quarterly mode
+const clearCustomDates = () => {
+    // Reset to default first quarter dates
+    startDate.value = new Date(2025, 5, 24); // June 24, 2025
+    endDate.value = new Date(2025, 7, 29); // August 29, 2025
+    
+    // This will re-enable the quarter dropdown since selectedQuarter is null
+    // User can now select a quarter again
+    
+    toast.add({
+        severity: 'info',
+        summary: 'Custom Dates Cleared',
+        detail: 'You can now select a school quarter',
+        life: 3000
+    });
+    
+    // Don't reload data automatically - let user select a quarter
+};
+
+// Section change handler
+const onSectionChange = () => {
+    if (sectionId.value) {
+        // Update section name and grade level
+        const selectedSection = teacherSections.value.find(s => s.id === sectionId.value);
+        if (selectedSection) {
+            sectionName.value = selectedSection.name;
+            gradeLevel.value = selectedSection.grade_level || 'Unknown Grade';
+            
+            toast.add({
+                severity: 'info',
+                summary: '📚 Section Changed',
+                detail: `Loading data for ${selectedSection.name}`,
+                life: 3000
+            });
+            
+            loadAttendanceData();
+        }
+    }
+};
+
+// Helper function to get section name by ID
+const getSectionName = (id) => {
+    const section = teacherSections.value.find(s => s.id === id);
+    return section ? section.name : 'Unknown';
 };
 
 // Quarter change handler
@@ -1298,20 +1406,40 @@ onMounted(async () => {
     const teacherData = TeacherAuthService.getTeacherData();
     console.log('👨‍🏫 Teacher data:', teacherData);
 
-    // Try to get section from teacher.homeroom_section first, then from assignments
+    // Collect all sections this teacher handles
+    const allSections = [];
     let homeroomSection = null;
 
+    // Get homeroom section
     if (teacherData?.teacher?.homeroom_section) {
         homeroomSection = teacherData.teacher.homeroom_section;
+        allSections.push(homeroomSection);
         console.log('✅ Found homeroom section in teacher object:', homeroomSection);
     } else if (teacherData?.assignments && teacherData.assignments.length > 0) {
         // Find homeroom assignment (subject_id is null)
         const homeroomAssignment = teacherData.assignments.find((a) => a.subject_id === null || a.subject_name === 'Homeroom');
         if (homeroomAssignment && homeroomAssignment.section) {
             homeroomSection = homeroomAssignment.section;
+            allSections.push(homeroomSection);
             console.log('✅ Found homeroom section in assignments:', homeroomSection);
         }
     }
+
+    // Get all other sections from assignments
+    if (teacherData?.assignments && teacherData.assignments.length > 0) {
+        teacherData.assignments.forEach(assignment => {
+            if (assignment.section && assignment.section.id !== homeroomSection?.id) {
+                // Check if not already added
+                if (!allSections.find(s => s.id === assignment.section.id)) {
+                    allSections.push(assignment.section);
+                }
+            }
+        });
+    }
+
+    // Store all sections
+    teacherSections.value = allSections;
+    console.log('📚 Teacher handles', allSections.length, 'section(s):', allSections.map(s => s.name));
 
     if (homeroomSection) {
         sectionId.value = homeroomSection.id;
@@ -1396,6 +1524,9 @@ onMounted(async () => {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 1200 !important;
 }
 
 .dialog-wrapper .floating-nav-btn {
@@ -1415,7 +1546,7 @@ onMounted(async () => {
     font-weight: 600;
     color: #495057;
     text-align: center;
-    line-height: 1.3;
+    line-height: 1.2;
     background: white;
     padding: 4px 8px;
     border-radius: 4px;
@@ -1445,6 +1576,33 @@ onMounted(async () => {
 /* Make sure dialog doesn't cover buttons */
 :deep(.sf2-dialog) {
     z-index: 1100 !important;
+}
+
+/* Hide any scroll indicators in the dialog footer area */
+:deep(.sf2-dialog .p-dialog-footer) {
+    position: relative;
+    z-index: 1300 !important;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Hide scroll indicators that might overlap */
+:deep(.sf2-dialog .p-dialog-content) {
+    position: relative;
+    z-index: 1;
+}
+
+/* Ensure footer is always on top */
+:deep(.sf2-dialog .p-dialog-footer::before) {
+    content: '';
+    position: absolute;
+    top: -20px;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to bottom, transparent, white);
+    pointer-events: none;
+    z-index: 1299;
 }
 
 .report-card {

@@ -109,12 +109,12 @@ onUnmounted(() => {
         <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out shadow-lg" :style="{ width: scrollProgress + '%' }"></div>
     </div>
 
-    <!-- Scroll Down Indicator -->
+    <!-- Scroll Down Indicator (hidden when dialogs are open) -->
     <Transition name="fade">
         <div
             v-if="showScrollIndicator"
-            class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center animate-bounce cursor-pointer"
-            style="z-index: 9998"
+            class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center animate-bounce cursor-pointer scroll-indicator"
+            style="z-index: 999"
             @click="scrollDown"
         >
             <div class="bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700 transition-colors">
@@ -151,6 +151,11 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+/* Hide scroll indicator when any dialog is open */
+body:has(.p-dialog-mask) .scroll-indicator {
+    display: none !important;
 }
 
 /* Print styles - hide navigation for QR code printing */

@@ -278,9 +278,29 @@ const initializeAttendanceSession = async () => {
         if (activeSessions && activeSessions.length > 0) {
             // Find session for current subject/section
             const resolvedSubjectId = getResolvedSubjectId();
-            const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == resolvedSubjectId);
+            
+            console.log('🔍 Looking for active session:');
+            console.log('- Current section ID:', sectionId.value);
+            console.log('- Current subject ID:', resolvedSubjectId);
+            console.log('- Active sessions:', activeSessions.map(s => ({ 
+                id: s.id, 
+                section_id: s.section_id, 
+                subject_id: s.subject_id,
+                subject_name: s.subject_name 
+            })));
+            
+            const matchingSession = activeSessions.find((session) => 
+                session.section_id == sectionId.value && 
+                session.subject_id == resolvedSubjectId
+            );
 
             if (matchingSession) {
+                console.log('✅ Found matching session:', {
+                    id: matchingSession.id,
+                    section_id: matchingSession.section_id,
+                    subject_id: matchingSession.subject_id,
+                    subject_name: matchingSession.subject_name
+                });
                 // Check if session is from today - don't auto-resume old sessions
                 const sessionDate = new Date(matchingSession.session_date || matchingSession.created_at);
                 const today = new Date();
@@ -307,13 +327,9 @@ const initializeAttendanceSession = async () => {
                     console.log('⏭️ Skipping session restoration - user is in edit mode');
                 } else {
                     console.log('Found old active session from', sessionDate.toDateString(), '- not resuming');
-                    // Optionally auto-complete old sessions
-                    try {
-                        await AttendanceSessionService.completeSession(matchingSession.id);
-                        console.log('Auto-completed old session:', matchingSession.id);
-                    } catch (error) {
-                        console.error('Error auto-completing old session:', error);
-                    }
+                    // DO NOT auto-complete sessions - let teacher manually complete them
+                    // This prevents accidentally marking everyone absent when navigating pages
+                    console.log('⚠️ Old session found but NOT auto-completing to prevent data loss');
                 }
             }
         }
@@ -1015,19 +1031,29 @@ const autoAssignStudents = (method = null) => {
 };
 
 // Floating Panel Drag Functions
+let dragAnimationFrame = null;
+let pendingDragUpdate = null;
+
 const startDragPanel = (event) => {
-    if (event.target.closest('.panel-btn') || event.target.closest('.floating-panel-content')) {
-        return; // Don't drag when clicking buttons or content
+    // Only allow dragging from the header, not from buttons or content
+    if (event.target.closest('.panel-btn')) {
+        return; // Don't drag when clicking buttons
+    }
+
+    // Only drag if clicking on the header itself
+    if (!event.target.closest('.floating-panel-header')) {
+        return;
     }
 
     isDraggingPanel.value = true;
-    const rect = event.currentTarget.getBoundingClientRect();
+    const panelElement = event.currentTarget.closest('.floating-students-panel');
+    const rect = panelElement.getBoundingClientRect();
     dragOffset.value = {
         x: event.clientX - rect.left,
         y: event.clientY - rect.top
     };
 
-    document.addEventListener('mousemove', dragPanel);
+    document.addEventListener('mousemove', dragPanel, { passive: true });
     document.addEventListener('mouseup', stopDragPanel);
     event.preventDefault();
 };
@@ -1035,25 +1061,48 @@ const startDragPanel = (event) => {
 const dragPanel = (event) => {
     if (!isDraggingPanel.value) return;
 
-    const newX = event.clientX - dragOffset.value.x;
-    const newY = event.clientY - dragOffset.value.y;
-
-    // Keep panel within viewport bounds
-    const panelWidth = 320;
-    const panelHeight = isMinimized.value ? 50 : 400;
-    const maxX = window.innerWidth - panelWidth;
-    const maxY = window.innerHeight - panelHeight;
-
-    panelPosition.value = {
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
+    // Store the latest mouse position
+    pendingDragUpdate = {
+        x: event.clientX - dragOffset.value.x,
+        y: event.clientY - dragOffset.value.y
     };
+
+    // Use requestAnimationFrame to batch updates and avoid lag
+    if (!dragAnimationFrame) {
+        dragAnimationFrame = requestAnimationFrame(() => {
+            if (pendingDragUpdate) {
+                const newX = pendingDragUpdate.x;
+                const newY = pendingDragUpdate.y;
+
+                // Keep panel within viewport bounds
+                const panelWidth = 320;
+                const panelHeight = isMinimized.value ? 50 : 400;
+                const maxX = window.innerWidth - panelWidth;
+                const maxY = window.innerHeight - panelHeight;
+
+                panelPosition.value = {
+                    x: Math.max(0, Math.min(newX, maxX)),
+                    y: Math.max(0, Math.min(newY, maxY))
+                };
+
+                pendingDragUpdate = null;
+            }
+            dragAnimationFrame = null;
+        });
+    }
 };
 
 const stopDragPanel = () => {
     isDraggingPanel.value = false;
     document.removeEventListener('mousemove', dragPanel);
     document.removeEventListener('mouseup', stopDragPanel);
+    
+    // Cancel any pending animation frame
+    if (dragAnimationFrame) {
+        cancelAnimationFrame(dragAnimationFrame);
+        dragAnimationFrame = null;
+    }
+    pendingDragUpdate = null;
 };
 
 const toggleMinimize = () => {
@@ -2804,6 +2853,11 @@ watch(
                 refreshInterval = null;
             }
 
+            // CRITICAL: Reset session state when switching subjects
+            sessionActive.value = false;
+            currentSession.value = null;
+            console.log(' Session state reset - switching subjects');
+
             // Clear current data
             students.value = [];
             seatPlan.value = [];
@@ -3012,6 +3066,10 @@ watchEffect(() => {
 onMounted(async () => {
     console.log('🔄 Component mounted with:', `Subject (ID: ${subjectId.value})`);
     console.log(`🔍 Subject ID is NaN: ${isNaN(subjectId.value)}`);
+
+    // Show loading modal IMMEDIATELY before any async operations
+    isLoadingSeating.value = true;
+    loadingMessage.value = 'Loading students and seating arrangement...';
 
     // Set initialization flag to prevent duplicate loads
     isInitializing.value = true;
@@ -4989,9 +5047,6 @@ const titleRef = ref(null);
                     </div>
                 </div>
 
-                <Button v-if="isEditMode" icon="pi pi-save" label="Save Template" class="p-button-outlined" @click="showTemplateSaveDialog = true" />
-                <Button v-if="isEditMode" icon="pi pi-list" label="Load Template" class="p-button-outlined" @click="showTemplateManager = true" />
-
                 <!-- Start Session - Only when NOT editing -->
                 <Button v-if="!isEditMode" icon="pi pi-play" label="Start Session" class="p-button-success" @click="startAttendanceSession" />
                 <Button v-if="!isEditMode" icon="pi pi-table" label="View Records" class="p-button-info" @click="viewAttendanceRecords" />
@@ -5173,8 +5228,8 @@ const titleRef = ref(null);
         </div>
 
         <!-- Floating Game-Style Unassigned Students Panel -->
-        <div v-if="isEditMode" class="floating-students-panel" :style="{ left: panelPosition.x + 'px', top: panelPosition.y + 'px' }" @mousedown="startDragPanel">
-            <div class="floating-panel-header" @mousedown="startDragPanel">
+        <div v-if="isEditMode" class="floating-students-panel" :style="{ left: panelPosition.x + 'px', top: panelPosition.y + 'px' }">
+            <div class="floating-panel-header" @mousedown="startDragPanel" style="cursor: move;">
                 <div class="panel-title">
                     <i class="pi pi-users"></i>
                     <span>Unassigned Students</span>
@@ -6628,10 +6683,14 @@ const titleRef = ref(null);
         0 0 0 1px rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     z-index: 1000;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 2px solid rgba(255, 255, 255, 0.2);
     overflow: hidden;
     animation: floatIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Hardware acceleration for smooth dragging */
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
 }
 
 .floating-students-panel:hover {

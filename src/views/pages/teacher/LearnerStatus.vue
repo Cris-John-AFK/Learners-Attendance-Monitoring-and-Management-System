@@ -73,10 +73,7 @@ const filteredStudents = computed(() => {
     // Apply search filter
     if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter((s) => 
-            s.name.toLowerCase().includes(query) || 
-            s.student_id.toLowerCase().includes(query)
-        );
+        filtered = filtered.filter((s) => s.name.toLowerCase().includes(query) || s.student_id.toLowerCase().includes(query));
     }
 
     // Apply status filter (always available)
@@ -96,9 +93,7 @@ const filteredStudents = computed(() => {
 
     // Apply subject filter (only for 'subject' and 'all' views)
     if (selectedSubject.value && isSubjectFilterEnabled.value) {
-        filtered = filtered.filter((s) => 
-            s.subjects && s.subjects.includes(selectedSubject.value)
-        );
+        filtered = filtered.filter((s) => s.subjects && s.subjects.includes(selectedSubject.value));
     }
 
     return filtered;
@@ -115,11 +110,11 @@ const loadStudents = async () => {
             students.value = response.students;
             isSectionAdviser.value = response.is_section_adviser;
             console.log('Students loaded:', students.value.length, 'Section Adviser:', isSectionAdviser.value);
-            
+
             // Extract unique sections, grades, and subjects for filters
-            availableSections.value = [...new Set(students.value.map(s => s.section))].filter(Boolean).sort();
-            availableGrades.value = [...new Set(students.value.map(s => s.grade_level))].filter(Boolean).sort();
-            
+            availableSections.value = [...new Set(students.value.map((s) => s.section))].filter(Boolean).sort();
+            availableGrades.value = [...new Set(students.value.map((s) => s.grade_level))].filter(Boolean).sort();
+
             // Extract available subjects from the API response
             if (response.available_subjects) {
                 availableSubjects.value = response.available_subjects;
@@ -144,7 +139,7 @@ const loadStudents = async () => {
 
 const changeView = (newView) => {
     currentView.value = newView;
-    
+
     // Clear filters that are not available in the new view
     if (newView === 'section') {
         // My Section: Only Status and Section filters enabled
@@ -156,7 +151,7 @@ const changeView = (newView) => {
         selectedSection.value = null;
     }
     // For 'all' view, keep all filters as they are
-    
+
     loadStudents();
 };
 
@@ -164,7 +159,7 @@ const clearFilters = () => {
     // Always clear search and status
     searchQuery.value = '';
     selectedStatus.value = null;
-    
+
     // Only clear enabled filters
     if (isGradeFilterEnabled.value) {
         selectedGrade.value = null;
@@ -233,16 +228,16 @@ const formatDate = (dateString) => {
 
 const getFullReasonDescription = (reasonCode, reasonCategory, status) => {
     if (!reasonCode || !reasonCategory || !status) return reasonCode;
-    
+
     const options = LearnerStatusService.getReasonOptions();
     const statusReasons = options[status] || [];
-    
+
     // Find the category
-    const category = statusReasons.find(cat => cat.category === reasonCategory);
+    const category = statusReasons.find((cat) => cat.category === reasonCategory);
     if (!category) return reasonCode;
-    
+
     // Find the specific reason
-    const reason = category.reasons.find(r => r.value === reasonCode);
+    const reason = category.reasons.find((r) => r.value === reasonCode);
     return reason ? reason.label : reasonCode;
 };
 
@@ -279,51 +274,28 @@ onMounted(() => {
         <div class="bg-white p-4 rounded-lg shadow mb-4">
             <div class="flex justify-between items-center gap-4 flex-wrap mb-4">
                 <div class="flex gap-2">
-                    <Button
-                        v-for="view in viewOptions"
-                        :key="view.value"
-                        :label="view.label"
-                        :icon="view.icon"
-                        :class="currentView === view.value ? 'p-button' : 'p-button-outlined'"
-                        @click="changeView(view.value)"
-                    />
+                    <Button v-for="view in viewOptions" :key="view.value" :label="view.label" :icon="view.icon" :class="currentView === view.value ? 'p-button' : 'p-button-outlined'" @click="changeView(view.value)" />
                 </div>
                 <InputText v-model="searchQuery" placeholder="Search by name or ID..." class="w-64" />
             </div>
-            
+
             <!-- Filter Row -->
             <div class="flex gap-3 items-center flex-wrap">
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-semibold mb-2">Status</label>
-                    <Dropdown 
-                        v-model="selectedStatus" 
-                        :options="statusOptions" 
-                        optionLabel="label" 
-                        optionValue="value" 
-                        placeholder="All Statuses" 
-                        class="w-full" 
-                        :showClear="true"
-                    />
+                    <Dropdown v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All Statuses" class="w-full" :showClear="true" />
                 </div>
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isGradeFilterEnabled }">Grade</label>
-                    <Dropdown 
-                        v-model="selectedGrade" 
-                        :options="availableGrades" 
-                        placeholder="All Grades" 
-                        class="w-full" 
-                        :class="{ 'opacity-50 cursor-not-allowed': !isGradeFilterEnabled }"
-                        :showClear="true"
-                        :disabled="!isGradeFilterEnabled"
-                    />
+                    <Dropdown v-model="selectedGrade" :options="availableGrades" placeholder="All Grades" class="w-full" :class="{ 'opacity-50 cursor-not-allowed': !isGradeFilterEnabled }" :showClear="true" :disabled="!isGradeFilterEnabled" />
                 </div>
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isSectionFilterEnabled }">Section</label>
-                    <Dropdown 
-                        v-model="selectedSection" 
-                        :options="availableSections" 
-                        placeholder="All Sections" 
-                        class="w-full" 
+                    <Dropdown
+                        v-model="selectedSection"
+                        :options="availableSections"
+                        placeholder="All Sections"
+                        class="w-full"
                         :class="{ 'opacity-50 cursor-not-allowed': !isSectionFilterEnabled }"
                         :showClear="true"
                         :disabled="!isSectionFilterEnabled"
@@ -331,23 +303,18 @@ onMounted(() => {
                 </div>
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-semibold mb-2" :class="{ 'text-gray-400': !isSubjectFilterEnabled }">Subject</label>
-                    <Dropdown 
-                        v-model="selectedSubject" 
-                        :options="availableSubjects" 
-                        placeholder="All Subjects" 
-                        class="w-full" 
+                    <Dropdown
+                        v-model="selectedSubject"
+                        :options="availableSubjects"
+                        placeholder="All Subjects"
+                        class="w-full"
                         :class="{ 'opacity-50 cursor-not-allowed': !isSubjectFilterEnabled }"
                         :showClear="true"
                         :disabled="!isSubjectFilterEnabled"
                     />
                 </div>
-                <div class="flex items-end pb-1">
-                    <Button 
-                        label="Clear Filters" 
-                        icon="pi pi-filter-slash" 
-                        class="p-button-outlined p-button-secondary" 
-                        @click="clearFilters"
-                    />
+                <div class="flex items-end pb-1 mt-7">
+                    <Button label="Clear Filters" icon="pi pi-filter-slash" class="p-button-outlined p-button-secondary" @click="clearFilters" />
                 </div>
             </div>
         </div>

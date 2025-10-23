@@ -1419,7 +1419,6 @@ const openSF2Report = () => {
             <div class="flex gap-2">
                 <Button icon="pi pi-refresh" label="Refresh" class="p-button-outlined" @click="forceRefresh" :disabled="isLoading" v-tooltip.top="'Refresh attendance data'" />
                 <Button icon="pi pi-file" label="Report (Teacher)" class="p-button-info" @click="openSF2Report" :disabled="isLoading || !filteredRecords.length || !selectedSection" v-tooltip.top="'Open SF2 Daily Attendance Report'" />
-                <Button icon="pi pi-file-excel" label="Export to Excel" class="p-button-success" @click="exportToExcel" :disabled="isLoading || !filteredRecords.length" />
             </div>
         </div>
 

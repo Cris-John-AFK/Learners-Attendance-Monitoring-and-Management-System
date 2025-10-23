@@ -2190,14 +2190,42 @@ class SF2ReportController extends Controller
             $sectionId = $request->input('section_id');
             $month = $request->input('month');
 
+            // Validate required fields
+            if (!$studentId || !$date || !$status || !$sectionId || !$month) {
+                Log::error('SF2 Edit - Missing required fields', $request->all());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing required fields',
+                    'received' => $request->all()
+                ], 400);
+            }
+
             Log::info('Saving SF2 attendance edit', [
                 'student_id' => $studentId,
                 'date' => $date,
                 'status' => $status,
                 'section_id' => $sectionId,
-                'month' => $month,
-                'request_data' => $request->all()
+                'month' => $month
             ]);
+
+            // Check if table exists, if not create it
+            if (!\Schema::hasTable('sf2_attendance_edits')) {
+                Log::warning('sf2_attendance_edits table does not exist, creating it now');
+                \Schema::create('sf2_attendance_edits', function ($table) {
+                    $table->id();
+                    $table->unsignedBigInteger('student_id');
+                    $table->unsignedBigInteger('section_id');
+                    $table->date('date');
+                    $table->string('month', 7);
+                    $table->string('status', 50);
+                    $table->timestamps();
+                    $table->unique(['student_id', 'date', 'section_id', 'month']);
+                    $table->index('student_id');
+                    $table->index('section_id');
+                    $table->index('date');
+                    $table->index('month');
+                });
+            }
 
             // Create or update SF2 edit record
             $editRecord = \DB::table('sf2_attendance_edits')->updateOrInsert(
@@ -2214,6 +2242,8 @@ class SF2ReportController extends Controller
                 ]
             );
 
+            Log::info('SF2 edit saved successfully', ['student_id' => $studentId, 'date' => $date]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Attendance edit saved successfully',
@@ -2225,11 +2255,16 @@ class SF2ReportController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error saving SF2 attendance edit: ' . $e->getMessage());
+            Log::error('Error saving SF2 attendance edit', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all()
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to save attendance edit',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'details' => config('app.debug') ? $e->getTraceAsString() : null
             ], 500);
         }
     }

@@ -302,7 +302,7 @@ const submitToAdmin = async () => {
     submitting.value = true;
     try {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
-        
+
         // Get authenticated teacher ID
         const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
         const teacherId = teacherData?.teacher?.id || teacherData?.id || 1;
@@ -716,7 +716,7 @@ onMounted(() => {
                 <Button icon="pi pi-pencil" :label="isEditMode ? 'Exit Edit Mode' : 'Edit (SF2)'" :class="isEditMode ? 'p-button-warning' : 'p-button-info'" @click="editSF2" />
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
                 <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
-                <Button icon="pi pi-send" label="Submit to Admin" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
+                <Button icon="pi pi-send" label="Consolidate for Storing" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
             </div>
         </div>
 
