@@ -12,7 +12,7 @@
                             <p class="card-subtitle">Naawan Central School</p>
                             <div class="total-teachers-badge">
                                 <i class="pi pi-book"></i>
-                                <span class="badge-label">Total Assignments:</span>
+                                <span class="badge-label">Total Subject Assignments:</span>
                                 <span class="badge-count">{{ teacherAssignments.length }}</span>
                             </div>
                         </div>
