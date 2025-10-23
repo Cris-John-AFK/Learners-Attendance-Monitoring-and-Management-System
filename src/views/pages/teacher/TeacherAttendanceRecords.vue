@@ -1527,40 +1527,49 @@ const openSF2Report = () => {
         </div>
 
         <!-- Enhanced Loading Overlay for Page -->
-        <div v-if="loading" class="fixed inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center z-50">
-            <div class="text-center relative">
-                <!-- Animated Background Elements -->
-                <div class="absolute -top-20 -left-20 w-40 h-40 bg-blue-200 rounded-full opacity-20 animate-pulse"></div>
-                <div class="absolute -bottom-16 -right-16 w-32 h-32 bg-purple-200 rounded-full opacity-20 animate-pulse" style="animation-delay: 0.5s"></div>
-                <div class="absolute top-10 right-10 w-24 h-24 bg-indigo-200 rounded-full opacity-20 animate-pulse" style="animation-delay: 1s"></div>
-
-                <!-- Main Loading Animation -->
-                <div class="relative z-10 bg-white rounded-2xl p-8 shadow-2xl border border-gray-100">
-                    <!-- Bouncing Books Animation -->
-                    <div class="flex justify-center mb-6 space-x-2">
-                        <div class="w-4 h-6 bg-gradient-to-t from-blue-500 to-blue-400 rounded-sm animate-bounce" style="animation-delay: 0s"></div>
-                        <div class="w-4 h-6 bg-gradient-to-t from-green-500 to-green-400 rounded-sm animate-bounce" style="animation-delay: 0.1s"></div>
-                        <div class="w-4 h-6 bg-gradient-to-t from-purple-500 to-purple-400 rounded-sm animate-bounce" style="animation-delay: 0.2s"></div>
-                        <div class="w-4 h-6 bg-gradient-to-t from-orange-500 to-orange-400 rounded-sm animate-bounce" style="animation-delay: 0.3s"></div>
-                        <div class="w-4 h-6 bg-gradient-to-t from-pink-500 to-pink-400 rounded-sm animate-bounce" style="animation-delay: 0.4s"></div>
+        <!-- Professional Skeleton Loader -->
+        <div v-if="loading" class="p-6">
+            <!-- Header Skeleton -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <div class="space-y-3 flex-1">
+                        <div class="h-8 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+                        <div class="h-4 bg-gray-200 rounded w-1/4 animate-pulse"></div>
                     </div>
+                    <div class="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+            </div>
 
-                    <!-- Progress Bar -->
-                    <div class="w-64 h-2 bg-gray-200 rounded-full mb-4 overflow-hidden">
-                        <div class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full animate-pulse loading-progress"></div>
-                    </div>
+            <!-- Filters Skeleton -->
+            <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="h-10 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-10 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-10 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-10 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+            </div>
 
-                    <!-- Text with Gradient -->
-                    <h3 class="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">📚 Loading Attendance Records</h3>
-                    <p class="text-gray-600 animate-pulse">Gathering student data and organizing records...</p>
+            <!-- Table Skeleton -->
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <!-- Table Header -->
+                <div class="grid grid-cols-6 gap-4 mb-4 pb-4 border-b">
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-300 rounded animate-pulse"></div>
+                </div>
 
-                    <!-- Floating Icons -->
-                    <div class="flex justify-center mt-4 space-x-4">
-                        <div class="animate-bounce" style="animation-delay: 0s">📊</div>
-                        <div class="animate-bounce" style="animation-delay: 0.2s">👨‍🎓</div>
-                        <div class="animate-bounce" style="animation-delay: 0.4s">📋</div>
-                        <div class="animate-bounce" style="animation-delay: 0.6s">✅</div>
-                    </div>
+                <!-- Table Rows -->
+                <div v-for="i in 8" :key="i" class="grid grid-cols-6 gap-4 mb-4 py-3 border-b border-gray-100">
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse"></div>
                 </div>
             </div>
         </div>

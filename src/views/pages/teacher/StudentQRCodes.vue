@@ -41,10 +41,33 @@
             </div>
         </div>
 
-        <!-- Loading state -->
-        <div v-if="loading" class="flex justify-center items-center py-8">
-            <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
-            <span class="ml-3">Loading student data...</span>
+        <!-- Professional Skeleton Loader -->
+        <div v-if="loading" class="space-y-4">
+            <!-- Header Skeleton -->
+            <div class="flex justify-between items-center mb-6">
+                <div class="h-6 bg-gray-200 rounded w-48 animate-pulse"></div>
+                <div class="h-10 w-40 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+
+            <!-- QR Code Grid Skeleton -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div v-for="i in 8" :key="i" class="bg-white rounded-xl shadow-sm p-6">
+                    <!-- QR Code Placeholder -->
+                    <div class="w-full aspect-square bg-gray-200 rounded-lg mb-4 animate-pulse"></div>
+                    
+                    <!-- Student Name -->
+                    <div class="h-5 bg-gray-200 rounded w-3/4 mx-auto mb-2 animate-pulse"></div>
+                    
+                    <!-- Student ID -->
+                    <div class="h-4 bg-gray-200 rounded w-1/2 mx-auto mb-3 animate-pulse"></div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex gap-2 justify-center">
+                        <div class="h-9 w-24 bg-gray-200 rounded animate-pulse"></div>
+                        <div class="h-9 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- QR Code Batch Loading Progress -->
