@@ -559,3 +559,23 @@ Route::post('/teachers/validate-homeroom-assignment', [TeacherAssignmentValidati
 
 Route::get('/students/{studentId}/qr-card/download', [QRCodeController::class, 'downloadQRCard']);
 
+// ========================================
+// SCHOOL QUARTER MANAGEMENT ROUTES
+// ========================================
+Route::prefix('school-quarters')->group(function () {
+    // Quarter CRUD
+    Route::get('/', [App\Http\Controllers\API\SchoolQuarterController::class, 'index']);
+    Route::post('/', [App\Http\Controllers\API\SchoolQuarterController::class, 'store']);
+    Route::get('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'show']);
+    Route::put('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'update']);
+    Route::delete('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'destroy']);
+    
+    // Teacher Access Management
+    Route::get('/{quarterId}/teachers', [App\Http\Controllers\API\SchoolQuarterController::class, 'getTeachers']);
+    Route::post('/{quarterId}/teachers', [App\Http\Controllers\API\SchoolQuarterController::class, 'grantTeacherAccess']);
+    Route::delete('/{quarterId}/teachers/{teacherId}', [App\Http\Controllers\API\SchoolQuarterController::class, 'revokeTeacherAccess']);
+});
+
+// Get quarters for a specific teacher (for teacher's attendance report)
+Route::get('/teachers/{teacherId}/quarters', [App\Http\Controllers\API\SchoolQuarterController::class, 'getTeacherQuarters']);
+

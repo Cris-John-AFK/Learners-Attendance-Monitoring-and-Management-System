@@ -6,7 +6,10 @@
                     <h2 class="text-2xl font-bold text-gray-800">School Calendar Management</h2>
                     <p class="text-sm text-gray-600 mt-1">Manage holidays, half-days, and special events</p>
                 </div>
-                <Button icon="pi pi-plus" label="Add Event" @click="openEventDialog()" severity="success" />
+                <div class="flex gap-3">
+                    <Button icon="pi pi-calendar" label="Set Up School Quarter" @click="$router.push('/admin-school-quarter')" severity="info" />
+                    <Button icon="pi pi-plus" label="Add Event" @click="openEventDialog()" severity="success" />
+                </div>
             </div>
 
             <!-- Event Type Filter -->

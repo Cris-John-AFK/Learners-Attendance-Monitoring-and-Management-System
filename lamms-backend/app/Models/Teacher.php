@@ -184,4 +184,17 @@ class Teacher extends Authenticatable
             ->with(['section', 'subject'])
             ->get();
     }
+
+    /**
+     * Get school quarters this teacher has access to
+     */
+    public function quarters()
+    {
+        return $this->belongsToMany(
+            SchoolQuarter::class,
+            'quarter_teacher_access',
+            'teacher_id',
+            'quarter_id'
+        )->withTimestamps();
+    }
 }

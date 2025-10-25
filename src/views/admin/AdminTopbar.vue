@@ -335,7 +335,7 @@ onUnmounted(() => {
             <div class="layout-topbar-actions">
                 <button type="button" class="layout-topbar-action create-button" @click="openSchoolCalendar">
                     <i class="pi pi-calendar"></i>
-                    <span>Event calendar</span>
+                    <span>Academic Calendar</span>
                 </button>
 
                 <!-- SF2 Reports Notification Button with Badge -->

@@ -1,24 +1,34 @@
 <template>
     <div class="summary-report-container">
-        <!-- Header Controls (No Print) -->
-        <div class="no-print mb-4 flex justify-between items-center bg-white p-4 rounded-lg shadow">
-            <div class="flex items-center gap-4">
-                <h2 class="text-xl font-bold text-gray-800">Summary Attendance Report</h2>
+        <!-- Header Banner (No Print) -->
+        <div class="no-print mb-6 bg-gradient-to-r from-blue-600 to-blue-400 rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="bg-white bg-opacity-20 rounded-full p-3">
+                        <i class="pi pi-chart-bar text-white text-3xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-white mb-1">Summary Attendance Management</h1>
+                        <p class="text-blue-100 text-sm">{{ sectionName }} - {{ gradeLevel }}</p>
+                    </div>
+                </div>
+                <div class="bg-white bg-opacity-20 rounded-lg px-4 py-2">
+                    <div class="flex items-center gap-2">
+                        <i class="pi pi-users text-white text-lg"></i>
+                        <span class="text-white font-semibold">Total Students: {{ students.length }}</span>
+                    </div>
+                </div>
             </div>
+        </div>
+
+        <!-- Header Controls (No Print) -->
+        <div class="no-print mb-4 bg-white p-4 rounded-lg shadow">
             <div class="flex flex-wrap items-center gap-3">
                 <!-- Section Selector (for teachers with multiple sections) -->
                 <div v-if="teacherSections.length > 1" class="flex items-center gap-2 border-2 border-purple-400 rounded-lg px-4 py-3 bg-purple-50 shadow-sm">
                     <i class="pi pi-users text-purple-600 text-lg"></i>
                     <label class="text-base font-bold text-purple-900">Section:</label>
-                    <Dropdown 
-                        v-model="sectionId" 
-                        :options="teacherSections" 
-                        optionLabel="name" 
-                        optionValue="id" 
-                        placeholder="Select Section" 
-                        @change="onSectionChange" 
-                        class="w-48"
-                    >
+                    <Dropdown v-model="sectionId" :options="teacherSections" optionLabel="name" optionValue="id" placeholder="Select Section" @change="onSectionChange" class="w-48">
                         <template #value="slotProps">
                             <div v-if="slotProps.value" class="flex items-center gap-2">
                                 <i class="pi pi-users text-purple-600"></i>
@@ -38,6 +48,21 @@
                     </Dropdown>
                 </div>
 
+                <!-- School Year Selector -->
+                <div class="flex items-center gap-2 border-2 rounded-lg px-4 py-3 shadow-sm transition-all" :class="selectedSchoolYear ? 'border-purple-400 bg-purple-50' : 'border-gray-300 bg-gray-50'">
+                    <i class="pi pi-calendar-plus text-lg" :class="selectedSchoolYear ? 'text-purple-600' : 'text-gray-400'"></i>
+                    <label class="text-base font-bold" :class="selectedSchoolYear ? 'text-purple-900' : 'text-gray-700'">School Year:</label>
+                    <Dropdown v-model="selectedSchoolYear" :options="schoolYears" placeholder="Select School Year" @change="onSchoolYearChange" class="w-48" showClear>
+                        <template #value="slotProps">
+                            <div v-if="slotProps.value" class="flex items-center gap-2">
+                                <i class="pi pi-calendar text-purple-600"></i>
+                                <span class="font-semibold text-sm">{{ slotProps.value }}</span>
+                            </div>
+                            <span v-else class="text-gray-500">{{ slotProps.placeholder }}</span>
+                        </template>
+                    </Dropdown>
+                </div>
+
                 <!-- Quarter Selector (User-Friendly for Elderly Teachers) -->
                 <div class="flex items-center gap-2 border-2 rounded-lg px-4 py-3 shadow-sm transition-all" :class="isQuarterMode ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'">
                     <i class="pi pi-calendar text-lg" :class="isQuarterMode ? 'text-blue-600' : 'text-gray-400'"></i>
@@ -46,7 +71,7 @@
                         <template #value="slotProps">
                             <div v-if="slotProps.value" class="flex items-center gap-2">
                                 <i class="pi pi-book text-blue-600"></i>
-                                <span class="font-semibold text-sm">{{ slotProps.value.label }}</span>
+                                <span class="font-semibold text-sm">{{ slotProps.value.displayLabel || slotProps.value.label }}</span>
                             </div>
                             <span v-else class="text-gray-500">{{ slotProps.placeholder }}</span>
                         </template>
@@ -391,12 +416,10 @@
 
             <template #footer>
                 <!-- Clean Footer with Centered Actions -->
-                <div class="flex flex-col items-center gap-3 w-full bg-white pt-4 pb-2" style="position: relative; z-index: 10;">
+                <div class="flex flex-col items-center gap-3 w-full bg-white pt-4 pb-2" style="position: relative; z-index: 10">
                     <!-- Student Counter -->
                     <div class="text-center mb-2">
-                        <span class="text-sm font-semibold text-gray-700 bg-white px-3 py-1 rounded-full border border-gray-300">
-                            Student {{ currentStudentIndex + 1 }} of {{ students.length }}
-                        </span>
+                        <span class="text-sm font-semibold text-gray-700 bg-white px-3 py-1 rounded-full border border-gray-300"> Student {{ currentStudentIndex + 1 }} of {{ students.length }} </span>
                     </div>
 
                     <!-- Action Buttons -->
@@ -442,41 +465,22 @@ const gradeLevel = ref('Loading...');
 const showDetailsDialog = ref(false);
 const selectedStudent = ref(null);
 
-// DepEd School Year 2025-2026 Quarters (Official Calendar)
-const quarters = ref([
-    {
-        label: '1st Quarter',
-        value: 'Q1',
-        dateRange: 'June 24 - August 29, 2025',
-        startDate: new Date(2025, 5, 24), // June 24, 2025
-        endDate: new Date(2025, 7, 29) // August 29, 2025
-    },
-    {
-        label: '2nd Quarter',
-        value: 'Q2',
-        dateRange: 'September 1 - November 7, 2025',
-        startDate: new Date(2025, 8, 1), // September 1, 2025
-        endDate: new Date(2025, 10, 7) // November 7, 2025
-    },
-    {
-        label: '3rd Quarter',
-        value: 'Q3',
-        dateRange: 'November 10 - January 30, 2026',
-        startDate: new Date(2025, 10, 10), // November 10, 2025
-        endDate: new Date(2026, 0, 30) // January 30, 2026
-    },
-    {
-        label: '4th Quarter',
-        value: 'Q4',
-        dateRange: 'February 2 - April 10, 2026',
-        startDate: new Date(2026, 1, 2), // February 2, 2026
-        endDate: new Date(2026, 3, 10) // April 10, 2026
-    }
-]);
+// School quarters - loaded from backend API
+const allQuarters = ref([]); // All quarters from backend
+const schoolYears = ref([]); // Unique school years
+const selectedSchoolYear = ref(null); // Selected school year
 
-// Date range for filtering - default to First Quarter
-const startDate = ref(new Date(2025, 5, 24)); // June 24, 2025
-const endDate = ref(new Date(2025, 7, 29)); // August 29, 2025
+// Filtered quarters based on selected school year
+const quarters = computed(() => {
+    if (!selectedSchoolYear.value) {
+        return allQuarters.value;
+    }
+    return allQuarters.value.filter((q) => q.school_year === selectedSchoolYear.value);
+});
+
+// Date range for filtering - will be set from selected quarter
+const startDate = ref(null);
+const endDate = ref(null);
 
 // Computed property to detect which mode is active
 const isQuarterMode = computed(() => {
@@ -1279,27 +1283,27 @@ const printAllStudents = () => {
 const getMonthName = () => {
     // Show date range instead of just one month
     if (!startDate.value || !endDate.value) return '';
-    
+
     const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-    
+
     const startMonth = months[startDate.value.getMonth()];
     const startDay = startDate.value.getDate();
     const startYear = startDate.value.getFullYear();
-    
+
     const endMonth = months[endDate.value.getMonth()];
     const endDay = endDate.value.getDate();
     const endYear = endDate.value.getFullYear();
-    
+
     // If same month and year, show: "JUNE 24-29, 2025"
     if (startMonth === endMonth && startYear === endYear) {
         return `${startMonth} ${startDay}-${endDay}, ${startYear}`;
     }
-    
+
     // If different months, show: "JUNE 24 - AUGUST 29, 2025"
     if (startYear === endYear) {
         return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${startYear}`;
     }
-    
+
     // If different years, show full dates: "JUNE 24, 2025 - AUGUST 29, 2026"
     return `${startMonth} ${startDay}, ${startYear} - ${endMonth} ${endDay}, ${endYear}`;
 };
@@ -1313,7 +1317,7 @@ const getAttendanceRateClass = (rate) => {
 
 const onDateRangeChange = () => {
     // Don't clear quarter - let both work independently
-    
+
     // Only load if both dates are selected
     if (startDate.value && endDate.value) {
         // Validate that end date is after start date
@@ -1340,17 +1344,17 @@ const clearCustomDates = () => {
     // Reset to default first quarter dates
     startDate.value = new Date(2025, 5, 24); // June 24, 2025
     endDate.value = new Date(2025, 7, 29); // August 29, 2025
-    
+
     // This will re-enable the quarter dropdown since selectedQuarter is null
     // User can now select a quarter again
-    
+
     toast.add({
         severity: 'info',
         summary: 'Custom Dates Cleared',
         detail: 'You can now select a school quarter',
         life: 3000
     });
-    
+
     // Don't reload data automatically - let user select a quarter
 };
 
@@ -1358,18 +1362,18 @@ const clearCustomDates = () => {
 const onSectionChange = () => {
     if (sectionId.value) {
         // Update section name and grade level
-        const selectedSection = teacherSections.value.find(s => s.id === sectionId.value);
+        const selectedSection = teacherSections.value.find((s) => s.id === sectionId.value);
         if (selectedSection) {
             sectionName.value = selectedSection.name;
             gradeLevel.value = selectedSection.grade_level || 'Unknown Grade';
-            
+
             toast.add({
                 severity: 'info',
                 summary: '📚 Section Changed',
                 detail: `Loading data for ${selectedSection.name}`,
                 life: 3000
             });
-            
+
             loadAttendanceData();
         }
     }
@@ -1377,7 +1381,7 @@ const onSectionChange = () => {
 
 // Helper function to get section name by ID
 const getSectionName = (id) => {
-    const section = teacherSections.value.find(s => s.id === id);
+    const section = teacherSections.value.find((s) => s.id === id);
     return section ? section.name : 'Unknown';
 };
 
@@ -1399,8 +1403,113 @@ const onQuarterChange = () => {
     }
 };
 
+// Load school quarters from backend API
+async function loadQuarters() {
+    try {
+        // Get teacher ID from authentication
+        const teacherData = TeacherAuthService.getTeacherData();
+        const teacherId = teacherData?.teacher?.id;
+        
+        if (!teacherId) {
+            console.error('❌ No teacher ID found');
+            toast.add({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Unable to identify teacher. Please log in again.',
+                life: 5000
+            });
+            return;
+        }
+        
+        // Fetch only quarters this teacher has access to
+        const response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/quarters`);
+        if (!response.ok) {
+            throw new Error('Failed to load quarters');
+        }
+
+        const data = await response.json();
+        
+        // If no quarters, show message
+        if (data.length === 0) {
+            console.log('ℹ️ No quarters available for this teacher');
+            toast.add({
+                severity: 'info',
+                summary: 'No Quarters Available',
+                detail: 'You have not been granted access to any school quarters yet. Please contact the admin.',
+                life: 5000
+            });
+            return;
+        }
+
+        // Extract unique school years
+        const uniqueYears = [...new Set(data.map((q) => q.school_year))];
+        schoolYears.value = uniqueYears.sort().reverse(); // Sort descending (newest first)
+
+        // Transform backend data to match the format expected by the dropdown
+        allQuarters.value = data.map((quarter) => {
+            const startDate = new Date(quarter.start_date);
+            const endDate = new Date(quarter.end_date);
+
+            // Format date range for display - compact format like Picture 1
+            const formatShortDate = (date) => {
+                const month = date.toLocaleDateString('en-US', { month: 'short' });
+                const day = date.getDate();
+                const year = date.getFullYear();
+                return `${month} ${day}, ${year}`;
+            };
+
+            const dateRange = `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+
+            // Ensure quarter name includes "Quarter" if not already present
+            const quarterName = quarter.quarter.includes('Quarter') ? quarter.quarter : `${quarter.quarter} Quarter`;
+
+            return {
+                label: quarterName, // Full label for dropdown options (e.g., "1st Quarter")
+                displayLabel: quarterName, // Short label for selected value (e.g., "1st Quarter")
+                value: quarter.id,
+                dateRange: dateRange,
+                startDate: startDate,
+                endDate: endDate,
+                quarter: quarter.quarter,
+                school_year: quarter.school_year
+            };
+        });
+
+        console.log('✅ Loaded', allQuarters.value.length, 'quarters from backend');
+        console.log('📅 School years available:', schoolYears.value);
+
+        // Auto-select the first (newest) school year
+        if (schoolYears.value.length > 0) {
+            selectedSchoolYear.value = schoolYears.value[0];
+        }
+    } catch (error) {
+        console.error('❌ Error loading quarters:', error);
+        quarters.value = [];
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'No school quarters available. Please contact admin to set up quarters.',
+            life: 5000
+        });
+    }
+}
+
+// School Year change handler
+function onSchoolYearChange() {
+    // Clear selected quarter when school year changes
+    selectedQuarter.value = null;
+    startDate.value = null;
+    endDate.value = null;
+
+    console.log('📅 School year changed to:', selectedSchoolYear.value);
+    console.log('📊 Quarters available:', quarters.value.length);
+}
+
 onMounted(async () => {
     console.log('🚀 Component mounted. Loading teacher data...');
+
+    // Load school quarters first
+    await loadQuarters();
 
     // Get teacher's section ID from authentication
     const teacherData = TeacherAuthService.getTeacherData();
@@ -1427,10 +1536,10 @@ onMounted(async () => {
 
     // Get all other sections from assignments
     if (teacherData?.assignments && teacherData.assignments.length > 0) {
-        teacherData.assignments.forEach(assignment => {
+        teacherData.assignments.forEach((assignment) => {
             if (assignment.section && assignment.section.id !== homeroomSection?.id) {
                 // Check if not already added
-                if (!allSections.find(s => s.id === assignment.section.id)) {
+                if (!allSections.find((s) => s.id === assignment.section.id)) {
                     allSections.push(assignment.section);
                 }
             }
@@ -1439,7 +1548,12 @@ onMounted(async () => {
 
     // Store all sections
     teacherSections.value = allSections;
-    console.log('📚 Teacher handles', allSections.length, 'section(s):', allSections.map(s => s.name));
+    console.log(
+        '📚 Teacher handles',
+        allSections.length,
+        'section(s):',
+        allSections.map((s) => s.name)
+    );
 
     if (homeroomSection) {
         sectionId.value = homeroomSection.id;
@@ -1463,19 +1577,31 @@ onMounted(async () => {
             rawSection: homeroomSection
         });
 
-        // Set default to First Quarter
-        selectedQuarter.value = quarters.value[0];
-        selectedMonth.value = new Date(2025, 5, 24); // June 24, 2025
+        // Set default to First Quarter if available
+        if (quarters.value.length > 0) {
+            selectedQuarter.value = quarters.value[0];
+            startDate.value = quarters.value[0].startDate;
+            endDate.value = quarters.value[0].endDate;
+            selectedMonth.value = quarters.value[0].startDate;
 
-        // Auto-load First Quarter data
-        toast.add({
-            severity: 'success',
-            summary: '✅ Ready',
-            detail: `Loading 1st Quarter attendance for ${sectionName.value}...`,
-            life: 3000
-        });
+            // Auto-load First Quarter data
+            toast.add({
+                severity: 'success',
+                summary: '✅ Ready',
+                detail: `Loading ${quarters.value[0].label} attendance for ${sectionName.value}...`,
+                life: 3000
+            });
 
-        loadAttendanceData();
+            loadAttendanceData();
+        } else {
+            // No quarters available
+            toast.add({
+                severity: 'info',
+                summary: 'No Quarters Available',
+                detail: 'Please contact admin to set up school quarters.',
+                life: 5000
+            });
+        }
     } else {
         console.error('❌ No homeroom section found in teacher data');
         console.log('Available data:', {
