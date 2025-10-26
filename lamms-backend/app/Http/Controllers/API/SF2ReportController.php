@@ -22,8 +22,8 @@ class SF2ReportController extends Controller
     public function download($sectionId)
     {
         try {
-            // Get section with students
-            $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+            // Get section with students, teacher, and grade
+            $section = Section::with(['students', 'teacher', 'grade', 'curriculumGrade.grade'])->findOrFail($sectionId);
 
             // Get current month attendance data
             $currentMonth = Carbon::now()->format('Y-m');
@@ -46,8 +46,8 @@ class SF2ReportController extends Controller
         try {
             \Log::info("SF2 Download Request - Section ID: {$sectionId}, Month: {$month}");
 
-            // Load section with students and teacher
-            $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+            // Load section with students, teacher, and grade
+            $section = Section::with(['students', 'teacher', 'grade', 'curriculumGrade.grade'])->findOrFail($sectionId);
             \Log::info("Section loaded: " . $section->name);
 
             // Generate and return SF2 report
@@ -444,8 +444,18 @@ class SF2ReportController extends Controller
             // Based on the Excel template image, use exact cell coordinates
             // First row of input fields (around row 6-7)
             $monthFormatted = strtoupper(Carbon::createFromFormat('Y-m', $month)->format('F Y'));
-            $gradeLevel = $section->grade_level ?? 'Kinder';
+            
+            // Get grade level from the section's grade relationship
+            $gradeLevel = 'Kinder'; // Default
+            if ($section->grade) {
+                $gradeLevel = $section->grade->name;
+            } elseif ($section->curriculumGrade && $section->curriculumGrade->grade) {
+                $gradeLevel = $section->curriculumGrade->grade->name;
+            }
+            
             $sectionName = $section->name ?? 'Matatag';
+            
+            Log::info("Grade Level determined: {$gradeLevel} for section: {$sectionName}");
 
             // Clear the specific input cells first to avoid overlaps
             $inputCells = ['D6', 'K6', 'X6', 'D8', 'X8', 'AC8'];
@@ -1470,8 +1480,8 @@ class SF2ReportController extends Controller
                 $month = Carbon::now()->format('Y-m');
             }
 
-            // Get section with students and teacher
-            $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+            // Get section with students, teacher, and grade
+            $section = Section::with(['students', 'teacher', 'grade', 'curriculumGrade.grade'])->findOrFail($sectionId);
 
             // Get students with attendance data
             $students = $this->getStudentsWithAttendance($section, $month);
@@ -1546,7 +1556,7 @@ class SF2ReportController extends Controller
                     'section' => [
                         'id' => $section->id,
                         'name' => $section->name,
-                        'grade_level' => $section->grade_level,
+                        'grade_level' => $section->grade ? $section->grade->name : ($section->curriculumGrade && $section->curriculumGrade->grade ? $section->curriculumGrade->grade->name : 'Kinder'),
                         'teacher' => $section->teacher ? [
                             'name' => $section->teacher->first_name . ' ' . $section->teacher->last_name,
                             'id' => $section->teacher->id
@@ -1724,8 +1734,8 @@ class SF2ReportController extends Controller
      */
     private function getReportDataForSubmission($sectionId, $month)
     {
-        // Get section with students and teacher
-        $section = Section::with(['students', 'teacher'])->findOrFail($sectionId);
+        // Get section with students, teacher, and grade
+        $section = Section::with(['students', 'teacher', 'grade', 'curriculumGrade.grade'])->findOrFail($sectionId);
 
         // Get students with attendance data
         $students = $this->getStudentsWithAttendance($section, $month);
@@ -1776,7 +1786,7 @@ class SF2ReportController extends Controller
             'section' => [
                 'id' => $section->id,
                 'name' => $section->name,
-                'grade_level' => $section->grade_level,
+                'grade_level' => $section->grade ? $section->grade->name : ($section->curriculumGrade && $section->curriculumGrade->grade ? $section->curriculumGrade->grade->name : 'Kinder'),
                 'teacher' => $section->teacher ? [
                     'name' => $section->teacher->first_name . ' ' . $section->teacher->last_name,
                     'id' => $section->teacher->id

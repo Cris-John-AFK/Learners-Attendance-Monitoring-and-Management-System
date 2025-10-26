@@ -137,26 +137,28 @@ return new class extends Migration
 
         // 7. GUARDHOUSE_ATTENDANCE TABLE INDEXES
         // Real-time QR scanning operations
-        Schema::table('guardhouse_attendance', function (Blueprint $table) {
-            // Student attendance lookups
-            $table->index('student_id', 'idx_guardhouse_attendance_student');
-            
-            // Date-based queries (today's records)
-            $table->index('date', 'idx_guardhouse_attendance_date');
-            
-            // Record type filtering (check-in/check-out)
-            $table->index('record_type', 'idx_guardhouse_attendance_type');
-            
-            // QR code lookups
-            $table->index('qr_code_data', 'idx_guardhouse_attendance_qr');
-            
-            // Timestamp ordering
-            $table->index('timestamp', 'idx_guardhouse_attendance_timestamp');
-            
-            // Composite indexes for common queries
-            $table->index(['student_id', 'date'], 'idx_guardhouse_attendance_student_date');
-            $table->index(['date', 'record_type'], 'idx_guardhouse_attendance_date_type');
-        });
+        if (Schema::hasTable('guardhouse_attendance')) {
+            Schema::table('guardhouse_attendance', function (Blueprint $table) {
+                // Student attendance lookups
+                $table->index('student_id', 'idx_guardhouse_attendance_student');
+                
+                // Date-based queries (today's records)
+                $table->index('date', 'idx_guardhouse_attendance_date');
+                
+                // Record type filtering (check-in/check-out)
+                $table->index('record_type', 'idx_guardhouse_attendance_type');
+                
+                // QR code lookups
+                $table->index('qr_code_data', 'idx_guardhouse_attendance_qr');
+                
+                // Timestamp ordering
+                $table->index('timestamp', 'idx_guardhouse_attendance_timestamp');
+                
+                // Composite indexes for common queries
+                $table->index(['student_id', 'date'], 'idx_guardhouse_attendance_student_date');
+                $table->index(['date', 'record_type'], 'idx_guardhouse_attendance_date_type');
+            });
+        }
 
         // 8. SECTIONS TABLE INDEXES
         // Section management and filtering
@@ -223,7 +225,7 @@ return new class extends Migration
             $table->index('teacher_id', 'idx_subject_schedules_teacher');
             
             // Day of week filtering
-            $table->index('day_of_week', 'idx_subject_schedules_day');
+            $table->index('day', 'idx_subject_schedules_day');
             
             // Composite index for section-subject schedules
             $table->index(['section_id', 'subject_id'], 'idx_subject_schedules_section_subject');

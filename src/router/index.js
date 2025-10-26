@@ -181,6 +181,16 @@ const router = createRouter({
                     component: () => import('@/views/pages/Admin/SchoolCalendar.vue')
                 },
                 {
+                    path: '/admin-school-quarter',
+                    name: 'admin-school-quarter',
+                    component: () => import('@/views/pages/Admin/SchoolQuarterManagement.vue')
+                },
+                {
+                    path: '/admin-school-quarter/:quarterId/teachers/:schoolYear/:quarter',
+                    name: 'quarter-teachers',
+                    component: () => import('@/views/pages/Admin/QuarterTeachers.vue')
+                },
+                {
                     path: '/admin-subject',
                     name: 'admin-subject',
                     component: () => import('@/views/pages/Admin/Admin-Subject.vue')
