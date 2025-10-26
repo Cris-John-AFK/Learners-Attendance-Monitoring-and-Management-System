@@ -384,22 +384,21 @@ router.afterEach((to, from) => {
     }
 });
 
-// Disable browser history navigation for authenticated pages
+// Prevent browser back button from accessing protected pages after logout
 window.addEventListener('popstate', function (event) {
     const currentPath = window.location.pathname;
     const isProtected = currentPath.startsWith('/teacher') || currentPath.startsWith('/admin') || currentPath.startsWith('/guardhouse');
+    const isAuthenticated = AuthService.isAuthenticated();
 
-    // If user navigated back from a protected page to root
-    if (currentPath === '/' && isProtected === false && AuthService.isAuthenticated()) {
-        // Clear the forward history by pushing current state
-        window.history.pushState(null, '', '/');
-    }
+    console.log('🔙 Popstate event:', { currentPath, isProtected, isAuthenticated });
 
-    // If trying to access protected page without authentication
-    if (isProtected && !AuthService.isAuthenticated()) {
+    // If trying to access protected page without authentication (e.g., after logout)
+    if (isProtected && !isAuthenticated) {
+        console.warn('⛔ Blocked access to protected page via back button');
         event.preventDefault();
+        // Force redirect to homepage
         window.history.replaceState(null, '', '/');
-        window.location.href = '/';
+        window.location.replace('/');
     }
 });
 

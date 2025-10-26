@@ -80,14 +80,35 @@ const showSessionSummaryDialog = async (notification) => {
 
         // Fetch real session data from API
         const sessionData = await AttendanceSessionService.getSessionSummary(sessionId);
+        console.log('📊 Session data received:', sessionData);
 
-        // Transform API response to match dialog format
-        const session = sessionData.session;
-        const stats = sessionData.statistics;
+        // Validate session data structure
+        if (!sessionData || typeof sessionData !== 'object') {
+            throw new Error('Invalid session data received from API');
+        }
+
+        // Transform API response to match dialog format with safe defaults
+        const session = sessionData.session || {};
+        const stats = sessionData.statistics || {};
         const records = sessionData.attendance_records;
 
+        console.log('📋 Records type:', typeof records, 'Is array:', Array.isArray(records));
+        console.log('📋 Records value:', records);
+
+        // Ensure records is an array
+        let recordsArray = [];
+        if (Array.isArray(records)) {
+            recordsArray = records;
+        } else if (records && typeof records === 'object') {
+            // If records is an object, try to convert it to array
+            recordsArray = Object.values(records);
+        } else {
+            console.warn('⚠️ Records is not an array or object, defaulting to empty array');
+            recordsArray = [];
+        }
+
         // Map attendance records to student list with better error handling
-        const students = records.map((record) => {
+        const students = recordsArray.map((record) => {
             console.log('Processing record:', record);
             return {
                 id: record.student?.id || 'unknown',
@@ -109,21 +130,28 @@ const showSessionSummaryDialog = async (notification) => {
             });
         }
 
+        // Calculate summary with safe defaults
+        const totalStudents = stats.total_students || 0;
+        const present = stats.present || 0;
+        const absent = (stats.absent || 0) + (stats.unmarked_students || 0);
+        const late = stats.late || 0;
+        const attendanceRate = totalStudents > 0 ? Math.round(((present + late) / totalStudents) * 100) : 0;
+
         selectedSession.value = {
-            id: session.id,
+            id: session.id || sessionId,
             subject: session.subject?.name || 'Unknown Subject',
             section: session.section?.name || 'Unknown Section',
-            date: new Date(session.session_date).toLocaleDateString(),
-            time: session.session_start_time,
+            date: session.session_date ? new Date(session.session_date).toLocaleDateString() : new Date().toLocaleDateString(),
+            time: session.session_start_time || 'N/A',
             method: session.metadata?.method || 'Manual Entry',
             teacher: session.teacher ? `${session.teacher.first_name} ${session.teacher.last_name}` : 'Unknown Teacher',
             students: students,
             summary: {
-                totalStudents: stats.total_students,
-                present: stats.present,
-                absent: stats.absent + stats.unmarked_students,
-                late: stats.late,
-                attendanceRate: Math.round(((stats.present + stats.late) / stats.total_students) * 100)
+                totalStudents: totalStudents,
+                present: present,
+                absent: absent,
+                late: late,
+                attendanceRate: attendanceRate
             }
         };
 
@@ -220,13 +248,12 @@ const logout = async () => {
         // Show success message
         isLogoutSuccess.value = true;
 
-        // Clear browser history to prevent back navigation
-        window.history.pushState(null, '', window.location.href);
-        window.history.replaceState(null, '', '/');
-
-        // Redirect to root login page after a short delay
+        // Redirect immediately using router.push with force reload
+        console.log('🔄 Redirecting to homepage...');
+        
+        // Use window.location for a hard redirect to ensure clean state
         setTimeout(() => {
-            router.replace('/');
+            window.location.href = '/';
         }, 1500);
     } catch (error) {
         console.error('❌ Logout error:', error);
@@ -244,8 +271,8 @@ const logout = async () => {
         keysToRemove.forEach(key => localStorage.removeItem(key));
         sessionStorage.clear();
         
-        window.history.replaceState(null, '', '/');
-        router.replace('/');
+        // Force redirect even on error
+        window.location.href = '/';
     }
 };
 

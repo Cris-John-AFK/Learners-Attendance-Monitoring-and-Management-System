@@ -2581,10 +2581,16 @@ const markAllPresent = async () => {
         let markedCount = 0;
         const attendanceData = [];
 
-        // Collect all students to mark as present
+        // Collect ONLY UNMARKED students to mark as present (preserve QR scan results)
         seatPlan.value.forEach((row) => {
             row.forEach((seat) => {
                 if (seat.isOccupied && seat.studentId) {
+                    // Skip students who already have a status (from QR scanning or manual marking)
+                    if (seat.status && seat.status !== 0) {
+                        console.log(`⏭️ Skipping ${seat.studentId} - already marked with status ${seat.status}`);
+                        return;
+                    }
+
                     // Find the student object to get the numeric ID
                     const student = students.value.find((s) => s.student_id === seat.studentId || s.id === seat.studentId);
                     if (!student) {
@@ -2619,6 +2625,8 @@ const markAllPresent = async () => {
                         reason_id: null,
                         marking_method: 'manual'
                     });
+                    
+                    console.log(`✅ Marking ${seat.studentId} as Present (was unmarked)`);
                 }
             });
         });
@@ -2653,10 +2661,15 @@ const markAllPresent = async () => {
             console.log('Vue DOM updated via nextTick');
         }
 
+        // Count total marked students (including previously scanned)
+        const totalMarked = seatPlan.value.flat().filter(seat => seat.isOccupied && seat.status === 1).length;
+        
         toast.add({
             severity: 'success',
-            summary: 'All Present',
-            detail: `${markedCount} students marked as present`,
+            summary: 'Attendance Updated',
+            detail: markedCount > 0 
+                ? `${markedCount} additional students marked as present (${totalMarked} total present)`
+                : `All students already marked (${totalMarked} total present)`,
             life: 3000
         });
     } catch (error) {

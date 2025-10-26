@@ -786,18 +786,16 @@ const logout = async () => {
 
         console.log('✅ Logout successful, clearing session data');
 
-        // Clear browser history to prevent back navigation
-        window.history.pushState(null, '', window.location.href);
-        window.history.replaceState(null, '', '/');
-
-        // Redirect to root login page
-        router.replace('/');
+        // Use window.location for a hard redirect to ensure clean state
+        console.log('🔄 Redirecting to homepage...');
+        window.location.href = '/';
     } catch (error) {
         console.error('❌ Logout error:', error);
         // Even if logout fails, clear local data and redirect
         AuthService.clearAuthData();
-        window.history.replaceState(null, '', '/');
-        router.replace('/');
+        
+        // Force redirect even on error
+        window.location.href = '/';
     }
 };
 </script>
