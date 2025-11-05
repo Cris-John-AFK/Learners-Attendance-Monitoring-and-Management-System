@@ -1619,6 +1619,35 @@ async function onCalendarSubjectChange() {
     }
 }
 
+// Month navigation functions
+function previousMonth() {
+    if (currentMonth.value === 0) {
+        currentMonth.value = 11;
+        currentYear.value--;
+    } else {
+        currentMonth.value--;
+    }
+    console.log('📅 Previous month:', new Date(currentYear.value, currentMonth.value).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
+    // Reload calendar data for new month
+    if (selectedStudent.value) {
+        prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+    }
+}
+
+function nextMonth() {
+    if (currentMonth.value === 11) {
+        currentMonth.value = 0;
+        currentYear.value++;
+    } else {
+        currentMonth.value++;
+    }
+    console.log('📅 Next month:', new Date(currentYear.value, currentMonth.value).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
+    // Reload calendar data for new month
+    if (selectedStudent.value) {
+        prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+    }
+}
+
 // Prepare calendar data with specific subject filter
 async function prepareCalendarDataForFilter(student, subjectId) {
     if (!student) return;
@@ -2624,16 +2653,38 @@ async function showStudentProfile(student) {
                     </div>
                 </div>
 
-                <div class="flex justify-between items-center mb-4">
-                    <div>
-                        <h4 class="font-medium">Attendance Calendar</h4>
-                        <p class="text-sm text-gray-600">{{ new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
+                <div class="mb-4">
+                    <!-- Header -->
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="font-semibold text-lg text-gray-800">Attendance Calendar</h4>
                         <div class="flex items-center gap-2">
                             <label for="calendar-subject-filter" class="text-sm font-medium text-gray-700">Subject:</label>
                             <Dropdown id="calendar-subject-filter" v-model="calendarSubjectFilter" :options="calendarSubjectOptions" optionLabel="name" optionValue="id" placeholder="Select Subject" @change="onCalendarSubjectChange" class="w-48" />
                         </div>
+                    </div>
+                    
+                    <!-- Month Navigation - Centered and Stylish -->
+                    <div class="flex items-center justify-center gap-4 py-3 px-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100 shadow-sm">
+                        <Button 
+                            icon="pi pi-chevron-left" 
+                            @click="previousMonth" 
+                            class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" 
+                            severity="secondary"
+                            size="large"
+                        />
+                        <div class="flex items-center gap-2 min-w-[200px] justify-center">
+                            <i class="pi pi-calendar text-blue-600"></i>
+                            <span class="text-lg font-semibold text-gray-800">
+                                {{ new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}
+                            </span>
+                        </div>
+                        <Button 
+                            icon="pi pi-chevron-right" 
+                            @click="nextMonth" 
+                            class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" 
+                            severity="secondary"
+                            size="large"
+                        />
                     </div>
                 </div>
 

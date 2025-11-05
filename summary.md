@@ -3,7 +3,73 @@
 ## Project Overview
 LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel backend. **Enterprise-grade school management system** with production-ready attendance tracking, real-time guardhouse monitoring, and comprehensive teacher dashboard. **Now optimized for massive scale** with intelligent API request management and advanced performance optimizations.
 
+## 🚫 Deployment Notes
+**IMPORTANT**: Vercel/Railway deployment is ON HOLD. Only work on deployment if the user explicitly requests it. Focus on core feature development instead.
+
 ## 🚀 Recent Updates
+
+### **November 6, 2025 - Student Attendance Calendar Month Navigation** ✅ NEW
+
+#### **Month Selector for Student Attendance Profile Calendar**
+**Problem**: Teachers could only view the current month's attendance in the Student Attendance Profile dialog. No way to view historical attendance data from previous months.
+
+**User Request**: "Make it so that we can change the month only for that calendar data for that student."
+
+**Solution Implemented**: Added Previous/Next month navigation buttons to the Attendance Calendar section.
+
+**Changes Made**:
+1. **UI Enhancement** (TeacherDashboard.vue - Lines 2627-2646):
+   - Added chevron-left button (Previous Month)
+   - Added chevron-right button (Next Month)
+   - Month/year display now centered between navigation buttons
+   - Clean, intuitive navigation interface
+
+2. **Navigation Functions** (TeacherDashboard.vue - Lines 1622-1649):
+   ```javascript
+   function previousMonth() {
+       if (currentMonth.value === 0) {
+           currentMonth.value = 11;
+           currentYear.value--;
+       } else {
+           currentMonth.value--;
+       }
+       // Reload calendar data for new month
+       prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+   }
+   
+   function nextMonth() {
+       if (currentMonth.value === 11) {
+           currentMonth.value = 0;
+           currentYear.value++;
+       } else {
+           currentMonth.value++;
+       }
+       // Reload calendar data for new month
+       prepareCalendarDataForFilter(selectedStudent.value, calendarSubjectFilter.value);
+   }
+   ```
+
+**Features**:
+- ✅ Navigate backward/forward through months
+- ✅ Automatic year rollover (Dec → Jan, Jan → Dec)
+- ✅ Calendar data reloads automatically for selected month
+- ✅ Works with subject filter (shows attendance for selected subject in selected month)
+- ✅ Visual feedback with PrimeVue buttons
+- ✅ Maintains student context during navigation
+
+**Benefits**:
+- ✅ View historical attendance data
+- ✅ Compare attendance patterns across months
+- ✅ Track student progress over time
+- ✅ Better insights into attendance trends
+- ✅ Intuitive UI with arrow buttons
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherDashboard.vue` (Lines 2627-2646, 1622-1649)
+
+**Now**: Teachers can navigate through months to view any student's attendance history in the calendar view.
+
+---
 
 ### **October 22, 2025 - Pinia State Management Implementation** ✅ NEW
 
