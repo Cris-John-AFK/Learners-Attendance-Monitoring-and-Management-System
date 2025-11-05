@@ -5612,7 +5612,7 @@ const titleRef = ref(null);
 
                 <!-- Animated Character -->
                 <div class="character-container">
-                    <div class="character">🏃‍♂️</div>
+                    <div class="character">🏃‍➡️</div>
                     <div class="obstacles">
                         <div class="obstacle obstacle-1">📚</div>
                         <div class="obstacle obstacle-2">✏️</div>
