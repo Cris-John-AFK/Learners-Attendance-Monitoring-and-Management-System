@@ -104,37 +104,39 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- Scroll Progress Bar - At the VERY top -->
-    <div class="fixed top-0 left-0 right-0 h-1 bg-gray-200" style="z-index: 9999">
-        <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out shadow-lg" :style="{ width: scrollProgress + '%' }"></div>
-    </div>
-
-    <!-- Scroll Down Indicator (hidden when dialogs are open) -->
-    <Transition name="fade">
-        <div
-            v-if="showScrollIndicator"
-            class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center animate-bounce cursor-pointer scroll-indicator"
-            style="z-index: 999"
-            @click="scrollDown"
-        >
-            <div class="bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700 transition-colors">
-                <i class="pi pi-angle-down text-xl"></i>
-            </div>
-            <span class="text-xs text-gray-600 mt-2 font-medium">Scroll Down</span>
+    <div class="app-layout-root">
+        <!-- Scroll Progress Bar - At the VERY top -->
+        <div class="fixed top-0 left-0 right-0 h-1 bg-gray-200" style="z-index: 9999">
+            <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out shadow-lg" :style="{ width: scrollProgress + '%' }"></div>
         </div>
-    </Transition>
 
-    <div class="app-layout-container">
-        <div class="layout-wrapper teacher-route" :class="containerClass">
-            <AppTopbar />
-            <AppSidebar />
-            <div class="layout-main-container">
-                <div class="layout-main">
-                    <router-view></router-view>
+        <!-- Scroll Down Indicator (hidden when dialogs are open) -->
+        <Transition name="fade">
+            <div
+                v-if="showScrollIndicator"
+                class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center animate-bounce cursor-pointer scroll-indicator"
+                style="z-index: 999"
+                @click="scrollDown"
+            >
+                <div class="bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700 transition-colors">
+                    <i class="pi pi-angle-down text-xl"></i>
                 </div>
-                <AppFooter />
+                <span class="text-xs text-gray-600 mt-2 font-medium">Scroll Down</span>
             </div>
-            <div class="layout-mask"></div>
+        </Transition>
+
+        <div class="app-layout-container">
+            <div class="layout-wrapper teacher-route" :class="containerClass">
+                <AppTopbar />
+                <AppSidebar />
+                <div class="layout-main-container">
+                    <div class="layout-main">
+                        <router-view></router-view>
+                    </div>
+                    <AppFooter />
+                </div>
+                <div class="layout-mask"></div>
+            </div>
         </div>
     </div>
 </template>

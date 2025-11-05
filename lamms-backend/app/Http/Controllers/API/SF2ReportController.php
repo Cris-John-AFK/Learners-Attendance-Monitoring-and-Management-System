@@ -13,6 +13,8 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class SF2ReportController extends Controller
 {
@@ -262,6 +264,23 @@ class SF2ReportController extends Controller
         // Get real attendance records from the production system
         $attendanceRecords = [];
         try {
+            // First, check ALL records to see if excused exists
+            $allRecords = \DB::table('attendance_sessions as s')
+                ->join('attendance_records as r', 's.id', '=', 'r.attendance_session_id')
+                ->join('attendance_statuses as st', 'r.attendance_status_id', '=', 'st.id')
+                ->where('s.section_id', $section->id)
+                ->whereBetween('s.session_date', [$startDate, $endDate])
+                ->select([
+                    'st.name as status_name',
+                    'r.is_current_version'
+                ])
+                ->get();
+            
+            $allStatuses = $allRecords->pluck('status_name')->unique();
+            Log::info("ALL attendance statuses (including non-current): " . $allStatuses->implode(', '));
+            Log::info("Total records without filter: " . $allRecords->count());
+            Log::info("Current version records: " . $allRecords->where('is_current_version', true)->count());
+            
             $records = \DB::table('attendance_sessions as s')
                 ->join('attendance_records as r', 's.id', '=', 'r.attendance_session_id')
                 ->join('attendance_statuses as st', 'r.attendance_status_id', '=', 'st.id')
@@ -272,16 +291,50 @@ class SF2ReportController extends Controller
                     's.session_date',
                     'r.student_id',
                     'st.name as status_name',
-                    'st.code as status_code'
+                    'st.code as status_code',
+                    'r.remarks'
                 ])
                 ->get();
 
-            // Group by student and date
+            // Group by student and date, keeping the "worst" status
+            // Priority: Late > Excused > Absent > Present
+            // Rationale: If excused in any subject, count as excused for the day
+            $statusPriority = [
+                'late' => 4,
+                'tardy' => 4,
+                'warning' => 4,
+                'excused' => 3,
+                'excused absence' => 3,
+                'absent' => 2,
+                'present' => 1,
+                'on time' => 1
+            ];
+            
             foreach ($records as $record) {
-                $attendanceRecords[$record->student_id][$record->session_date] = [
-                    'status_name' => $record->status_name,
-                    'status_code' => $record->status_code
-                ];
+                $studentId = $record->student_id;
+                $date = $record->session_date;
+                $statusName = strtolower($record->status_name);
+                $currentPriority = $statusPriority[$statusName] ?? 1;
+                
+                // If this student-date combination doesn't exist yet, or if this status is worse, use it
+                if (!isset($attendanceRecords[$studentId][$date])) {
+                    $attendanceRecords[$studentId][$date] = [
+                        'status_name' => $record->status_name,
+                        'status_code' => $record->status_code,
+                        'remarks' => $record->remarks,
+                        'priority' => $currentPriority
+                    ];
+                } else {
+                    $existingPriority = $attendanceRecords[$studentId][$date]['priority'] ?? 0;
+                    if ($currentPriority > $existingPriority) {
+                        $attendanceRecords[$studentId][$date] = [
+                            'status_name' => $record->status_name,
+                            'status_code' => $record->status_code,
+                            'remarks' => $record->remarks,
+                            'priority' => $currentPriority
+                        ];
+                    }
+                }
             }
 
             Log::info("Found " . count($records) . " real attendance records");
@@ -289,6 +342,16 @@ class SF2ReportController extends Controller
             // Log all unique status names for debugging
             $uniqueStatuses = $records->pluck('status_name')->unique();
             Log::info("Unique attendance statuses found: " . $uniqueStatuses->implode(', '));
+            
+            // Log how many of each status after aggregation
+            $aggregatedStatuses = [];
+            foreach ($attendanceRecords as $studentId => $dates) {
+                foreach ($dates as $date => $data) {
+                    $status = strtolower($data['status_name']);
+                    $aggregatedStatuses[$status] = ($aggregatedStatuses[$status] ?? 0) + 1;
+                }
+            }
+            Log::info("Aggregated statuses: " . json_encode($aggregatedStatuses));
 
         } catch (\Exception $e) {
             Log::info("Error fetching real attendance data: " . $e->getMessage());
@@ -328,6 +391,7 @@ class SF2ReportController extends Controller
             $presentDays = 0;
             $absentDays = 0;
             $lateDays = 0;
+            $excusedDays = 0;
             $attendanceData = [];
 
             // Generate attendance data for each day of the month
@@ -339,10 +403,16 @@ class SF2ReportController extends Controller
 
                     // Check if there's a saved SF2 edit for this student and date
                     $sf2Edit = $sf2Edits[$student->id][$dateKey] ?? null;
+                    $remarks = null; // Initialize remarks
 
                     if ($sf2Edit) {
                         // Use SF2 edit (manual override) - highest priority
                         $status = $sf2Edit;
+                        // Try to get remarks from original attendance data even if using SF2 edit
+                        $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
+                        if ($studentAttendance) {
+                            $remarks = $studentAttendance['remarks'] ?? null;
+                        }
                         Log::info("Student {$student->id} on {$dateKey}: Using SF2 edit -> {$status}");
                     } else {
                         // Use original attendance data
@@ -351,21 +421,25 @@ class SF2ReportController extends Controller
                         if ($studentAttendance) {
                             // Use real attendance data and map to simple status
                             $statusName = strtolower($studentAttendance['status_name']);
+                            $remarks = $studentAttendance['remarks'] ?? null;
+
+                            Log::info("Processing attendance - Student {$student->id}, Date {$dateKey}, Raw status: '{$statusName}', Remarks: '{$remarks}'");
 
                             if (in_array($statusName, ['present', 'on time'])) {
                                 $status = 'present';
                             } elseif (in_array($statusName, ['late', 'tardy', 'warning'])) {
                                 $status = 'late';
-                            } elseif (in_array($statusName, ['excused'])) {
-                                $status = 'present'; // Treat excused as present for SF2
+                            } elseif (in_array($statusName, ['excused', 'excused absence'])) {
+                                $status = 'excused'; // Keep excused as separate status
                             } else {
                                 $status = 'absent';
                             }
 
-                            Log::info("Student {$student->id} on {$dateKey}: {$statusName} -> {$status}");
+                            Log::info("Student {$student->id} on {$dateKey}: '{$statusName}' -> '{$status}'");
                         } else {
                             // No attendance record - skip this day (don't count as absent)
                             $status = null;
+                            $remarks = null;
                         }
                     }
 
@@ -377,11 +451,25 @@ class SF2ReportController extends Controller
                         } elseif ($status === 'late') {
                             $lateDays++;
                             $presentDays++; // Late is still considered present for totals
+                        } elseif ($status === 'excused') {
+                            // Excused is counted separately, not as absent
+                            $excusedDays++;
+                            $presentDays++; // Count excused as present for attendance rate
                         } else {
                             $absentDays++;
                         }
 
-                        $attendanceData[$dateKey] = $status;
+                        // Store both status and remarks
+                        $attendanceData[$dateKey] = [
+                            'status' => $status,
+                            'remarks' => $remarks
+                        ];
+                        
+                        // Debug log what we're storing
+                        if ($status === 'late' || $status === 'excused') {
+                            Log::info("📝 Storing attendance data - Student {$student->id}, Date {$dateKey}, Status: '{$status}', Remarks: '" . ($remarks ?? 'NULL') . "'");
+                        }
+                        
                         $totalDays++;
                     }
                 }
@@ -396,9 +484,10 @@ class SF2ReportController extends Controller
             $student->total_present = $presentDays;
             $student->total_absent = $absentDays;
             $student->total_late = $lateDays;
+            $student->total_excused = $excusedDays;
             $student->attendance_rate = $attendanceRate;
 
-            Log::info("Student {$student->firstName} {$student->lastName}: Present: {$presentDays}, Absent: {$absentDays}, Late: {$lateDays}");
+            Log::info("Student {$student->firstName} {$student->lastName}: Present: {$presentDays}, Absent: {$absentDays}, Late: {$lateDays}, Excused: {$excusedDays}");
         }
 
         return $students;
@@ -1806,6 +1895,8 @@ class SF2ReportController extends Controller
                     'attendance_data' => $student->attendance_data, // Also include attendance_data key for compatibility
                     'totalPresent' => $student->total_present,
                     'totalAbsent' => $student->total_absent,
+                    'totalLate' => $student->total_late,
+                    'totalExcused' => $student->total_excused,
                     'attendanceRate' => $student->attendance_rate,
                     'status' => 'active'
                 ];

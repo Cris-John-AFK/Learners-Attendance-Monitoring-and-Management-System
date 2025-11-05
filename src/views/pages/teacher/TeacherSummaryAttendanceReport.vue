@@ -140,10 +140,7 @@
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">No.</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-left font-bold">Learner's Name<br />(Last Name, First Name, Middle Name)</th>
                             <th colspan="4" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Summary</th>
-                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">
-                                Attendance Rate<br />
-                                <span class="text-xs font-normal text-gray-600">(Out of {{ schoolDays }} sessions)</span>
-                            </th>
+                            <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Attendance Rate<br /></th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold">Remarks</th>
                             <th rowspan="2" class="border-2 border-gray-900 bg-gray-100 p-2 text-center font-bold no-print">Actions</th>
                         </tr>
@@ -171,11 +168,9 @@
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td
-                                class="border border-gray-900 p-1 text-center text-sm font-bold"
-                                :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)"
-                            >
-                                {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(calculateAttendanceRate(student))">
+                                {{ calculateAttendanceRate(student) }}%<br />
+                                <span class="text-xs font-normal text-gray-600">(out of {{ calculateTotalSessions(student) }} sessions)</span>
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                             <td class="border border-gray-900 p-2 text-center no-print">
@@ -198,11 +193,9 @@
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
-                            <td
-                                class="border border-gray-900 p-1 text-center text-sm font-bold"
-                                :class="getAttendanceRateClass(schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0)"
-                            >
-                                {{ schoolDays > 0 ? Math.round(((calculateStudentTotal(student, 'present') + calculateStudentTotal(student, 'late')) / schoolDays) * 100) : 0 }}%
+                            <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(calculateAttendanceRate(student))">
+                                {{ calculateAttendanceRate(student) }}%<br />
+                                <span class="text-xs font-normal text-gray-600">(out of {{ calculateTotalSessions(student) }} sessions)</span>
                             </td>
                             <td class="border border-gray-900 p-1 text-sm">{{ student.remarks || '-' }}</td>
                             <td class="border border-gray-900 p-2 text-center no-print">
@@ -592,7 +585,20 @@ const calculateStudentTotal = (student, status) => {
 
         // Only count if the day is within the selected date range
         if (dayDate >= start && dayDate <= end) {
-            const dayStatus = student.attendance_data[day.date];
+            const attendanceEntry = student.attendance_data[day.date];
+
+            // Handle both old format (string) and new format (object with status and remarks)
+            let dayStatus;
+            if (typeof attendanceEntry === 'string') {
+                // Old format: just a status string
+                dayStatus = attendanceEntry;
+            } else if (attendanceEntry && typeof attendanceEntry === 'object') {
+                // New format: object with {status, remarks}
+                dayStatus = attendanceEntry.status;
+            } else {
+                dayStatus = null;
+            }
+
             if (isFirstStudent && dayStatus) {
                 console.log(`  - Day ${day.date}: status='${dayStatus}', looking for='${status}', match=${dayStatus === status}`);
             }
@@ -629,17 +635,87 @@ const totalExcused = computed(() => {
     return students.value.reduce((sum, student) => sum + calculateStudentTotal(student, 'excused'), 0);
 });
 
+// Calculate total attendance sessions for a student (days with any attendance record)
+const calculateTotalSessions = (student) => {
+    if (!student || !student.attendance_data || !reportData.value?.days_in_month) {
+        return 0;
+    }
+
+    let sessionCount = 0;
+    reportData.value.days_in_month.forEach((day) => {
+        const attendanceEntry = student.attendance_data[day.date];
+        // Count if there's any attendance record (present, late, absent, or excused)
+        if (attendanceEntry) {
+            sessionCount++;
+        }
+    });
+
+    return sessionCount;
+};
+
+// Calculate attendance rate for a student (present + late) / total sessions
+const calculateAttendanceRate = (student) => {
+    const totalSessions = calculateTotalSessions(student);
+    if (totalSessions === 0) return 0;
+
+    const presentCount = calculateStudentTotal(student, 'present');
+    const lateCount = calculateStudentTotal(student, 'late');
+
+    return Math.round(((presentCount + lateCount) / totalSessions) * 100);
+};
+
+// Get all unique meaningful remarks for a student within the date range
+// Filters out auto-generated system messages
+const getStudentRemarks = (student) => {
+    if (!student || !student.attendance_data || !reportData.value?.days_in_month) {
+        return '-';
+    }
+
+    const remarksSet = new Set();
+    const start = new Date(startDate.value);
+    const end = new Date(endDate.value);
+
+    // Auto-generated remarks to filter out
+    const autoGeneratedRemarks = [
+        'Auto-marked absent when session completed',
+        'Attended class',
+        'Marked present',
+        'On time'
+    ];
+
+    reportData.value.days_in_month.forEach((day) => {
+        const dayDate = new Date(day.date);
+        
+        // Only include days within the selected date range
+        if (dayDate >= start && dayDate <= end) {
+            const attendanceEntry = student.attendance_data[day.date];
+            
+            // Extract remarks from attendance data
+            let remarks = '';
+            if (typeof attendanceEntry === 'object' && attendanceEntry?.remarks) {
+                remarks = attendanceEntry.remarks.trim();
+            }
+            
+            // Only add meaningful, manually-entered remarks
+            // Skip empty, dash, or auto-generated remarks
+            if (remarks && 
+                remarks !== '-' && 
+                !autoGeneratedRemarks.includes(remarks)) {
+                remarksSet.add(remarks);
+            }
+        }
+    });
+
+    // Return unique meaningful remarks joined by semicolon, or dash if none
+    return remarksSet.size > 0 ? Array.from(remarksSet).join('; ') : '-';
+};
+
 // Calculate average attendance rate
 const averageAttendanceRate = computed(() => {
-    if (students.value.length === 0 || !reportData.value?.days_in_month) return 0;
-
-    const totalDays = reportData.value.days_in_month.length;
-    if (totalDays === 0) return 0;
+    if (students.value.length === 0) return 0;
 
     const totalAttendanceRate = students.value.reduce((sum, student) => {
-        const presentDays = calculateStudentTotal(student, 'present');
-        const rate = (presentDays / totalDays) * 100;
-        return sum + rate;
+        return sum + calculateAttendanceRate(student);
     }, 0);
 
     return Math.round(totalAttendanceRate / students.value.length);
@@ -915,12 +991,42 @@ const getStudentDailyAttendance = (student) => {
 
         // Only include days within the selected date range
         if (dayDate >= start && dayDate <= end) {
-            const status = student.attendance_data ? student.attendance_data[day.date] : null;
+            const attendanceEntry = student.attendance_data ? student.attendance_data[day.date] : null;
+
+            // Handle both old format (string) and new format (object with status and remarks)
+            let status, remarks;
+            
+            // Debug: Log the attendance entry format
+            if (day.date === '2025-10-15' || day.date === '2025-10-23') {
+                console.log(`🔍 Attendance entry for ${day.date}:`, attendanceEntry);
+                console.log(`   Type: ${typeof attendanceEntry}`);
+                console.log(`   Is Array: ${Array.isArray(attendanceEntry)}`);
+            }
+            
+            if (typeof attendanceEntry === 'string') {
+                // Old format: just a status string
+                status = attendanceEntry;
+                remarks = getStatusRemarks(status);
+            } else if (attendanceEntry && typeof attendanceEntry === 'object') {
+                // New format: object with {status, remarks}
+                status = attendanceEntry.status;
+                remarks = attendanceEntry.remarks || getStatusRemarks(status);
+                
+                // Debug: Log what we extracted
+                if (day.date === '2025-10-15' || day.date === '2025-10-23') {
+                    console.log(`   Extracted status: '${status}'`);
+                    console.log(`   Extracted remarks: '${remarks}'`);
+                }
+            } else {
+                status = null;
+                remarks = '';
+            }
+
             dailyAttendance.push({
                 date: day.date,
                 dayName: day.dayName || new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
                 status: status,
-                remarks: status ? getStatusRemarks(status) : ''
+                remarks: remarks
             });
         }
     });
@@ -1409,35 +1515,29 @@ async function loadQuarters() {
         // Get teacher ID from authentication
         const teacherData = TeacherAuthService.getTeacherData();
         const teacherId = teacherData?.teacher?.id;
-        
+
         if (!teacherId) {
             console.error('❌ No teacher ID found');
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Unable to identify teacher. Please log in again.',
-                life: 5000
-            });
+            useDefaultQuarters();
             return;
         }
-        
+
         // Fetch only quarters this teacher has access to
         const response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/quarters`);
+
+        // If API fails, use default quarters
         if (!response.ok) {
-            throw new Error('Failed to load quarters');
+            console.warn('⚠️ Failed to load quarters from API, using default DepEd quarters');
+            useDefaultQuarters();
+            return;
         }
 
         const data = await response.json();
-        
-        // If no quarters, show message
-        if (data.length === 0) {
-            console.log('ℹ️ No quarters available for this teacher');
-            toast.add({
-                severity: 'info',
-                summary: 'No Quarters Available',
-                detail: 'You have not been granted access to any school quarters yet. Please contact the admin.',
-                life: 5000
-            });
+
+        // If no quarters from backend, use default DepEd quarters
+        if (!data || data.length === 0) {
+            console.log('ℹ️ No quarters available from backend, using default DepEd quarters');
+            useDefaultQuarters();
             return;
         }
 
@@ -1484,13 +1584,65 @@ async function loadQuarters() {
         }
     } catch (error) {
         console.error('❌ Error loading quarters:', error);
-        quarters.value = [];
-        toast.add({
-            severity: 'warn',
-            summary: 'Warning',
-            detail: 'No school quarters available. Please contact admin to set up quarters.',
-            life: 5000
-        });
+        console.log('📅 Falling back to default DepEd quarters');
+        useDefaultQuarters();
+    }
+}
+
+// Use default DepEd SY 2025-2026 quarters
+function useDefaultQuarters() {
+    const currentYear = '2025-2026';
+    schoolYears.value = [currentYear];
+    selectedSchoolYear.value = currentYear;
+
+    allQuarters.value = [
+        {
+            label: '1st Quarter',
+            displayLabel: '1st Quarter',
+            value: 'q1',
+            dateRange: 'Jun 24, 2025 - Aug 29, 2025',
+            startDate: new Date('2025-06-24'),
+            endDate: new Date('2025-08-29'),
+            quarter: '1st Quarter',
+            school_year: currentYear
+        },
+        {
+            label: '2nd Quarter',
+            displayLabel: '2nd Quarter',
+            value: 'q2',
+            dateRange: 'Sep 1, 2025 - Nov 7, 2025',
+            startDate: new Date('2025-09-01'),
+            endDate: new Date('2025-11-07'),
+            quarter: '2nd Quarter',
+            school_year: currentYear
+        },
+        {
+            label: '3rd Quarter',
+            displayLabel: '3rd Quarter',
+            value: 'q3',
+            dateRange: 'Nov 10, 2025 - Jan 30, 2026',
+            startDate: new Date('2025-11-10'),
+            endDate: new Date('2026-01-30'),
+            quarter: '3rd Quarter',
+            school_year: currentYear
+        },
+        {
+            label: '4th Quarter',
+            displayLabel: '4th Quarter',
+            value: 'q4',
+            dateRange: 'Feb 2, 2026 - Apr 10, 2026',
+            startDate: new Date('2026-02-02'),
+            endDate: new Date('2026-04-10'),
+            quarter: '4th Quarter',
+            school_year: currentYear
+        }
+    ];
+
+    console.log('✅ Using default DepEd quarters for SY 2025-2026');
+
+    // Auto-select the first quarter (1st Quarter)
+    if (allQuarters.value.length > 0) {
+        selectedSchoolYear.value = currentYear;
     }
 }
 
