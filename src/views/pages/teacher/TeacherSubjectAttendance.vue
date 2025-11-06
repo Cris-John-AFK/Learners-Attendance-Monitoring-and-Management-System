@@ -697,11 +697,14 @@ const toggleEditMode = () => {
     isEditMode.value = !isEditMode.value;
 
     if (isEditMode.value) {
-        // Entering edit mode - refresh students data and calculate unassigned
-        loadStudentsData();
+        // Entering edit mode - just recalculate unassigned students from current seat plan
+        // Don't reload students as this causes them to flash back to unassigned list
+        calculateUnassignedStudents();
+        console.log('Entered edit mode, recalculated unassigned students');
     } else {
         // Exiting edit mode - save the current layout
         saveCurrentLayout(false);
+        console.log('Exited edit mode, saved layout');
     }
 };
 
@@ -723,7 +726,17 @@ const saveCurrentLayout = async (showToast = true) => {
 
 // Immediate save function (internal)
 const saveCurrentLayoutImmediate = async (showToast = true) => {
-    console.log('Saving current layout to database');
+    console.log('💾 SAVING current layout to database...');
+    
+    // Show loading indicator
+    if (showToast) {
+        toast.add({
+            severity: 'info',
+            summary: 'Saving...',
+            detail: 'Saving seating arrangement',
+            life: 2000
+        });
+    }
 
     try {
         if (!sectionId.value || !teacherId.value) {
@@ -767,12 +780,13 @@ const saveCurrentLayoutImmediate = async (showToast = true) => {
             toast.add({
                 severity: 'success',
                 summary: 'Layout Saved',
-                detail: 'Seating arrangement has been saved successfully',
+                detail: `Saved ${assignedSeats} student assignments to database`,
                 life: 3000
             });
         }
 
-        console.log('Layout saved successfully:', response);
+        console.log('✅ Layout saved successfully to database:', response);
+        console.log(`✅ Saved ${assignedSeats} assigned seats`);
     } catch (error) {
         console.error('Error saving layout to database:', error);
 
@@ -844,6 +858,8 @@ const loadSeatingArrangementFromDatabase = async () => {
             // Set the seat plan with deep copy to avoid reference issues
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
+                console.log('✅ Loaded seat plan from database with', layout.seatPlan.flat().filter(s => s.isOccupied).length, 'assigned seats');
+                console.log('✅ First 5 assigned students:', layout.seatPlan.flat().filter(s => s.isOccupied).slice(0, 5).map(s => ({id: s.studentId, occupied: s.isOccupied})));
 
                 // Defer cleanup until after students are fully loaded
                 // Use nextTick to ensure students are loaded first
@@ -5039,7 +5055,7 @@ const titleRef = ref(null);
         <div class="action-buttons flex flex-wrap gap-2 mb-4">
             <!-- EDIT MODE BUTTONS - Only show when NOT in session -->
             <template v-if="!sessionActive">
-                <Button icon="pi pi-pencil" label="Edit Seats" class="p-button-success" :class="{ 'p-button-outlined': !isEditMode }" @click="toggleEditMode" />
+                <Button :icon="isEditMode ? 'pi pi-check' : 'pi pi-pencil'" :label="isEditMode ? 'Save & Exit' : 'Edit Seats'" class="p-button-success" @click="toggleEditMode" />
 
                 <!-- Auto Assignment - Only in Edit Mode -->
                 <div v-if="isEditMode" class="auto-assign-container">
@@ -5144,10 +5160,10 @@ const titleRef = ref(null);
                 <div class="seating-grid-container">
                     <div class="seating-grid">
                         <div v-for="(row, rowIndex) in seatPlan" :key="`row-${rowIndex}`" class="seat-row flex">
-                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1">
+                            <div v-for="(seat, colIndex) in row" :key="`seat-${rowIndex}-${colIndex}`" class="seat-container p-1" :class="{ 'compact-container': !sessionActive }">
                                 <div
                                     :class="[
-                                        'seat p-3 border rounded-lg transition-all duration-200',
+                                        'seat p-3 border rounded-lg',
                                         { 'cursor-pointer': !isEditMode || seat.isOccupied },
                                         { 'drop-target': isDropTarget && isDropTarget(rowIndex, colIndex) },
                                         { 'student-present': seat.isOccupied && seat.status === 'Present' },
@@ -5156,80 +5172,78 @@ const titleRef = ref(null);
                                         { 'student-excused': seat.isOccupied && seat.status === 'Excused' },
                                         { 'student-occupied': seat.isOccupied },
                                         { removable: isEditMode && seat.isOccupied },
-                                        { 'seat-hovered': hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex }
+                                        { 'seat-compact': !sessionActive }
                                     ]"
-                                    :style="hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex ? { transformOrigin: hoveredSeat.transformOrigin } : {}"
                                     @click="isEditMode ? (seat.isOccupied ? removeStudentFromSeat(rowIndex, colIndex) : null) : handleSeatClick(rowIndex, colIndex)"
-                                    @mouseenter="handleSeatHover(rowIndex, colIndex, $event)"
-                                    @mouseleave="handleSeatLeave"
                                     @dragover="allowDrop($event)"
                                     @drop="dropOnSeat(rowIndex, colIndex)"
                                 >
-                                    <!-- Show 2x2 quadrant grid when hovered -->
-                                    <div v-if="hoveredSeat && hoveredSeat.row === rowIndex && hoveredSeat.col === colIndex && !isEditMode" class="quadrant-grid-container">
-                                        <!-- Top-Left: Absent (Red) -->
-                                        <div class="quadrant quadrant-top-left quadrant-absent" @click.stop="handleQuickAction('Absent')">
-                                            <i class="pi pi-times"></i>
-                                            <span>Absent</span>
+                                    <!-- Student card - Always visible (even in edit mode) -->
+                                    <div v-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-card-layout" :class="{ 'compact-mode': !sessionActive || isEditMode }">
+                                        <!-- Student name header -->
+                                        <div class="student-name-header" :class="{
+                                            'header-present': seat.status === 1 || seat.status === 'Present',
+                                            'header-absent': seat.status === 2 || seat.status === 'Absent',
+                                            'header-late': seat.status === 3 || seat.status === 'Late',
+                                            'header-excused': seat.status === 4 || seat.status === 'Excused'
+                                        }">
+                                            <div class="student-avatar-small">
+                                                {{ getStudentInitials(getStudentById(seat.studentId)) }}
+                                            </div>
+                                            <div class="student-info-text">
+                                                <div class="student-name-text">{{ getStudentById(seat.studentId)?.name }}</div>
+                                                <div class="student-id-text">ID: {{ getStudentById(seat.studentId)?.lrn || getStudentById(seat.studentId)?.id }}</div>
+                                            </div>
                                         </div>
-
-                                        <!-- Top-Right: Present (Green) -->
-                                        <div class="quadrant quadrant-top-right quadrant-present" @click.stop="handleQuickAction('Present')">
-                                            <i class="pi pi-check"></i>
-                                            <span>Present</span>
-                                        </div>
-
-                                        <!-- Bottom-Left: Excused (Blue) -->
-                                        <div class="quadrant quadrant-bottom-left quadrant-excused" @click.stop="handleQuickAction('Excused')">
-                                            <i class="pi pi-info-circle"></i>
-                                            <span>Excused</span>
-                                        </div>
-
-                                        <!-- Bottom-Right: Late (Orange/Yellow) -->
-                                        <div class="quadrant quadrant-bottom-right quadrant-late" @click.stop="handleQuickAction('Late')">
-                                            <i class="pi pi-clock"></i>
-                                            <span>Late</span>
-                                        </div>
-
-                                        <!-- Student name overlay in center -->
-                                        <div class="student-name-overlay">
-                                            {{ getStudentById(seat.studentId)?.name }}
+                                        
+                                        <!-- 2x2 Status buttons grid - Only show when session is active -->
+                                        <div v-if="sessionActive" class="status-buttons-grid">
+                                            <!-- Top-Left: Absent (Red) -->
+                                            <div 
+                                                class="status-btn status-btn-absent"
+                                                :class="{ 'status-active': seat.status === 2 || seat.status === 'Absent' }"
+                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Absent')"
+                                            >
+                                                <i class="pi pi-times"></i>
+                                                <span>Absent</span>
+                                            </div>
+                                            
+                                            <!-- Top-Right: Present (Green) -->
+                                            <div 
+                                                class="status-btn status-btn-present"
+                                                :class="{ 'status-active': seat.status === 1 || seat.status === 'Present' }"
+                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Present')"
+                                            >
+                                                <i class="pi pi-check"></i>
+                                                <span>Present</span>
+                                            </div>
+                                            
+                                            <!-- Bottom-Left: Excused (Blue) -->
+                                            <div 
+                                                class="status-btn status-btn-excused"
+                                                :class="{ 'status-active': seat.status === 4 || seat.status === 'Excused' }"
+                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Excused')"
+                                            >
+                                                <i class="pi pi-info-circle"></i>
+                                                <span>Excused</span>
+                                            </div>
+                                            
+                                            <!-- Bottom-Right: Late (Orange) -->
+                                            <div 
+                                                class="status-btn status-btn-late"
+                                                :class="{ 'status-active': seat.status === 3 || seat.status === 'Late' }"
+                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Late')"
+                                            >
+                                                <i class="pi pi-clock"></i>
+                                                <span>Late</span>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <!-- Normal student info when not hovered -->
-                                    <div v-else-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-info relative">
-                                        <div class="student-initials bg-blue-500 text-white">
-                                            {{ getStudentInitials(getStudentById(seat.studentId)) }}
-                                        </div>
-                                        <!-- Status indicator badge -->
-                                        <div
-                                            v-if="seat.status"
-                                            class="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                                            :class="{
-                                                'bg-green-500': seat.status === 1 || seat.status === 'Present',
-                                                'bg-red-500': seat.status === 2 || seat.status === 'Absent',
-                                                'bg-yellow-500': seat.status === 3 || seat.status === 'Late',
-                                                'bg-blue-400': seat.status === 4 || seat.status === 'Excused'
-                                            }"
-                                        >
-                                            <i
-                                                class="pi text-white text-xs"
-                                                :class="{
-                                                    'pi-check': seat.status === 1 || seat.status === 'Present',
-                                                    'pi-times': seat.status === 2 || seat.status === 'Absent',
-                                                    'pi-clock': seat.status === 3 || seat.status === 'Late',
-                                                    'pi-info-circle': seat.status === 4 || seat.status === 'Excused'
-                                                }"
-                                            ></i>
-                                        </div>
-                                        <div class="student-name">{{ getStudentById(seat.studentId)?.name }}</div>
-                                    </div>
-                                    <div v-else-if="isEditMode" class="empty-seat">
+                                    <div v-else-if="isEditMode && !seat.isOccupied" class="empty-seat">
                                         <i class="pi pi-plus text-gray-400"></i>
                                         <div class="text-gray-400 text-xs mt-1">Empty</div>
                                     </div>
-                                    <div v-else class="empty-seat">
+                                    <div v-else-if="!seat.isOccupied" class="empty-seat">
                                         <div class="text-gray-400">Empty</div>
                                     </div>
                                 </div>
@@ -5815,23 +5829,33 @@ const titleRef = ref(null);
 .seating-grid {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
     align-items: center;
     max-width: fit-content;
+    padding: 1rem 0;
 }
 
 .seat-row {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.75rem;
     justify-content: center;
+    margin-bottom: 0.75rem;
 }
 
 .seat-container {
     flex: 0 0 auto; /* Don't grow or shrink, maintain fixed size */
-    width: 90px; /* Fixed width for consistent sizing */
-    height: 90px; /* Fixed height for consistent sizing */
-    min-width: 90px;
-    max-width: 90px;
+    width: 280px; /* MUCH WIDER - no fear! */
+    height: 400px; /* EXTREMELY TALL - absolutely no cuts! */
+    min-width: 280px;
+    max-width: 280px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Compact container - smaller height when session not active */
+.seat-container.compact-container {
+    height: auto;
+    min-height: auto;
 }
 
 .seat {
@@ -5839,15 +5863,39 @@ const titleRef = ref(null);
     width: 100%;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    z-index: 1;
+    padding: 0;
+}
+
+/* Compact seat - no fixed height when session not active */
+.seat.seat-compact {
+    height: auto;
+}
+
+/* Empty seat styling */
+.empty-seat {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    text-align: center;
-    transition: all 0.2s ease;
-    position: relative;
-    overflow: visible;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    background-color: #f9f9f9;
+    min-height: 85px;
+    padding: 20px;
+}
+
+.seat:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    z-index: 10;
 }
 
 .student-info {
@@ -5855,6 +5903,206 @@ const titleRef = ref(null);
     flex-direction: column;
     align-items: center;
     width: 100%;
+}
+
+/* Student Card Layout - Name at top with 2x2 buttons */
+.student-card-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: white;
+}
+
+/* Compact mode - only show header when session not active */
+.student-card-layout.compact-mode {
+    height: auto;
+    min-height: auto;
+}
+
+.student-name-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: white;
+    padding: 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 85px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.3s ease;
+}
+
+/* Header color based on attendance status */
+.student-name-header.header-present {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+}
+
+.student-name-header.header-absent {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+}
+
+.student-name-header.header-late {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+}
+
+.student-name-header.header-excused {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+}
+
+.student-name-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+}
+
+.student-avatar-small {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: bold;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.student-info-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.student-name-text {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: visible;
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.student-id-text {
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0.85;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+/* 2x2 Status Buttons Grid */
+.status-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    flex: 1 1 auto;
+    background: #f1f5f9;
+    padding: 10px;
+    min-height: 300px;
+}
+
+.status-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    position: relative;
+    padding: 24px 14px;
+    opacity: 0.75;
+    border-radius: 16px !important;
+    min-height: 115px;
+    overflow: hidden;
+}
+
+.status-btn:hover {
+    opacity: 1;
+    transform: scale(1.08) translateY(-2px);
+    z-index: 1;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.status-btn.status-active {
+    opacity: 1;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.6), 0 4px 12px rgba(0, 0, 0, 0.25);
+    transform: scale(1.02);
+}
+
+.status-btn i {
+    font-size: 32px;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.status-btn span {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    line-height: 1.4;
+    font-weight: 800;
+    padding: 4px 8px;
+}
+
+/* Status Button Colors */
+.status-btn-absent {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.status-btn-absent:hover {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+}
+
+.status-btn-present {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.status-btn-present:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+}
+
+.status-btn-excused {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.status-btn-excused:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.status-btn-late {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.status-btn-late:hover {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
 }
 
 .student-initials {
@@ -6641,28 +6889,27 @@ const titleRef = ref(null);
     border-bottom-right-radius: 12px;
 }
 
-/* Student Name Overlay - Centered over quadrants */
+/* Student Name Overlay - At top of quadrants like picture 1 */
 .student-name-overlay {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.8);
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.85);
     color: white;
-    padding: 4px 8px;
-    border-radius: 8px;
-    font-size: 10px;
+    padding: 12px 8px;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    font-size: 12px;
     font-weight: 600;
     text-align: center;
     white-space: nowrap;
     z-index: 10;
     pointer-events: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    max-width: 80%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     text-overflow: ellipsis;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .floating-panel-content::-webkit-scrollbar-thumb {
