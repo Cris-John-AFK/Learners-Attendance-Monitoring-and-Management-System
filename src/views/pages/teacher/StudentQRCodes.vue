@@ -16,17 +16,10 @@
         <div class="action-bar">
             <div class="action-left">
                 <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" class="print-button" />
-                
+
                 <div class="sort-wrapper">
                     <label class="sort-label">Sort by:</label>
-                    <Dropdown 
-                        v-model="sortOrder" 
-                        :options="sortOptions" 
-                        optionLabel="label" 
-                        optionValue="value" 
-                        class="sort-dropdown"
-                        placeholder="Sort by..."
-                    />
+                    <Dropdown v-model="sortOrder" :options="sortOptions" optionLabel="label" optionValue="value" class="sort-dropdown" placeholder="Sort by..." />
                 </div>
             </div>
 
@@ -54,13 +47,13 @@
                 <div v-for="i in 8" :key="i" class="bg-white rounded-xl shadow-sm p-6">
                     <!-- QR Code Placeholder -->
                     <div class="w-full aspect-square bg-gray-200 rounded-lg mb-4 animate-pulse"></div>
-                    
+
                     <!-- Student Name -->
                     <div class="h-5 bg-gray-200 rounded w-3/4 mx-auto mb-2 animate-pulse"></div>
-                    
+
                     <!-- Student ID -->
                     <div class="h-4 bg-gray-200 rounded w-1/2 mx-auto mb-3 animate-pulse"></div>
-                    
+
                     <!-- Action Buttons -->
                     <div class="flex gap-2 justify-center">
                         <div class="h-9 w-24 bg-gray-200 rounded animate-pulse"></div>
@@ -140,8 +133,7 @@ const sortOptions = [
     { label: 'Name (A-Z)', value: 'name_asc' },
     { label: 'Name (Z-A)', value: 'name_desc' },
     { label: 'Student ID (Low-High)', value: 'id_asc' },
-    { label: 'Student ID (High-Low)', value: 'id_desc' },
-    { label: 'Section', value: 'section' }
+    { label: 'Student ID (High-Low)', value: 'id_desc' }
 ];
 
 // Load students on component mount
@@ -199,7 +191,7 @@ onMounted(async () => {
 
             for (const assignment of assignments) {
                 console.log('Processing assignment:', assignment);
-                
+
                 // CRITICAL: Only process homeroom assignments (is_primary = true)
                 if (assignment.is_primary === true || assignment.subject_name === 'Homeroom') {
                     console.log('✅ Processing HOMEROOM assignment:', assignment);
@@ -236,7 +228,7 @@ onMounted(async () => {
             students.value = uniqueStudents;
             refreshKey.value = Date.now(); // Force refresh QR components
             console.log(`✅ Loaded ${uniqueStudents.length} ACTIVE homeroom students for teacher ${teacherId}`);
-            
+
             // DEBUG: Check section and grade data for QR codes
             if (uniqueStudents.length > 0) {
                 const firstStudent = uniqueStudents[0];
@@ -247,7 +239,7 @@ onMounted(async () => {
                     grade_level: firstStudent.grade_level
                 });
             }
-            
+
             // 🚀 PERFORMANCE: Batch load QR codes for all students
             try {
                 await batchLoadQRCodes(uniqueStudents);
@@ -273,7 +265,7 @@ const filteredStudents = computed(() => {
     let filtered = students.value;
 
     // CRITICAL: Filter out non-active students (only show active students)
-    filtered = filtered.filter(student => {
+    filtered = filtered.filter((student) => {
         const status = student.enrollment_status || 'active';
         return ['active', 'enrolled', 'transferred_in'].includes(status);
     });
@@ -281,7 +273,7 @@ const filteredStudents = computed(() => {
     // Apply search filter
     if (searchQuery.value.trim()) {
         const query = searchQuery.value.toLowerCase();
-        filtered = filtered.filter(student => {
+        filtered = filtered.filter((student) => {
             const name = (student.full_name || student.name || `${student.first_name} ${student.last_name}` || '').toLowerCase();
             const studentId = (student.student_id || student.id || '').toString().toLowerCase();
             return name.includes(query) || studentId.includes(query);
@@ -316,40 +308,39 @@ const filteredStudents = computed(() => {
     return filtered;
 });
 
-
 // 🚀 ULTRA-FAST: Single bulk API call for all QR codes
 const batchLoadQRCodes = async (studentList) => {
     console.log('🚀 Starting BULK QR code loading for', studentList.length, 'students');
-    
+
     try {
         batchLoadingProgress.value = 10; // Show initial progress
-        
+
         // Extract student IDs
-        const studentIds = studentList.map(student => student.id);
-        
+        const studentIds = studentList.map((student) => student.id);
+
         // Single API call for ALL QR codes
         const authToken = TeacherAuthServiceDefault.getToken();
         const response = await fetch('http://localhost:8000/api/qr-codes/bulk', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${authToken}`,
+                Authorization: `Bearer ${authToken}`,
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             },
             body: JSON.stringify({
                 student_ids: studentIds
             })
         });
-        
+
         batchLoadingProgress.value = 50; // Halfway progress
-        
+
         if (response.ok) {
             const result = await response.json();
-            
+
             if (result.success) {
                 // Store all QR codes at once
                 qrCodes.value = { ...result.qr_codes };
-                
+
                 batchLoadingProgress.value = 100;
                 console.log(`🎉 BULK loading complete! Loaded ${result.found_count}/${result.requested_count} QR codes in ONE request`);
             } else {
@@ -358,7 +349,6 @@ const batchLoadQRCodes = async (studentList) => {
         } else {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
     } catch (error) {
         console.error('❌ Bulk QR loading failed:', error);
         batchLoadingProgress.value = 0;
@@ -366,7 +356,7 @@ const batchLoadQRCodes = async (studentList) => {
     } finally {
         // Mark batch loading as complete
         batchLoadingComplete.value = true;
-        
+
         // Reset progress after showing completion
         setTimeout(() => {
             batchLoadingProgress.value = 0;
@@ -764,12 +754,29 @@ const downloadAllQRCodes = async () => {
         display: none !important;
     }
 
-    /* Reset page to white */
+    /* Reset page to white and hide scrollbars */
     html,
     body {
         margin: 0 !important;
         padding: 0 !important;
         background: white !important;
+        overflow: hidden !important;
+    }
+
+    /* Hide all scrollbars */
+    *,
+    *::before,
+    *::after {
+        overflow: visible !important;
+        scrollbar-width: none !important; /* Firefox */
+        -ms-overflow-style: none !important; /* IE and Edge */
+    }
+
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    *::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
     }
 
     .student-qrcodes-page {

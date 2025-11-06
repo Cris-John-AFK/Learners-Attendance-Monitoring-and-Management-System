@@ -8,9 +8,125 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
-### **November 6, 2025 - Student Attendance Calendar Month Navigation** ✅ NEW
+### **November 6, 2025 - QR Code Download Enhancement & Calendar Month Navigation** ✅ NEW
 
-#### **Month Selector for Student Attendance Profile Calendar**
+#### **1. QR Code Download with Student Information**
+**Problem**: Downloaded QR codes (PNG/SVG) only showed the QR code itself without any identifying information, making it difficult to organize and identify which student each QR code belongs to.
+
+**User Request**: "Make it so that the name of the student that holds that qr code is there too when download is pressed so that it is good and presentable."
+
+**Solution Implemented**: Enhanced both PNG and SVG download functions to include student name and ID in the downloaded image.
+
+**Changes Made**:
+
+1. **PNG Download Enhancement** (QRCodeAPIService.js - Lines 109-175):
+   ```javascript
+   // Canvas with student info header
+   const qrSize = 300;
+   const headerHeight = 100;
+   const padding = 30;
+   const totalWidth = qrSize + (padding * 2);  // 360px
+   const totalHeight = qrSize + headerHeight + (padding * 2);  // 430px
+   
+   // Draw student name (bold, 24px, centered)
+   ctx.font = 'bold 24px Arial, sans-serif';
+   ctx.fillText(studentName, totalWidth / 2, padding + 30);
+   
+   // Draw student ID (18px, centered)
+   ctx.font = '18px Arial, sans-serif';
+   ctx.fillText(`ID: ${studentId}`, totalWidth / 2, padding + 60);
+   
+   // Draw QR code with border
+   ctx.drawImage(img, padding, headerHeight + padding, qrSize, qrSize);
+   ```
+
+2. **SVG Download Enhancement** (QRCodeAPIService.js - Lines 82-148):
+   ```xml
+   <svg width="360" height="430">
+       <!-- White background -->
+       <rect width="360" height="430" fill="white"/>
+       
+       <!-- Student Name (bold, 24px) -->
+       <text x="180" y="60" font-size="24" font-weight="bold" 
+             fill="#333333" text-anchor="middle">
+           Angelo Aguilar
+       </text>
+       
+       <!-- Student ID (18px) -->
+       <text x="180" y="90" font-size="18" fill="#666666" 
+             text-anchor="middle">
+           ID: 3239
+       </text>
+       
+       <!-- QR Code with border -->
+       <g transform="translate(30, 130)">
+           <!-- Original QR code SVG -->
+       </g>
+   </svg>
+   ```
+
+**Visual Layout**:
+```
+┌──────────────────────────┐
+│                          │
+│    Angelo Aguilar        │  ← Student Name (bold, 24px)
+│       ID: 3239           │  ← Student ID (18px)
+│                          │
+│  ┌──────────────────┐   │
+│  │                  │   │
+│  │   QR CODE HERE   │   │  ← 300x300px QR Code
+│  │                  │   │
+│  └──────────────────┘   │
+│                          │
+└──────────────────────────┘
+```
+
+**Features**:
+- ✅ Student name displayed prominently at top (bold, 24px)
+- ✅ Student ID shown below name (18px)
+- ✅ Both centered for professional appearance
+- ✅ White background for clean look
+- ✅ Subtle border around QR code
+- ✅ Proper spacing and padding (30px)
+- ✅ Works for both PNG and SVG formats
+- ✅ Maintains QR code scannability
+
+**Benefits**:
+- ✅ Easy identification of student QR codes
+- ✅ Professional, presentable appearance
+- ✅ No need to manually label printed QR codes
+- ✅ Better organization when managing multiple QR codes
+- ✅ Suitable for printing and distribution
+- ✅ Clear visual hierarchy (name → ID → QR code)
+
+**Files Modified**:
+- `src/router/service/QRCodeAPIService.js` (Lines 82-175)
+
+**Now**: Downloaded QR codes include student name and ID, making them immediately identifiable and professionally presentable.
+
+**Print QR Codes Scrollbar Fix** (COMPLETED):
+- **Issue**: Scrollbar was visible in print output when printing all QR codes
+- **Solution**: Added comprehensive scrollbar hiding CSS rules for print media
+- **Changes**: 
+  - `overflow: hidden` on html/body
+  - `scrollbar-width: none` for Firefox
+  - `-ms-overflow-style: none` for IE/Edge
+  - `::-webkit-scrollbar { display: none }` for Chrome/Safari
+- **Files Modified**: `StudentQRCodes.vue` (Lines 767-790)
+- **Now**: Clean print output without any scrollbars
+
+**Scroll Down Button Enhancement** (COMPLETED):
+- **Issue**: "Scroll Down" button only scrolled one screen height (small distance)
+- **User Request**: "Make it travel at the bottom of the page like literally"
+- **Solution**: Changed scroll behavior to scroll all the way to the bottom
+- **Before**: `top: window.scrollY + window.innerHeight` (one screen)
+- **After**: `top: document.documentElement.scrollHeight` (full bottom)
+- **Files Modified**: `AppLayout.vue` (Lines 29-35)
+- **Now**: Clicking the scroll down arrow takes you directly to the bottom of the page
+
+---
+
+#### **2. Month Selector for Student Attendance Profile Calendar**
 **Problem**: Teachers could only view the current month's attendance in the Student Attendance Profile dialog. No way to view historical attendance data from previous months.
 
 **User Request**: "Make it so that we can change the month only for that calendar data for that student."

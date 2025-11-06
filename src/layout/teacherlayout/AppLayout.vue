@@ -26,10 +26,10 @@ function updateScrollProgress() {
     showScrollIndicator.value = scrollPercent < 80;
 }
 
-// Scroll down one screen when arrow is clicked
+// Scroll to bottom of page when arrow is clicked
 function scrollDown() {
     window.scrollTo({
-        top: window.scrollY + window.innerHeight,
+        top: document.documentElement.scrollHeight,
         behavior: 'smooth'
     });
 }

@@ -75,18 +75,66 @@ export const QRCodeAPIService = {
     },
 
     /**
-     * Download QR code as image
+     * Download QR code as SVG with student information
      * @param {number} studentId - Student ID
      * @param {string} studentName - Student name for filename
      */
     async downloadQRCode(studentId, studentName) {
         try {
-            const response = await api.get(`/api/qr-codes/image/${studentId}`, {
-                responseType: 'blob'
-            });
+            const response = await api.get(`/api/qr-codes/image/${studentId}`);
+            const svgData = response.data;
             
-            // Create blob URL and download
-            const blob = new Blob([response.data], { type: 'image/svg+xml' });
+            // Parse the SVG to get dimensions
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgData, 'image/svg+xml');
+            const originalSvg = svgDoc.querySelector('svg');
+            
+            // Get original dimensions or use defaults
+            const qrSize = 300;
+            const headerHeight = 100;
+            const padding = 30;
+            const totalWidth = qrSize + (padding * 2);
+            const totalHeight = qrSize + headerHeight + (padding * 2);
+            
+            // Create new SVG with student info
+            const enhancedSvg = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${totalHeight}" viewBox="0 0 ${totalWidth} ${totalHeight}">
+                    <!-- White background -->
+                    <rect width="${totalWidth}" height="${totalHeight}" fill="white"/>
+                    
+                    <!-- Student Name -->
+                    <text x="${totalWidth / 2}" y="${padding + 30}" 
+                          font-family="Arial, sans-serif" 
+                          font-size="24" 
+                          font-weight="bold" 
+                          fill="#333333" 
+                          text-anchor="middle">
+                        ${studentName}
+                    </text>
+                    
+                    <!-- Student ID -->
+                    <text x="${totalWidth / 2}" y="${padding + 60}" 
+                          font-family="Arial, sans-serif" 
+                          font-size="18" 
+                          fill="#666666" 
+                          text-anchor="middle">
+                        ID: ${studentId}
+                    </text>
+                    
+                    <!-- Border around QR code -->
+                    <rect x="${padding - 1}" y="${headerHeight + padding - 1}" 
+                          width="${qrSize + 2}" height="${qrSize + 2}" 
+                          fill="none" stroke="#e0e0e0" stroke-width="2"/>
+                    
+                    <!-- Original QR Code -->
+                    <g transform="translate(${padding}, ${headerHeight + padding})">
+                        ${originalSvg ? originalSvg.innerHTML : svgData}
+                    </g>
+                </svg>
+            `;
+            
+            // Create blob and download
+            const blob = new Blob([enhancedSvg], { type: 'image/svg+xml' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -102,7 +150,7 @@ export const QRCodeAPIService = {
     },
 
     /**
-     * Convert SVG to PNG and download
+     * Convert SVG to PNG and download with student information
      * @param {number} studentId - Student ID
      * @param {string} studentName - Student name for filename
      */
@@ -112,18 +160,45 @@ export const QRCodeAPIService = {
             const response = await api.get(`/api/qr-codes/image/${studentId}`);
             const svgData = response.data;
             
-            // Create canvas and convert SVG to PNG
+            // Create canvas with extra space for student info
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const img = new Image();
             
             return new Promise((resolve, reject) => {
                 img.onload = function() {
-                    canvas.width = 300;
-                    canvas.height = 300;
+                    // Canvas dimensions: QR code + header space
+                    const qrSize = 300;
+                    const headerHeight = 100;
+                    const padding = 30;
+                    const totalWidth = qrSize + (padding * 2);
+                    const totalHeight = qrSize + headerHeight + (padding * 2);
+                    
+                    canvas.width = totalWidth;
+                    canvas.height = totalHeight;
+                    
+                    // White background
                     ctx.fillStyle = 'white';
-                    ctx.fillRect(0, 0, 300, 300);
-                    ctx.drawImage(img, 0, 0, 300, 300);
+                    ctx.fillRect(0, 0, totalWidth, totalHeight);
+                    
+                    // Draw student name (centered, bold)
+                    ctx.fillStyle = '#333333';
+                    ctx.font = 'bold 24px Arial, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(studentName, totalWidth / 2, padding + 30);
+                    
+                    // Draw student ID (centered, smaller)
+                    ctx.fillStyle = '#666666';
+                    ctx.font = '18px Arial, sans-serif';
+                    ctx.fillText(`ID: ${studentId}`, totalWidth / 2, padding + 60);
+                    
+                    // Draw QR code
+                    ctx.drawImage(img, padding, headerHeight + padding, qrSize, qrSize);
+                    
+                    // Optional: Add border around QR code
+                    ctx.strokeStyle = '#e0e0e0';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(padding - 1, headerHeight + padding - 1, qrSize + 2, qrSize + 2);
                     
                     canvas.toBlob((blob) => {
                         const url = window.URL.createObjectURL(blob);

@@ -218,12 +218,10 @@ const loadReportData = async () => {
         // If no sectionId, get it from teacher's homeroom section
         if (!sectionId.value) {
             const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
-            
+
             // Try to get homeroom section from teacher data
-            const homeroomSection = teacherData.teacher?.homeroom_section || 
-                                   teacherData.homeroom_section ||
-                                   teacherData.assignments?.find(a => a.is_primary)?.section;
-            
+            const homeroomSection = teacherData.teacher?.homeroom_section || teacherData.homeroom_section || teacherData.assignments?.find((a) => a.is_primary)?.section;
+
             if (homeroomSection) {
                 sectionId.value = homeroomSection.id || homeroomSection.section_id;
                 console.log('📚 Using teacher homeroom section:', sectionId.value);
@@ -729,7 +727,7 @@ onMounted(() => {
                 <Button icon="pi pi-pencil" :label="isEditMode ? 'Exit Edit Mode' : 'Edit (SF2)'" :class="isEditMode ? 'p-button-warning' : 'p-button-info'" @click="editSF2" />
                 <Button icon="pi pi-print" label="Print" class="p-button-outlined" @click="printReport" />
                 <Button icon="pi pi-download" label="Download Excel" class="p-button-success" @click="downloadExcel" />
-                <Button icon="pi pi-send" label="Submit to Admin" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
+                <Button icon="pi pi-send" label="Consolidate for Storing" class="p-button-warning" :loading="submitting" @click="submitToAdmin" />
             </div>
         </div>
 
