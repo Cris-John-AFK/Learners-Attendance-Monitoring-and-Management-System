@@ -5,7 +5,7 @@ import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
@@ -117,7 +117,8 @@ const maleDailyTotals = computed(() => {
             dropout = 0;
 
         maleStudents.value.forEach((student) => {
-            const status = student.attendance_data?.[day.date];
+            const entry = student.attendance_data?.[day.date];
+            const status = typeof entry === 'object' ? entry?.status : entry;
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
@@ -150,7 +151,8 @@ const femaleDailyTotals = computed(() => {
             dropout = 0;
 
         femaleStudents.value.forEach((student) => {
-            const status = student.attendance_data?.[day.date];
+            const entry = student.attendance_data?.[day.date];
+            const status = typeof entry === 'object' ? entry?.status : entry;
             if (status === 'present') present++;
             else if (status === 'absent') absent++;
             else if (status === 'late') late++;
@@ -230,12 +232,41 @@ const loadReportData = async () => {
             }
         }
 
-        const monthStr = selectedMonth.value.toISOString().slice(0, 7); // YYYY-MM format
+        // Format month using LOCAL timezone (not UTC) to avoid off-by-one month errors
+        const year = selectedMonth.value.getFullYear();
+        const month = String(selectedMonth.value.getMonth() + 1).padStart(2, '0'); // +1 because JS months are 0-indexed
+        const monthStr = `${year}-${month}`; // YYYY-MM format
+        
+        console.log('📅 Loading SF2 data for:', monthStr, '(Selected:', selectedMonth.value.toLocaleDateString(), ')');
         const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`);
 
+        console.log('📊 API Response:', response.data);
+        
         if (response.data.success) {
             reportData.value = response.data.data;
+            console.log('✅ Report data loaded:', {
+                students: reportData.value?.students?.length || 0,
+                days: reportData.value?.days_in_month?.length || 0,
+                month: reportData.value?.month_name
+            });
+            
+            // Debug: Check first student's attendance data
+            if (reportData.value?.students?.length > 0) {
+                const firstStudent = reportData.value.students[0];
+                console.log('🔍 First student:', firstStudent.name);
+                console.log('🔍 Attendance data keys:', Object.keys(firstStudent.attendance_data || {}));
+                console.log('🔍 Sample attendance entries:', firstStudent.attendance_data);
+                
+                // Check the structure of one attendance entry
+                const firstDate = Object.keys(firstStudent.attendance_data || {})[0];
+                if (firstDate) {
+                    console.log('🔍 First date:', firstDate);
+                    console.log('🔍 Value at first date:', firstStudent.attendance_data[firstDate]);
+                    console.log('🔍 Type:', typeof firstStudent.attendance_data[firstDate]);
+                }
+            }
         } else {
+            console.error('❌ API returned error:', response.data);
             throw new Error(response.data.message || 'Failed to load report data');
         }
     } catch (error) {
@@ -280,7 +311,11 @@ const printReport = () => {
 // Download Excel report
 const downloadExcel = async () => {
     try {
-        const monthStr = selectedMonth.value.toISOString().slice(0, 7);
+        // Format month using LOCAL timezone (not UTC) to avoid off-by-one month errors
+        const year = selectedMonth.value.getFullYear();
+        const month = String(selectedMonth.value.getMonth() + 1).padStart(2, '0');
+        const monthStr = `${year}-${month}`;
+        
         const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${sectionId.value}/${monthStr}`, {
             responseType: 'blob'
         });
@@ -495,7 +530,9 @@ const calculateAbsentCount = (student) => {
     if (!student.attendance_data) return 0;
 
     let absentCount = 0;
-    Object.entries(student.attendance_data).forEach(([date, status]) => {
+    Object.entries(student.attendance_data).forEach(([date, entry]) => {
+        // Handle both object format {status, remarks} and string format
+        const status = typeof entry === 'object' ? entry.status : entry;
         // Only count absences for dates that have already occurred (not future dates)
         if (status === 'absent' && !isFutureDate(date)) {
             absentCount++;
@@ -701,6 +738,15 @@ const closeDayAnnotationDialog = () => {
     editingDay.value = null;
     dayAnnotationValue.value = '';
 };
+
+// Watch for month changes and reload data automatically
+watch(selectedMonth, (newMonth, oldMonth) => {
+    // Only reload if month actually changed (not initial load)
+    if (oldMonth && newMonth && newMonth.getTime() !== oldMonth.getTime()) {
+        console.log('📅 Month changed from', oldMonth.toISOString().slice(0, 7), 'to', newMonth.toISOString().slice(0, 7));
+        loadReportData();
+    }
+});
 
 // Initialize component
 onMounted(() => {
@@ -918,7 +964,7 @@ onMounted(() => {
                                     class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date]?.status === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data?.[col.date]?.status, col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -926,8 +972,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
-                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date]?.status === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date]?.status, col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -996,7 +1042,7 @@ onMounted(() => {
                                     class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
                                     :class="[
                                         col.isEmpty ? 'bg-gray-100' : '',
-                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
+                                        student.attendance_data?.[col.date]?.status === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data?.[col.date]?.status, col.date), col.date),
                                         !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
                                         !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
                                     ]"
@@ -1004,8 +1050,8 @@ onMounted(() => {
                                     @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
                                     :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
                                 >
-                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
-                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <span v-if="student.attendance_data?.[col.date]?.status === 'late'" class="tardy-text">L</span>
+                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date]?.status, col.date) }}</span>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>

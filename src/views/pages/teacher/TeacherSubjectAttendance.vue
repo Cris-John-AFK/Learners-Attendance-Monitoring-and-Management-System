@@ -67,6 +67,7 @@ const initialSubject = getInitialSubjectInfo();
 const subjectName = ref(initialSubject.name);
 const subjectId = ref(initialSubject.id);
 const sectionId = ref('');
+const sectionName = ref(''); // Store actual section name
 const teacherId = ref(null); // Will be set from authenticated teacher
 const currentDate = ref(new Date()); // Use Date object for DatePicker compatibility
 const currentDateTime = ref(new Date());
@@ -85,7 +86,7 @@ const currentDateString = computed(() => {
 
 // Computed property to get current section name
 const currentSectionName = computed(() => {
-    return route.query.sectionName || 'Unknown Section';
+    return sectionName.value || route.query.sectionName || 'Unknown Section';
 });
 
 // Function to ensure date is always current
@@ -278,21 +279,21 @@ const initializeAttendanceSession = async () => {
         if (activeSessions && activeSessions.length > 0) {
             // Find session for current subject/section
             const resolvedSubjectId = getResolvedSubjectId();
-            
+
             console.log('🔍 Looking for active session:');
             console.log('- Current section ID:', sectionId.value);
             console.log('- Current subject ID:', resolvedSubjectId);
-            console.log('- Active sessions:', activeSessions.map(s => ({ 
-                id: s.id, 
-                section_id: s.section_id, 
-                subject_id: s.subject_id,
-                subject_name: s.subject_name 
-            })));
-            
-            const matchingSession = activeSessions.find((session) => 
-                session.section_id == sectionId.value && 
-                session.subject_id == resolvedSubjectId
+            console.log(
+                '- Active sessions:',
+                activeSessions.map((s) => ({
+                    id: s.id,
+                    section_id: s.section_id,
+                    subject_id: s.subject_id,
+                    subject_name: s.subject_name
+                }))
             );
+
+            const matchingSession = activeSessions.find((session) => session.section_id == sectionId.value && session.subject_id == resolvedSubjectId);
 
             if (matchingSession) {
                 console.log('✅ Found matching session:', {
@@ -463,9 +464,9 @@ const loadStudentsData = async () => {
 
             return true;
         }
-        
+
         console.log('🔄 Loading students from database...');
-        
+
         // Set loading animation flags
         isLoadingSeating.value = true;
         loadingMessage.value = 'Loading students and seating arrangement...';
@@ -548,6 +549,7 @@ const loadStudentsData = async () => {
 
             if (targetSectionId) {
                 sectionId.value = targetSectionId;
+                sectionName.value = targetSectionName; // Store section name for modal display
 
                 // Use optimized teacher-specific API to avoid loading ALL students
                 console.log('🔄 Loading students for section:', targetSectionName, 'ID:', targetSectionId);
@@ -727,7 +729,7 @@ const saveCurrentLayout = async (showToast = true) => {
 // Immediate save function (internal)
 const saveCurrentLayoutImmediate = async (showToast = true) => {
     console.log('💾 SAVING current layout to database...');
-    
+
     // Show loading indicator
     if (showToast) {
         toast.add({
@@ -858,8 +860,15 @@ const loadSeatingArrangementFromDatabase = async () => {
             // Set the seat plan with deep copy to avoid reference issues
             if (layout.seatPlan) {
                 seatPlan.value = JSON.parse(JSON.stringify(layout.seatPlan));
-                console.log('✅ Loaded seat plan from database with', layout.seatPlan.flat().filter(s => s.isOccupied).length, 'assigned seats');
-                console.log('✅ First 5 assigned students:', layout.seatPlan.flat().filter(s => s.isOccupied).slice(0, 5).map(s => ({id: s.studentId, occupied: s.isOccupied})));
+                console.log('✅ Loaded seat plan from database with', layout.seatPlan.flat().filter((s) => s.isOccupied).length, 'assigned seats');
+                console.log(
+                    '✅ First 5 assigned students:',
+                    layout.seatPlan
+                        .flat()
+                        .filter((s) => s.isOccupied)
+                        .slice(0, 5)
+                        .map((s) => ({ id: s.studentId, occupied: s.isOccupied }))
+                );
 
                 // Defer cleanup until after students are fully loaded
                 // Use nextTick to ensure students are loaded first
@@ -1112,7 +1121,7 @@ const stopDragPanel = () => {
     isDraggingPanel.value = false;
     document.removeEventListener('mousemove', dragPanel);
     document.removeEventListener('mouseup', stopDragPanel);
-    
+
     // Cancel any pending animation frame
     if (dragAnimationFrame) {
         cancelAnimationFrame(dragAnimationFrame);
@@ -1390,11 +1399,7 @@ const autoCompleteSession = async () => {
         sessionCompletionProgress.value = 25;
         console.log('📤 [AUTO-COMPLETE] Sending seat plan attendance to backend...');
         try {
-            await AttendanceSessionService.markSeatPlanAttendance(
-                currentSession.value.id,
-                seatPlan.value,
-                attendanceStatuses.value
-            );
+            await AttendanceSessionService.markSeatPlanAttendance(currentSession.value.id, seatPlan.value, attendanceStatuses.value);
             console.log('✅ [AUTO-COMPLETE] Attendance data sent successfully');
         } catch (error) {
             console.warn('⚠️ [AUTO-COMPLETE] Attendance already saved, skipping...', error.message);
@@ -2619,10 +2624,7 @@ const markAllPresent = async () => {
 
                     // Find Present status ID from attendanceStatuses with better matching
                     const presentStatus = attendanceStatuses.value.find((status) => {
-                        return status.code === 'P' || 
-                               status.name === 'Present' || 
-                               status.id === 1 ||
-                               (status.name && status.name.toLowerCase() === 'present');
+                        return status.code === 'P' || status.name === 'Present' || status.id === 1 || (status.name && status.name.toLowerCase() === 'present');
                     });
 
                     if (!presentStatus) {
@@ -2641,7 +2643,7 @@ const markAllPresent = async () => {
                         reason_id: null,
                         marking_method: 'manual'
                     });
-                    
+
                     console.log(`✅ Marking ${seat.studentId} as Present (was unmarked)`);
                 }
             });
@@ -2657,19 +2659,29 @@ const markAllPresent = async () => {
             markedCount = attendanceData.length;
             console.log('Successfully marked', markedCount, 'students');
 
-            // Force visual update - ensure all seats show green status
+            // Force visual update - ONLY update seats that were just marked (preserve existing statuses)
             const updatedSeats = [];
             seatPlan.value.forEach((row, rowIndex) => {
                 row.forEach((seat, colIndex) => {
                     if (seat.isOccupied && seat.studentId) {
-                        seat.status = 1; // Set to green/present
-                        console.log(`Setting seat [${rowIndex}][${colIndex}] student ${seat.studentId} to status 1 (green)`);
-                        updatedSeats.push({ rowIndex, colIndex, studentId: seat.studentId });
+                        // Only update if this student was in the attendanceData (newly marked)
+                        const wasJustMarked = attendanceData.some((data) => {
+                            const student = students.value.find((s) => s.id === data.student_id);
+                            return student && (student.student_id === seat.studentId || student.id === seat.studentId);
+                        });
+
+                        if (wasJustMarked) {
+                            seat.status = 1; // Set to green/present ONLY for newly marked students
+                            console.log(`✅ Updated seat [${rowIndex}][${colIndex}] student ${seat.studentId} to Present (was unmarked)`);
+                            updatedSeats.push({ rowIndex, colIndex, studentId: seat.studentId });
+                        } else {
+                            console.log(`⏭️ Preserved seat [${rowIndex}][${colIndex}] student ${seat.studentId} existing status: ${seat.status}`);
+                        }
                     }
                 });
             });
 
-            console.log('Updated', updatedSeats.length, 'seats with green status');
+            console.log('Updated', updatedSeats.length, 'seats to Present (preserved', seatPlan.value.flat().filter((s) => s.isOccupied).length - updatedSeats.length, 'existing statuses)');
             console.log('Updated seats:', updatedSeats);
 
             // Force Vue reactivity with nextTick
@@ -2678,14 +2690,12 @@ const markAllPresent = async () => {
         }
 
         // Count total marked students (including previously scanned)
-        const totalMarked = seatPlan.value.flat().filter(seat => seat.isOccupied && seat.status === 1).length;
-        
+        const totalMarked = seatPlan.value.flat().filter((seat) => seat.isOccupied && seat.status === 1).length;
+
         toast.add({
             severity: 'success',
             summary: 'Attendance Updated',
-            detail: markedCount > 0 
-                ? `${markedCount} additional students marked as present (${totalMarked} total present)`
-                : `All students already marked (${totalMarked} total present)`,
+            detail: markedCount > 0 ? `${markedCount} additional students marked as present (${totalMarked} total present)` : `All students already marked (${totalMarked} total present)`,
             life: 3000
         });
     } catch (error) {
@@ -3913,11 +3923,11 @@ const onQRDecode = async (decodedText) => {
 
         console.log('Found student:', student);
         console.log('Debug - Extracted ID:', extractedStudentId);
-        const availableIds = students.value.map((s) => ({ 
-            id: s.id, 
-            studentId: s.studentId, 
+        const availableIds = students.value.map((s) => ({
+            id: s.id,
+            studentId: s.studentId,
             student_id: s.student_id,
-            name: s.name 
+            name: s.name
         }));
         console.log('Debug - Available student IDs:', availableIds);
         console.log('Debug - Total students loaded:', students.value.length);
@@ -3927,8 +3937,8 @@ const onQRDecode = async (decodedText) => {
             const existingIndex = qrScanResults.value.findIndex((s) => s.studentId === student.id);
 
             if (existingIndex === -1) {
-                // New scan - mark as present
-                qrScanResults.value.push({
+                // New scan - mark as present - ADD TO TOP OF LIST (unshift instead of push)
+                qrScanResults.value.unshift({
                     id: student.id,
                     studentId: student.id,
                     name: student.name,
@@ -3952,11 +3962,13 @@ const onQRDecode = async (decodedText) => {
                     success: true
                 });
 
+                // 🎉 BIG VISUAL FEEDBACK - Show prominent toast with student name
                 toast.add({
                     severity: 'success',
-                    summary: 'Student Scanned',
-                    detail: `${student.name} marked as Present`,
-                    life: 2000
+                    summary: `✅ ${student.name.toUpperCase()}`,
+                    detail: `Successfully marked as PRESENT`,
+                    life: 3000,
+                    closable: true
                 });
             } else {
                 // Already scanned
@@ -4099,11 +4111,7 @@ const completeQRSession = async () => {
         sessionCompletionProgress.value = 25;
         console.log('📤 [QR-COMPLETE] Sending seat plan attendance to backend...');
         try {
-            await AttendanceSessionService.markSeatPlanAttendance(
-                currentSession.value.id,
-                seatPlan.value,
-                attendanceStatuses.value
-            );
+            await AttendanceSessionService.markSeatPlanAttendance(currentSession.value.id, seatPlan.value, attendanceStatuses.value);
             console.log('✅ [QR-COMPLETE] Attendance data sent successfully');
         } catch (error) {
             console.warn('⚠️ [QR-COMPLETE] Seat plan attendance already saved via QR scans, skipping...', error.message);
@@ -4219,18 +4227,18 @@ const saveAttendanceToDatabase = async (studentId, status, remarks = '', reasonI
 
         // Find status ID from loaded attendanceStatuses with comprehensive matching
         let attendanceStatusId;
-        
+
         // First, ensure attendanceStatuses is loaded
         if (!attendanceStatuses.value || attendanceStatuses.value.length === 0) {
             console.warn('Attendance statuses not loaded, reloading...');
             attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
             console.log('Reloaded attendance statuses:', attendanceStatuses.value);
         }
-        
+
         const statusRecord = attendanceStatuses.value.find((s) => {
             // Convert status to number if it's a numeric ID
             const statusNum = typeof status === 'number' ? status : parseInt(status);
-            
+
             // Try multiple matching strategies
             return (
                 s.id === statusNum ||
@@ -4464,19 +4472,17 @@ const processQRCode = async (qrData) => {
 const findSeatByStudentId = (studentId) => {
     // Normalize the search ID to handle both numeric and string formats
     const searchId = studentId?.toString();
-    
+
     for (let i = 0; i < seatPlan.value.length; i++) {
         for (let j = 0; j < seatPlan.value[i].length; j++) {
             const seat = seatPlan.value[i][j];
             const seatStudentId = seat.studentId?.toString();
-            
+
             // Match if:
             // 1. Exact match (e.g., "3237" === "3237" or "NCS-2025-03237" === "NCS-2025-03237")
             // 2. Numeric ID matches the end of prefixed ID (e.g., "3237" matches "NCS-2025-03237")
             // 3. Prefixed ID ends with the numeric ID (e.g., "NCS-2025-03237" ends with "3237")
-            if (seatStudentId === searchId || 
-                seatStudentId?.endsWith(searchId) || 
-                searchId?.endsWith(seatStudentId)) {
+            if (seatStudentId === searchId || seatStudentId?.endsWith(searchId) || searchId?.endsWith(seatStudentId)) {
                 return seat;
             }
         }
@@ -5085,10 +5091,10 @@ const titleRef = ref(null);
             <template v-if="sessionActive">
                 <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
                 <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" :disabled="isCompletingSession" />
-                
+
                 <!-- QR Scanner specific -->
                 <Button v-if="attendanceMethod === 'qr' && !showQRScanner" icon="pi pi-qrcode" label="Reopen Scanner" class="p-button-info" @click="reopenQRScanner" :disabled="isCompletingSession" />
-                
+
                 <Button icon="pi pi-refresh" label="Reset" class="p-button-outlined" @click="resetAllAttendance" :disabled="isCompletingSession" />
                 <Button
                     :icon="isCompletingSession ? 'pi pi-spin pi-spinner' : 'pi pi-stop'"
@@ -5181,12 +5187,15 @@ const titleRef = ref(null);
                                     <!-- Student card - Always visible (even in edit mode) -->
                                     <div v-if="seat.isOccupied && getStudentById(seat.studentId)" class="student-card-layout" :class="{ 'compact-mode': !sessionActive || isEditMode }">
                                         <!-- Student name header -->
-                                        <div class="student-name-header" :class="{
-                                            'header-present': seat.status === 1 || seat.status === 'Present',
-                                            'header-absent': seat.status === 2 || seat.status === 'Absent',
-                                            'header-late': seat.status === 3 || seat.status === 'Late',
-                                            'header-excused': seat.status === 4 || seat.status === 'Excused'
-                                        }">
+                                        <div
+                                            class="student-name-header"
+                                            :class="{
+                                                'header-present': seat.status === 1 || seat.status === 'Present',
+                                                'header-absent': seat.status === 2 || seat.status === 'Absent',
+                                                'header-late': seat.status === 3 || seat.status === 'Late',
+                                                'header-excused': seat.status === 4 || seat.status === 'Excused'
+                                            }"
+                                        >
                                             <div class="student-avatar-small">
                                                 {{ getStudentInitials(getStudentById(seat.studentId)) }}
                                             </div>
@@ -5195,44 +5204,56 @@ const titleRef = ref(null);
                                                 <div class="student-id-text">ID: {{ getStudentById(seat.studentId)?.lrn || getStudentById(seat.studentId)?.id }}</div>
                                             </div>
                                         </div>
-                                        
+
                                         <!-- 2x2 Status buttons grid - Only show when session is active -->
                                         <div v-if="sessionActive" class="status-buttons-grid">
                                             <!-- Top-Left: Absent (Red) -->
-                                            <div 
+                                            <div
                                                 class="status-btn status-btn-absent"
                                                 :class="{ 'status-active': seat.status === 2 || seat.status === 'Absent' }"
-                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Absent')"
+                                                @click.stop="
+                                                    hoveredSeat = { row: rowIndex, col: colIndex };
+                                                    handleQuickAction('Absent');
+                                                "
                                             >
                                                 <i class="pi pi-times"></i>
                                                 <span>Absent</span>
                                             </div>
-                                            
+
                                             <!-- Top-Right: Present (Green) -->
-                                            <div 
+                                            <div
                                                 class="status-btn status-btn-present"
                                                 :class="{ 'status-active': seat.status === 1 || seat.status === 'Present' }"
-                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Present')"
+                                                @click.stop="
+                                                    hoveredSeat = { row: rowIndex, col: colIndex };
+                                                    handleQuickAction('Present');
+                                                "
                                             >
                                                 <i class="pi pi-check"></i>
                                                 <span>Present</span>
                                             </div>
-                                            
+
                                             <!-- Bottom-Left: Excused (Blue) -->
-                                            <div 
+                                            <div
                                                 class="status-btn status-btn-excused"
                                                 :class="{ 'status-active': seat.status === 4 || seat.status === 'Excused' }"
-                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Excused')"
+                                                @click.stop="
+                                                    hoveredSeat = { row: rowIndex, col: colIndex };
+                                                    handleQuickAction('Excused');
+                                                "
                                             >
                                                 <i class="pi pi-info-circle"></i>
                                                 <span>Excused</span>
                                             </div>
-                                            
+
                                             <!-- Bottom-Right: Late (Orange) -->
-                                            <div 
+                                            <div
                                                 class="status-btn status-btn-late"
                                                 :class="{ 'status-active': seat.status === 3 || seat.status === 'Late' }"
-                                                @click.stop="hoveredSeat = { row: rowIndex, col: colIndex }; handleQuickAction('Late')"
+                                                @click.stop="
+                                                    hoveredSeat = { row: rowIndex, col: colIndex };
+                                                    handleQuickAction('Late');
+                                                "
                                             >
                                                 <i class="pi pi-clock"></i>
                                                 <span>Late</span>
@@ -5256,7 +5277,7 @@ const titleRef = ref(null);
 
         <!-- Floating Game-Style Unassigned Students Panel -->
         <div v-if="isEditMode" class="floating-students-panel" :style="{ left: panelPosition.x + 'px', top: panelPosition.y + 'px' }">
-            <div class="floating-panel-header" @mousedown="startDragPanel" style="cursor: move;">
+            <div class="floating-panel-header" @mousedown="startDragPanel" style="cursor: move">
                 <div class="panel-title">
                     <i class="pi pi-users"></i>
                     <span>Unassigned Students</span>
@@ -5819,35 +5840,32 @@ const titleRef = ref(null);
 /* Seat grid styles */
 .seating-grid-container {
     width: 100%;
-    overflow-x: visible;
+    overflow-x: auto;
     display: flex;
     justify-content: center;
     padding: 0.5rem;
-    min-width: fit-content;
 }
 
 .seating-grid {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    align-items: center;
-    max-width: fit-content;
-    padding: 1rem 0;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem;
 }
 
 .seat-row {
     display: flex;
-    gap: 0.75rem;
-    justify-content: center;
-    margin-bottom: 0.75rem;
+    gap: 0.5rem;
+    width: 100%;
+    flex: 1;
 }
 
 .seat-container {
-    flex: 0 0 auto; /* Don't grow or shrink, maintain fixed size */
-    width: 280px; /* MUCH WIDER - no fear! */
-    height: 400px; /* EXTREMELY TALL - absolutely no cuts! */
-    min-width: 280px;
-    max-width: 280px;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 280px;
     position: relative;
     z-index: 1;
 }
@@ -5872,7 +5890,9 @@ const titleRef = ref(null);
     border: none;
     border-radius: 16px;
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
     z-index: 1;
     padding: 0;
 }
@@ -5894,7 +5914,9 @@ const titleRef = ref(null);
 
 .seat:hover {
     transform: translateY(-4px);
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    box-shadow:
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04);
     z-index: 10;
 }
 
@@ -5925,13 +5947,13 @@ const titleRef = ref(null);
 }
 
 .student-name-header {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 20px 16px;
+    padding: 12px 10px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-height: 85px;
+    gap: 8px;
+    min-height: 60px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     position: relative;
     flex-shrink: 0;
@@ -5966,14 +5988,14 @@ const titleRef = ref(null);
 }
 
 .student-avatar-small {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: bold;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
@@ -5989,17 +6011,18 @@ const titleRef = ref(null);
 }
 
 .student-name-text {
-    font-size: 17px;
+    font-size: 14px;
     font-weight: 700;
-    line-height: 1.4;
+    line-height: 1.3;
     white-space: nowrap;
-    overflow: visible;
-    letter-spacing: 0.3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.2px;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .student-id-text {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     opacity: 0.85;
     line-height: 1.2;
@@ -6007,10 +6030,10 @@ const titleRef = ref(null);
     overflow: hidden;
     text-overflow: ellipsis;
     background: rgba(255, 255, 255, 0.15);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
     display: inline-block;
-    margin-top: 4px;
+    margin-top: 2px;
 }
 
 /* 2x2 Status Buttons Grid */
@@ -6018,11 +6041,11 @@ const titleRef = ref(null);
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
     flex: 1 1 auto;
     background: #f1f5f9;
-    padding: 10px;
-    min-height: 300px;
+    padding: 8px;
+    min-height: 0;
 }
 
 .status-btn {
@@ -6032,44 +6055,46 @@ const titleRef = ref(null);
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     color: white;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     position: relative;
-    padding: 24px 14px;
+    padding: 12px 8px;
     opacity: 0.75;
-    border-radius: 16px !important;
-    min-height: 115px;
+    border-radius: 12px !important;
+    min-height: 0;
     overflow: hidden;
 }
 
 .status-btn:hover {
     opacity: 1;
-    transform: scale(1.08) translateY(-2px);
+    transform: scale(1.05) translateY(-1px);
     z-index: 1;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
 }
 
 .status-btn.status-active {
     opacity: 1;
-    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.6), 0 4px 12px rgba(0, 0, 0, 0.25);
-    transform: scale(1.02);
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.6),
+        0 3px 8px rgba(0, 0, 0, 0.25);
+    transform: scale(1.01);
 }
 
 .status-btn i {
-    font-size: 32px;
-    margin-bottom: 10px;
+    font-size: 20px;
+    margin-bottom: 6px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .status-btn span {
-    font-size: 14px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    line-height: 1.4;
+    letter-spacing: 0.5px;
+    line-height: 1.3;
     font-weight: 800;
-    padding: 4px 8px;
+    padding: 2px 4px;
 }
 
 /* Status Button Colors */

@@ -124,6 +124,166 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 - **Files Modified**: `AppLayout.vue` (Lines 29-35)
 - **Now**: Clicking the scroll down arrow takes you directly to the bottom of the page
 
+**Mark All Present Status Preservation Fix** (COMPLETED):
+- **Issue**: When marking individual students as Late/Absent/Excused, then pressing "Mark All Present", all statuses were overwritten to Present (green)
+- **User Report**: "I marked Bautista as Late, then pressed Mark All Present. Where is the Late? Where is Excused?"
+- **Root Cause**: Visual update loop was forcing ALL seats to status 1 (Present) instead of only updating unmarked students
+- **Solution**: Modified visual update to only change status for newly-marked students, preserving existing Absent/Late/Excused statuses
+- **Code Changes**:
+  - Added `wasJustMarked` check to compare against `attendanceData` array
+  - Only update `seat.status = 1` if student was in the newly-marked batch
+  - Preserve existing status for all previously-marked students
+- **Files Modified**: `TeacherSubjectAttendance.vue` (Lines 2660-2684)
+- **Now**: Mark All Present correctly:
+  - ✅ Marks only unmarked students as Present
+  - ✅ Preserves Absent status (red)
+  - ✅ Preserves Late status (orange)
+  - ✅ Preserves Excused status (blue)
+  - ✅ Visual display matches database records
+
+**Excused Status in Session Summary** (COMPLETED):
+- **Issue**: Attendance Session Summary dialog was missing "Excused" status card and count
+- **User Report**: "Where is the excused on the attendance session summary?"
+- **Solution**: Added complete Excused status support to session summary
+- **Changes Made**:
+  - Added Excused summary card with blue gradient styling
+  - Added `excused` count calculation from API stats
+  - Included Excused in attendance rate calculation: `(present + late + excused) / total`
+  - Added Excused icon (`pi-info-circle`) to student status badges
+  - Added blue color styling for Excused status badge
+- **Files Modified**: `AppTopbar.vue` (Lines 138, 155, 439-447, 479, 716-719, 744-746, 879-882)
+- **Now**: Session Summary shows:
+  - ✅ Total Students (blue)
+  - ✅ Present (green)
+  - ✅ Absent (red)
+  - ✅ Late (orange)
+  - ✅ **Excused (blue)** ← NEW!
+  - ✅ Attendance Rate (includes Excused)
+
+**SF2 Daily Attendance - Data Not Displaying (Object vs String)** (COMPLETED):
+- **Issue**: SF2 report showed all slashes (no data) even though API returned attendance data correctly
+- **User Report**: "But why is that the data is not there? Like why? You already know we have data on this month"
+- **Root Cause**: Attendance data structure mismatch
+  - **API returns**: `{status: 'late', remarks: null}` (object format)
+  - **Template expected**: `'late'` (string format)
+  - Template was accessing `student.attendance_data[date]` directly instead of `student.attendance_data[date].status`
+- **Solution**: Updated template to access `.status` property from attendance data objects
+- **Changes Made**:
+  - Fixed male students section attendance cell access (Lines 963, 971-972)
+  - Fixed female students section attendance cell access (Lines 1041, 1049-1050)
+  - Fixed `calculateAbsentCount()` function to handle object format (Lines 531-533)
+  - Fixed `maleDailyTotals` computed property to extract status from object (Lines 120-121)
+  - Fixed `femaleDailyTotals` computed property to extract status from object (Lines 154-155)
+  - Changed from: `student.attendance_data[col.date]` → `student.attendance_data?.[col.date]?.status`
+  - Added backward compatibility for both object and string formats
+- **Files Modified**: `TeacherDailyAttendance.vue` (Lines 120-121, 154-155, 527-540, 963, 971-972, 1041, 1049-1050)
+- **Now**: SF2 report correctly displays ✓ (present), ✗ (absent), L (late), E (excused) marks! ✅
+
+**SF2 Daily Attendance - Month Off-by-One Error** (COMPLETED):
+- **Issue**: When selecting October 2025, SF2 showed "SEPTEMBER 2025". November showed October, etc.
+- **User Report**: "I know why. When I select october it goes 1 month before the october same with november!"
+- **Root Cause**: Two issues:
+  1. Calendar component's `@date-select` event wasn't firing for month view changes
+  2. Using `toISOString()` which converts to UTC, causing timezone-based month shifts
+  3. JavaScript Date months are 0-indexed (0=Jan, 9=Oct) but API expects 1-indexed (1=Jan, 10=Oct)
+- **Solution**: 
+  1. Added Vue `watch` to monitor `selectedMonth` and reload data automatically
+  2. Changed from UTC `toISOString()` to local timezone formatting with `getMonth() + 1`
+- **Changes Made**:
+  - Added `watch` import from Vue (Line 8)
+  - Added watcher for `selectedMonth` (Lines 706-712)
+  - Fixed `loadReportData()` to use local timezone: `getMonth() + 1` instead of `toISOString()` (Lines 233-239)
+  - Fixed `downloadExcel()` with same local timezone fix (Lines 288-291)
+  - Added debug logging: "📅 Loading SF2 data for: 2025-10 (Selected: 10/1/2025)"
+- **Files Modified**: `TeacherDailyAttendance.vue` (Lines 8, 233-239, 288-291, 706-712)
+- **Before**: October → September, November → October (off by 1 month)
+- **Now**: October → October, November → November (correct!) ✅
+
+**Summary Attendance - Auto Quarter Detection** (COMPLETED):
+- **Issue**: Teachers had to manually select the school quarter after choosing a date range
+- **User Request**: "Make it auto like on school quarter get the quarter on when the data has started"
+- **Solution**: Automatically detect and select the matching quarter when dates are changed
+- **How It Works**:
+  1. When teacher selects "From" and "To" dates
+  2. System searches all available quarters for a match
+  3. If dates match a quarter exactly OR fall within a quarter's range → auto-select that quarter
+  4. If dates don't match any quarter → clear quarter selection (custom range)
+  5. Show toast notification: "📚 Quarter Auto-Selected: Detected 1st Quarter"
+- **Changes Made**:
+  - Added `findMatchingQuarter(start, end)` helper function
+  - Modified `onDateRangeChange()` to call auto-detection
+  - Normalizes dates to compare only year-month-day (ignores time)
+  - Checks for exact match OR if range falls within quarter
+- **Files Modified**: `TeacherSummaryAttendanceReport.vue` (Lines 1424-1494)
+- **Benefits**:
+  - ✅ No manual quarter selection needed
+  - ✅ Automatically syncs quarter with date range
+  - ✅ Works with both exact matches and partial ranges
+  - ✅ Clears quarter for truly custom ranges
+  - ✅ Better UX for elderly teachers
+
+**Attendance Completion Modal - Unknown Section Fix** (COMPLETED):
+- **Issue**: Completion modal showed "Music - Unknown Section" instead of actual section name
+- **User Report**: Console errors and "Unknown Section" displayed in completion modal
+- **Root Cause**: `currentSectionName` computed property was using `route.query.sectionName` which wasn't set, falling back to "Unknown Section"
+- **Solution**: Added `sectionName` ref to store actual section name when loading students
+- **Changes Made**:
+  - Added `const sectionName = ref('')` to store section name (Line 70)
+  - Updated `currentSectionName` computed to use `sectionName.value` first (Line 89)
+  - Set `sectionName.value = targetSectionName` when loading students (Line 552)
+- **Files Modified**: `TeacherSubjectAttendance.vue` (Lines 70, 89, 552)
+- **Now**: Completion modal shows correct section name: "Music - Gumamela - 11/6/2025" ✅
+
+**QR Scanner Visual Feedback Enhancement** (COMPLETED):
+- **Issue**: When scanning students, teachers couldn't tell who was just scanned - no clear visual indication
+- **User Report**: "The teacher won't know who they have scanned! The list starts at top then goes bottom, not showing the latest!"
+- **Problems**:
+  1. Toast notification was small and generic ("Student Scanned")
+  2. Scanned students list showed oldest scans at top (using `push()`)
+  3. Latest scanned student was buried at the bottom, requiring scrolling
+- **Solution**: Enhanced visual feedback and reversed list order
+- **Changes Made**:
+  1. **Big Visual Toast**: Changed toast to show student name in UPPERCASE with checkmark emoji
+     - Before: `summary: 'Student Scanned', detail: '${name} marked as Present'`
+     - After: `summary: '✅ ${name.toUpperCase()}', detail: 'Successfully marked as PRESENT'`
+     - Increased life from 2000ms to 3000ms for better visibility
+  2. **Reversed List Order**: Changed from `push()` to `unshift()` 
+     - Latest scanned students now appear at the TOP of the list
+     - No more scrolling to see who was just scanned
+  3. **Scan log also uses `unshift()`** - latest entries at top
+- **Files Modified**: `TeacherSubjectAttendance.vue` (Lines 3939, 3964-3970)
+- **Benefits**:
+  - ✅ Immediate visual confirmation with student's name in large text
+  - ✅ Latest scanned student always visible at top of list
+  - ✅ Teachers can quickly verify correct student was scanned
+  - ✅ No scrolling needed to see recent scans
+  - ✅ Better UX for high-volume scanning
+
+**Responsive Seating Grid Layout** (COMPLETED):
+- **Issue**: Student cards were getting cut off on the right side with fixed card sizes
+- **User Request**: "Can you make this cards dynamic? I don't care if it shrinks down to size but just make it readable too. Just to accommodate the rows and columns"
+- **Problem**: Cards had fixed 280px width, causing overflow when grid had many columns
+- **Solution**: Made cards fully flexible to scale with configured grid dimensions
+- **Changes Made**:
+  - Changed `.seat-container` to `flex: 1 1 0` with `min-width: 0` for flexible scaling
+  - Reduced card height from 400px to 280px for better proportions
+  - Made `.seat-row` use `flex: 1` to distribute space evenly
+  - Reduced all font sizes and padding for compact, readable cards:
+    - Header: 60px min-height (was 85px)
+    - Avatar: 36px (was 42px)
+    - Name: 14px (was 17px)
+    - ID: 11px (was 13px)
+    - Status buttons: 20px icons (was 32px), 11px text (was 14px)
+  - Removed fixed `min-height` from status buttons grid
+  - Added text ellipsis for long names
+- **Files Modified**: `TeacherSubjectAttendance.vue` (Lines 5839-6081)
+- **Benefits**:
+  - ✅ Cards scale dynamically to fit any grid configuration (3×3, 8×5, 10×10, etc.)
+  - ✅ No horizontal overflow or cut-off cards
+  - ✅ Text remains readable even when cards shrink
+  - ✅ Maintains visual quality with proper proportions
+  - ✅ Works perfectly with Layout Configuration controls
+
 ---
 
 #### **2. Month Selector for Student Attendance Profile Calendar**

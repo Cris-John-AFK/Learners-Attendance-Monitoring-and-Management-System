@@ -135,7 +135,8 @@ const showSessionSummaryDialog = async (notification) => {
         const present = stats.present || 0;
         const absent = (stats.absent || 0) + (stats.unmarked_students || 0);
         const late = stats.late || 0;
-        const attendanceRate = totalStudents > 0 ? Math.round(((present + late) / totalStudents) * 100) : 0;
+        const excused = stats.excused || 0;
+        const attendanceRate = totalStudents > 0 ? Math.round(((present + late + excused) / totalStudents) * 100) : 0;
 
         selectedSession.value = {
             id: session.id || sessionId,
@@ -151,6 +152,7 @@ const showSessionSummaryDialog = async (notification) => {
                 present: present,
                 absent: absent,
                 late: late,
+                excused: excused,
                 attendanceRate: attendanceRate
             }
         };
@@ -436,6 +438,15 @@ onUnmounted(() => {
                             <div class="card-label">Late</div>
                         </div>
                     </div>
+                    <div class="summary-card excused">
+                        <div class="card-icon">
+                            <i class="pi pi-info-circle"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-number">{{ selectedSession.summary.excused || 0 }}</div>
+                            <div class="card-label">Excused</div>
+                        </div>
+                    </div>
                     <div class="summary-card rate">
                         <div class="card-icon">
                             <i class="pi pi-chart-pie"></i>
@@ -467,6 +478,7 @@ onUnmounted(() => {
                                         <i class="pi pi-check-circle" v-if="student.status === 'Present'"></i>
                                         <i class="pi pi-times-circle" v-else-if="student.status === 'Absent'"></i>
                                         <i class="pi pi-clock" v-else-if="student.status === 'Late'"></i>
+                                        <i class="pi pi-info-circle" v-else-if="student.status === 'Excused'"></i>
                                         {{ student.status }}
                                     </span>
                                 </div>
@@ -703,6 +715,11 @@ onUnmounted(() => {
     border-left: 4px solid #ff9800;
 }
 
+.summary-card.excused {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border-left: 4px solid #2196f3;
+}
+
 .summary-card.rate {
     background: linear-gradient(135deg, #f3e5f5, #e1bee7);
     border-left: 4px solid #9c27b0;
@@ -725,6 +742,9 @@ onUnmounted(() => {
 }
 .summary-card.late .card-icon {
     color: #ff9800;
+}
+.summary-card.excused .card-icon {
+    color: #2196f3;
 }
 .summary-card.rate .card-icon {
     color: #9c27b0;
@@ -854,6 +874,11 @@ onUnmounted(() => {
 .status-badge.late {
     background: #fff3e0;
     color: #ef6c00;
+}
+
+.status-badge.excused {
+    background: #e3f2fd;
+    color: #1565c0;
 }
 
 /* Create Event Calendar Button - White Pill Style */

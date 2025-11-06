@@ -1422,8 +1422,6 @@ const getAttendanceRateClass = (rate) => {
 };
 
 const onDateRangeChange = () => {
-    // Don't clear quarter - let both work independently
-
     // Only load if both dates are selected
     if (startDate.value && endDate.value) {
         // Validate that end date is after start date
@@ -1436,6 +1434,25 @@ const onDateRangeChange = () => {
             });
             return;
         }
+
+        // 🎯 AUTO-DETECT QUARTER based on selected date range
+        const matchingQuarter = findMatchingQuarter(startDate.value, endDate.value);
+        if (matchingQuarter) {
+            selectedQuarter.value = matchingQuarter;
+            console.log('✅ Auto-detected quarter:', matchingQuarter.label);
+            
+            toast.add({
+                severity: 'success',
+                summary: '📚 Quarter Auto-Selected',
+                detail: `Detected ${matchingQuarter.label} (${matchingQuarter.dateRange})`,
+                life: 3000
+            });
+        } else {
+            // Clear quarter if dates don't match any quarter
+            selectedQuarter.value = null;
+            console.log('ℹ️ Custom date range - no matching quarter');
+        }
+
         // Update selectedMonth based on date range
         selectedMonth.value = new Date(startDate.value);
         console.log('📅 Date range changed, loading data...');
@@ -1443,6 +1460,37 @@ const onDateRangeChange = () => {
     } else {
         console.log('⏳ Waiting for both dates to be selected...');
     }
+};
+
+// Helper function to find matching quarter based on date range
+const findMatchingQuarter = (start, end) => {
+    if (!allQuarters.value || allQuarters.value.length === 0) {
+        return null;
+    }
+
+    // Normalize dates to compare only year-month-day
+    const normalizeDate = (date) => {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    };
+
+    const startNorm = normalizeDate(start);
+    const endNorm = normalizeDate(end);
+
+    // Find quarter where dates match exactly or fall within the quarter range
+    return allQuarters.value.find((quarter) => {
+        const qStart = normalizeDate(quarter.startDate);
+        const qEnd = normalizeDate(quarter.endDate);
+
+        // Check if dates match exactly
+        const exactMatch = qStart.getTime() === startNorm.getTime() && qEnd.getTime() === endNorm.getTime();
+
+        // Check if selected range falls within quarter range
+        const withinRange = startNorm >= qStart && endNorm <= qEnd;
+
+        return exactMatch || withinRange;
+    });
 };
 
 // Clear custom dates and go back to quarterly mode
