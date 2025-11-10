@@ -322,10 +322,7 @@ const submitToAdmin = async () => {
                 life: 5000
             });
 
-            // Optional: Redirect to dashboard after successful submission
-            setTimeout(() => {
-                router.push('/teacher');
-            }, 2000);
+            // Stay on the same page - no redirect
         } else {
             throw new Error(response.data.message || 'Failed to submit report');
         }

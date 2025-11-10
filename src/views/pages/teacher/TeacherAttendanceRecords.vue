@@ -1399,12 +1399,9 @@ const openSF2Report = () => {
         return;
     }
 
-    // Navigate to SF2 report page with section ID
+    // Navigate to Daily Attendance page (SF2 Daily Attendance Report)
     router.push({
-        name: 'teacher-sf2-report',
-        params: {
-            sectionId: selectedSection.value.id
-        }
+        name: 'teacher-daily-attendance'
     });
 };
 </script>

@@ -28,3 +28,85 @@
 .teacher-route .p-datatable .p-datatable-tbody > tr > td {
     padding: 0.5rem 0.75rem; /* Reduce cell padding */
 }
+
+/* ========================================
+   SIDEBAR - No Scrollbar Needed (Compact Design)
+   ======================================== */
+
+.layout-sidebar {
+    overflow: hidden !important;
+}
+
+.layout-menu {
+    overflow: visible !important;
+}
+
+/* ========================================
+   ENHANCED MENU ITEMS - Button-like with Shadow
+   ======================================== */
+
+/* Highlighted menu items - clean with shadow to look like buttons */
+.layout-menu a.font-semibold,
+.layout-menu .font-semibold {
+    background: transparent !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transform-origin: left center !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+    margin: 4px 8px !important;
+    padding: 10px 12px !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+/* Hover effect - colored background, grows bigger with smooth animation */
+.layout-menu a.font-semibold:hover,
+.layout-menu .font-semibold:hover {
+    background: rgba(102, 126, 234, 0.12) !important;
+    transform: scale(1.05) !important;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Icon color for highlighted items */
+.layout-menu a.font-semibold .layout-menuitem-icon,
+.layout-menu .font-semibold .layout-menuitem-icon {
+    color: #667eea !important;
+}
+
+/* Active/selected state - only exact match */
+.layout-menu a.font-semibold.router-link-exact-active,
+.layout-menu .font-semibold.router-link-exact-active {
+    background: rgba(102, 126, 234, 0.15) !important;
+    transform: scale(1.02) !important;
+    box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Sliding circle indicator - solid, no pulsing */
+.menu-active-indicator {
+    position: absolute;
+    right: 8px;
+    width: 16px;
+    height: 16px;
+    background: #667eea;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(102, 126, 234, 0.6);
+    transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    opacity: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.layout-menu a.font-semibold.router-link-exact-active .layout-menuitem-text,
+.layout-menu .font-semibold.router-link-exact-active .layout-menuitem-text {
+    color: #667eea !important;
+    font-weight: 700 !important;
+}
+
+/* Active/click state - visible feedback */
+.layout-menu a.font-semibold:active,
+.layout-menu .font-semibold:active {
+    background: rgba(102, 126, 234, 0.25) !important;
+    transform: scale(0.98) !important;
+    box-shadow: 0 1px 4px rgba(102, 126, 234, 0.3) !important;
+}

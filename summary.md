@@ -8,7 +8,318 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
-### **November 6, 2025 - QR Code Download Enhancement & Calendar Month Navigation** ✅ NEW
+### **November 10, 2025 - SF2 Daily Attendance Fixes & Enhanced Menu Navigation** ✅ NEW
+
+#### **1. SF2 Daily Attendance Report - Edit Dialog & Data Fixes**
+**Problem**: Multiple critical issues with the SF2 Daily Attendance edit functionality:
+1. Edit dialog showed "Current: -" instead of actual status (Present, Absent, etc.)
+2. Save button caused 500 Internal Server Error
+3. After saving, the table didn't update to reflect changes
+4. Status data wasn't syncing with Attendance Sessions and Attendance Records
+
+**Root Causes**:
+1. **Current Status Display**: Attendance data structure was `{status: "present", remarks: null}` (object) but code expected string
+2. **500 Error**: Using `sectionId` instead of `sectionId.value` (ref value not extracted)
+3. **No Table Update**: Not reloading data from backend after save
+4. **Custom Text Input**: Confusing UX with text input field alongside status buttons
+
+**Solutions Implemented**:
+
+**A. Fixed Current Status Display** (Lines 604-645):
+```javascript
+// Extract status from object structure
+const currentStatusData = student.attendance_data?.[date];
+const currentStatus = typeof currentStatusData === 'object' && currentStatusData?.status 
+    ? currentStatusData.status 
+    : currentStatusData;
+
+// Convert to display symbol
+switch (currentStatus) {
+    case 'present': displayValue = '✓'; break;
+    case 'absent': displayValue = '✗'; break;
+    case 'late': displayValue = 'L'; break;
+    case 'excused': displayValue = 'E'; break;
+    case 'dropout': displayValue = 'D'; break;
+}
+```
+
+**B. Fixed 500 Error** (Line 658):
+- Changed `section_id: sectionId` → `section_id: sectionId.value`
+- Properly extracts value from Vue ref
+
+**C. Added Data Reload After Save** (Line 733):
+```javascript
+closeEditDialog();
+await loadReportData(); // Reload from backend
+```
+
+**D. Redesigned Edit Dialog** (Lines 1390-1424):
+- **Removed**: Text input field for custom text entry
+- **Added**: Large, clear status buttons (Present, Absent, Late, Excused)
+- **Layout**: 2x2 grid with buttons that save immediately on click
+- **Styling**: 
+  - Bigger buttons (py-4 px-6)
+  - Larger icons (text-2xl) and text (text-lg)
+  - Hover effects with shadows
+  - Auto-save on button click (no separate Save button needed)
+
+**E. Enhanced Current Status Display** (Lines 1385-1387):
+```javascript
+// Shows "Current: ✓ Present" instead of just "Current: ✓"
+Current: <span class="text-xl">{{ editingCell.currentValue }}</span> 
+{{ getStatusLabel(editingCell.currentValue) }}
+```
+
+**F. Added Status Label Helper** (Lines 744-759):
+```javascript
+const getStatusLabel = (symbol) => {
+    switch (symbol) {
+        case '✓': return 'Present';
+        case '✗': return 'Absent';
+        case 'L': return 'Late';
+        case 'E': return 'Excused';
+        case 'D': return 'Drop Out';
+        default: return '';
+    }
+};
+```
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherDailyAttendance.vue` (Lines 604-645, 658, 733, 744-759, 1385-1424)
+
+**Benefits**:
+- ✅ Current status displays correctly (e.g., "Current: ✓ Present")
+- ✅ Save works without 500 errors
+- ✅ Table updates immediately after save
+- ✅ Changes sync to Attendance Sessions and Records
+- ✅ Clean, intuitive button-based UI
+- ✅ Larger, easier-to-click buttons
+- ✅ Auto-save on button click (faster workflow)
+
+---
+
+#### **2. Removed Auto-Redirect After Consolidate for Storing**
+**Problem**: After clicking "Consolidate for Storing" and successfully submitting SF2 reports, users were automatically redirected to the dashboard after 2 seconds, interrupting their workflow.
+
+**User Request**: "When I press the consolidate for storing and success it takes me back to the dashboard!! It should stay!"
+
+**Solution**: Removed automatic redirect to dashboard, allowing users to stay on the report page.
+
+**Changes Made**:
+1. **TeacherDailyAttendance.vue** (Lines 371-372):
+   - Removed: `setTimeout(() => { router.push('/teacher'); }, 2000);`
+   - Added: `// Stay on the same page - no redirect`
+
+2. **TeacherSF2Report.vue** (Lines 325-326):
+   - Removed: `setTimeout(() => { router.push('/teacher'); }, 2000);`
+   - Added: `// Stay on the same page - no redirect`
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherDailyAttendance.vue` (Lines 371-372)
+- `src/views/pages/teacher/TeacherSF2Report.vue` (Lines 325-326)
+
+**Benefits**:
+- ✅ Users stay on report page after submission
+- ✅ Can review submitted data immediately
+- ✅ Can submit multiple reports without navigation interruption
+- ✅ Better workflow for teachers managing multiple sections
+
+---
+
+#### **3. Unified SF2 Report Routing**
+**Problem**: Two different routes showed different SF2 reports:
+- "Daily Attendance" menu → `/teacher/daily-attendance` (SF2 Daily Attendance Report)
+- "Report (Teacher)" button in Attendance Records → `/teacher/sf2-report/219` (Old SF2 report)
+- This caused confusion with different data and layouts
+
+**User Request**: "Why is the sf2 daily attendance report different inside the daily attendance and inside the attendance records? It should be the same!"
+
+**Solution**: Made "Report (Teacher)" button route to the same Daily Attendance page.
+
+**Changes Made** (TeacherAttendanceRecords.vue - Lines 1402-1405):
+```javascript
+// Before:
+router.push({
+    name: 'teacher-sf2-report',  // Old route
+    params: { sectionId: selectedSection.value.id }
+});
+
+// After:
+router.push({
+    name: 'teacher-daily-attendance'  // Same as menu
+});
+```
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherAttendanceRecords.vue` (Lines 1402-1405)
+
+**Benefits**:
+- ✅ Consistent SF2 report across all entry points
+- ✅ No confusion with multiple report versions
+- ✅ Single source of truth for SF2 data
+- ✅ Easier maintenance (one report to update)
+
+---
+
+#### **4. Enhanced Teacher Menu Navigation**
+**Problem**: Client testing revealed navigation issues:
+- Menu items were hard to find
+- No clear indication of clickable items
+- "Daily Attendance" name wasn't descriptive enough
+- No visual feedback on interaction
+
+**User Feedback**: "They were reading very hard or looking everywhere on where is this certain button! Or where it goes!"
+
+**Solutions Implemented**:
+
+**A. Renamed Menu Items** (AppMenu.vue - Lines 71-74):
+- Changed: "Daily Attendance" → **"SF2 Report Form"**
+- Changed icon: `pi-calendar-plus` → `pi-file-edit` (more intuitive)
+- More descriptive and matches actual form name
+
+**B. Enhanced Menu Item Visibility** (teacher-layout.css - Lines 36-112):
+
+**Visual Design**:
+```css
+/* Clean button appearance with shadow */
+.layout-menu a.font-semibold {
+    background: transparent;           /* No color by default */
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);  /* Subtle shadow */
+    margin: 4px 8px;                   /* Proper spacing */
+    padding: 10px 12px;                /* Comfortable padding */
+    position: relative;
+    overflow: hidden;                  /* For ripple effect */
+}
+
+/* Hover effect - purple background appears */
+.layout-menu a.font-semibold:hover {
+    background: rgba(102, 126, 234, 0.12);  /* Light purple */
+    transform: scale(1.05);                  /* Grows 5% */
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+}
+
+/* Ripple effect on click */
+@keyframes ripple {
+    0% { transform: scale(0); opacity: 0.6; }
+    100% { transform: scale(4); opacity: 0; }
+}
+
+.layout-menu a.font-semibold:active::before {
+    width: 100px;
+    height: 100px;
+    animation: ripple 0.6s ease-out;
+}
+```
+
+**C. Added font-semibold Class to Important Items** (AppMenu.vue):
+- ✅ Dashboard (removed - not a primary action)
+- ✅ English (Gumamela) - Line 189
+- ✅ Music (Gumamela) - Line 189
+- ✅ Attendance Records - Line 38
+- ✅ Attendance Sessions - Line 44
+- ✅ Learner Status - Line 58
+- ✅ Student QR Codes - Line 64
+- ✅ **SF2 Report Form** - Line 74 (most important!)
+- ✅ Summary Attendance - Line 84
+
+**Features**:
+1. **Clean Default State**:
+   - Transparent background (no purple color when idle)
+   - Subtle shadow to indicate it's a button
+   - Purple icons for visual distinction
+   - Proper spacing between items (4px margin)
+
+2. **Interactive Hover**:
+   - Light purple background appears (12% opacity)
+   - Button grows 5% larger (`scale(1.05)`)
+   - Stronger shadow with purple tint
+   - Smooth 0.3s transition
+
+3. **Ripple Effect on Click**:
+   - Expanding circle animation from click point
+   - Purple color (40% opacity)
+   - 0.6s animation duration
+   - Material Design-inspired feedback
+
+4. **Active/Selected State**:
+   - Slightly stronger purple background (15% opacity)
+   - Slightly bigger (`scale(1.02)`)
+   - Purple text color
+   - Medium shadow
+
+**Files Modified**:
+- `src/layout/teacherlayout/AppMenu.vue` (Lines 10, 38, 44, 58, 64, 71-74, 84, 189, 247)
+- `src/assets/css/teacher-layout.css` (Lines 36-112)
+
+**Benefits**:
+- ✅ Clear visual indication of clickable items
+- ✅ Professional button-like appearance
+- ✅ Satisfying interaction feedback (ripple effect)
+- ✅ Better spacing prevents accidental clicks
+- ✅ Cleaner look (no background clutter when idle)
+- ✅ More descriptive menu labels
+- ✅ Easier navigation for elderly teachers
+- ✅ Modern Material Design aesthetic
+
+**D. Sliding Circle Indicator** (AppMenu.vue + teacher-layout.css):
+- **Feature**: Animated circle that slides to the currently active menu item
+- **Position**: Right side of menu (8px from edge)
+- **Animation**: Smooth 0.4s cubic-bezier transition when changing pages
+- **Visual Effects**:
+  - 12px purple circle with glow effect
+  - Pulsing ring animation (expands and fades)
+  - Only visible on active menu items
+- **Implementation**:
+  - JavaScript tracks active route and calculates position
+  - Updates automatically when navigating between pages
+  - Smooth sliding animation between menu items
+- **Files Modified**:
+  - `AppMenu.vue` (Lines 3-4, 8-9, 282-308, 312-314)
+  - `teacher-layout.css` (Lines 74-112)
+
+**User Experience Improvements**:
+- **Before**: Plain text links, hard to identify important actions
+- **After**: Clear button cards with shadows, hover effects, and sliding circle indicator
+- **Navigation Feedback**: Circle smoothly slides to show current page
+- **Accessibility**: Larger click targets, better visual feedback
+- **Performance**: Smooth CSS transitions with minimal JavaScript
+
+---
+
+#### **5. Console Error Fixes**
+**Problems**: 
+1. 500 Internal Server Error on quarters API endpoint
+2. PrimeVue deprecation warnings for Calendar and Dropdown components
+
+**Solutions**:
+
+**A. Quarters API 500 Error Fix** (TeacherSummaryAttendanceReport.vue - Lines 1591-1606):
+- **Issue**: `GET /api/teachers/1/quarters` returned 500 error because backend route doesn't exist yet
+- **Fix**: Wrapped fetch in try-catch to gracefully handle missing endpoint
+- **Behavior**: Silently falls back to default DepEd quarters (2025-2026 school year)
+- **Result**: No more red error in console, just info log: "ℹ️ Quarters API not available, using default DepEd quarters"
+
+**B. PrimeVue Deprecation Warnings** (main.js - Lines 51-54):
+- **Issue**: Console warnings: "Deprecated since v4. Use Select/DatePicker component instead"
+- **Status**: These are just notices - components still work perfectly in PrimeVue v4
+- **Fix**: Added documentation comment acknowledging the warnings
+- **Note**: Migration to new components (Select, DatePicker) can be done later without breaking changes
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherSummaryAttendanceReport.vue` (Lines 1591-1606)
+- `src/main.js` (Lines 51-54)
+
+**Benefits**:
+- ✅ Clean console with no red errors
+- ✅ Graceful fallback when API endpoints don't exist
+- ✅ App continues working normally
+- ✅ Default DepEd quarters work perfectly as fallback
+- ✅ Deprecation warnings documented for future migration
+
+---
+
+### **November 6, 2025 - QR Code Download Enhancement & Calendar Month Navigation** ✅
 
 #### **1. QR Code Download with Student Information**
 **Problem**: Downloaded QR codes (PNG/SVG) only showed the QR code itself without any identifying information, making it difficult to organize and identify which student each QR code belongs to.

@@ -368,10 +368,7 @@ const submitToAdmin = async () => {
                 life: 5000
             });
 
-            // Optional: Redirect to dashboard after successful submission
-            setTimeout(() => {
-                router.push('/teacher');
-            }, 2000);
+            // Stay on the same page - no redirect
         } else {
             throw new Error(response.data.message || 'Failed to submit report');
         }
@@ -601,13 +598,53 @@ const openEditDialog = (student, date, day) => {
         return;
     }
 
+    // Get current status and display value
+    const currentStatusData = student.attendance_data?.[date];
+    
+    // Extract status string from object (backend returns {status: "present", remarks: null})
+    const currentStatus = typeof currentStatusData === 'object' && currentStatusData?.status 
+        ? currentStatusData.status 
+        : currentStatusData;
+    
+    console.log('🔍 Opening edit dialog:', {
+        student: student.name,
+        date: date,
+        day: day,
+        currentStatusData: currentStatusData,
+        extractedStatus: currentStatus,
+        statusType: typeof currentStatus
+    });
+    
+    let displayValue = '';
+    
+    // Convert status to display symbol
+    switch (currentStatus) {
+        case 'present':
+            displayValue = '✓';
+            break;
+        case 'absent':
+            displayValue = '✗';
+            break;
+        case 'late':
+            displayValue = 'L';
+            break;
+        case 'excused':
+            displayValue = 'E';
+            break;
+        case 'dropout':
+            displayValue = 'D';
+            break;
+        default:
+            displayValue = '-';
+    }
+
     editingCell.value = {
         student: student,
         date: date,
         day: day,
-        currentValue: getAttendanceMark(student.attendance_data?.[date], date)
+        currentValue: displayValue
     };
-    editAttendanceValue.value = getAttendanceMark(student.attendance_data?.[date], date) || '';
+    editAttendanceValue.value = displayValue === '-' ? '' : displayValue;
     showEditDialog.value = true;
 };
 
@@ -646,7 +683,7 @@ const saveAttendanceEdit = async () => {
             student_id: student.id,
             date: date,
             status: status,
-            section_id: sectionId,
+            section_id: sectionId.value,
             month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
         });
 
@@ -662,14 +699,60 @@ const saveAttendanceEdit = async () => {
         return; // Don't update UI if save failed
     }
 
+    // Get display value for toast message
+    let displayStatus = '';
+    switch (status) {
+        case 'present':
+            displayStatus = '✓ (Present)';
+            break;
+        case 'absent':
+            displayStatus = '✗ (Absent)';
+            break;
+        case 'late':
+            displayStatus = 'L (Late)';
+            break;
+        case 'excused':
+            displayStatus = 'E (Excused)';
+            break;
+        case 'dropout':
+            displayStatus = 'D (Drop Out)';
+            break;
+        case null:
+            displayStatus = '- (Cleared)';
+            break;
+        default:
+            displayStatus = status;
+    }
+
     toast.add({
         severity: 'success',
         summary: 'Updated',
-        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to "${getAttendanceMark(status)}"`,
+        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to ${displayStatus}`,
         life: 3000
     });
 
     closeEditDialog();
+    
+    // Reload report data to reflect changes from backend and update all related components
+    await loadReportData();
+};
+
+// Get status label from symbol
+const getStatusLabel = (symbol) => {
+    switch (symbol) {
+        case '✓':
+            return 'Present';
+        case '✗':
+            return 'Absent';
+        case 'L':
+            return 'Late';
+        case 'E':
+            return 'Excused';
+        case 'D':
+            return 'Drop Out';
+        default:
+            return '';
+    }
 };
 
 // Close edit dialog
@@ -1310,43 +1393,49 @@ onMounted(() => {
 
         <!-- Edit Attendance Dialog -->
         <Dialog v-model:visible="showEditDialog" modal header="Edit Attendance" :style="{ width: '450px' }" class="no-print">
-            <div v-if="editingCell" class="space-y-4">
+            <div v-if="editingCell" class="space-y-4 pt-4">
                 <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p class="text-base font-bold text-gray-800">{{ editingCell.student.name }}</p>
                     <p class="text-sm text-gray-600 mt-1">Day {{ editingCell.day }} - {{ reportData.month_name }} {{ reportData.school_info.school_year }}</p>
-                    <p class="text-xs text-gray-500 mt-2 bg-white px-2 py-1 rounded inline-block">
-                        Current: <span class="font-semibold">{{ editingCell.currentValue || '-' }}</span>
+                    <p class="text-lg text-gray-700 mt-3 bg-white px-4 py-2 rounded inline-block font-semibold">
+                        Current: <span class="text-xl">{{ editingCell.currentValue || '-' }}</span> {{ getStatusLabel(editingCell.currentValue) }}
                     </p>
                 </div>
 
-                <div class="flex flex-col gap-3">
-                    <label class="text-sm font-semibold text-gray-700">Enter Attendance Mark:</label>
-                    <input
-                        v-model="editAttendanceValue"
-                        type="text"
-                        placeholder="Enter: ✓, ✗, L, or custom text"
-                        class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg font-semibold text-center"
-                        @keyup.enter="saveAttendanceEdit"
-                        autofocus
-                    />
-                    <div class="bg-gray-50 p-3 rounded-lg">
-                        <p class="text-xs font-medium text-gray-600 mb-2">Quick Reference:</p>
-                        <div class="grid grid-cols-5 gap-2 text-xs">
-                            <button @click="editAttendanceValue = '✓'" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded">✓ Present</button>
-                            <button @click="editAttendanceValue = '✗'" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded">✗ Absent</button>
-                            <button @click="editAttendanceValue = 'L'" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded">L Late</button>
-                            <button @click="editAttendanceValue = 'E'" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded">E Excused</button>
-                            <button @click="editAttendanceValue = 'D'" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-2 py-1 rounded">D Drop Out</button>
-                        </div>
+                <div class="flex flex-col gap-4">
+                    <label class="text-base font-semibold text-gray-700">Select Status:</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button 
+                            @click="editAttendanceValue = '✓'; saveAttendanceEdit()" 
+                            class="bg-green-100 hover:bg-green-200 text-green-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                            <span class="text-2xl">✓</span>
+                            <span>Present</span>
+                        </button>
+                        <button 
+                            @click="editAttendanceValue = '✗'; saveAttendanceEdit()" 
+                            class="bg-red-100 hover:bg-red-200 text-red-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                            <span class="text-2xl">✗</span>
+                            <span>Absent</span>
+                        </button>
+                        <button 
+                            @click="editAttendanceValue = 'L'; saveAttendanceEdit()" 
+                            class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                            <span class="text-2xl">L</span>
+                            <span>Late</span>
+                        </button>
+                        <button 
+                            @click="editAttendanceValue = 'E'; saveAttendanceEdit()" 
+                            class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                            <span class="text-2xl">E</span>
+                            <span>Excused</span>
+                        </button>
                     </div>
-                    <p class="text-xs text-gray-500 italic">Type any symbol or letter (✓, ✗, L, E, D, /, \\, etc.) or press Enter to save</p>
                 </div>
             </div>
 
             <template #footer>
                 <div class="flex justify-end gap-2">
                     <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="closeEditDialog" />
-                    <Button label="Save" icon="pi pi-check" class="p-button-success" @click="saveAttendanceEdit" />
                 </div>
             </template>
         </Dialog>

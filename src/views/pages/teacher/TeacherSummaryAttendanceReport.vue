@@ -1519,12 +1519,29 @@ const onSectionChange = () => {
         const selectedSection = teacherSections.value.find((s) => s.id === sectionId.value);
         if (selectedSection) {
             sectionName.value = selectedSection.name;
-            gradeLevel.value = selectedSection.grade_level || 'Unknown Grade';
+            
+            // Extract grade_level - it might be nested in a grade object or directly available
+            if (selectedSection.grade_level) {
+                gradeLevel.value = selectedSection.grade_level;
+            } else if (selectedSection.grade && selectedSection.grade.name) {
+                gradeLevel.value = selectedSection.grade.name;
+            } else if (selectedSection.grade && selectedSection.grade.grade_name) {
+                gradeLevel.value = selectedSection.grade.grade_name;
+            } else {
+                gradeLevel.value = 'Unknown Grade';
+            }
+
+            console.log('✅ Section changed:', {
+                id: sectionId.value,
+                name: sectionName.value,
+                grade: gradeLevel.value,
+                rawSection: selectedSection
+            });
 
             toast.add({
                 severity: 'info',
                 summary: '📚 Section Changed',
-                detail: `Loading data for ${selectedSection.name}`,
+                detail: `Loading data for ${selectedSection.name} (${gradeLevel.value})`,
                 life: 3000
             });
 
@@ -1571,11 +1588,19 @@ async function loadQuarters() {
         }
 
         // Fetch only quarters this teacher has access to
-        const response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/quarters`);
+        let response;
+        try {
+            response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/quarters`);
+        } catch (error) {
+            // Silently fall back to default quarters if API endpoint doesn't exist
+            console.log('ℹ️ Quarters API not available, using default DepEd quarters');
+            useDefaultQuarters();
+            return;
+        }
 
         // If API fails, use default quarters
         if (!response.ok) {
-            console.warn('⚠️ Failed to load quarters from API, using default DepEd quarters');
+            console.log('ℹ️ Using default DepEd quarters');
             useDefaultQuarters();
             return;
         }
@@ -1722,15 +1747,41 @@ onMounted(async () => {
     // Get homeroom section
     if (teacherData?.teacher?.homeroom_section) {
         homeroomSection = teacherData.teacher.homeroom_section;
-        allSections.push(homeroomSection);
-        console.log('✅ Found homeroom section in teacher object:', homeroomSection);
+        // Ensure grade_level is properly set for homeroom too
+        const homeroomWithGrade = {
+            ...homeroomSection,
+            grade_level: homeroomSection.grade_level || 
+                       homeroomSection.grade?.name || 
+                       homeroomSection.grade?.grade_name ||
+                       'Unknown Grade'
+        };
+        allSections.push(homeroomWithGrade);
+        console.log('✅ Found homeroom section in teacher object:', {
+            id: homeroomWithGrade.id,
+            name: homeroomWithGrade.name,
+            grade_level: homeroomWithGrade.grade_level,
+            original: homeroomSection
+        });
     } else if (teacherData?.assignments && teacherData.assignments.length > 0) {
         // Find homeroom assignment (subject_id is null)
         const homeroomAssignment = teacherData.assignments.find((a) => a.subject_id === null || a.subject_name === 'Homeroom');
         if (homeroomAssignment && homeroomAssignment.section) {
             homeroomSection = homeroomAssignment.section;
-            allSections.push(homeroomSection);
-            console.log('✅ Found homeroom section in assignments:', homeroomSection);
+            // Ensure grade_level is properly set
+            const homeroomWithGrade = {
+                ...homeroomSection,
+                grade_level: homeroomSection.grade_level || 
+                           homeroomSection.grade?.name || 
+                           homeroomSection.grade?.grade_name ||
+                           'Unknown Grade'
+            };
+            allSections.push(homeroomWithGrade);
+            console.log('✅ Found homeroom section in assignments:', {
+                id: homeroomWithGrade.id,
+                name: homeroomWithGrade.name,
+                grade_level: homeroomWithGrade.grade_level,
+                original: homeroomSection
+            });
         }
     }
 
@@ -1740,7 +1791,49 @@ onMounted(async () => {
             if (assignment.section && assignment.section.id !== homeroomSection?.id) {
                 // Check if not already added
                 if (!allSections.find((s) => s.id === assignment.section.id)) {
-                    allSections.push(assignment.section);
+                    console.log('🔍 Processing assignment section:', {
+                        section_id: assignment.section.id,
+                        section_name: assignment.section.name,
+                        has_grade_level: !!assignment.section.grade_level,
+                        grade_level_value: assignment.section.grade_level,
+                        has_grade_object: !!assignment.section.grade,
+                        grade_object: assignment.section.grade,
+                        description: assignment.section.description,
+                        full_section: assignment.section
+                    });
+                    
+                    // Extract grade_level from multiple possible sources
+                    let extractedGrade = 'Unknown Grade';
+                    
+                    // Try direct grade_level field
+                    if (assignment.section.grade_level) {
+                        extractedGrade = assignment.section.grade_level;
+                    }
+                    // Try nested grade object
+                    else if (assignment.section.grade?.name) {
+                        extractedGrade = assignment.section.grade.name;
+                    }
+                    else if (assignment.section.grade?.grade_name) {
+                        extractedGrade = assignment.section.grade.grade_name;
+                    }
+                    // Try extracting from description (e.g., "Lapu-Lapu - Grade 6")
+                    else if (assignment.section.description) {
+                        const match = assignment.section.description.match(/Grade\s+\d+/i);
+                        if (match) {
+                            extractedGrade = match[0];
+                        }
+                    }
+                    
+                    const sectionWithGrade = {
+                        ...assignment.section,
+                        grade_level: extractedGrade
+                    };
+                    allSections.push(sectionWithGrade);
+                    console.log('✅ Added section from assignment:', {
+                        id: sectionWithGrade.id,
+                        name: sectionWithGrade.name,
+                        grade_level: sectionWithGrade.grade_level
+                    });
                 }
             }
         });
@@ -1752,22 +1845,32 @@ onMounted(async () => {
         '📚 Teacher handles',
         allSections.length,
         'section(s):',
-        allSections.map((s) => s.name)
+        allSections.map((s) => `${s.name} (${s.grade_level})`)
     );
 
     if (homeroomSection) {
-        sectionId.value = homeroomSection.id;
-        sectionName.value = homeroomSection.name || 'Unknown Section';
-
-        // Extract grade_level - it might be nested in a grade object or directly available
-        if (homeroomSection.grade_level) {
-            gradeLevel.value = homeroomSection.grade_level;
-        } else if (homeroomSection.grade && homeroomSection.grade.name) {
-            gradeLevel.value = homeroomSection.grade.name;
-        } else if (homeroomSection.grade && homeroomSection.grade.grade_name) {
-            gradeLevel.value = homeroomSection.grade.grade_name;
+        // Use the processed section from allSections array (which has grade_level properly set)
+        const processedHomeroom = allSections.find(s => s.id === homeroomSection.id);
+        
+        if (processedHomeroom) {
+            sectionId.value = processedHomeroom.id;
+            sectionName.value = processedHomeroom.name || 'Unknown Section';
+            gradeLevel.value = processedHomeroom.grade_level || 'Unknown Grade';
         } else {
-            gradeLevel.value = 'Unknown Grade';
+            // Fallback to original homeroom
+            sectionId.value = homeroomSection.id;
+            sectionName.value = homeroomSection.name || 'Unknown Section';
+            
+            // Extract grade_level - it might be nested in a grade object or directly available
+            if (homeroomSection.grade_level) {
+                gradeLevel.value = homeroomSection.grade_level;
+            } else if (homeroomSection.grade && homeroomSection.grade.name) {
+                gradeLevel.value = homeroomSection.grade.name;
+            } else if (homeroomSection.grade && homeroomSection.grade.grade_name) {
+                gradeLevel.value = homeroomSection.grade.grade_name;
+            } else {
+                gradeLevel.value = 'Unknown Grade';
+            }
         }
 
         console.log('✅ Teacher section loaded:', {

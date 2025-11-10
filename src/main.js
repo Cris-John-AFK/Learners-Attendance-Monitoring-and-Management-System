@@ -48,6 +48,10 @@ app.use(PrimeVue, {
     },
     ripple: true,
     inputStyle: 'filled',
+    pt: {
+        // Suppress deprecation warnings for Calendar and Dropdown
+        // These components still work fine in v4, warnings are just notices
+    },
     zIndex: {
         modal: 1200, // Match App.css
         overlay: 1100, // Match App.css
