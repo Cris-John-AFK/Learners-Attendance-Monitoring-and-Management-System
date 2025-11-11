@@ -8,7 +8,159 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
-### **November 10, 2025 - SF2 Daily Attendance Fixes & Enhanced Menu Navigation** ✅ NEW
+### **November 11, 2025 - Progress Tracking Percentage Fix & Menu Improvements** ✅ NEW
+
+#### **1. Fixed 350% Attendance Percentage Bug in Progress Tracking**
+**Problem**: Progress Tracking dialog showed attendance percentages over 100% (e.g., 350%), which is mathematically impossible and confusing for teachers.
+
+**Root Cause**: The system was counting multiple attendance records per day (morning and afternoon sessions for different subjects) separately. If a student had 2 subjects per day for 5 days, that's 10 records, leading to inflated percentages like 200-350%.
+
+**User Requirement**: 
+- **Only calculate 1 status per day** (not per session)
+- **Prioritize worst status**: If student is present in morning but absent/excused in afternoon, count the whole day as absent/excused
+- Percentage should reflect daily attendance, not session attendance
+
+**Solution Implemented**:
+
+**Backend Changes** (`SmartAttendanceAnalyticsController.php`):
+
+1. **Added Daily Status Tracking** (Lines 581, 628-640):
+```php
+$dailyStatuses = []; // Track worst status per day
+
+// Track worst status per day (priority: Absent > Excused > Late > Present)
+if (!isset($dailyStatuses[$day])) {
+    $dailyStatuses[$day] = $record->status_code;
+} else {
+    // Priority order: A (worst) > E > L > P (best)
+    $currentPriority = $this->getStatusPriority($dailyStatuses[$day]);
+    $newPriority = $this->getStatusPriority($record->status_code);
+    
+    if ($newPriority > $currentPriority) {
+        $dailyStatuses[$day] = $record->status_code;
+    }
+}
+```
+
+2. **Count Daily Statuses** (Lines 645-661):
+```php
+// Count daily statuses (only 1 status per day based on worst status)
+foreach ($dailyStatuses as $day => $status) {
+    switch ($status) {
+        case 'P': $present++; break;
+        case 'A': $absent++; break;
+        case 'L': $late++; break;
+        case 'E': $excused++; break;
+    }
+}
+```
+
+3. **Fixed Percentage Calculation** (Lines 663-667):
+```php
+// Calculate percentage based on DAYS, not individual records
+$totalAttended = $present + $late;
+$totalDays = count($uniqueDays);
+$percentage = $totalDays > 0 ? round(($totalAttended / $totalDays) * 100) : 0;
+```
+
+4. **Added Status Priority Helper** (Lines 731-745):
+```php
+private function getStatusPriority(string $statusCode): int
+{
+    switch ($statusCode) {
+        case 'A': return 4; // Absent - worst
+        case 'E': return 3; // Excused
+        case 'L': return 2; // Late
+        case 'P': return 1; // Present - best
+        default: return 0;
+    }
+}
+```
+
+**How It Works Now**:
+
+**Example Scenario**:
+- Monday: Present in English (morning), Absent in Math (afternoon) → **Counts as Absent** (whole day)
+- Tuesday: Present in English, Present in Math → **Counts as Present** (whole day)
+- Wednesday: Late in English, Present in Math → **Counts as Late** (whole day)
+- Thursday: Present in English, Excused in Math → **Counts as Excused** (whole day)
+- Friday: Present in both subjects → **Counts as Present** (whole day)
+
+**Result**: 5 days total, 2 present, 1 absent, 1 late, 1 excused = **60% attendance** (3 attended / 5 days)
+
+**Before**: Would count 10 sessions and show inflated percentages like 200-350%
+
+**Files Modified**:
+- `lamms-backend/app/Http/Controllers/API/SmartAttendanceAnalyticsController.php` (Lines 575-668, 731-745)
+
+**Benefits**:
+- ✅ Accurate attendance percentages (0-100% range)
+- ✅ Daily attendance calculation (not per session)
+- ✅ Prioritizes worst status per day
+- ✅ Reflects real-world attendance patterns
+- ✅ Clear and understandable for teachers
+- ✅ Matches educational standards (daily attendance)
+
+---
+
+#### **2. Hidden "Other Subjects" Menu When Empty**
+**Problem**: Teachers who only teach homeroom subjects still saw an empty "Other Subjects" section in the sidebar menu.
+
+**Solution**: Added conditional rendering to hide "Other Subjects" section and its separators when the teacher has no other subjects assigned.
+
+**Changes Made** (`AppMenu.vue`):
+
+1. **Added Computed Property** (Lines 15-19):
+```javascript
+const hasOtherSubjects = computed(() => {
+    const otherSubjectsItem = model.value.find((item) => item.label === 'Other Subjects');
+    return otherSubjectsItem && otherSubjectsItem.items && otherSubjectsItem.items.length > 0;
+});
+```
+
+2. **Conditional Rendering** (Lines 356, 371-375):
+- Hide "Other Subjects" container when empty
+- Hide separator before "Other Subjects"
+- Hide separator after "Other Subjects"
+- Skip rendering in regular menu items
+
+**Files Modified**:
+- `src/layout/teacherlayout/AppMenu.vue` (Lines 3, 15-19, 35-36, 44-45, 356, 371-375, 378-379)
+
+**Benefits**:
+- ✅ Cleaner sidebar for homeroom-only teachers
+- ✅ No empty sections cluttering the menu
+- ✅ Automatic show/hide based on assignments
+
+---
+
+#### **3. Moved "Attendance History" Label Above Homeroom Subjects**
+**Problem**: The "ATTENDANCE" section label appeared below subjects, making it less prominent.
+
+**Solution**: Added "Attendance History" as an empty section label above "Homeroom Subjects" while keeping the actual attendance menu items in their original position.
+
+**New Menu Structure**:
+- HOME → Dashboard
+- **ATTENDANCE HISTORY** ← Empty label for visual organization
+- Homeroom Subjects → English, Music, etc.
+- Other Subjects (hidden when empty)
+- **ATTENDANCE HISTORY** ← Actual menu items
+  - Attendance Records
+  - Attendance Sessions
+- STUDENT MANAGEMENT
+- REPORTS
+
+**Files Modified**:
+- `src/layout/teacherlayout/AppMenu.vue` (Lines 29-32, 58-73)
+
+**Benefits**:
+- ✅ Better visual organization
+- ✅ Clear section hierarchy
+- ✅ Easier navigation for teachers
+
+---
+
+### **November 10, 2025 - SF2 Daily Attendance Fixes & Enhanced Menu Navigation** ✅
 
 #### **1. SF2 Daily Attendance Report - Edit Dialog & Data Fixes**
 **Problem**: Multiple critical issues with the SF2 Daily Attendance edit functionality:

@@ -578,6 +578,7 @@ class SmartAttendanceAnalyticsController extends Controller
             $excused = 0;
             $subjectBreakdown = [];
             $uniqueDays = [];
+            $dailyStatuses = []; // Track worst status per day
 
             foreach ($weekRecords as $record) {
                 // Skip weekends (Saturday = 6, Sunday = 0)
@@ -608,33 +609,62 @@ class SmartAttendanceAnalyticsController extends Controller
                     ];
                 }
 
+                // Track status per subject for breakdown
                 switch ($record->status_code) {
                     case 'P':
-                        $present++;
                         $subjectBreakdown[$subjectKey]['present']++;
                         break;
                     case 'A':
-                        $absent++;
                         $subjectBreakdown[$subjectKey]['absent']++;
                         break;
                     case 'L':
-                        $late++;
                         $subjectBreakdown[$subjectKey]['late']++;
                         break;
                     case 'E':
-                        $excused++;
                         $subjectBreakdown[$subjectKey]['excused']++;
                         break;
+                }
+                
+                // Track worst status per day (priority: Absent > Excused > Late > Present)
+                // If student is absent in ANY session that day, mark whole day as absent
+                if (!isset($dailyStatuses[$day])) {
+                    $dailyStatuses[$day] = $record->status_code;
+                } else {
+                    // Priority order: A (worst) > E > L > P (best)
+                    $currentPriority = $this->getStatusPriority($dailyStatuses[$day]);
+                    $newPriority = $this->getStatusPriority($record->status_code);
+                    
+                    if ($newPriority > $currentPriority) {
+                        $dailyStatuses[$day] = $record->status_code;
+                    }
                 }
                 
                 $uniqueDays[$day][] = $subject;
             }
 
-            // Count late as present for percentage calculation (they attended, just late)
+            // Count daily statuses (only 1 status per day based on worst status)
+            foreach ($dailyStatuses as $day => $status) {
+                switch ($status) {
+                    case 'P':
+                        $present++;
+                        break;
+                    case 'A':
+                        $absent++;
+                        break;
+                    case 'L':
+                        $late++;
+                        break;
+                    case 'E':
+                        $excused++;
+                        break;
+                }
+            }
+
+            // Calculate percentage based on DAYS, not individual records
+            // Count late as present for percentage (they attended, just late)
             $totalAttended = $present + $late;
-            $total = $present + $absent + $late + $excused;
-            $percentage = $total > 0 ? round(($totalAttended / $total) * 100) : 0;
             $totalDays = count($uniqueDays);
+            $percentage = $totalDays > 0 ? round(($totalAttended / $totalDays) * 100) : 0;
             $totalSubjects = count($subjectBreakdown);
 
             $weeklyData[] = [
@@ -645,7 +675,7 @@ class SmartAttendanceAnalyticsController extends Controller
                 'absent' => $absent,
                 'late' => $late,
                 'excused' => $excused,
-                'total_records' => $total,
+                'total_records' => $present + $absent + $late + $excused,
                 'total_days' => $totalDays,
                 'total_subjects' => $totalSubjects,
                 'subject_breakdown' => $subjectBreakdown,
@@ -692,6 +722,26 @@ class SmartAttendanceAnalyticsController extends Controller
         }
 
         return $weeks;
+    }
+
+    /**
+     * Get status priority for determining worst status per day
+     * Higher number = worse status (Absent is worst, Present is best)
+     */
+    private function getStatusPriority(string $statusCode): int
+    {
+        switch ($statusCode) {
+            case 'A': // Absent - worst
+                return 4;
+            case 'E': // Excused
+                return 3;
+            case 'L': // Late
+                return 2;
+            case 'P': // Present - best
+                return 1;
+            default:
+                return 0;
+        }
     }
 
     /**

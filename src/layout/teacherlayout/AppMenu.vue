@@ -1,6 +1,6 @@
 <script setup>
 import TeacherAuthService from '@/services/TeacherAuthService';
-import { onMounted, ref, nextTick } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 import AppMenuItem from './AppMenuItem.vue';
@@ -8,8 +8,14 @@ import AppMenuItem from './AppMenuItem.vue';
 const route = useRoute();
 const activeIndicator = ref(null);
 const expandedSections = ref({
-    homeroom: true,  // Start expanded
-    other: true      // Start expanded
+    homeroom: true, // Start expanded
+    other: true // Start expanded
+});
+
+// Computed property to check if there are other subjects
+const hasOtherSubjects = computed(() => {
+    const otherSubjectsItem = model.value.find((item) => item.label === 'Other Subjects');
+    return otherSubjectsItem && otherSubjectsItem.items && otherSubjectsItem.items.length > 0;
 });
 
 const model = ref([
@@ -21,12 +27,20 @@ const model = ref([
         separator: true
     },
     {
+        label: 'Attendanc',
+        items: []
+    },
+    {
+        separator: true
+    },
+    {
         label: 'Homeroom Subjects',
         icon: 'pi pi-fw pi-home',
         items: []
     },
     {
-        separator: true
+        separator: true,
+        id: 'other-subjects-separator' // ID for conditional rendering
     },
     {
         label: 'Other Subjects',
@@ -34,10 +48,14 @@ const model = ref([
         items: []
     },
     {
+        separator: true,
+        id: 'other-subjects-separator-after' // ID for conditional rendering
+    },
+    {
         separator: true
     },
     {
-        label: 'Attendance',
+        label: 'Attendance History',
         items: [
             {
                 label: 'Attendance Records',
@@ -282,7 +300,7 @@ onMounted(async () => {
         console.error('Error loading teacher assignments for menu:', error);
         // Keep Subjects section empty as fallback
     }
-    
+
     // Position the sliding indicator after menu loads
     await nextTick();
     updateIndicatorPosition();
@@ -292,14 +310,13 @@ onMounted(async () => {
 const updateIndicatorPosition = () => {
     nextTick(() => {
         // Find the active link - use router-link-active-exact to avoid parent route matching
-        const activeLink = document.querySelector('.layout-menu a.font-semibold.router-link-exact-active') 
-                        || document.querySelector('.layout-menu a.font-semibold.router-link-active:not(.router-link-active > .router-link-active)');
-        
+        const activeLink = document.querySelector('.layout-menu a.font-semibold.router-link-exact-active') || document.querySelector('.layout-menu a.font-semibold.router-link-active:not(.router-link-active > .router-link-active)');
+
         if (activeLink && activeIndicator.value) {
             const rect = activeLink.getBoundingClientRect();
             const menuRect = activeLink.closest('.layout-menu').getBoundingClientRect();
-            const topPosition = rect.top - menuRect.top + (rect.height / 2) - 8; // Center the 16px circle
-            
+            const topPosition = rect.top - menuRect.top + rect.height / 2 - 8; // Center the 16px circle
+
             activeIndicator.value.style.top = `${topPosition}px`;
             activeIndicator.value.style.opacity = '1';
         } else if (activeIndicator.value) {
@@ -310,9 +327,12 @@ const updateIndicatorPosition = () => {
 
 // Watch for route changes and update indicator
 import { watch } from 'vue';
-watch(() => route.path, () => {
-    updateIndicatorPosition();
-});
+watch(
+    () => route.path,
+    () => {
+        updateIndicatorPosition();
+    }
+);
 
 // Toggle section expansion
 const toggleSection = (section) => {
@@ -323,15 +343,13 @@ const toggleSection = (section) => {
 </script>
 
 <template>
-    <ul class="layout-menu" style="position: relative;">
+    <ul class="layout-menu" style="position: relative">
         <!-- Sliding circle indicator -->
         <div ref="activeIndicator" class="menu-active-indicator"></div>
-        
+
         <template v-for="(item, i) in model" :key="item">
             <!-- Special collapsible container for Homeroom Subjects -->
-            <li v-if="!item.separator && item.label === 'Homeroom Subjects'" 
-                class="subjects-container"
-                :class="{ 'collapsed': !expandedSections.homeroom }">
+            <li v-if="!item.separator && item.label === 'Homeroom Subjects'" class="subjects-container" :class="{ collapsed: !expandedSections.homeroom }">
                 <div class="subjects-header" @click="toggleSection('homeroom')">
                     <span class="subjects-title">
                         <span class="pulse-dot"></span>
@@ -341,15 +359,12 @@ const toggleSection = (section) => {
                     <i class="pi" :class="expandedSections.homeroom ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
                 </div>
                 <div class="subjects-content" v-show="expandedSections.homeroom">
-                    <app-menu-item v-for="subItem in item.items" :key="subItem.label" 
-                                   :item="{ items: [subItem] }" :index="i"></app-menu-item>
+                    <app-menu-item v-for="subItem in item.items" :key="subItem.label" :item="{ items: [subItem] }" :index="i"></app-menu-item>
                 </div>
             </li>
-            
-            <!-- Special collapsible container for Other Subjects -->
-            <li v-else-if="!item.separator && item.label === 'Other Subjects'" 
-                class="subjects-container"
-                :class="{ 'collapsed': !expandedSections.other }">
+
+            <!-- Special collapsible container for Other Subjects - only show if there are other subjects -->
+            <li v-else-if="!item.separator && item.label === 'Other Subjects' && hasOtherSubjects" class="subjects-container" :class="{ collapsed: !expandedSections.other }">
                 <div class="subjects-header" @click="toggleSection('other')">
                     <span class="subjects-title">
                         <span class="pulse-dot"></span>
@@ -359,14 +374,19 @@ const toggleSection = (section) => {
                     <i class="pi" :class="expandedSections.other ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
                 </div>
                 <div class="subjects-content" v-show="expandedSections.other">
-                    <app-menu-item v-for="subItem in item.items" :key="subItem.label" 
-                                   :item="{ items: [subItem] }" :index="i"></app-menu-item>
+                    <app-menu-item v-for="subItem in item.items" :key="subItem.label" :item="{ items: [subItem] }" :index="i"></app-menu-item>
                 </div>
             </li>
-            
-            <!-- Regular menu items -->
-            <app-menu-item v-else-if="!item.separator" :item="item" :index="i"></app-menu-item>
-            <li v-if="item.separator" class="menu-separator"></li>
+
+            <!-- Hide the separator before Other Subjects if there are no other subjects -->
+            <li v-else-if="item.separator && item.id === 'other-subjects-separator' && !hasOtherSubjects"></li>
+
+            <!-- Hide the separator after Other Subjects if there are no other subjects -->
+            <li v-else-if="item.separator && item.id === 'other-subjects-separator-after' && !hasOtherSubjects"></li>
+
+            <!-- Regular menu items - skip "Other Subjects" if it has no items -->
+            <app-menu-item v-else-if="!item.separator && !(item.label === 'Other Subjects' && !hasOtherSubjects)" :item="item" :index="i"></app-menu-item>
+            <li v-if="item.separator && !item.id" class="menu-separator"></li>
         </template>
     </ul>
 </template>
@@ -374,14 +394,12 @@ const toggleSection = (section) => {
 <style scoped>
 /* Modern glassmorphism container for subject sections */
 .subjects-container {
-    background: linear-gradient(135deg, 
-        rgba(102, 126, 234, 0.05) 0%, 
-        rgba(118, 75, 162, 0.03) 100%);
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.03) 100%);
     backdrop-filter: blur(10px);
     border-radius: 12px;
     padding: 0;
     margin: 10px 8px;
-    box-shadow: 
+    box-shadow:
         0 4px 16px rgba(102, 126, 234, 0.08),
         0 1px 4px rgba(0, 0, 0, 0.04),
         inset 0 1px 1px rgba(255, 255, 255, 0.8);
@@ -474,7 +492,8 @@ const toggleSection = (section) => {
 
 /* Pulsing dot animation */
 @keyframes pulse-dot {
-    0%, 100% {
+    0%,
+    100% {
         transform: scale(1);
         box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
     }
@@ -520,23 +539,25 @@ const toggleSection = (section) => {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, 
-        #667eea 0%, 
-        #764ba2 50%, 
-        #667eea 100%);
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
     background-size: 200% 100%;
     animation: gradient-shift 3s ease infinite;
     border-radius: 16px 16px 0 0;
 }
 
 @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
 }
 
 /* Subtle glow effect on hover */
 .subjects-container:hover {
-    box-shadow: 
+    box-shadow:
         0 12px 40px rgba(102, 126, 234, 0.18),
         0 4px 12px rgba(102, 126, 234, 0.12),
         inset 0 1px 1px rgba(255, 255, 255, 0.9);
@@ -552,9 +573,7 @@ const toggleSection = (section) => {
     right: 0;
     width: 60px;
     height: 60px;
-    background: radial-gradient(circle at bottom right, 
-        rgba(102, 126, 234, 0.08) 0%, 
-        transparent 70%);
+    background: radial-gradient(circle at bottom right, rgba(102, 126, 234, 0.08) 0%, transparent 70%);
     border-radius: 16px;
     pointer-events: none;
 }
