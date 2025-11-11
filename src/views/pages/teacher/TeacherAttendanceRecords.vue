@@ -306,7 +306,15 @@ const filteredRecords = computed(() => {
         });
     }
 
-    return records;
+    // Add computed fields for sorting
+    records = records.map(record => ({
+        ...record,
+        _statusSort: getStatusSortValue(record),
+        _absencesSort: getAbsencesSortValue(record)
+    }));
+
+    // Sort alphabetically by student name
+    return records.sort((a, b) => a.name.localeCompare(b.name));
 });
 
 // Force refresh function that clears cache and reloads data
@@ -1210,6 +1218,26 @@ const calculateAbsences = (studentData) => {
     return absences;
 };
 
+// Sort function for Status column
+const getStatusSortValue = (studentData) => {
+    // Priority order: Dropped Out > Transferred Out > Warning > At Risk > Normal
+    if (studentData.enrollment_status && studentData.enrollment_status.toLowerCase() !== 'active') {
+        const status = studentData.enrollment_status.toLowerCase();
+        if (status === 'dropped_out') return 1;
+        if (status === 'transferred_out') return 2;
+        return 3;
+    }
+    const overallStatus = getOverallStatus(studentData);
+    if (overallStatus === 'Warning') return 4;
+    if (overallStatus === 'At Risk') return 5;
+    return 6; // Normal
+};
+
+// Sort function for Total Absences column
+const getAbsencesSortValue = (studentData) => {
+    return calculateAbsences(studentData);
+};
+
 // Get CSS class for attendance status visualization
 const getAttendanceStatusClass = (status) => {
     switch (status) {
@@ -1519,6 +1547,12 @@ const openSF2Report = () => {
                     </div>
                     <span class="text-sm">Inactive Student</span>
                 </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center">
+                        <i class="pi pi-exclamation-triangle text-white text-xs"></i>
+                    </div>
+                    <span class="text-sm">Mixed (Multiple Statuses)</span>
+                </div>
             </div>
         </div>
 
@@ -1610,7 +1644,7 @@ const openSF2Report = () => {
                 </template>
             </Column>
             <Column field="id" header="ID" :sortable="true" style="width: 80px"></Column>
-            <Column field="status" header="Status" :sortable="true" style="width: 150px">
+            <Column field="_statusSort" header="Status" :sortable="true" style="width: 150px">
                 <template #body="slotProps">
                     <!-- Show formatted enrollment status if student is not Active (case-insensitive) -->
                     <Tag v-if="slotProps.data.enrollment_status && slotProps.data.enrollment_status.toLowerCase() !== 'active'" :value="formatEnrollmentStatus(slotProps.data.enrollment_status)" severity="secondary" class="text-xs" />
@@ -1618,7 +1652,7 @@ const openSF2Report = () => {
                     <Tag v-else :value="getOverallStatus(slotProps.data)" :severity="getStatusSeverity(getOverallStatus(slotProps.data))" />
                 </template>
             </Column>
-            <Column field="absences" header="Total Absences" :sortable="true" style="width: 120px">
+            <Column field="_absencesSort" header="Total Absences" :sortable="true" style="width: 120px">
                 <template #body="slotProps">
                     <span class="font-medium text-red-600">{{ calculateAbsences(slotProps.data) }}</span>
                 </template>

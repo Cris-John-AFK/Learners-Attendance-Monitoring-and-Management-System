@@ -2198,10 +2198,7 @@ const autoFillFromPrevious = async () => {
         });
 
         // Fetch the most recent completed session for this section (any date)
-        const response = await AttendanceSessionService.getMostRecentSessionToday(
-            sectionId.value,
-            currentDateString.value
-        );
+        const response = await AttendanceSessionService.getMostRecentSessionToday(sectionId.value, currentDateString.value);
 
         if (!response || !response.success || !response.session) {
             toast.add({
@@ -2224,20 +2221,23 @@ const autoFillFromPrevious = async () => {
         // Copy statuses to current seat plan
         let copiedCount = 0;
         let debugInfo = [];
-        
+
         console.log('🔍 Starting to copy statuses...');
         console.log('🔍 Seat plan structure:', seatPlan.value);
-        console.log('🔍 First seat with student:', seatPlan.value.flat().find(s => s.student));
-        
+        console.log(
+            '🔍 First seat with student:',
+            seatPlan.value.flat().find((s) => s.student)
+        );
+
         seatPlan.value.forEach((row, rowIndex) => {
             row.forEach((seat, colIndex) => {
                 // Check if seat has a student (could be seat.student or seat.studentId)
                 const hasStudent = seat.student || seat.studentId;
-                
+
                 if (hasStudent) {
                     // Get student ID from either seat.student.id or seat.studentId
                     let studentIdStr = seat.student?.id || seat.studentId;
-                    
+
                     // Find matching attendance record
                     // studentIdStr might be "NCS-2025-03249" or just 3249
                     // record.student_id is always numeric like 3249
@@ -2249,43 +2249,45 @@ const autoFillFromPrevious = async () => {
                     } else {
                         seatStudentId = studentIdStr;
                     }
-                    
-                    const record = attendanceRecords.find(
-                        (r) => r.student_id === seatStudentId
-                    );
-                    
+
+                    const record = attendanceRecords.find((r) => r.student_id === seatStudentId);
+
                     console.log(`🔍 Seat [${rowIndex}][${colIndex}] student ${studentIdStr} (parsed: ${seatStudentId}) - Record found: ${!!record}`);
 
                     if (record) {
                         // Map status code to status string
                         let statusValue = null;
-                        
+
                         // Check all possible status field names
                         const statusCode = record.status_code || record.statusCode || record.code;
                         const statusName = record.status || record.status_name || record.name;
-                        
+
                         console.log(`🔍 Student ${studentIdStr}: statusCode="${statusCode}", statusName="${statusName}"`);
-                        
+
                         if (statusCode) {
                             // Backend returns status_code: 'P', 'A', 'L', 'E'
-                            // UI expects capitalized strings: 'Present', 'Absent', 'Late', 'Excused'
+                            // UI expects NUMERIC IDs: 1=Present, 2=Absent, 3=Late, 4=Excused
                             switch (statusCode.toUpperCase()) {
                                 case 'P':
-                                    statusValue = 'Present';
+                                    statusValue = 1; // Present
                                     break;
                                 case 'A':
-                                    statusValue = 'Absent';
+                                    statusValue = 2; // Absent
                                     break;
                                 case 'L':
-                                    statusValue = 'Late';
+                                    statusValue = 3; // Late
                                     break;
                                 case 'E':
-                                    statusValue = 'Excused';
+                                    statusValue = 4; // Excused
                                     break;
                             }
                         } else if (statusName) {
-                            // Fallback: use status name field if available (capitalize first letter)
-                            statusValue = statusName.charAt(0).toUpperCase() + statusName.slice(1).toLowerCase();
+                            // Fallback: map status name to numeric ID
+                            const nameLower = statusName.toLowerCase();
+                            if (nameLower === 'present') statusValue = 1;
+                            else if (nameLower === 'absent') statusValue = 2;
+                            else if (nameLower === 'late') statusValue = 3;
+                            else if (nameLower === 'excused') statusValue = 4;
                         }
 
                         if (statusValue) {
@@ -2308,46 +2310,49 @@ const autoFillFromPrevious = async () => {
         seatPlan.value = [...seatPlan.value];
 
         if (copiedCount > 0) {
-            // Save the copied attendance to the database immediately
+            // CRITICAL: Save auto-filled statuses to database immediately
+            // Otherwise backend will mark all as absent on completion
             console.log('💾 Saving auto-filled attendance to database...');
             try {
-                // Loop through all seats and save each student's attendance
                 const savePromises = [];
                 seatPlan.value.forEach((row) => {
                     row.forEach((seat) => {
                         if (seat.studentId && seat.status) {
                             // Extract numeric student ID
-                            const studentIdNum = typeof seat.studentId === 'string'
-                                ? parseInt(seat.studentId.split('-').pop())
+                            const studentIdNum = typeof seat.studentId === 'string' 
+                                ? parseInt(seat.studentId.split('-').pop()) 
                                 : seat.studentId;
                             
-                            // Save this student's attendance
+                            // Save with numeric status ID (1,2,3,4)
                             savePromises.push(
                                 saveAttendanceToDatabase(studentIdNum, seat.status)
+                                    .catch(err => {
+                                        console.error(`Failed to save ${studentIdNum}:`, err);
+                                        return null; // Continue with other saves
+                                    })
                             );
                         }
                     });
                 });
                 
                 await Promise.all(savePromises);
-                console.log(`✅ Auto-filled attendance saved to database for ${savePromises.length} students`);
+                console.log(`✅ Auto-filled attendance saved to database for ${copiedCount} students`);
+                
+                toast.add({
+                    severity: 'success',
+                    summary: 'Attendance Copied & Saved!',
+                    detail: `Copied and saved ${copiedCount} student statuses. You can now complete the session.`,
+                    life: 5000
+                });
             } catch (saveError) {
                 console.error('❌ Failed to save auto-filled attendance:', saveError);
                 toast.add({
-                    severity: 'warn',
-                    summary: 'Attendance Copied (Not Saved)',
-                    detail: 'Statuses were copied but not saved to database. Please mark attendance manually.',
+                    severity: 'error',
+                    summary: 'Save Failed',
+                    detail: 'Statuses were copied but failed to save. Please mark attendance manually.',
                     life: 5000
                 });
-                return;
             }
-            
-            toast.add({
-                severity: 'success',
-                summary: 'Attendance Copied & Saved!',
-                detail: `Copied and saved ${copiedCount} student statuses from previous session. You can now edit or complete the session.`,
-                life: 5000
-            });
             console.log(`✅ Auto-filled ${copiedCount} student statuses:`, debugInfo);
         } else {
             toast.add({
@@ -2360,7 +2365,7 @@ const autoFillFromPrevious = async () => {
         }
     } catch (error) {
         console.error('Error auto-filling attendance:', error);
-        
+
         // Check if it's a 404 error (no previous session)
         if (error.response && error.response.status === 404) {
             toast.add({
@@ -2583,57 +2588,6 @@ const selectRollCallMethod = async () => {
     }
 };
 
-// Calculate optimistic summary from frontend data (instant, no API call)
-const calculateOptimisticSummary = () => {
-    console.log('📊 Calculating summary from seat plan...');
-    
-    // Count statuses from seat plan
-    let present = 0, absent = 0, late = 0, excused = 0;
-    let totalStudents = 0;
-    
-    seatPlan.value.forEach((row) => {
-        row.forEach((seat) => {
-            if (seat.studentId) {
-                totalStudents++;
-                const status = seat.status;
-                if (status === 'Present' || status === 1) present++;
-                else if (status === 'Absent' || status === 2) absent++;
-                else if (status === 'Late' || status === 3) late++;
-                else if (status === 'Excused' || status === 4) excused++;
-            }
-        });
-    });
-    
-    const marked = present + absent + late + excused;
-    const attendanceRate = totalStudents > 0 ? Math.round((present / totalStudents) * 100) : 0;
-    
-    // Calculate session duration
-    const startTime = currentSession.value?.session_start_time || new Date().toISOString();
-    const endTime = new Date().toISOString();
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const durationMinutes = Math.round((end - start) / 1000 / 60);
-    
-    console.log(`📊 Summary: ${present}P ${absent}A ${late}L ${excused}E | Total: ${totalStudents} | Rate: ${attendanceRate}%`);
-    
-    return {
-        session_id: currentSession.value?.id,
-        subject_name: subjectName.value,
-        section_name: currentSectionName.value,
-        session_date: new Date().toISOString().split('T')[0],
-        session_start_time: startTime,
-        session_end_time: endTime,
-        total_students: totalStudents,
-        marked_students: marked,
-        present,
-        absent,
-        late,
-        excused,
-        attendance_rate: attendanceRate,
-        duration_minutes: durationMinutes
-    };
-};
-
 // Complete attendance session
 const completeAttendanceSession = async () => {
     if (!sessionActive.value || !currentSession.value) {
@@ -2674,34 +2628,22 @@ const completeAttendanceSession = async () => {
     }, 150); // Slower interval
 
     try {
-        // Declare today once at the top of the scope
-        const today = new Date().toISOString().split('T')[0];
-        
-        // 🚀 OPTIMISTIC UI: Calculate summary from frontend data immediately
-        console.log('⚡ Calculating optimistic summary from frontend data...');
-        const optimisticSummary = calculateOptimisticSummary();
-        
-        // Show dialog immediately with optimistic data
-        sessionCompletionProgress.value = 100;
-        clearInterval(progressInterval);
-        isCompletingSession.value = false;
-        sessionCompletionProgress.value = 0;
-        
-        // Set optimistic summary and show modal immediately
-        sessionSummary.value = optimisticSummary;
-        showCompletionModal.value = true;
-        modalDismissedToday.value = false;
-        localStorage.removeItem(`completion_dismissed_${today}`);
-        
-        console.log('✅ Modal shown immediately with optimistic data');
+        // Step 1: Initial progress
+        sessionCompletionProgress.value = 10;
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Reduced from 800ms
 
-        // Now complete session in background and update when ready
+        // Step 2: Skip sending attendance data (already saved during marking)
         sessionCompletionProgress.value = 25;
-        console.log('📤 Completing session in background...');
-        
+        console.log('⏭️ [COMPLETE] Skipping attendance save - already saved during marking');
+        // Removed 600ms delay
+
+        // Step 3: Complete session
         const response = await AttendanceSessionService.completeSession(currentSession.value.id);
-        
-        console.log('✅ Backend response received, updating modal with accurate data');
+
+        // Step 3: Process response
+        sessionCompletionProgress.value = 60;
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Reduced from 700ms
+
         sessionSummary.value = response.summary;
         sessionActive.value = false;
         currentSession.value = null;
@@ -2729,6 +2671,7 @@ const completeAttendanceSession = async () => {
         sessionCompletionProgress.value = 95;
 
         // Save session data but don't show modal yet
+        const today = new Date().toISOString().split('T')[0];
         const completionKey = `attendance_completion_${today}`;
         const completionData = {
             timestamp: new Date().toISOString(),
@@ -5344,7 +5287,7 @@ const titleRef = ref(null);
 
             <!-- ACTIVE SESSION BUTTONS - Only show during session -->
             <template v-if="sessionActive">
-                <Button icon="pi pi-copy" label="Auto-Fill from Previous" class="p-button-secondary auto-fill-pulse-button" @click="autoFillFromPrevious" :disabled="isCompletingSession" title="Copy attendance from the most recent session today" />
+                <Button icon="pi pi-copy" label="Auto-Fill from Previous" class="p-button-info p-button-outlined auto-fill-button" @click="autoFillFromPrevious" :disabled="isCompletingSession" title="Copy attendance from the most recent completed session" style="border: 2px solid #3b82f6; font-weight: 600;" />
                 <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
                 <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" :disabled="isCompletingSession" />
 
@@ -7409,33 +7352,31 @@ const titleRef = ref(null);
 }
 
 /* Pulsing animation for Auto-Fill button */
-.auto-fill-pulse-button {
+.auto-fill-button {
     position: relative;
     animation: pulse-glow 2s ease-in-out infinite;
-    box-shadow: 0 0 0 0 rgba(103, 58, 183, 0.7) !important;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7) !important;
 }
 
 @keyframes pulse-glow {
     0% {
-        box-shadow: 0 0 0 0 rgba(103, 58, 183, 0.7);
-        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
     }
     50% {
-        box-shadow: 0 0 0 10px rgba(103, 58, 183, 0);
-        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(103, 58, 183, 0);
-        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
     }
 }
 
-.auto-fill-pulse-button:hover {
+.auto-fill-button:hover {
     animation: none;
     transform: scale(1.05);
+    background-color: rgba(59, 130, 246, 0.1) !important;
 }
 
-.auto-fill-pulse-button:disabled {
+.auto-fill-button:disabled {
     animation: none;
     opacity: 0.6;
 }

@@ -505,12 +505,16 @@ const students = computed(() => {
 
 const maleStudents = computed(() => {
     if (!reportData.value?.students) return [];
-    return reportData.value.students.filter((student) => student.gender === 'Male');
+    return reportData.value.students
+        .filter((student) => student.gender === 'Male')
+        .sort((a, b) => a.name.localeCompare(b.name)); // Alphabetical sort
 });
 
 const femaleStudents = computed(() => {
     if (!reportData.value?.students) return [];
-    return reportData.value.students.filter((student) => student.gender === 'Female');
+    return reportData.value.students
+        .filter((student) => student.gender === 'Female')
+        .sort((a, b) => a.name.localeCompare(b.name)); // Alphabetical sort
 });
 
 const schoolDays = computed(() => {

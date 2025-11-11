@@ -5,7 +5,7 @@ import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
@@ -583,13 +583,28 @@ const saveAttendanceEdit = async () => {
         status = null;
     }
 
-    // Update the attendance data for this student
+    // ✨ INSTANT UPDATE: Update local data first for immediate visual feedback
     if (!student.attendance_data) {
         student.attendance_data = {};
     }
+    const oldStatus = student.attendance_data[date];
     student.attendance_data[date] = status;
+    
+    // Force Vue reactivity update
+    await nextTick();
 
-    // Send update to backend API
+    // Close dialog immediately for instant feel
+    closeEditDialog();
+    
+    // Show success toast immediately
+    toast.add({
+        severity: 'success',
+        summary: 'Updated',
+        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to ${getAttendanceMark(status) || '✓'}`,
+        life: 3000
+    });
+
+    // Send update to backend API in background (non-blocking)
     try {
         await axios.post(`/api/teacher/reports/sf2/save-edit`, {
             student_id: student.id,
@@ -599,26 +614,21 @@ const saveAttendanceEdit = async () => {
             month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
         });
 
-        console.log('SF2 edit saved successfully');
+        console.log('✅ SF2 edit saved to backend successfully');
     } catch (error) {
-        console.error('Error saving SF2 edit:', error);
+        console.error('❌ Error saving SF2 edit to backend:', error);
+        
+        // Revert the change if backend save failed
+        student.attendance_data[date] = oldStatus;
+        await nextTick();
+        
         toast.add({
             severity: 'error',
-            summary: 'Save Error',
-            detail: 'Failed to save attendance edit. Please try again.',
+            summary: 'Save Failed',
+            detail: 'Failed to save to server. Change has been reverted. Please try again.',
             life: 5000
         });
-        return; // Don't update UI if save failed
     }
-
-    toast.add({
-        severity: 'success',
-        summary: 'Updated',
-        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to "${getAttendanceMark(status)}"`,
-        life: 3000
-    });
-
-    closeEditDialog();
 };
 
 // Close edit dialog
