@@ -1448,6 +1448,77 @@ class AttendanceSessionController extends Controller
     }
 
     /**
+     * Get the most recent completed session for a section
+     * Used for auto-filling attendance from previous session
+     * Now fetches from ANY date (not just today) to get the most recent completed session
+     */
+    public function getMostRecentSessionToday(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'section_id' => 'required|exists:sections,id',
+                'date' => 'nullable|date' // Made optional since we're getting most recent from any date
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $sectionId = $request->section_id;
+
+            // Get the most recent COMPLETED session from ANY date (not just today)
+            $session = AttendanceSession::where('section_id', $sectionId)
+                ->where('status', 'completed') // Only completed sessions
+                ->orderBy('session_date', 'desc') // Most recent date first
+                ->orderBy('session_end_time', 'desc') // Then by end time
+                ->first();
+
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No completed session found for this section'
+                ], 404);
+            }
+
+            // Get attendance records for this session with student details
+            $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)
+                ->join('attendance_statuses', 'attendance_records.attendance_status_id', '=', 'attendance_statuses.id')
+                ->select(
+                    'attendance_records.*',
+                    'attendance_statuses.code as status_code',
+                    'attendance_statuses.name as status'
+                )
+                ->get();
+
+            Log::info('Auto-fill: Found most recent session', [
+                'session_id' => $session->id,
+                'session_date' => $session->session_date,
+                'section_id' => $sectionId,
+                'attendance_count' => $attendanceRecords->count()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'session' => $session,
+                'attendance_records' => $attendanceRecords,
+                'message' => 'Most recent session retrieved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching most recent session: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve most recent session',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Log audit events
      */
     private function logAuditEvent($entityType, $entityId, $action, $teacherId, $context = [])

@@ -237,6 +237,9 @@ Route::prefix('attendance-sessions')->group(function () {
     Route::post('/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
     Route::get('/{sessionId}/summary', [AttendanceSessionController::class, 'getSessionSummary']);
     Route::get('/{sessionId}/details', [AttendanceSessionController::class, 'getSessionAttendanceDetails']);
+    
+    // Auto-fill from previous session
+    Route::get('/recent-today', [AttendanceSessionController::class, 'getMostRecentSessionToday']);
 
     // Attendance marking within sessions
     Route::post('/{sessionId}/attendance', [AttendanceSessionController::class, 'markSessionAttendance']);

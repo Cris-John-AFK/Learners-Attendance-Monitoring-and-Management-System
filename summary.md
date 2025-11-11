@@ -8,7 +8,86 @@ LAMMS (Learning and Academic Management System) - Vue.js frontend with Laravel b
 
 ## 🚀 Recent Updates
 
-### **November 11, 2025 - Progress Tracking Percentage Fix & Menu Improvements** ✅ NEW
+### **November 11, 2025 - Auto-Fill Attendance Feature & Performance Improvements** ✅ NEW
+
+#### **1. Auto-Fill from Previous Session Feature**
+**Problem**: Teachers had to manually mark attendance for every subject throughout the day, which was very time-consuming and repetitive.
+
+**User Request**: 
+- Add a button to automatically copy attendance from the most recent completed session
+- Make the button visually prominent (blinking/pulsing animation)
+- Allow teachers to review and edit before completing the session
+- Prevent "Cancel Session" from marking all students absent
+
+**Solution Implemented**:
+
+**Frontend Changes** (`TeacherSubjectAttendance.vue`):
+
+1. **Added Pulsing Auto-Fill Button** (Lines 5161-5163, 7225-7255):
+   - Purple pulsing glow animation to make button highly visible
+   - Button appears when session is active
+   - Animation: scales to 1.05x with glowing shadow every 2 seconds
+
+2. **Auto-Fill Function** (Lines 2190-2350):
+   - Fetches most recent completed session from ANY date (not just today)
+   - Parses student IDs correctly: `"NCS-2025-03249"` → `3249`
+   - Maps status codes to capitalized strings: `'P'` → `'Present'`
+   - Automatically saves to database after copying
+   - Shows success message: "Copied and saved 15 student statuses"
+
+3. **Fixed Cancel Session Bug** (Lines 3813-3943):
+   - Changed from `completeSession()` to `cancelSession()`
+   - Now properly discards session without saving any attendance
+   - Updated confirmation message to clarify no attendance will be saved
+
+4. **Performance Optimization** (Lines 2628, 2640, 2663, 2723):
+   - Reduced artificial delays from 2.1 seconds to 0.3 seconds
+   - Removed unnecessary 500ms waits
+   - Completion dialog now appears much faster
+
+5. **Fixed Percentage Display** (Line 5857):
+   - Changed from `{{ sessionCompletionProgress }}%` to `{{ Math.round(sessionCompletionProgress) }}%`
+   - Now shows clean percentages: "86%" instead of "86.46341683338926%"
+
+**Backend Changes** (`AttendanceSessionController.php`):
+
+1. **Added getMostRecentSessionToday Endpoint** (Lines 1450-1520):
+   - Fetches most recent completed session from ANY date
+   - Orders by `session_date DESC`, then `session_end_time DESC`
+   - Returns session data with all attendance records
+   - Includes status codes ('P', 'A', 'L', 'E') and status names
+
+**Service Layer** (`AttendanceSessionService.js`):
+
+1. **Added getMostRecentSessionToday Method** (Lines 277-294):
+   - API call to fetch recent session for auto-fill
+   - Handles 404 errors gracefully (no previous session)
+
+**Routes** (`api.php`):
+
+1. **Added Auto-Fill Route** (Lines 241-242):
+   ```php
+   Route::get('/attendance-sessions/recent-today', [AttendanceSessionController::class, 'getMostRecentSessionToday']);
+   ```
+
+**Key Features**:
+- ✅ Pulsing purple button for high visibility
+- ✅ Copies attendance from most recent session (any date)
+- ✅ Automatically saves to database
+- ✅ Shows visual status on seat buttons
+- ✅ Prevents accidental data loss on cancel
+- ✅ Fast completion (reduced from ~3s to ~1s)
+- ✅ Clean percentage display (whole numbers only)
+
+**Files Modified**:
+- `src/views/pages/teacher/TeacherSubjectAttendance.vue`
+- `lamms-backend/app/Http/Controllers/API/AttendanceSessionController.php`
+- `src/services/AttendanceSessionService.js`
+- `lamms-backend/routes/api.php`
+
+---
+
+### **November 11, 2025 - Progress Tracking Percentage Fix & Menu Improvements** ✅
 
 #### **1. Fixed 350% Attendance Percentage Bug in Progress Tracking**
 **Problem**: Progress Tracking dialog showed attendance percentages over 100% (e.g., 350%), which is mathematically impossible and confusing for teachers.

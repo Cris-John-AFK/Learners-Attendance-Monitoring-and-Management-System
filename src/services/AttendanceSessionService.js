@@ -275,6 +275,25 @@ class AttendanceSessionService {
     }
 
     /**
+     * Get the most recent completed session from today for a section
+     * Used for auto-filling attendance from previous session
+     */
+    async getMostRecentSessionToday(sectionId, date) {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/attendance-sessions/recent-today`, {
+                params: {
+                    section_id: sectionId,
+                    date: date
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching most recent session:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Validate session data before submission
      */
     validateSessionData(sessionData) {
