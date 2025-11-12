@@ -307,7 +307,7 @@ const filteredRecords = computed(() => {
     }
 
     // Add computed fields for sorting
-    records = records.map(record => ({
+    records = records.map((record) => ({
         ...record,
         _statusSort: getStatusSortValue(record),
         _absencesSort: getAbsencesSortValue(record)

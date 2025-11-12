@@ -165,7 +165,9 @@ body:has(.p-dialog-mask) .scroll-indicator {
     .layout-topbar,
     .layout-sidebar,
     .layout-mask,
-    .app-footer {
+    .app-footer,
+    .scroll-indicator,
+    .scroll-progress-bar {
         display: none !important;
         visibility: hidden !important;
     }

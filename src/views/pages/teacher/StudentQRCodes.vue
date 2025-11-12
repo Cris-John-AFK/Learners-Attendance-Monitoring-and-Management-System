@@ -15,7 +15,7 @@
         <!-- Modern Action Bar -->
         <div class="action-bar">
             <div class="action-left">
-                <Button label="Print All QR Codes" icon="pi pi-print" @click="printQRCodes" class="print-button" />
+                <Button label="Print All QR Code ID" icon="pi pi-print" @click="printQRCodes" class="print-button" />
 
                 <div class="sort-wrapper">
                     <label class="sort-label">Sort by:</label>
@@ -797,17 +797,18 @@ const downloadAllQRCodes = async () => {
     .qrcode-item {
         page-break-after: always !important;
         page-break-inside: avoid !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        min-height: 100vh !important;
+        break-inside: avoid !important;
+        display: block !important;
         width: 100% !important;
+        height: 100vh !important;
         background: white !important;
         box-shadow: none !important;
         border-radius: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
         animation: none !important;
+        position: relative !important;
+        overflow: hidden !important;
     }
 
     /* Last item doesn't need break after */

@@ -303,13 +303,13 @@ const downloadAsPNG = async () => {
         display: block !important;
     }
 
-    /* Center card on page */
+    /* Center card on page - FIT ON ONE PAGE */
     .student-qr-code {
         max-width: 700px;
         width: 95%;
-        height: auto;
+        height: 100vh !important;
         margin: 0 auto !important;
-        padding: 2.5rem;
+        padding: 1.5rem 2rem !important;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
@@ -319,14 +319,17 @@ const downloadAsPNG = async () => {
         flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        overflow: hidden !important;
     }
 
-    /* School branding */
+    /* School branding - COMPACT */
     .school-logo {
         text-align: center;
-        margin-bottom: 2rem;
-        padding-bottom: 1.5rem;
-        border-bottom: 3px solid #2196f3;
+        margin-bottom: 1rem !important;
+        padding-bottom: 1rem !important;
+        border-bottom: 2px solid #2196f3;
         width: 100%;
         display: flex;
         flex-direction: column;
@@ -335,45 +338,45 @@ const downloadAsPNG = async () => {
     }
 
     .school-logo-image {
-        width: 100px;
-        height: 100px;
+        width: 70px !important;
+        height: 70px !important;
         object-fit: contain;
-        margin: 0 auto 1rem auto;
+        margin: 0 auto 0.5rem auto !important;
         display: block;
     }
 
     .school-name {
-        font-size: 2rem;
+        font-size: 1.5rem !important;
         font-weight: 800;
         color: #2196f3;
-        margin: 0 0 0.5rem 0;
-        letter-spacing: 1px;
+        margin: 0 0 0.3rem 0 !important;
+        letter-spacing: 0.5px;
     }
 
     .school-subtitle {
-        font-size: 1.1rem;
+        font-size: 0.9rem !important;
         color: #666;
-        margin: 0;
+        margin: 0 !important;
         font-weight: 500;
     }
 
-    /* Student header */
+    /* Student header - COMPACT */
     .qr-header {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem !important;
         width: 100%;
     }
 
     .student-name {
-        font-size: 1.6rem;
+        font-size: 1.3rem !important;
         font-weight: 700;
         color: #333;
-        margin: 0 0 0.75rem 0;
-        letter-spacing: 0.5px;
+        margin: 0 0 0.5rem 0 !important;
+        letter-spacing: 0.3px;
         text-align: center !important;
         width: 100% !important;
         display: block !important;
-        line-height: 1.3 !important;
+        line-height: 1.2 !important;
         word-wrap: break-word !important;
         hyphens: auto !important;
         max-width: 400px !important;
@@ -382,70 +385,70 @@ const downloadAsPNG = async () => {
     }
 
     .student-id {
-        font-size: 1.2rem;
+        font-size: 1rem !important;
         color: #666;
-        margin: 0 0 1.5rem 0;
+        margin: 0 0 1rem 0 !important;
         font-weight: 600;
         background-color: #f0f0f0;
-        padding: 0.5rem 1.5rem;
-        border-radius: 20px;
+        padding: 0.4rem 1.2rem !important;
+        border-radius: 15px;
         display: inline-block;
     }
 
-    /* Student details */
+    /* Student details - COMPACT */
     .student-details {
-        margin-top: 1.5rem;
-        padding: 1rem;
+        margin-top: 1rem !important;
+        padding: 0.7rem !important;
         background-color: #f8f9fa;
-        border-radius: 10px;
+        border-radius: 8px;
         width: 100%;
     }
 
     .detail-item {
-        font-size: 1.1rem;
+        font-size: 0.95rem !important;
         color: #555;
-        margin: 0.5rem 0;
-        padding: 0.5rem;
+        margin: 0.3rem 0 !important;
+        padding: 0.3rem !important;
     }
 
     .detail-item strong {
         color: #2196f3;
         font-weight: 700;
         display: inline-block;
-        min-width: 100px;
+        min-width: 80px;
     }
 
-    /* QR Code container */
+    /* QR Code container - COMPACT */
     .qr-container {
-        width: 350px;
-        height: 350px;
-        padding: 1.5rem;
+        width: 280px !important;
+        height: 280px !important;
+        padding: 1rem !important;
         background: white;
-        border: 5px solid #2196f3;
-        border-radius: 15px;
+        border: 4px solid #2196f3 !important;
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.3) !important;
-        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3) !important;
+        margin-bottom: 1rem !important;
     }
 
     .qr-image img {
-        width: 300px !important;
-        height: 300px !important;
-        border-radius: 8px;
+        width: 240px !important;
+        height: 240px !important;
+        border-radius: 6px;
     }
 
-    /* Footer instruction */
+    /* Footer instruction - COMPACT */
     .student-qr-code::after {
         content: 'Scan this QR code for attendance tracking';
         display: block;
         text-align: center;
-        font-size: 1rem;
+        font-size: 0.85rem !important;
         color: #888;
-        margin-top: 2rem;
-        padding-top: 1.5rem;
-        border-top: 2px solid #e0e0e0;
+        margin-top: 1rem !important;
+        padding-top: 1rem !important;
+        border-top: 1px solid #e0e0e0;
         width: 100%;
         font-style: italic;
     }
