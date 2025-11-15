@@ -60,34 +60,36 @@ class AttendanceSessionController extends Controller
         }
 
         try {
-            // Check if there's already an active session for this combination
+            // CRITICAL FIX: Check for ANY existing session (active OR completed) for this day/subject combination
+            // This prevents duplicate sessions and data bloat
             $existingSession = AttendanceSession::where([
                 'teacher_id' => $requestData['teacher_id'],
                 'section_id' => $requestData['section_id'],
                 'subject_id' => $requestData['subject_id'],
-                'session_date' => $requestData['session_date'],
-                'status' => 'active'
-            ])->first();
+                'session_date' => $requestData['session_date']
+            ])->first(); // Removed status filter - check for ANY session
 
             if ($existingSession) {
-                Log::info("Active session already exists for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
+                // Session already exists for this day/subject - reopen it instead of creating duplicate
+                Log::info("Session already exists for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}. Reopening existing session ID: {$existingSession->id}");
+                
+                // If session was completed, reopen it by setting status back to active
+                if ($existingSession->status === 'completed') {
+                    $existingSession->update([
+                        'status' => 'active',
+                        'session_start_time' => now()->format('H:i:s'), // Update start time
+                        'session_end_time' => null, // Clear end time
+                        'completed_at' => null // Clear completion timestamp
+                    ]);
+                    
+                    Log::info("Reopened completed session {$existingSession->id} for editing");
+                }
+                
                 return response()->json([
-                    'message' => 'Active session already exists',
-                    'session' => $existingSession->load(['teacher', 'section', 'subject'])
+                    'message' => 'Existing session found - reopened for editing',
+                    'session' => $existingSession->load(['teacher', 'section', 'subject']),
+                    'is_reopened' => true
                 ], 200);
-            }
-
-            // Allow multiple sessions per day, but log for tracking
-            $completedSessionsCount = AttendanceSession::where([
-                'teacher_id' => $requestData['teacher_id'],
-                'section_id' => $requestData['section_id'],
-                'subject_id' => $requestData['subject_id'],
-                'session_date' => $requestData['session_date'],
-                'status' => 'completed'
-            ])->count();
-
-            if ($completedSessionsCount > 0) {
-                Log::info("Creating additional session - {$completedSessionsCount} completed session(s) already exist for teacher {$requestData['teacher_id']}, section {$requestData['section_id']}, subject {$requestData['subject_id']}, date {$requestData['session_date']}");
             }
 
             // Create the session - always use current time as start time

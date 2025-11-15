@@ -37,7 +37,8 @@ class AttendanceSummaryController extends Controller
             }
 
             Log::info("Loading attendance summary for teacher {$teacherId}, period: {$period}, viewType: {$viewType}, subjectId: {$subjectId}");
-            
+            Log::info("🚫 FILTERING OUT dropped_out, transferred_out, withdrawn, deceased students");
+
             // Add debug logging for the query
             if ($viewType === 'subject') {
                 Log::info("Filtering attendance summary by subject", [
@@ -68,7 +69,13 @@ class AttendanceSummaryController extends Controller
                 ->join('teacher_section_subject as tss', 'ss.section_id', '=', 'tss.section_id')
                 ->where('tss.teacher_id', $teacherId)
                 ->where('tss.is_active', true)
-                ->where('ss.is_active', 1); // PostgreSQL: use 1 instead of true
+                ->where('ss.is_active', 1) // PostgreSQL: use 1 instead of true
+                // CRITICAL FIX: Exclude dropped out and transferred out students
+                ->where(function($query) {
+                    $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                          ->orWhereNull('sd.enrollment_status');
+                })
+                ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased']);
 
             // CRITICAL: For subject-specific view, only get students assigned to that specific subject
             if ($viewType === 'subject') {
@@ -85,7 +92,7 @@ class AttendanceSummaryController extends Controller
             // For 'all_students' view type, we get ALL students from ALL teacher's assignments (no additional filtering)
 
             $studentIds = $studentIdsQuery->distinct()->pluck('sd.id');
-            
+
             if ($studentIds->isEmpty()) {
                 Log::info("No students found for teacher {$teacherId}");
                 return response()->json([
@@ -128,7 +135,7 @@ class AttendanceSummaryController extends Controller
                 ])->first();
 
                 $attendanceCounts[$studentId] = $counts;
-                
+
                 Log::info("Student {$studentId} attendance counts", [
                     'present' => $counts->total_present,
                     'absent' => $counts->total_absences,
@@ -143,7 +150,13 @@ class AttendanceSummaryController extends Controller
                 ->join('sections as sec', 'ss.section_id', '=', 'sec.id')
                 ->join('curriculum_grade as cg', 'sec.curriculum_grade_id', '=', 'cg.id')
                 ->join('grades as g', 'cg.grade_id', '=', 'g.id')
-                ->whereIn('sd.id', $studentIds);
+                ->whereIn('sd.id', $studentIds)
+                // CRITICAL FIX: Double-check enrollment status filtering in student details query
+                ->where(function($query) {
+                    $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
+                          ->orWhereNull('sd.enrollment_status');
+                })
+                ->whereNotIn('sd.enrollment_status', ['dropped_out', 'transferred_out', 'withdrawn', 'deceased']);
 
             // Log the actual SQL query being executed
             $sql = $studentsQuery->toSql();
@@ -167,7 +180,7 @@ class AttendanceSummaryController extends Controller
             ->get();
 
             Log::info("Found {$students->count()} students for teacher {$teacherId}");
-            
+
             // Attach pre-calculated attendance counts to each student
             foreach ($students as $student) {
                 $counts = $attendanceCounts[$student->student_id] ?? (object)[
@@ -193,7 +206,7 @@ class AttendanceSummaryController extends Controller
                 ]);
 
                 // Calculate basic attendance rate
-                $student->attendance_rate = $student->total_records > 0 ? 
+                $student->attendance_rate = $student->total_records > 0 ?
                     round(($student->total_present / $student->total_records) * 100, 2) : 0;
                 $student->sf2_compliant = true;
             }
@@ -471,7 +484,7 @@ class AttendanceSummaryController extends Controller
     public function getStudentAttendanceRecords(Request $request)
     {
         $startTime = microtime(true);
-        
+
         try {
             $studentIds = $request->query('student_ids');
             $subjectId = $request->query('subject_id');
@@ -487,7 +500,7 @@ class AttendanceSummaryController extends Controller
 
             // Convert student_ids to array
             $studentIdsArray = is_string($studentIds) ? explode(',', $studentIds) : [$studentIds];
-            
+
             // Calculate date range for the month
             $startDate = Carbon::create($year, $month + 1, 1)->startOfMonth();
             $endDate = Carbon::create($year, $month + 1, 1)->endOfMonth();
@@ -542,7 +555,7 @@ class AttendanceSummaryController extends Controller
 
         } catch (\Exception $e) {
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
-            
+
             Log::error('Error in getStudentAttendanceRecords: ' . $e->getMessage(), [
                 'student_ids' => $studentIds ?? null,
                 'execution_time_ms' => $executionTime

@@ -1312,8 +1312,10 @@ const onQRCodeDetected = async (detectedCodes) => {
         life: 3000
     });
 
-    // Check if all students are scanned
-    if (scannedStudents.value.length >= students.value.length) {
+    // FIXED: Only auto-complete for QR scanning method, not manual marking
+    // Check if all students are scanned AND we're using QR scanner method
+    if (attendanceMethod.value === 'qr' && scannedStudents.value.length >= students.value.length) {
+        console.log('🎯 Auto-completing QR session - all students scanned');
         await autoCompleteSession();
     }
 };
@@ -2319,25 +2321,22 @@ const autoFillFromPrevious = async () => {
                     row.forEach((seat) => {
                         if (seat.studentId && seat.status) {
                             // Extract numeric student ID
-                            const studentIdNum = typeof seat.studentId === 'string' 
-                                ? parseInt(seat.studentId.split('-').pop()) 
-                                : seat.studentId;
-                            
+                            const studentIdNum = typeof seat.studentId === 'string' ? parseInt(seat.studentId.split('-').pop()) : seat.studentId;
+
                             // Save with numeric status ID (1,2,3,4)
                             savePromises.push(
-                                saveAttendanceToDatabase(studentIdNum, seat.status)
-                                    .catch(err => {
-                                        console.error(`Failed to save ${studentIdNum}:`, err);
-                                        return null; // Continue with other saves
-                                    })
+                                saveAttendanceToDatabase(studentIdNum, seat.status).catch((err) => {
+                                    console.error(`Failed to save ${studentIdNum}:`, err);
+                                    return null; // Continue with other saves
+                                })
                             );
                         }
                     });
                 });
-                
+
                 await Promise.all(savePromises);
                 console.log(`✅ Auto-filled attendance saved to database for ${copiedCount} students`);
-                
+
                 toast.add({
                     severity: 'success',
                     summary: 'Attendance Copied & Saved!',
@@ -2420,6 +2419,13 @@ const showConfirmDialog = (title, message, confirmLabel = 'Yes', cancelLabel = '
 // Create actual session after method selection
 const createAttendanceSession = async () => {
     try {
+        // CRITICAL FIX: Ensure attendance statuses are loaded before creating session
+        if (!attendanceStatuses.value || attendanceStatuses.value.length === 0) {
+            console.log('🔄 Loading attendance statuses before session creation...');
+            attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
+            console.log('✅ Loaded attendance statuses:', attendanceStatuses.value);
+        }
+
         // Clear QR scan data when starting new session
         clearQRScanData();
 
@@ -2448,10 +2454,12 @@ const createAttendanceSession = async () => {
         currentSession.value = response.session;
         sessionActive.value = true;
 
+        // Show appropriate message based on whether session was reopened or newly created
+        const isReopened = response.is_reopened || false;
         toast.add({
             severity: 'success',
-            summary: 'Session Started',
-            detail: 'Attendance session has been started successfully',
+            summary: isReopened ? 'Session Reopened' : 'Session Started',
+            detail: isReopened ? 'Existing session reopened for editing' : 'New attendance session created successfully',
             life: 3000
         });
 
@@ -2465,7 +2473,7 @@ const createAttendanceSession = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: error.message || 'Failed to start attendance session',
+            detail: error.response?.data?.message || error.message || 'Failed to start attendance session',
             life: 5000
         });
     }
@@ -2796,6 +2804,13 @@ const markAllPresent = async () => {
     }
 
     try {
+        // CRITICAL FIX: Ensure attendance statuses are loaded
+        if (!attendanceStatuses.value || attendanceStatuses.value.length === 0) {
+            console.log('🔄 Loading attendance statuses for Mark All Present...');
+            attendanceStatuses.value = await AttendanceSessionService.getAttendanceStatuses();
+            console.log('✅ Loaded attendance statuses:', attendanceStatuses.value);
+        }
+
         console.log('Starting mark all present process');
         let markedCount = 0;
         const attendanceData = [];
@@ -5287,7 +5302,15 @@ const titleRef = ref(null);
 
             <!-- ACTIVE SESSION BUTTONS - Only show during session -->
             <template v-if="sessionActive">
-                <Button icon="pi pi-copy" label="Auto-Fill from Previous" class="p-button-info p-button-outlined auto-fill-button" @click="autoFillFromPrevious" :disabled="isCompletingSession" title="Copy attendance from the most recent completed session" style="border: 2px solid #3b82f6; font-weight: 600;" />
+                <Button
+                    icon="pi pi-copy"
+                    label="Auto-Fill from Previous"
+                    class="p-button-info p-button-outlined auto-fill-button"
+                    @click="autoFillFromPrevious"
+                    :disabled="isCompletingSession"
+                    title="Copy attendance from the most recent completed session"
+                    style="border: 2px solid #3b82f6; font-weight: 600"
+                />
                 <Button icon="pi pi-check-circle" label="Mark All Present" class="p-button-success" @click="markAllPresent" :disabled="isCompletingSession" />
                 <Button icon="pi pi-sync" label="Change Method" class="p-button-help" @click="changeAttendanceMethod" :disabled="isCompletingSession" />
 
