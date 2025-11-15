@@ -5,7 +5,7 @@ import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
@@ -322,7 +322,10 @@ const submitToAdmin = async () => {
                 life: 5000
             });
 
-            // Stay on the same page - no redirect
+            // Optional: Redirect to dashboard after successful submission
+            setTimeout(() => {
+                router.push('/teacher');
+            }, 2000);
         } else {
             throw new Error(response.data.message || 'Failed to submit report');
         }
@@ -476,6 +479,24 @@ const getAttendanceColor = (status) => {
     }
 };
 
+// Get triangle background color class for AM/PM sections
+const getTriangleColorClass = (status) => {
+    switch (status) {
+        case 'present':
+            return 'bg-green-200'; // Light green for present
+        case 'absent':
+            return 'bg-red-200'; // Light red for absent
+        case 'late':
+            return 'bg-yellow-200'; // Light yellow for late
+        case 'excused':
+            return 'bg-blue-200'; // Light blue for excused
+        case 'dropout':
+            return 'bg-purple-200'; // Light purple for dropout
+        default:
+            return 'bg-gray-50'; // Default light gray
+    }
+};
+
 // Calculate total absent days for a student - only count past/current dates
 const calculateAbsentCount = (student) => {
     if (!student.attendance_data) return 0;
@@ -539,7 +560,7 @@ const onMonthChange = () => {
 };
 
 // Open edit dialog for attendance cell
-const openEditDialog = (student, date, day) => {
+const openEditDialog = (student, date, day, period = null) => {
     if (!isEditMode.value) {
         toast.add({
             severity: 'warn',
@@ -550,21 +571,32 @@ const openEditDialog = (student, date, day) => {
         return;
     }
 
+    // Determine the data key based on period (AM/PM)
+    const dataKey = period ? `${date}_${period}` : date;
+    const periodLabel = period ? ` (${period.toUpperCase()})` : '';
+
     editingCell.value = {
         student: student,
         date: date,
         day: day,
-        currentValue: getAttendanceMark(student.attendance_data?.[date], date)
+        period: period,
+        dataKey: dataKey,
+        currentValue: getAttendanceMark(student.attendance_data?.[dataKey], date)
     };
-    editAttendanceValue.value = getAttendanceMark(student.attendance_data?.[date], date) || '';
+    editAttendanceValue.value = getAttendanceMark(student.attendance_data?.[dataKey], date) || '';
     showEditDialog.value = true;
+
+    // Update dialog title to show AM/PM
+    if (period) {
+        console.log(`Editing ${period.toUpperCase()} attendance for ${student.name} on ${day}`);
+    }
 };
 
 // Save attendance edit
 const saveAttendanceEdit = async () => {
     if (!editingCell.value) return;
 
-    const { student, date } = editingCell.value;
+    const { student, date, period, dataKey } = editingCell.value;
     const inputValue = editAttendanceValue.value.trim();
 
     // Convert text input to status
@@ -579,56 +611,47 @@ const saveAttendanceEdit = async () => {
         status = 'excused';
     } else if (inputValue === 'D' || inputValue.toLowerCase() === 'd' || inputValue.toLowerCase() === 'dropout' || inputValue.toLowerCase() === 'drop out') {
         status = 'dropout';
-    } else if (inputValue === '' || inputValue === '-') {
+    } else if (inputValue === '' || inputValue.toLowerCase() === 'clear' || inputValue === '-') {
         status = null;
     }
 
-    // ✨ INSTANT UPDATE: Update local data first for immediate visual feedback
+    // Update the attendance data for this student using the correct data key (includes AM/PM)
     if (!student.attendance_data) {
         student.attendance_data = {};
     }
-    const oldStatus = student.attendance_data[date];
-    student.attendance_data[date] = status;
-    
-    // Force Vue reactivity update
-    await nextTick();
+    student.attendance_data[dataKey] = status;
 
-    // Close dialog immediately for instant feel
-    closeEditDialog();
-    
-    // Show success toast immediately
-    toast.add({
-        severity: 'success',
-        summary: 'Updated',
-        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to ${getAttendanceMark(status) || '✓'}`,
-        life: 3000
-    });
-
-    // Send update to backend API in background (non-blocking)
+    // Send update to backend API
     try {
         await axios.post(`/api/teacher/reports/sf2/save-edit`, {
             student_id: student.id,
             date: date,
             status: status,
             section_id: sectionId,
-            month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
+            month: selectedMonth.value.toISOString().slice(0, 7), // YYYY-MM format
+            period: period // Send period to backend
         });
 
-        console.log('✅ SF2 edit saved to backend successfully');
+        console.log('SF2 edit saved successfully');
     } catch (error) {
-        console.error('❌ Error saving SF2 edit to backend:', error);
-        
-        // Revert the change if backend save failed
-        student.attendance_data[date] = oldStatus;
-        await nextTick();
-        
+        console.error('Error saving SF2 edit:', error);
         toast.add({
             severity: 'error',
-            summary: 'Save Failed',
-            detail: 'Failed to save to server. Change has been reverted. Please try again.',
+            summary: 'Save Error',
+            detail: 'Failed to save attendance edit. Please try again.',
             life: 5000
         });
+        return; // Don't update UI if save failed
     }
+
+    toast.add({
+        severity: 'success',
+        summary: 'Updated',
+        detail: `Attendance for ${student.name} on day ${editingCell.value.day} has been updated to "${getAttendanceMark(status)}"`,
+        life: 3000
+    });
+
+    closeEditDialog();
 };
 
 // Close edit dialog
@@ -908,22 +931,48 @@ onMounted(() => {
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
-                                <!-- Regular attendance cells -->
+                                <!-- Regular attendance cells with AM/PM diagonal sections -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
-                                    :class="[
-                                        col.isEmpty ? 'bg-gray-100' : '',
-                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
-                                        !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
-                                        !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
-                                    ]"
-                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
-                                    @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                    :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                    class="border border-gray-900 p-0 text-center text-xs font-semibold relative attendance-cell am-pm-diagonal"
+                                    :class="[col.isEmpty ? 'bg-gray-100' : '', !col.isEmpty && isEditMode ? 'border-2 border-blue-400' : '']"
+                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '', height: '20px' }"
                                 >
-                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
-                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <!-- AM Section (Upper triangle - above diagonal) -->
+                                    <div
+                                        class="absolute top-0 left-0 w-full h-full flex items-start justify-start pl-1 pt-0.5"
+                                        :class="[
+                                            col.isEmpty ? 'bg-gray-100' : getTriangleColorClass(student.attendance_data?.[col.date + '_am']),
+                                            !col.isEmpty && isEditMode ? 'cursor-pointer hover:opacity-80' : '',
+                                            !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                        ]"
+                                        @click.stop="!col.isEmpty && openEditDialog(student, col.date, col.day, 'am')"
+                                        :title="!col.isEmpty && isEditMode ? 'Click to edit AM attendance' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                        style="font-size: 8px; line-height: 1; clip-path: polygon(0 0, 100% 0, 0 100%)"
+                                    >
+                                        <span class="text-gray-800 font-bold">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date + '_am'], col.date) }}</span>
+                                    </div>
+
+                                    <!-- PM Section (Lower triangle - below diagonal) -->
+                                    <div
+                                        class="absolute bottom-0 right-0 w-full h-full flex items-end justify-end pr-1 pb-0.5"
+                                        :class="[
+                                            col.isEmpty ? 'bg-gray-100' : getTriangleColorClass(student.attendance_data?.[col.date + '_pm']),
+                                            !col.isEmpty && isEditMode ? 'cursor-pointer hover:opacity-80' : '',
+                                            !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                        ]"
+                                        @click.stop="!col.isEmpty && openEditDialog(student, col.date, col.day, 'pm')"
+                                        :title="!col.isEmpty && isEditMode ? 'Click to edit PM attendance' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                        style="font-size: 8px; line-height: 1; clip-path: polygon(100% 0, 100% 100%, 0 100%)"
+                                    >
+                                        <span class="text-gray-800 font-bold">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date + '_pm'], col.date) }}</span>
+                                    </div>
+
+                                    <!-- Diagonal line -->
+                                    <div
+                                        class="absolute top-0 left-0 w-full h-full pointer-events-none"
+                                        style="background-image: linear-gradient(to bottom right, transparent calc(50% - 0.5px), #374151 calc(50% - 0.5px), #374151 calc(50% + 0.5px), transparent calc(50% + 0.5px))"
+                                    ></div>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -986,22 +1035,48 @@ onMounted(() => {
                                         {{ dayAnnotations[col.date] }}
                                     </div>
                                 </td>
-                                <!-- Regular attendance cells -->
+                                <!-- Regular attendance cells with AM/PM diagonal sections -->
                                 <td
                                     v-if="!dayAnnotations[col.date]"
-                                    class="border border-gray-900 p-0.5 text-center text-xs font-semibold relative attendance-cell"
-                                    :class="[
-                                        col.isEmpty ? 'bg-gray-100' : '',
-                                        student.attendance_data?.[col.date] === 'late' ? 'tardy-half-shaded' : getAttendanceColorClass(getAttendanceMark(student.attendance_data[col.date], col.date), col.date),
-                                        !col.isEmpty && isEditMode ? 'cursor-pointer hover:bg-blue-100 border-2 border-blue-400' : '',
-                                        !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
-                                    ]"
-                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '' }"
-                                    @click="!col.isEmpty && openEditDialog(student, col.date, col.day)"
-                                    :title="!col.isEmpty && isEditMode ? 'Click to edit' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                    class="border border-gray-900 p-0 text-center text-xs font-semibold relative attendance-cell am-pm-diagonal"
+                                    :class="[col.isEmpty ? 'bg-gray-100' : '', !col.isEmpty && isEditMode ? 'border-2 border-blue-400' : '']"
+                                    :style="{ borderLeft: col.dayName === 'M' ? '2px solid #000' : '', height: '20px' }"
                                 >
-                                    <span v-if="student.attendance_data?.[col.date] === 'late'" class="tardy-text">L</span>
-                                    <span v-else>{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data[col.date], col.date) }}</span>
+                                    <!-- AM Section (Upper triangle - above diagonal) -->
+                                    <div
+                                        class="absolute top-0 left-0 w-full h-full flex items-start justify-start pl-1 pt-0.5"
+                                        :class="[
+                                            col.isEmpty ? 'bg-gray-100' : getTriangleColorClass(student.attendance_data?.[col.date + '_am']),
+                                            !col.isEmpty && isEditMode ? 'cursor-pointer hover:opacity-80' : '',
+                                            !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                        ]"
+                                        @click.stop="!col.isEmpty && openEditDialog(student, col.date, col.day, 'am')"
+                                        :title="!col.isEmpty && isEditMode ? 'Click to edit AM attendance' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                        style="font-size: 8px; line-height: 1; clip-path: polygon(0 0, 100% 0, 0 100%)"
+                                    >
+                                        <span class="text-gray-800 font-bold">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date + '_am'], col.date) }}</span>
+                                    </div>
+
+                                    <!-- PM Section (Lower triangle - below diagonal) -->
+                                    <div
+                                        class="absolute bottom-0 right-0 w-full h-full flex items-end justify-end pr-1 pb-0.5"
+                                        :class="[
+                                            col.isEmpty ? 'bg-gray-100' : getTriangleColorClass(student.attendance_data?.[col.date + '_pm']),
+                                            !col.isEmpty && isEditMode ? 'cursor-pointer hover:opacity-80' : '',
+                                            !col.isEmpty && !isEditMode ? 'cursor-not-allowed' : ''
+                                        ]"
+                                        @click.stop="!col.isEmpty && openEditDialog(student, col.date, col.day, 'pm')"
+                                        :title="!col.isEmpty && isEditMode ? 'Click to edit PM attendance' : !col.isEmpty ? 'Enable Edit Mode first' : ''"
+                                        style="font-size: 8px; line-height: 1; clip-path: polygon(100% 0, 100% 100%, 0 100%)"
+                                    >
+                                        <span class="text-gray-800 font-bold">{{ col.isEmpty ? '' : getAttendanceMark(student.attendance_data?.[col.date + '_pm'], col.date) }}</span>
+                                    </div>
+
+                                    <!-- Diagonal line -->
+                                    <div
+                                        class="absolute top-0 left-0 w-full h-full pointer-events-none"
+                                        style="background-image: linear-gradient(to bottom right, transparent calc(50% - 0.5px), #374151 calc(50% - 0.5px), #374151 calc(50% + 0.5px), transparent calc(50% + 0.5px))"
+                                    ></div>
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
@@ -1259,11 +1334,14 @@ onMounted(() => {
         </div>
 
         <!-- Edit Attendance Dialog -->
-        <Dialog v-model:visible="showEditDialog" modal header="Edit Attendance" :style="{ width: '450px' }" class="no-print">
+        <Dialog v-model:visible="showEditDialog" modal :header="`Edit Attendance${editingCell?.period ? ` (${editingCell.period.toUpperCase()})` : ''}`" :style="{ width: '450px' }" class="no-print">
             <div v-if="editingCell" class="space-y-4">
                 <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border-l-4 border-blue-500">
                     <p class="text-base font-bold text-gray-800">{{ editingCell.student.name }}</p>
-                    <p class="text-sm text-gray-600 mt-1">Day {{ editingCell.day }} - {{ reportData.month_name }} {{ reportData.school_info.school_year }}</p>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Day {{ editingCell.day }} - {{ reportData.month_name }} {{ reportData.school_info.school_year }}
+                        <span v-if="editingCell.period" class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">{{ editingCell.period.toUpperCase() }}</span>
+                    </p>
                     <p class="text-xs text-gray-500 mt-2 bg-white px-2 py-1 rounded inline-block">
                         Current: <span class="font-semibold">{{ editingCell.currentValue || '-' }}</span>
                     </p>
