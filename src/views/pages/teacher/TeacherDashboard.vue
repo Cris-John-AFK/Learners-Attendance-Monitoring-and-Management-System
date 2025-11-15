@@ -32,6 +32,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 
 // Import our new smart analytics services
+import AttendanceHeatmapService from '@/services/AttendanceHeatmapService';
 import AttendanceIndexingService from '@/services/AttendanceIndexingService';
 import CacheService from '@/services/CacheService';
 import SmartAnalyticsService from '@/services/SmartAnalyticsService';
@@ -60,6 +61,33 @@ const profileAvailableSubjects = ref([]); // Available subjects for the profile 
 const loading = ref(true);
 const subjectLoading = ref(false);
 const chartOptions = ref({});
+
+const topReasonLocationPairs = computed(() => {
+    const cells = heatmapChartData.value?.heatmapMatrix?.data;
+    if (!cells?.length) return [];
+
+    return [...cells]
+        .filter((cell) => cell.v && cell.v > 0)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 5)
+        .map((cell) => ({
+            reason: cell.reason,
+            location: cell.location,
+            count: cell.count,
+            type: cell.type
+        }));
+});
+
+const locationImpactSummary = computed(() => {
+    const correlations = heatmapChartData.value?.rawData?.location_correlations;
+    if (!correlations?.length) return [];
+
+    return correlations.slice(0, 3).map((entry) => ({
+        location: entry.location,
+        late: entry.late_count,
+        excused: entry.excused_count
+    }));
+});
 const attendanceChartData = ref(null);
 const selectedSubject = ref(null);
 const availableSubjects = ref([]);
@@ -69,6 +97,87 @@ const chartViewOptions = [
     { label: 'Monthly', value: 'month' }
 ];
 const chartView = ref('week');
+
+// Chart type toggle options
+const chartTypeOptions = [
+    { label: 'Trends', value: 'trends' },
+    { label: 'Reasons Heatmap', value: 'heatmap' }
+];
+const chartType = ref('trends');
+
+// Heatmap data and options
+const heatmapData = ref(null);
+const heatmapLoading = ref(false);
+const heatmapChartData = ref(null);
+const heatmapChartOptions = ref({});
+const heatmapViewOptions = [
+    { label: 'Heatmap Matrix', value: 'heatmap' },
+    { label: 'Top Reasons', value: 'reasons' },
+    { label: 'By Location', value: 'locations' },
+    { label: 'Timeline', value: 'timeline' }
+];
+const heatmapView = ref('heatmap');
+const MAX_HEATMAP_ROWS = 10;
+const MAX_HEATMAP_COLUMNS = 10;
+const HEATMAP_ROW_HEIGHT = 28;
+const HEATMAP_ROW_GAP = 6;
+const HEATMAP_HEADER_HEIGHT = 44;
+
+const heatmapColumnLabels = computed(() => {
+    const labels = heatmapChartData.value?.heatmapMatrix?.xLabels ?? [];
+    return labels.slice(0, MAX_HEATMAP_COLUMNS);
+});
+
+const heatmapColumnCount = computed(() => Math.max(heatmapColumnLabels.value.length, 1));
+
+const heatmapRows = computed(() => {
+    const matrix = heatmapChartData.value?.heatmapMatrix;
+    if (!matrix) return [];
+
+    const rowsLimit = Math.min(MAX_HEATMAP_ROWS, matrix.yLabels.length);
+
+    return Array.from({ length: rowsLimit }, (_, idx) => {
+        const label = matrix.yLabels[idx];
+        const type = matrix.reasonTypes?.[idx] || 'Reasons';
+
+        return {
+            label,
+            type,
+            startOfGroup: idx === 0 || matrix.reasonTypes?.[idx - 1] !== type,
+            index: idx
+        };
+    });
+});
+
+const heatmapRowCount = computed(() => heatmapRows.value.length || 1);
+
+const heatmapYLabelsStyle = computed(() => ({
+    gridTemplateRows: `repeat(${heatmapRowCount.value}, ${HEATMAP_ROW_HEIGHT}px)`,
+    paddingTop: `${HEATMAP_HEADER_HEIGHT}px`
+}));
+
+const getReasonHeadingStyle = (rowIndex) => {
+    const offset = HEATMAP_HEADER_HEIGHT + rowIndex * (HEATMAP_ROW_HEIGHT + HEATMAP_ROW_GAP) - HEATMAP_ROW_GAP;
+    return {
+        top: `${offset}px`
+    };
+};
+
+const visibleHeatmapCells = computed(() => {
+    const cells = heatmapChartData.value?.heatmapMatrix?.data;
+    if (!cells?.length) return [];
+
+    return cells.filter((cell) => cell.y < MAX_HEATMAP_ROWS && cell.x < heatmapColumnCount.value).sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
+});
+
+const heatmapColumnGridStyle = computed(() => ({
+    gridTemplateColumns: `repeat(${heatmapColumnCount.value}, minmax(56px, 1fr))`,
+    gridTemplateRows: `repeat(${heatmapRowCount.value}, ${HEATMAP_ROW_HEIGHT}px)`
+}));
+
+const heatmapColumnHeaderStyle = computed(() => ({
+    gridTemplateColumns: `repeat(${heatmapColumnCount.value}, minmax(56px, 1fr))`
+}));
 
 // Data indexing and refresh control
 const isIndexing = ref(false);
@@ -1894,6 +2003,126 @@ async function onChartViewChange() {
         // Fallback to preparing chart data from current summary
         await prepareChartData();
     }
+
+    // If heatmap is active, reload heatmap data too
+    if (chartType.value === 'heatmap') {
+        await loadHeatmapData();
+    }
+}
+
+// Handle chart type change (trends vs heatmap)
+async function onChartTypeChange() {
+    console.log('🔄 Chart type changed to:', chartType.value);
+
+    if (chartType.value === 'heatmap') {
+        await loadHeatmapData();
+    }
+}
+
+// Load heatmap data
+async function loadHeatmapData() {
+    if (!currentTeacher.value?.id) {
+        console.warn('No teacher ID available for heatmap');
+        return;
+    }
+
+    heatmapLoading.value = true;
+
+    try {
+        console.log('🔥 Loading heatmap data...');
+
+        const options = {
+            period: chartView.value,
+            subjectId: selectedSubject.value?.id || null
+        };
+
+        const response = await AttendanceHeatmapService.getAttendanceReasonsHeatmap(currentTeacher.value.id, options);
+
+        if (response.success && response.data) {
+            heatmapData.value = response.data;
+
+            // Process data for charts
+            const processedData = AttendanceHeatmapService.processHeatmapForChart(response);
+            if (processedData) {
+                heatmapChartData.value = processedData;
+
+                // Set chart options
+                heatmapChartOptions.value = {
+                    reasons: AttendanceHeatmapService.getChartOptions('reasons'),
+                    location: AttendanceHeatmapService.getChartOptions('location'),
+                    timeline: AttendanceHeatmapService.getChartOptions('timeline')
+                };
+            }
+
+            console.log('✅ Heatmap data loaded successfully');
+        } else {
+            console.warn('No heatmap data received');
+            heatmapData.value = null;
+        }
+    } catch (error) {
+        console.error('❌ Error loading heatmap data:', error);
+        heatmapData.value = null;
+    } finally {
+        heatmapLoading.value = false;
+    }
+}
+
+// Get heatmap cell styling based on intensity
+function getHeatmapCellStyle(cell) {
+    if (!cell.v || cell.v === 0) {
+        return {
+            backgroundColor: '#f8fafc',
+            color: '#0f172a',
+            border: '1px solid rgba(148, 163, 184, 0.25)'
+        };
+    }
+
+    const maxValue = heatmapChartData.value?.heatmapMatrix?.maxValue || 10;
+    const intensity = Math.min(cell.v / maxValue, 1);
+
+    const lateRamp = [
+        [255, 255, 255], // white
+        [255, 243, 205],
+        [255, 213, 130],
+        [255, 180, 60],
+        [253, 139, 36],
+        [239, 98, 25],
+        [202, 63, 17]
+    ];
+
+    const excusedRamp = [
+        [240, 249, 255],
+        [188, 231, 255],
+        [144, 213, 255],
+        [99, 194, 255],
+        [64, 160, 255],
+        [34, 125, 210],
+        [17, 86, 161]
+    ];
+
+    const steps = lateRamp.length - 1;
+    const rawIndex = intensity * steps;
+    const lowerIndex = Math.floor(rawIndex);
+    const upperIndex = Math.min(steps, lowerIndex + 1);
+    const t = rawIndex - lowerIndex;
+
+    const palette = cell.type === 'Late' ? lateRamp : excusedRamp;
+    const blend = palette.map((color, idx) => idx === lowerIndex || idx === upperIndex);
+    const [r1, g1, b1] = palette[lowerIndex];
+    const [r2, g2, b2] = palette[upperIndex];
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+
+    const textColor = intensity > 0.55 ? '#ffffff' : '#0f172a';
+
+    return {
+        backgroundColor: `rgb(${r}, ${g}, ${b})`,
+        color: textColor,
+        fontWeight: '700',
+        border: '1px solid rgba(15, 23, 42, 0.08)',
+        boxShadow: intensity > 0.55 ? '0 0 6px rgba(15, 23, 42, 0.35)' : '0 1px 2px rgba(15, 23, 42, 0.15)'
+    };
 }
 
 // Watch for subject changes and reload data
@@ -2168,11 +2397,7 @@ async function showStudentProfile(student) {
                 <!-- Attendance Stats Cards -->
                 <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <!-- Total Students Card - Clickable -->
-                    <div 
-                        @click="scrollToStudentOverview" 
-                        class="bg-white rounded-xl shadow-sm p-5 hover:shadow-lg transition-all cursor-pointer flex items-center relative group"
-                        title="Click to view student list"
-                    >
+                    <div @click="scrollToStudentOverview" class="bg-white rounded-xl shadow-sm p-5 hover:shadow-lg transition-all cursor-pointer flex items-center relative group" title="Click to view student list">
                         <div class="mr-4 bg-blue-100 p-3 rounded-lg group-hover:bg-blue-200 transition-colors">
                             <i class="pi pi-users text-blue-600 text-xl"></i>
                         </div>
@@ -2194,8 +2419,8 @@ async function showStudentProfile(student) {
                             <div class="flex-1 p-2">
                                 <div class="text-sm text-gray-500 font-medium flex items-center gap-2">
                                     Average Attendance
-                                    <i 
-                                        class="pi pi-info-circle text-blue-500 cursor-help" 
+                                    <i
+                                        class="pi pi-info-circle text-blue-500 cursor-help"
                                         v-tooltip.top="{
                                             value: 'Calculated as: (Present + Late + Excused) ÷ Total Possible Days × 100%<br/>Based on actual attendance records for this subject.',
                                             escape: false
@@ -2235,7 +2460,15 @@ async function showStudentProfile(student) {
                 <div class="col-span-12 lg:col-span-8">
                     <div class="bg-white rounded-xl shadow-sm p-6">
                         <div class="mb-4">
-                            <h2 class="text-lg font-semibold mb-4">Attendance Trends</h2>
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-lg font-semibold">Attendance Trends</h2>
+
+                                <!-- Chart Type Toggle -->
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm text-gray-600">Chart Type:</span>
+                                    <SelectButton v-model="chartType" :options="chartTypeOptions" optionLabel="label" optionValue="value" class="text-xs" @change="onChartTypeChange" />
+                                </div>
+                            </div>
 
                             <!-- Enhanced Filters Section -->
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -2248,27 +2481,18 @@ async function showStudentProfile(student) {
                                 <!-- Subject Filter (Always Visible) -->
                                 <div>
                                     <label class="block text-xs font-medium text-gray-700 mb-1"> <i class="pi pi-book text-xs mr-1"></i>Subject Filter </label>
-                                    <Dropdown
-                                        v-model="selectedSubject"
-                                        :options="[{ id: null, name: 'All Subjects' }, ...availableSubjects]"
-                                        optionLabel="name"
-                                        placeholder="Select Subject"
-                                        class="w-full text-sm"
-                                        :disabled="viewType === 'all_students'"
-                                        @change="onSubjectChange"
-                                    >
-                                        <template #value="slotProps">
-                                            <div v-if="slotProps.value" class="flex items-center text-sm">
-                                                <i class="pi pi-book mr-1 text-blue-600 text-xs"></i>
-                                                <span>{{ slotProps.value.name }}</span>
-                                            </div>
-                                            <span v-else class="text-sm">{{ slotProps.placeholder }}</span>
+                                    <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" class="w-full text-sm" :disabled="!availableSubjects?.length" placeholder="Select a subject">
+                                        <template #value="{ value }">
+                                            <span v-if="value" class="flex items-center gap-2">
+                                                <i class="pi pi-book text-blue-500 text-xs"></i>
+                                                <span class="truncate">{{ value.name }}</span>
+                                            </span>
+                                            <span v-else class="text-gray-400">Select a subject</span>
                                         </template>
-                                        <template #option="slotProps">
-                                            <div class="flex items-center">
-                                                <i v-if="slotProps.option.id" class="pi pi-book mr-2 text-blue-600 text-xs"></i>
-                                                <i v-else class="pi pi-list mr-2 text-gray-600 text-xs"></i>
-                                                <span>{{ slotProps.option.name }}</span>
+                                        <template #option="{ option }">
+                                            <div class="flex flex-col">
+                                                <span class="font-medium">{{ option.name }}</span>
+                                                <small class="text-gray-500" v-if="option.sectionName">Section: {{ option.sectionName }}</small>
                                             </div>
                                         </template>
                                     </Dropdown>
@@ -2301,25 +2525,177 @@ async function showStudentProfile(student) {
                         </div>
 
                         <div v-else>
-                            <!-- Chart Legend -->
-                            <div class="flex justify-center gap-6 mb-4 pb-2">
-                                <div class="flex items-center">
-                                    <div class="w-4 h-4 rounded bg-green-500 mr-2"></div>
-                                    <span class="text-sm font-medium text-gray-700">Present</span>
+                            <!-- Attendance Trends Chart -->
+                            <div v-if="chartType === 'trends'">
+                                <!-- Chart Legend -->
+                                <div class="flex justify-center gap-6 mb-4 pb-2">
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 rounded bg-green-500 mr-2"></div>
+                                        <span class="text-sm font-medium text-gray-700">Present</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 rounded bg-red-500 mr-2"></div>
+                                        <span class="text-sm font-medium text-gray-700">Absent</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 rounded bg-yellow-500 mr-2"></div>
+                                        <span class="text-sm font-medium text-gray-700">Late</span>
+                                    </div>
                                 </div>
-                                <div class="flex items-center">
-                                    <div class="w-4 h-4 rounded bg-red-500 mr-2"></div>
-                                    <span class="text-sm font-medium text-gray-700">Absent</span>
-                                </div>
-                                <div class="flex items-center">
-                                    <div class="w-4 h-4 rounded bg-yellow-500 mr-2"></div>
-                                    <span class="text-sm font-medium text-gray-700">Late</span>
+
+                                <!-- Chart Container -->
+                                <div class="chart-container">
+                                    <Chart type="line" :data="attendanceChartData" :options="chartOptions" :key="`chart-${viewType}-${selectedSubject?.id || 'all'}-${chartView}`" style="height: 100%; width: 100%" class="stylish-chart" />
                                 </div>
                             </div>
 
-                            <!-- Chart Container -->
-                            <div class="chart-container" style="height: 400px; padding-bottom: 20px">
-                                <Chart type="line" :data="attendanceChartData" :options="chartOptions" :key="`chart-${viewType}-${selectedSubject?.id || 'all'}-${chartView}`" style="height: 100%; width: 100%" class="stylish-chart" />
+                            <!-- Reasons Heatmap -->
+                            <div v-else-if="chartType === 'heatmap'">
+                                <div v-if="heatmapLoading" class="flex flex-col items-center justify-center py-12">
+                                    <ProgressSpinner strokeWidth="4" style="width: 50px; height: 50px" class="text-blue-500" />
+                                    <p class="mt-3 text-gray-500 font-normal">Loading reasons heatmap...</p>
+                                </div>
+
+                                <div v-else-if="heatmapData" class="space-y-6">
+                                    <!-- Heatmap Summary Stats -->
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                        <div class="bg-yellow-50 rounded-lg p-3 text-center">
+                                            <div class="text-2xl font-bold text-yellow-600">{{ heatmapData.summary.total_late_incidents }}</div>
+                                            <div class="text-xs text-yellow-700">Late Incidents</div>
+                                        </div>
+                                        <div class="bg-blue-50 rounded-lg p-3 text-center">
+                                            <div class="text-2xl font-bold text-blue-600">{{ heatmapData.summary.total_excused_incidents }}</div>
+                                            <div class="text-xs text-blue-700">Excused Incidents</div>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-3 text-center" v-if="heatmapData.summary.most_common_late_reason">
+                                            <div class="text-sm font-semibold text-gray-700 truncate">{{ heatmapData.summary.most_common_late_reason }}</div>
+                                            <div class="text-xs text-gray-600">Top Late Reason</div>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-3 text-center" v-if="heatmapData.summary.most_affected_location">
+                                            <div class="text-sm font-semibold text-gray-700 truncate">{{ heatmapData.summary.most_affected_location }}</div>
+                                            <div class="text-xs text-gray-600">Most Affected Area</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Heatmap Charts Tabs -->
+                                    <div class="mb-4">
+                                        <SelectButton v-model="heatmapView" :options="heatmapViewOptions" optionLabel="label" optionValue="value" class="text-xs" />
+                                    </div>
+
+                                    <!-- True Heatmap Matrix View -->
+                                    <div v-if="heatmapView === 'heatmap' && heatmapChartData?.heatmapMatrix" class="heatmap-card">
+                                        <div class="heatmap-container">
+                                            <div class="heatmap-title text-center">
+                                                <h4 class="font-semibold">Attendance Issues Heatmap</h4>
+                                                <p class="text-gray-600">Reasons vs Locations</p>
+                                            </div>
+
+                                            <div class="heatmap-wrapper">
+                                                <div class="heatmap-grid">
+                                                    <div class="y-labels" :style="heatmapYLabelsStyle">
+                                                        <div v-for="row in heatmapRows" :key="`matrix-y-${row.index}`" class="y-label">
+                                                            {{ row.label.length > 18 ? row.label.substring(0, 18) + '…' : row.label }}
+                                                        </div>
+                                                        <template v-for="row in heatmapRows" :key="`group-heading-${row.index}`">
+                                                            <div v-if="row.startOfGroup" class="reason-group-heading" :style="getReasonHeadingStyle(row.index)">{{ row.type }} Reasons</div>
+                                                        </template>
+                                                    </div>
+
+                                                    <div class="heatmap-main">
+                                                        <div class="x-labels" :style="heatmapColumnHeaderStyle">
+                                                            <div v-for="(label, index) in heatmapColumnLabels" :key="`matrix-x-${index}`" class="x-label">
+                                                                {{ label.replace('Brgy. ', '') }}
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="heatmap-cells" :style="heatmapColumnGridStyle">
+                                                            <div
+                                                                v-for="cell in visibleHeatmapCells"
+                                                                :key="`matrix-cell-${cell.x}-${cell.y}`"
+                                                                :class="['heatmap-cell', { 'heatmap-cell-divider': cell.rowDivider }]"
+                                                                :style="getHeatmapCellStyle(cell)"
+                                                                :title="`${cell.reason} at ${cell.location}: ${cell.count} incidents (${cell.type})`"
+                                                            >
+                                                                <span v-if="cell.v > 0" class="cell-value">{{ cell.v }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="heatmap-insights" v-if="topReasonLocationPairs.length">
+                                                    <div class="insights-card">
+                                                        <h5>Top Reason ↔ Location</h5>
+                                                        <p class="insights-caption">Highest overlaps this period</p>
+                                                        <div class="insight-row" v-for="pair in topReasonLocationPairs" :key="`${pair.reason}-${pair.location}`">
+                                                            <div>
+                                                                <p class="insight-reason">{{ pair.reason }}</p>
+                                                                <p class="insight-location">{{ pair.location }}</p>
+                                                            </div>
+                                                            <div class="insight-metric">
+                                                                <span class="insight-pill" :class="pair.type === 'Late' ? 'late' : 'excused'">{{ pair.type }}</span>
+                                                                <span class="insight-count">{{ pair.count }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="insights-card" v-if="locationImpactSummary.length">
+                                                        <h5>Most Impacted Locations</h5>
+                                                        <p class="insights-caption">Late vs Excused split</p>
+                                                        <div class="location-row" v-for="loc in locationImpactSummary" :key="loc.location">
+                                                            <div class="location-name">{{ loc.location }}</div>
+                                                            <div class="location-bars">
+                                                                <div class="bar late" :style="{ width: `${Math.min(loc.late, 8) * 12}%` }"></div>
+                                                                <div class="bar excused" :style="{ width: `${Math.min(loc.excused, 8) * 12}%` }"></div>
+                                                            </div>
+                                                            <div class="location-values">
+                                                                <span class="late">{{ loc.late }}</span>
+                                                                <span class="excused">{{ loc.excused }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="heatmap-legend flex justify-center items-center gap-3 text-xs">
+                                                <span class="text-gray-600">Low</span>
+                                                <div class="legend-gradient"></div>
+                                                <span class="text-gray-600">High</span>
+                                                <div class="flex gap-4 ml-4">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="legend-dot late"></span>
+                                                        <span>Late</span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="legend-dot excused"></span>
+                                                        <span>Excused</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Other chart views -->
+                                    <div v-else class="chart-container">
+                                        <div v-if="heatmapView === 'reasons' || heatmapView === 'locations'" class="heatmap-inline-legend">
+                                            <div class="legend-item">
+                                                <span class="legend-dot late"></span>
+                                                <span>Late incidents</span>
+                                            </div>
+                                            <div class="legend-item">
+                                                <span class="legend-dot excused"></span>
+                                                <span>Excused incidents</span>
+                                            </div>
+                                        </div>
+                                        <Chart v-if="heatmapView === 'reasons'" type="bar" :data="heatmapChartData.reasonsChart" :options="heatmapChartOptions.reasons" style="height: 100%; width: 100%" />
+                                        <Chart v-else-if="heatmapView === 'locations'" type="bar" :data="heatmapChartData.locationChart" :options="heatmapChartOptions.location" style="height: 100%; width: 100%" />
+                                        <Chart v-else-if="heatmapView === 'timeline'" type="line" :data="heatmapChartData.timelineChart" :options="heatmapChartOptions.timeline" style="height: 100%; width: 100%" />
+                                    </div>
+                                </div>
+
+                                <div v-else class="flex flex-col items-center justify-center py-12 text-gray-500">
+                                    <i class="pi pi-chart-bar text-4xl mb-3 text-gray-300"></i>
+                                    <p class="font-normal">No reasons data available for the selected period</p>
+                                </div>
                             </div>
                         </div>
 
@@ -2618,8 +2994,8 @@ async function showStudentProfile(student) {
                     <div class="bg-gray-50 p-4 rounded-xl shadow-sm">
                         <p class="text-gray-500 text-sm mb-1 flex items-center gap-2">
                             Attendance Rate
-                            <i 
-                                class="pi pi-info-circle text-blue-500 cursor-help text-xs" 
+                            <i
+                                class="pi pi-info-circle text-blue-500 cursor-help text-xs"
                                 v-tooltip.top="{
                                     value: 'Formula: (Days Present + Late + Excused) ÷ Total School Days × 100%',
                                     escape: false
@@ -2662,29 +3038,17 @@ async function showStudentProfile(student) {
                             <Dropdown id="calendar-subject-filter" v-model="calendarSubjectFilter" :options="calendarSubjectOptions" optionLabel="name" optionValue="id" placeholder="Select Subject" @change="onCalendarSubjectChange" class="w-48" />
                         </div>
                     </div>
-                    
+
                     <!-- Month Navigation - Centered and Stylish -->
                     <div class="flex items-center justify-center gap-4 py-3 px-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100 shadow-sm">
-                        <Button 
-                            icon="pi pi-chevron-left" 
-                            @click="previousMonth" 
-                            class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" 
-                            severity="secondary"
-                            size="large"
-                        />
+                        <Button icon="pi pi-chevron-left" @click="previousMonth" class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" severity="secondary" size="large" />
                         <div class="flex items-center gap-2 min-w-[200px] justify-center">
                             <i class="pi pi-calendar text-blue-600"></i>
                             <span class="text-lg font-semibold text-gray-800">
                                 {{ new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }}
                             </span>
                         </div>
-                        <Button 
-                            icon="pi pi-chevron-right" 
-                            @click="nextMonth" 
-                            class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" 
-                            severity="secondary"
-                            size="large"
-                        />
+                        <Button icon="pi pi-chevron-right" @click="nextMonth" class="p-button-rounded p-button-text hover:bg-blue-100 transition-colors" severity="secondary" size="large" />
                     </div>
                 </div>
 
@@ -2985,15 +3349,29 @@ async function showStudentProfile(student) {
 
 .chart-container {
     position: relative;
-    height: 300px !important;
     width: 100%;
+    min-height: 260px;
     margin-bottom: 1rem;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.heatmap-card {
+    background-color: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
 }
 
 .chart-container :deep(canvas) {
     display: block !important;
     height: 100% !important;
     width: 100% !important;
+    min-height: 240px;
 }
 
 /* Modern styles for attendance stats progress bars */
@@ -3090,7 +3468,8 @@ async function showStudentProfile(student) {
 
 @media (max-width: 768px) {
     .chart-container {
-        height: 250px !important;
+        min-height: 220px;
+        padding: 0.65rem;
     }
 }
 /* Subject Loading Overlay Styles */
@@ -3157,14 +3536,12 @@ async function showStudentProfile(student) {
 }
 
 @keyframes gradientShift {
-    0% {
+    0%,
+    100% {
         background-position: 0% 50%;
     }
     50% {
         background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
     }
 }
 
@@ -3175,5 +3552,347 @@ async function showStudentProfile(student) {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     letter-spacing: 1px;
     margin: 0;
+}
+
+/* Compact Professional Heatmap Styles */
+.heatmap-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.heatmap-title {
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+}
+
+.heatmap-title h4 {
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+
+.heatmap-title p {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.heatmap-wrapper {
+    display: flex;
+    gap: 1.25rem;
+    width: 100%;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+
+.heatmap-grid {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1 1 520px;
+    min-width: 0;
+}
+
+.y-labels {
+    display: grid;
+    grid-template-rows: repeat(10, 28px);
+    gap: 6px;
+    width: 150px;
+    flex-shrink: 0;
+    align-content: start;
+    position: relative;
+}
+
+.reason-section-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    padding-right: 0.5rem;
+    margin-top: 0.25rem;
+    grid-column: 1 / -1;
+}
+
+.y-label {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.5rem;
+    font-size: 0.74rem;
+    color: #374151;
+    font-weight: 500;
+    line-height: 1;
+}
+
+.reason-group-heading {
+    position: absolute;
+    right: 0;
+    width: 100%;
+    text-align: right;
+    padding-right: 0.5rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.heatmap-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.heatmap-insights {
+    display: grid;
+    gap: 1rem;
+    flex: 1 1 280px;
+    min-width: 260px;
+    max-width: 520px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    align-content: flex-start;
+}
+
+@media (max-width: 1100px) {
+    .heatmap-wrapper {
+        flex-direction: column;
+    }
+
+    .heatmap-insights {
+        width: 100%;
+        max-width: none;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+}
+
+.insights-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.insights-card h5 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+    color: #0f172a;
+}
+
+.insights-caption {
+    font-size: 0.74rem;
+    color: #94a3b8;
+    margin-bottom: 0.75rem;
+}
+
+.insight-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.insight-row:last-child {
+    border-bottom: none;
+}
+
+.insight-reason {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.insight-location {
+    font-size: 0.7rem;
+    color: #6b7280;
+}
+
+.insight-metric {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.insight-pill {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.insight-pill.late {
+    background: #f97316;
+}
+
+.insight-pill.excused {
+    background: #0ea5e9;
+}
+
+.insight-count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.location-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+}
+
+.location-row:last-child {
+    margin-bottom: 0;
+}
+
+.location-name {
+    flex: 0 0 70px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.location-bars {
+    flex: 1;
+    display: flex;
+    gap: 3px;
+    height: 8px;
+}
+
+.location-bars .bar {
+    border-radius: 999px;
+}
+
+.location-bars .bar.late {
+    background: #f97316;
+}
+
+.location-bars .bar.excused {
+    background: #0ea5e9;
+}
+
+.location-values {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.65rem;
+    text-align: right;
+}
+
+.location-values .late {
+    color: #f97316;
+}
+
+.location-values .excused {
+    color: #0ea5e9;
+}
+
+.x-labels {
+    display: grid;
+    gap: 6px;
+    height: 38px;
+    margin-bottom: 0.25rem;
+    flex-shrink: 0;
+}
+
+.x-label {
+    width: 60px;
+    text-align: center;
+    font-size: 0.7rem;
+    color: #374151;
+    font-weight: 500;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0.25rem;
+}
+
+.heatmap-cells {
+    display: grid;
+    gap: 6px;
+}
+
+.heatmap-cell-divider {
+    border-top: 2px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+.heatmap-cell {
+    width: 100%;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+    border: 1px solid #374151;
+}
+
+.cell-value {
+    font-weight: 700;
+    font-size: 0.6rem;
+}
+
+.heatmap-legend {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e5e7eb;
+    flex-shrink: 0;
+}
+
+.heatmap-inline-legend {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    color: #4b5563;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.legend-dot.late {
+    background-color: #fbbf24;
+}
+
+.legend-dot.excused {
+    background-color: #38bdf8;
+}
+
+.legend-gradient {
+    width: 120px;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(to right, rgba(255, 243, 205, 1), rgba(253, 139, 36, 1), rgba(17, 86, 161, 1));
+    border: 1px solid rgba(148, 163, 184, 0.4);
 }
 </style>

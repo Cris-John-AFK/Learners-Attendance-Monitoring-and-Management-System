@@ -4,6 +4,8 @@ use App\Http\Controllers\API\GradeController;
 use App\Http\Controllers\API\AttendanceController;
 use App\Http\Controllers\API\AttendanceSessionController;
 use App\Http\Controllers\API\AttendanceReasonController;
+use App\Http\Controllers\API\AttendanceHeatmapController;
+use App\Http\Controllers\API\AttendanceHeatmapControllerSimple;
 use App\Http\Controllers\API\SubjectController;
 use App\Http\Controllers\API\SectionController;
 use App\Http\Controllers\API\TeacherController;
@@ -227,6 +229,12 @@ Route::prefix('attendance')->group(function () {
     // Dashboard routes for teacher analytics
     Route::get('/trends', [AttendanceController::class, 'getAttendanceTrends']);
     Route::get('/summary', [AttendanceController::class, 'getAttendanceSummary']);
+
+    // Heatmap routes for reasons analysis
+    Route::get('/heatmap/test', function() {
+        return response()->json(['success' => true, 'message' => 'Heatmap route works']);
+    });
+    Route::get('/heatmap/reasons', [AttendanceHeatmapControllerSimple::class, 'getAttendanceReasonsHeatmap']);
 });
 
 // New Attendance Session routes for solid database system
@@ -237,7 +245,7 @@ Route::prefix('attendance-sessions')->group(function () {
     Route::post('/{sessionId}/complete', [AttendanceSessionController::class, 'completeSession']);
     Route::get('/{sessionId}/summary', [AttendanceSessionController::class, 'getSessionSummary']);
     Route::get('/{sessionId}/details', [AttendanceSessionController::class, 'getSessionAttendanceDetails']);
-    
+
     // Auto-fill from previous session
     Route::get('/recent-today', [AttendanceSessionController::class, 'getMostRecentSessionToday']);
 
@@ -572,7 +580,7 @@ Route::prefix('school-quarters')->group(function () {
     Route::get('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'show']);
     Route::put('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'update']);
     Route::delete('/{id}', [App\Http\Controllers\API\SchoolQuarterController::class, 'destroy']);
-    
+
     // Teacher Access Management
     Route::get('/{quarterId}/teachers', [App\Http\Controllers\API\SchoolQuarterController::class, 'getTeachers']);
     Route::post('/{quarterId}/teachers', [App\Http\Controllers\API\SchoolQuarterController::class, 'grantTeacherAccess']);
