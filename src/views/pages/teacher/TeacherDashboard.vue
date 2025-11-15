@@ -2471,7 +2471,7 @@ async function showStudentProfile(student) {
                             </div>
 
                             <!-- Enhanced Filters Section -->
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div v-if="chartType !== 'heatmap'" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <!-- View Type Selector -->
                                 <div>
                                     <label class="block text-xs font-medium text-gray-700 mb-1">View Type</label>
@@ -2641,6 +2641,16 @@ async function showStudentProfile(student) {
                                                     <div class="insights-card" v-if="locationImpactSummary.length">
                                                         <h5>Most Impacted Locations</h5>
                                                         <p class="insights-caption">Late vs Excused split</p>
+                                                        <div class="location-legend">
+                                                            <div class="legend-item">
+                                                                <span class="legend-dot late"></span>
+                                                                <span>Late</span>
+                                                            </div>
+                                                            <div class="legend-item">
+                                                                <span class="legend-dot excused"></span>
+                                                                <span>Excused</span>
+                                                            </div>
+                                                        </div>
                                                         <div class="location-row" v-for="loc in locationImpactSummary" :key="loc.location">
                                                             <div class="location-name">{{ loc.location }}</div>
                                                             <div class="location-bars">
@@ -2656,18 +2666,21 @@ async function showStudentProfile(student) {
                                                 </div>
                                             </div>
 
-                                            <div class="heatmap-legend flex justify-center items-center gap-3 text-xs">
-                                                <span class="text-gray-600">Low</span>
-                                                <div class="legend-gradient"></div>
-                                                <span class="text-gray-600">High</span>
-                                                <div class="flex gap-4 ml-4">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="legend-dot late"></span>
-                                                        <span>Late</span>
+                                            <div class="heatmap-legend">
+                                                <div class="legend-scale">
+                                                    <p class="legend-title">Late intensity</p>
+                                                    <div class="legend-bar">
+                                                        <span>Low</span>
+                                                        <div class="legend-gradient legend-gradient-late"></div>
+                                                        <span>High</span>
                                                     </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="legend-dot excused"></span>
-                                                        <span>Excused</span>
+                                                </div>
+                                                <div class="legend-scale">
+                                                    <p class="legend-title">Excused intensity</p>
+                                                    <div class="legend-bar">
+                                                        <span>Low</span>
+                                                        <div class="legend-gradient legend-gradient-excused"></div>
+                                                        <span>High</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -3857,6 +3870,46 @@ async function showStudentProfile(student) {
     padding-top: 0.75rem;
     border-top: 1px solid #e5e7eb;
     flex-shrink: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.legend-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.legend-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+}
+
+.legend-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.legend-gradient {
+    flex: 1;
+    height: 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.legend-gradient-late {
+    background: linear-gradient(90deg, #fff3cd 0%, #ffd582 20%, #ffb43c 45%, #fd8b24 65%, #ca3f11 100%);
+}
+
+.legend-gradient-excused {
+    background: linear-gradient(90deg, #f0f9ff 0%, #bce7ff 20%, #90d5ff 45%, #63c2ff 65%, #1156a1 100%);
 }
 
 .heatmap-inline-legend {
@@ -3881,18 +3934,19 @@ async function showStudentProfile(student) {
 }
 
 .legend-dot.late {
-    background-color: #fbbf24;
+    background-color: #f97316;
 }
 
 .legend-dot.excused {
-    background-color: #38bdf8;
+    background-color: #0ea5e9;
 }
 
-.legend-gradient {
-    width: 120px;
-    height: 14px;
-    border-radius: 999px;
-    background: linear-gradient(to right, rgba(255, 243, 205, 1), rgba(253, 139, 36, 1), rgba(17, 86, 161, 1));
-    border: 1px solid rgba(148, 163, 184, 0.4);
+.location-legend {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.72rem;
+    color: #6b7280;
 }
 </style>
