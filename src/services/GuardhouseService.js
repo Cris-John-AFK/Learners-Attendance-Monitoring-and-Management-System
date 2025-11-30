@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 
 class GuardhouseService {
     /**
@@ -60,7 +60,7 @@ class GuardhouseService {
     static async getTodayRecords(filters = {}) {
         try {
             const params = new URLSearchParams();
-            
+
             if (filters.date) params.append('date', filters.date);
             if (filters.record_type) params.append('record_type', filters.record_type);
             if (filters.search) params.append('search', filters.search);

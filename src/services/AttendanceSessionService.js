@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 
 class AttendanceSessionService {
     /**
@@ -202,36 +202,32 @@ class AttendanceSessionService {
     async markSeatPlanAttendance(sessionId, seatPlan, attendanceStatuses) {
         try {
             const attendanceData = [];
-            
+
             // Extract attendance data from seat plan
-            seatPlan.forEach(row => {
-                row.forEach(seat => {
+            seatPlan.forEach((row) => {
+                row.forEach((seat) => {
                     if (seat.isOccupied && seat.studentId && seat.status !== null) {
                         // Map seat status to attendance status ID
                         let statusId;
                         switch (seat.status) {
                             case 1: // Present
-                                statusId = attendanceStatuses.find(s => s.code === 'P')?.id;
+                                statusId = attendanceStatuses.find((s) => s.code === 'P')?.id;
                                 break;
                             case 2: // Absent
-                                statusId = attendanceStatuses.find(s => s.code === 'A')?.id;
+                                statusId = attendanceStatuses.find((s) => s.code === 'A')?.id;
                                 break;
                             case 3: // Late
-                                statusId = attendanceStatuses.find(s => s.code === 'L')?.id;
+                                statusId = attendanceStatuses.find((s) => s.code === 'L')?.id;
                                 break;
                             case 4: // Excused
-                                statusId = attendanceStatuses.find(s => s.code === 'E')?.id;
+                                statusId = attendanceStatuses.find((s) => s.code === 'E')?.id;
                                 break;
                             default:
-                                statusId = attendanceStatuses.find(s => s.code === 'P')?.id; // Default to Present
+                                statusId = attendanceStatuses.find((s) => s.code === 'P')?.id; // Default to Present
                         }
 
                         if (statusId) {
-                            attendanceData.push(this.formatAttendanceForAPI(
-                                seat.studentId,
-                                statusId,
-                                seat.remarks || null
-                            ));
+                            attendanceData.push(this.formatAttendanceForAPI(seat.studentId, statusId, seat.remarks || null));
                         }
                     }
                 });
@@ -298,28 +294,28 @@ class AttendanceSessionService {
      */
     validateSessionData(sessionData) {
         const errors = [];
-        
+
         if (!sessionData.teacherId) {
             errors.push('Teacher ID is required');
         }
-        
+
         if (!sessionData.sectionId) {
             errors.push('Section ID is required');
         }
-        
+
         if (!sessionData.date) {
             errors.push('Session date is required');
         }
-        
+
         // Check if date is not in the future
         const sessionDate = new Date(sessionData.date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         if (sessionDate > today) {
             errors.push('Cannot create sessions for future dates');
         }
-        
+
         return {
             isValid: errors.length === 0,
             errors

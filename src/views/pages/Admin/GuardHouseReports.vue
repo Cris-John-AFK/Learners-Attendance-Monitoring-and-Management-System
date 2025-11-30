@@ -223,22 +223,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useToast } from 'primevue/usetoast';
-import Button from 'primevue/button';
+import { queueApiRequest } from '@/services/ApiRequestManager';
+import axios from 'axios';
 import Badge from 'primevue/badge';
-import Calendar from 'primevue/calendar';
-import InputText from 'primevue/inputtext';
-import Dropdown from 'primevue/dropdown';
-import DataTable from 'primevue/datatable';
+import Button from 'primevue/button';
 import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
 import Tag from 'primevue/tag';
 import Toast from 'primevue/toast';
-import axios from 'axios';
-import { queueApiRequest } from '@/services/ApiRequestManager';
+import { useToast } from 'primevue/usetoast';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const toast = useToast();
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 // State
 const scannerEnabled = ref(true);
 const checkInRecords = ref([]);

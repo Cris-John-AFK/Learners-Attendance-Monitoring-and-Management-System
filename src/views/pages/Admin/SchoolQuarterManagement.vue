@@ -11,16 +11,7 @@
             </div>
 
             <!-- Quarters DataTable -->
-            <DataTable 
-                :value="quarters" 
-                :loading="loading"
-                paginator 
-                :rows="10"
-                dataKey="id"
-                :rowHover="true"
-                showGridlines
-                responsiveLayout="scroll"
-            >
+            <DataTable :value="quarters" :loading="loading" paginator :rows="10" dataKey="id" :rowHover="true" showGridlines responsiveLayout="scroll">
                 <Column field="school_year" header="School Year" sortable>
                     <template #body="{ data }">
                         <span class="font-semibold">{{ data.school_year }}</span>
@@ -83,15 +74,7 @@
                 <!-- Quarter Selection -->
                 <div class="field">
                     <label for="quarter" class="font-semibold">Quarter *</label>
-                    <Dropdown 
-                        id="quarter"
-                        v-model="quarterForm.quarter"
-                        :options="quarterOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Select quarter"
-                        class="w-full"
-                    />
+                    <Dropdown id="quarter" v-model="quarterForm.quarter" :options="quarterOptions" optionLabel="label" optionValue="value" placeholder="Select quarter" class="w-full" />
                 </div>
 
                 <!-- Date Range -->
@@ -124,8 +107,8 @@
             <div class="flex items-center gap-3">
                 <i class="pi pi-exclamation-triangle text-red-500" style="font-size: 2rem"></i>
                 <span>
-                    Are you sure you want to delete <strong>{{ quarterToDelete?.quarter }} - {{ quarterToDelete?.school_year }}</strong>?
-                    <br><br>
+                    Are you sure you want to delete <strong>{{ quarterToDelete?.quarter }} - {{ quarterToDelete?.school_year }}</strong
+                    >? <br /><br />
                     This will also remove all teacher access permissions for this quarter.
                 </span>
             </div>
@@ -138,8 +121,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 const toast = useToast();
@@ -176,25 +159,26 @@ const quarterOptions = [
 async function loadQuarters() {
     loading.value = true;
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/school-quarters');
-        
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/school-quarters`);
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         quarters.value = data;
-        
+
         console.log('✅ Loaded school quarters:', quarters.value.length);
     } catch (error) {
         console.error('❌ Error loading quarters:', error);
         // Initialize with empty array so page still works
         quarters.value = [];
-        toast.add({ 
-            severity: 'warn', 
-            summary: 'Warning', 
-            detail: 'Could not load quarters. Backend API may not be available.', 
-            life: 5000 
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Could not load quarters. Backend API may not be available.',
+            life: 5000
         });
     } finally {
         loading.value = false;
@@ -203,17 +187,17 @@ async function loadQuarters() {
 
 function openQuarterDialog() {
     editingQuarter.value = null;
-    
+
     // Get current school year (e.g., 2024-2025)
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
-    
+
     // If we're in August or later, school year is current-next year
     // Otherwise, it's previous-current year
     const schoolYearStart = currentMonth >= 7 ? currentYear : currentYear - 1;
     const schoolYearEnd = schoolYearStart + 1;
-    
+
     quarterForm.value = {
         school_year: `${schoolYearStart}-${schoolYearEnd}`,
         quarter: '1st',
@@ -238,13 +222,12 @@ function editQuarter(quarter) {
 
 async function saveQuarter() {
     // Validate required fields
-    if (!quarterForm.value.school_year || !quarterForm.value.quarter || 
-        !quarterForm.value.start_date || !quarterForm.value.end_date) {
-        toast.add({ 
-            severity: 'warn', 
-            summary: 'Validation Error', 
-            detail: 'Please fill in all required fields', 
-            life: 3000 
+    if (!quarterForm.value.school_year || !quarterForm.value.quarter || !quarterForm.value.start_date || !quarterForm.value.end_date) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Validation Error',
+            detail: 'Please fill in all required fields',
+            life: 3000
         });
         return;
     }
@@ -264,38 +247,40 @@ async function saveQuarter() {
         let response;
         if (editingQuarter.value) {
             // Update existing quarter
-            response = await fetch(`http://127.0.0.1:8000/api/school-quarters/${editingQuarter.value.id}`, {
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            response = await fetch(`${apiUrl}/api/school-quarters/${editingQuarter.value.id}`, {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(quarterData)
             });
-            
+
             if (response.ok) {
-                toast.add({ 
-                    severity: 'success', 
-                    summary: 'Success', 
-                    detail: 'Quarter updated successfully!', 
-                    life: 3000 
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: 'Quarter updated successfully!',
+                    life: 3000
                 });
             }
         } else {
             // Create new quarter
-            response = await fetch('http://127.0.0.1:8000/api/school-quarters', {
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            response = await fetch(`${apiUrl}/api/school-quarters`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(quarterData)
             });
-            
+
             if (response.ok) {
-                toast.add({ 
-                    severity: 'success', 
-                    summary: 'Success', 
-                    detail: `${quarterForm.value.quarter} Quarter for ${quarterForm.value.school_year} has been created!`, 
-                    life: 3000 
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: `${quarterForm.value.quarter} Quarter for ${quarterForm.value.school_year} has been created!`,
+                    life: 3000
                 });
             }
         }
@@ -308,11 +293,11 @@ async function saveQuarter() {
         loadQuarters();
     } catch (error) {
         console.error('❌ Error saving quarter:', error);
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Error', 
-            detail: 'Failed to save school quarter', 
-            life: 3000 
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to save school quarter',
+            life: 3000
         });
     } finally {
         saving.value = false;
@@ -339,7 +324,8 @@ function confirmDeleteQuarter(quarter) {
 async function deleteQuarter() {
     deleting.value = true;
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/school-quarters/${quarterToDelete.value.id}`, {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/school-quarters/${quarterToDelete.value.id}`, {
             method: 'DELETE'
         });
 

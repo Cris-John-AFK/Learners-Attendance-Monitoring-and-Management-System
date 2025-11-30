@@ -417,7 +417,8 @@ const loadStudents = async () => {
         loading.value = true;
 
         // Fetch submitted SF2 reports from Laravel API
-        const response = await fetch('http://127.0.0.1:8000/api/sf2/submitted', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/sf2/submitted`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -557,7 +558,8 @@ const viewSF2Report = async (reportData) => {
 
         // First, try to get the submitted report to see what section ID was actually used
         try {
-            const submittedResponse = await fetch('http://127.0.0.1:8000/api/sf2/submitted');
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const submittedResponse = await fetch(`${apiUrl}/api/sf2/submitted`);
             if (submittedResponse.ok) {
                 const submittedReports = await submittedResponse.json();
                 console.log('All submitted reports:', submittedReports);
@@ -577,7 +579,8 @@ const viewSF2Report = async (reportData) => {
             console.error('Error fetching submitted reports:', error);
         }
 
-        console.log('Final API URL:', `http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        console.log('Final API URL:', `${apiUrl}/api/teacher/reports/sf2/data/${sectionId}/${month}`);
         console.log('=== ADMIN CALLING SAME API AS TEACHER ===');
         console.log('If teacher uses section ID 2 for Matatag, admin should also use section ID 2');
         console.log('If teacher gets real students, admin should get same students');
@@ -589,156 +592,154 @@ const viewSF2Report = async (reportData) => {
 
         try {
             // Try to get the exact submitted data first
-            response = await fetch(`http://127.0.0.1:8000/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
+            response = await fetch(`${apiUrl}/api/admin/reports/sf2/submitted/${sectionId}/${month}`);
             if (response.ok) {
                 usingSubmittedData = true;
                 console.log('Using submitted SF2 data (exact teacher submission)');
             } else {
-                throw new Error('Submitted data not found');
+                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
             }
-        } catch (error) {
-            console.log('Submitted data not available, falling back to live API');
-            // Fallback to live teacher API
-            response = await fetch(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId}/${month}`);
-        }
 
-        if (!response.ok) {
-            console.error('API Error:', response.status, response.statusText);
-            const errorText = await response.text();
-            console.error('API Error Response:', errorText);
-            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-        }
+            const data = await response.json();
 
-        const data = await response.json();
+            console.log('API Response:', data);
+            console.log('Students in response:', data.data?.students);
+            console.log('Number of students:', data.data?.students?.length);
+            console.log('First student:', data.data?.students?.[0]);
+            console.log(
+                'Student names:',
+                data.data?.students?.map((s) => `${s.firstName} ${s.lastName}`)
+            );
 
-        console.log('API Response:', data);
-        console.log('Students in response:', data.data?.students);
-        console.log('Number of students:', data.data?.students?.length);
-        console.log('First student:', data.data?.students?.[0]);
-        console.log(
-            'Student names:',
-            data.data?.students?.map((s) => `${s.firstName} ${s.lastName}`)
-        );
+            // Debug attendance data for first student
+            if (data.data?.students?.[0]) {
+                const firstStudent = data.data.students[0];
+                console.log('=== ATTENDANCE DATA DEBUG ===');
+                console.log('First student attendance_data:', firstStudent.attendance_data);
+                console.log('Sample attendance marks:');
+                Object.keys(firstStudent.attendance_data || {})
+                    .slice(0, 5)
+                    .forEach((date) => {
+                        console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
+                    });
+            }
 
-        // Debug attendance data for first student
-        if (data.data?.students?.[0]) {
-            const firstStudent = data.data.students[0];
-            console.log('=== ATTENDANCE DATA DEBUG ===');
-            console.log('First student attendance_data:', firstStudent.attendance_data);
-            console.log('Sample attendance marks:');
-            Object.keys(firstStudent.attendance_data || {})
-                .slice(0, 5)
-                .forEach((date) => {
-                    console.log(`  ${date}: ${firstStudent.attendance_data[date]}`);
-                });
-        }
+            // Process the API response data
+            if (data.success && data.data && data.data.students && data.data.students.length > 0) {
+                sf2ReportData.value = data.data;
 
-        // Process the API response data
-        if (data.success && data.data && data.data.students && data.data.students.length > 0) {
-            sf2ReportData.value = data.data;
+                console.log('SF2 Data loaded:', sf2ReportData.value);
+                console.log('Students loaded:', sf2ReportData.value.students);
 
-            console.log('SF2 Data loaded:', sf2ReportData.value);
-            console.log('Students loaded:', sf2ReportData.value.students);
+                // Check if we're getting sample data (fallback from backend)
+                const firstStudent = data.data.students[0];
+                const isSampleData = (firstStudent && firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') || (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
 
-            // Check if we're getting sample data (fallback from backend)
-            const firstStudent = data.data.students[0];
-            const isSampleData = (firstStudent && firstStudent.firstName === 'Juan' && firstStudent.lastName === 'Dela Cruz') || (firstStudent.firstName === 'Maria' && firstStudent.lastName === 'Cruz');
+                if (isSampleData) {
+                    console.warn('WARNING: Getting sample data from backend - trying alternative approach');
 
-            if (isSampleData) {
-                console.warn('WARNING: Getting sample data from backend - trying alternative approach');
+                    // Try to get real students from students API and match by section name
+                    try {
+                        const studentsResponse = await fetch(`${apiUrl}/api/students`);
+                        if (studentsResponse.ok) {
+                            const studentsData = await studentsResponse.json();
+                            const sectionName = reportData.section || reportData.section_name;
 
-                // Try to get real students from students API and match by section name
-                try {
-                    const studentsResponse = await fetch('http://127.0.0.1:8000/api/students');
-                    if (studentsResponse.ok) {
-                        const studentsData = await studentsResponse.json();
-                        const sectionName = reportData.section || reportData.section_name;
+                            // Filter students by section name or look for specific students from teacher's view
+                            let realStudents = studentsData.filter(
+                                (student) => student.section === sectionName || student.current_section_name === sectionName || student.gradeLevel === 'Grade 1' // Fallback for Matatag section
+                            );
 
-                        // Filter students by section name or look for specific students from teacher's view
-                        let realStudents = studentsData.filter(
-                            (student) => student.section === sectionName || student.current_section_name === sectionName || student.gradeLevel === 'Grade 1' // Fallback for Matatag section
-                        );
+                            // Log all students to see what's available
+                            console.log('All students from API:', studentsData);
+                            console.log('Filtered students for section:', realStudents);
 
-                        // Log all students to see what's available
-                        console.log('All students from API:', studentsData);
-                        console.log('Filtered students for section:', realStudents);
+                            if (realStudents.length > 0) {
+                                console.log('Found real students via alternative method:', realStudents);
 
-                        if (realStudents.length > 0) {
-                            console.log('Found real students via alternative method:', realStudents);
+                                // Replace sample data with real students
+                                sf2ReportData.value.students = realStudents.map((student) => ({
+                                    id: student.id,
+                                    name: `${student.lastName || student.last_name}, ${student.firstName || student.first_name} ${student.middleName || student.middle_name || ''}`,
+                                    firstName: student.firstName || student.first_name,
+                                    lastName: student.lastName || student.last_name,
+                                    middleName: student.middleName || student.middle_name,
+                                    gender: student.gender,
+                                    attendance_data: {}, // Empty for now
+                                    total_present: 0,
+                                    total_absent: 0,
+                                    attendance_rate: 0
+                                }));
 
-                            // Replace sample data with real students
-                            sf2ReportData.value.students = realStudents.map((student) => ({
-                                id: student.id,
-                                name: `${student.lastName || student.last_name}, ${student.firstName || student.first_name} ${student.middleName || student.middle_name || ''}`,
-                                firstName: student.firstName || student.first_name,
-                                lastName: student.lastName || student.last_name,
-                                middleName: student.middleName || student.middle_name,
-                                gender: student.gender,
-                                attendance_data: {}, // Empty for now
-                                total_present: 0,
-                                total_absent: 0,
-                                attendance_rate: 0
-                            }));
-
-                            toast.add({
-                                severity: 'success',
-                                summary: 'Real Students Found',
-                                detail: `Found ${realStudents.length} real students via alternative method`,
-                                life: 4000
-                            });
-                        } else {
-                            toast.add({
-                                severity: 'warn',
-                                summary: 'Sample Data Only',
-                                detail: `No real students found for section ${sectionName} - showing sample data`,
-                                life: 6000
-                            });
+                                toast.add({
+                                    severity: 'success',
+                                    summary: 'Real Students Found',
+                                    detail: `Found ${realStudents.length} real students via alternative method`,
+                                    life: 4000
+                                });
+                            } else {
+                                toast.add({
+                                    severity: 'warn',
+                                    summary: 'Sample Data Only',
+                                    detail: `No real students found for section ${sectionName} - showing sample data`,
+                                    life: 6000
+                                });
+                            }
                         }
+                    } catch (error) {
+                        console.error('Error fetching real students:', error);
+                        toast.add({
+                            severity: 'warn',
+                            summary: 'Sample Data Only',
+                            life: 6000
+                        });
                     }
-                } catch (error) {
-                    console.error('Error fetching real students:', error);
+                } else {
+                    // Show detailed information about what data was loaded
+                    const studentNames = data.data.students.map((s) => `${s.firstName} ${s.lastName}`).join(', ');
+                    const dataSource = usingSubmittedData ? 'SUBMITTED DATA' : 'LIVE API';
                     toast.add({
-                        severity: 'warn',
-                        summary: 'Sample Data Only',
-                        life: 6000
+                        severity: usingSubmittedData ? 'success' : 'info',
+                        summary: `SF2 Data Loaded (${dataSource})`,
+                        detail: usingSubmittedData ? `Showing exact data teacher submitted: ${studentNames}` : `Using live API data: ${studentNames}`,
+                        life: 8000
                     });
                 }
             } else {
-                // Show detailed information about what data was loaded
-                const studentNames = data.data.students.map((s) => `${s.firstName} ${s.lastName}`).join(', ');
-                const dataSource = usingSubmittedData ? 'SUBMITTED DATA' : 'LIVE API';
+                // Show warning that no real data was found
                 toast.add({
-                    severity: usingSubmittedData ? 'success' : 'info',
-                    summary: `SF2 Data Loaded (${dataSource})`,
-                    detail: usingSubmittedData ? `Showing exact data teacher submitted: ${studentNames}` : `Using live API data: ${studentNames}`,
-                    life: 8000
+                    severity: 'warn',
+                    summary: 'No SF2 Data Found',
+                    detail: `No submitted SF2 report found for ${reportData.section} - ${month}`,
+                    life: 5000
                 });
+
+                // Set empty data structure
+                sf2ReportData.value = {
+                    students: [],
+                    days_in_month: [],
+                    school_info: {
+                        school_name: 'Naawan Central School',
+                        school_id: '123456',
+                        grade_level: 'Grade 1',
+                        section: reportData.section || 'Unknown Section'
+                    },
+                    summary: {
+                        total_students: 0,
+                        total_male: 0,
+                        total_female: 0
+                    }
+                };
             }
-        } else {
+        } catch (innerError) {
+            console.error('Error fetching SF2 data:', innerError);
             // Show warning that no real data was found
             toast.add({
                 severity: 'warn',
                 summary: 'No SF2 Data Found',
-                detail: `No submitted SF2 report found for ${reportData.section} - ${month}`,
+                detail: `Failed to load SF2 report: ${innerError.message}`,
                 life: 5000
             });
-
-            // Set empty data structure
-            sf2ReportData.value = {
-                students: [],
-                days_in_month: [],
-                school_info: {
-                    school_name: 'Naawan Central School',
-                    school_id: '123456',
-                    grade_level: 'Grade 1',
-                    section: reportData.section || 'Unknown Section'
-                },
-                summary: {
-                    total_students: 0,
-                    total_male: 0,
-                    total_female: 0
-                }
-            };
         }
     } catch (error) {
         console.error('Error loading SF2 report:', error);
@@ -794,7 +795,8 @@ const downloadSF2Report = async (reportData) => {
         }
 
         // Construct the download URL
-        const downloadUrl = `http://127.0.0.1:8000/api/teacher/reports/sf2/download/${reportData.section_id}/${month}`;
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const downloadUrl = `${apiUrl}/api/teacher/reports/sf2/download/${reportData.section_id}/${month}`;
 
         // Create a temporary link and trigger download
         const link = document.createElement('a');

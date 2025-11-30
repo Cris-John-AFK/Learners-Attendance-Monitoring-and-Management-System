@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 
 class SmartAnalyticsService {
     constructor() {
@@ -8,7 +8,7 @@ class SmartAnalyticsService {
             baseURL: API_BASE_URL,
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             }
         });
 
@@ -88,7 +88,7 @@ class SmartAnalyticsService {
             if (teacherId) {
                 params.teacher_id = teacherId;
             }
-            
+
             const response = await this.api.get(`/analytics/student/${studentId}/weekly`, { params });
             return response.data;
         } catch (error) {
@@ -188,10 +188,10 @@ class SmartAnalyticsService {
      */
     getRiskColorClass(riskLevel) {
         const colors = {
-            'low': 'text-green-600 bg-green-100 border-green-200',
-            'medium': 'text-yellow-600 bg-yellow-100 border-yellow-200',
-            'high': 'text-orange-600 bg-orange-100 border-orange-200',
-            'critical': 'text-red-600 bg-red-100 border-red-200'
+            low: 'text-green-600 bg-green-100 border-green-200',
+            medium: 'text-yellow-600 bg-yellow-100 border-yellow-200',
+            high: 'text-orange-600 bg-orange-100 border-orange-200',
+            critical: 'text-red-600 bg-red-100 border-red-200'
         };
         return colors[riskLevel] || 'text-gray-500 bg-gray-100 border-gray-200';
     }
@@ -201,10 +201,10 @@ class SmartAnalyticsService {
      */
     getUrgencyColorClass(urgency) {
         const colors = {
-            'low': 'text-green-600 bg-green-50 border-green-200',
-            'medium': 'text-yellow-600 bg-yellow-50 border-yellow-200',
-            'high': 'text-orange-600 bg-orange-50 border-orange-200',
-            'critical': 'text-red-600 bg-red-50 border-red-200'
+            low: 'text-green-600 bg-green-50 border-green-200',
+            medium: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+            high: 'text-orange-600 bg-orange-50 border-orange-200',
+            critical: 'text-red-600 bg-red-50 border-red-200'
         };
         return colors[urgency] || 'text-gray-500 bg-gray-50 border-gray-200';
     }
@@ -224,10 +224,10 @@ class SmartAnalyticsService {
      */
     getRiskIcon(riskLevel) {
         const icons = {
-            'low': '✅',
-            'medium': '⚠️',
-            'high': '🔶',
-            'critical': '🚨'
+            low: '✅',
+            medium: '⚠️',
+            high: '🔶',
+            critical: '🚨'
         };
         return icons[riskLevel] || '❓';
     }

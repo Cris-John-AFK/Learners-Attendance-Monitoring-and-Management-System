@@ -921,6 +921,7 @@ const initializeComponent = async () => {
             console.log(`Loading cached data for teacher ID: ${teacherId.value}`);
 
             // Use preload function for optimal performance
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
             const {
                 assignments,
                 sections: allSections,
@@ -928,7 +929,7 @@ const initializeComponent = async () => {
             } = await teacherDataCache.preloadTeacherData(
                 teacherId.value,
                 axios.create({
-                    baseURL: 'http://127.0.0.1:8000'
+                    baseURL: apiUrl
                 })
             );
 
@@ -1000,7 +1001,8 @@ const initializeComponent = async () => {
             // Fallback: Try to load data without caching service
             console.log('🔄 Fallback: Loading data without caching...');
             try {
-                const response = await axios.get(`http://127.0.0.1:8000/api/teachers/${teacherId.value}/assignments`);
+                const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                const response = await axios.get(`${apiUrl}/api/teachers/${teacherId.value}/assignments`);
                 const assignments = Array.isArray(response.data) ? response.data : response.data.assignments || [];
                 const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
 

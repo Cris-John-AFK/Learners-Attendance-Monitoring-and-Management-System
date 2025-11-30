@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
 
 export class AttendanceRecordsService {
     // Cache for storing frequently accessed data
@@ -49,11 +49,11 @@ export class AttendanceRecordsService {
                 section_id: sectionId,
                 week_start: weekStart
             };
-            
+
             if (subjectId) {
                 params.subject_id = subjectId;
             }
-            
+
             const response = await axios.get(`${API_BASE_URL}/attendance-sessions/reports/weekly`, {
                 params
             });
@@ -73,23 +73,23 @@ export class AttendanceRecordsService {
             return await this.getCachedData(cacheKey, async () => {
                 const response = await axios.get(`${API_BASE_URL}/teachers/${teacherId}/assignments`);
                 console.log('Raw API response:', response.data);
-                
+
                 if (!response.data.success) {
                     throw new Error(response.data.message || 'Failed to fetch assignments');
                 }
-                
+
                 const assignments = response.data.assignments || [];
-                
+
                 // Transform assignments directly into sections format
                 // Each assignment already contains section info and subjects
-                const sectionsWithSubjects = assignments.map(assignment => {
+                const sectionsWithSubjects = assignments.map((assignment) => {
                     return {
                         id: assignment.section_id,
                         name: assignment.section_name,
                         subjects: assignment.subjects || []
                     };
                 });
-                
+
                 return {
                     success: true,
                     sections: sectionsWithSubjects
@@ -171,11 +171,11 @@ export class AttendanceRecordsService {
                         week_start: startDate
                     }
                 });
-                
+
                 // Extract dates from the weekly report
                 const sessions = response.data.sessions || [];
-                const dates = sessions.map(session => session.session_date).filter(Boolean);
-                
+                const dates = sessions.map((session) => session.session_date).filter(Boolean);
+
                 return { dates: [...new Set(dates)] }; // Remove duplicates
             });
         } catch (error) {
@@ -212,7 +212,7 @@ export class AttendanceRecordsService {
                 start_date: startDate,
                 end_date: endDate
             };
-            
+
             if (subjectId) {
                 params.subject_id = subjectId;
             }
@@ -232,20 +232,20 @@ export class AttendanceRecordsService {
      */
     static transformToMatrix(sessions, students, dateRange) {
         const matrix = [];
-        
+
         // Create a map of attendance records by student, date, and subject
         const attendanceMap = new Map();
-        
-        sessions.forEach(session => {
+
+        sessions.forEach((session) => {
             const sessionDate = session.session_date;
-            
-            session.attendance_records?.forEach(record => {
+
+            session.attendance_records?.forEach((record) => {
                 const studentKey = `${record.student_id}-${sessionDate}`;
-                
+
                 if (!attendanceMap.has(studentKey)) {
                     attendanceMap.set(studentKey, []);
                 }
-                
+
                 attendanceMap.get(studentKey).push({
                     status: record.attendance_status?.name || 'Unmarked',
                     status_code: record.attendance_status?.code || 'U',
@@ -260,7 +260,7 @@ export class AttendanceRecordsService {
         });
 
         // Create matrix rows for each student
-        students.forEach(student => {
+        students.forEach((student) => {
             const row = {
                 id: student.id,
                 name: student.name || `${student.firstName} ${student.lastName}`,
@@ -270,10 +270,10 @@ export class AttendanceRecordsService {
             };
 
             // Add attendance data for each date
-            dateRange.forEach(date => {
+            dateRange.forEach((date) => {
                 const studentKey = `${student.id}-${date}`;
                 const dayRecords = attendanceMap.get(studentKey) || [];
-                
+
                 if (dayRecords.length === 0) {
                     row[date] = null;
                 } else if (dayRecords.length === 1) {
@@ -281,12 +281,12 @@ export class AttendanceRecordsService {
                     row[date] = dayRecords[0].status;
                 } else {
                     // Multiple subjects - calculate overall status
-                    const statuses = dayRecords.map(r => r.status);
-                    const presentCount = statuses.filter(s => s === 'Present').length;
-                    const absentCount = statuses.filter(s => s === 'Absent').length;
-                    const lateCount = statuses.filter(s => s === 'Late').length;
-                    const excusedCount = statuses.filter(s => s === 'Excused').length;
-                    
+                    const statuses = dayRecords.map((r) => r.status);
+                    const presentCount = statuses.filter((s) => s === 'Present').length;
+                    const absentCount = statuses.filter((s) => s === 'Absent').length;
+                    const lateCount = statuses.filter((s) => s === 'Late').length;
+                    const excusedCount = statuses.filter((s) => s === 'Excused').length;
+
                     // Determine overall status
                     if (absentCount === 0 && lateCount === 0) {
                         row[date] = 'Present'; // All present/excused
@@ -298,7 +298,7 @@ export class AttendanceRecordsService {
                         row[date] = 'Mixed'; // Mixed attendance
                     }
                 }
-                
+
                 // Store detailed records for expandable view
                 row[`${date}_details`] = dayRecords;
             });
@@ -336,7 +336,7 @@ export class AttendanceRecordsService {
         let mixed = 0;
         let total = 0;
 
-        dateColumns.forEach(date => {
+        dateColumns.forEach((date) => {
             const status = studentRow[date];
             if (status) {
                 total++;
@@ -357,8 +357,8 @@ export class AttendanceRecordsService {
                         mixed++;
                         // For mixed days, count as 1 absence if any subject was absent (consistent with main table)
                         const details = studentRow[`${date}_details`] || [];
-                        const hasAbsent = details.some(record => record.status === 'Absent');
-                        const hasLate = details.some(record => record.status === 'Late');
+                        const hasAbsent = details.some((record) => record.status === 'Absent');
+                        const hasLate = details.some((record) => record.status === 'Late');
                         if (hasAbsent) absent++;
                         if (hasLate) late++;
                         break;

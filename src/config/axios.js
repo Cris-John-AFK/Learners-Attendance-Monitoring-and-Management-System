@@ -1,11 +1,12 @@
 import axios from 'axios';
 
 // Define API base URL and export it
-export const API_BASE_URL = 'http://localhost:8000/api';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = apiBaseUrl + '/api';
 
 // Create axios instance with the correct backend URL
 const api = axios.create({
-    baseURL: 'http://localhost:8000',
+    baseURL: apiBaseUrl,
     withCredentials: true,
     timeout: 15000, // Increased to 15 seconds for better reliability
     headers: {
@@ -40,7 +41,7 @@ api.interceptors.request.use(
     async (config) => {
         // Request deduplication - prevent duplicate concurrent requests
         const requestKey = createRequestKey(config);
-        
+
         // Check if there's already a pending request for this exact same call
         if (pendingRequests.has(requestKey)) {
             console.log('🔄 Deduplicating request:', config.url);
@@ -305,8 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastClearTime = localStorage.getItem('last_cache_clear');
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
-    
-    if (!lastClearTime || (now - parseInt(lastClearTime)) > oneHour) {
+
+    if (!lastClearTime || now - parseInt(lastClearTime) > oneHour) {
         console.log('Clearing expired API cache');
         try {
             // Only clear expired cache items

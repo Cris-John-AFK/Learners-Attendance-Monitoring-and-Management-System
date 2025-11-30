@@ -3,7 +3,7 @@
  */
 
 // API URL for backend requests
-export const API_URL = 'http://localhost:8000/api';
+export const API_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
 
 // Other configuration can be added here as needed
 export const APP_NAME = 'Sakai LAMMS';

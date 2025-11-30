@@ -81,7 +81,8 @@ const logout = async () => {
 const loadSubmittedReports = async () => {
     try {
         console.log('🔄 Loading submitted reports...');
-        const response = await fetch('http://127.0.0.1:8000/api/admin/reports/submitted');
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/admin/reports/submitted`);
         const data = await response.json();
 
         if (data.success) {
@@ -158,19 +159,21 @@ const stopPolling = () => {
 // Navigate to collected reports page and highlight specific report
 const goToCollectedReports = (reportId = null) => {
     isNotificationOpen.value = false;
-    
+
     if (reportId) {
         // Navigate with report ID to highlight
         router.push({
             path: '/admin-collected-reports',
             query: { highlight: reportId }
         });
-        
+
         // Also emit event for immediate highlighting
         setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('highlightReport', { 
-                detail: { reportId: reportId }
-            }));
+            window.dispatchEvent(
+                new CustomEvent('highlightReport', {
+                    detail: { reportId: reportId }
+                })
+            );
         }, 500); // Wait for page to load
     } else {
         router.push('/admin-collected-reports');
@@ -343,11 +346,7 @@ onUnmounted(() => {
                     <button type="button" class="layout-topbar-action notification-button" @click="handleNotificationClick">
                         <i class="pi pi-bell" style="font-size: 1.2rem"></i>
                         <!-- Show badge with actual unread count -->
-                        <span 
-                            v-if="unreadCount > 0"
-                            class="notification-badge" 
-                            :class="{ 'new-notification': hasNewNotification }"
-                        >
+                        <span v-if="unreadCount > 0" class="notification-badge" :class="{ 'new-notification': hasNewNotification }">
                             {{ unreadCount }}
                         </span>
                     </button>
@@ -821,7 +820,7 @@ onUnmounted(() => {
 }
 
 .create-button .pi-calendar:before {
-    content: "\e927" !important;
+    content: '\e927' !important;
     font-family: 'primeicons' !important;
     speak: none !important;
     font-style: normal !important;

@@ -1,9 +1,9 @@
 <script setup>
+import Calendar from 'primevue/calendar';
 import { useToast } from 'primevue/usetoast';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import Calendar from 'primevue/calendar';
 
 const toast = useToast();
 const router = useRouter();
@@ -142,10 +142,7 @@ const sectionsByGrade = ref({});
 
 // Computed property to check if any filter is selected
 const hasActiveFilter = computed(() => {
-    return filters.value.grade !== null || 
-           filters.value.section !== null || 
-           filters.value.gender !== null || 
-           filters.value.status !== null;
+    return filters.value.grade !== null || filters.value.section !== null || filters.value.gender !== null || filters.value.status !== null;
 });
 
 const disabilityTypes = [
@@ -168,7 +165,8 @@ const disabilityTypes = [
 // Load sections from database
 const loadSectionsFromDatabase = async () => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/sections', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/sections`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -182,12 +180,12 @@ const loadSectionsFromDatabase = async () => {
 
         const sectionsData = await response.json();
         console.log('Loaded sections from API:', sectionsData);
-        
+
         allSections.value = sectionsData;
-        
+
         // Group sections by grade (removing duplicates)
         const grouped = {};
-        sectionsData.forEach(section => {
+        sectionsData.forEach((section) => {
             // Extract grade name from curriculum_grade relationship
             let gradeName = 'Unknown';
             if (section.curriculum_grade && section.curriculum_grade.grade) {
@@ -195,20 +193,20 @@ const loadSectionsFromDatabase = async () => {
             } else if (section.curriculumGrade && section.curriculumGrade.grade) {
                 gradeName = section.curriculumGrade.grade.name;
             }
-            
+
             if (!grouped[gradeName]) {
                 grouped[gradeName] = [];
             }
-            
+
             // Only add if not already in the array (prevent duplicates)
             if (!grouped[gradeName].includes(section.name)) {
                 grouped[gradeName].push(section.name);
             }
         });
-        
+
         sectionsByGrade.value = grouped;
         console.log('Sections grouped by grade (unique):', grouped);
-        
+
         // Set default sections for filter
         if (filters.value.grade) {
             sections.value = grouped[filters.value.grade] || [];
@@ -227,7 +225,8 @@ const loadSectionsFromDatabase = async () => {
 // Load grades from database
 const loadGradesFromDatabase = async () => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/grades', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/grades`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -241,13 +240,13 @@ const loadGradesFromDatabase = async () => {
 
         const gradesData = await response.json();
         console.log('Loaded grades from API:', gradesData);
-        
+
         // Format grades for dropdown
-        gradeLevels.value = gradesData.map(grade => ({
+        gradeLevels.value = gradesData.map((grade) => ({
             name: grade.name,
             code: grade.name
         }));
-        
+
         grades.value = gradeLevels.value;
     } catch (error) {
         console.error('Error loading grades:', error);
@@ -359,12 +358,14 @@ const getStudentPhotoUrl = (student) => {
 
     // If it's a path starting with /, make it absolute with backend URL
     if (student.photo.startsWith('/')) {
-        return `http://127.0.0.1:8000${student.photo}`;
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        return `${apiUrl}${student.photo}`;
     }
 
     // If it's just a filename in photos directory
     if (student.photo.includes('photos/')) {
-        return `http://127.0.0.1:8000/${student.photo}`;
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        return `${apiUrl}/${student.photo}`;
     }
 
     // Default fallback
@@ -430,7 +431,8 @@ const loadStudents = async () => {
         loading.value = true;
 
         // Fetch students from Laravel API
-        const response = await fetch('http://127.0.0.1:8000/api/students', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/students`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -451,7 +453,7 @@ const loadStudents = async () => {
             const formatted = {
                 ...student,
                 // Map qr_code_path from backend to qrCodePath for frontend
-                qrCodePath: student.qr_code_path ? `http://127.0.0.1:8000/${student.qr_code_path}` : null,
+                qrCodePath: student.qr_code_path ? `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/${student.qr_code_path}` : null,
                 // Ensure other fields are properly mapped
                 photo: student.profilePhoto || student.photo,
                 contact: student.contactInfo || student.parentContact || '',
@@ -542,21 +544,21 @@ function formatAddress(student) {
 function getStudentStatusDisplay(student) {
     // Get the status value
     let status = student.current_status || student.enrollment_status;
-    
+
     // If no enrollment_status, fall back to isActive
     if (!status) {
         return student.isActive ? 'Active' : 'Inactive';
     }
-    
+
     // Format database values for display
     const statusMap = {
-        'active': 'Active',
-        'dropped_out': 'Dropped Out',
-        'transferred_out': 'Transferred Out',
-        'transferred_in': 'Transferred In',
-        'graduated': 'Graduated'
+        active: 'Active',
+        dropped_out: 'Dropped Out',
+        transferred_out: 'Transferred Out',
+        transferred_in: 'Transferred In',
+        graduated: 'Graduated'
     };
-    
+
     return statusMap[status] || status;
 }
 
@@ -579,52 +581,52 @@ function getStudentReason(student) {
     // This matches the exact mapping used in SF2ReportController.php
     const reasonMap = {
         // Category A - Family-related
-        'a1': 'a.1 Had to take care of siblings',
+        a1: 'a.1 Had to take care of siblings',
         'a.1': 'a.1 Had to take care of siblings',
-        'a2': 'a.2 Early marriage/pregnancy',
+        a2: 'a.2 Early marriage/pregnancy',
         'a.2': 'a.2 Early marriage/pregnancy',
-        'a3': 'a.3 Parents\' attitude toward schooling',
-        'a.3': 'a.3 Parents\' attitude toward schooling',
-        'a4': 'a.4 Family problems',
+        a3: "a.3 Parents' attitude toward schooling",
+        'a.3': "a.3 Parents' attitude toward schooling",
+        a4: 'a.4 Family problems',
         'a.4': 'a.4 Family problems',
-        
+
         // Category B - Health/Personal
-        'b1': 'b.1 Illness',
+        b1: 'b.1 Illness',
         'b.1': 'b.1 Illness',
-        'b2': 'b.2 Disease',
+        b2: 'b.2 Disease',
         'b.2': 'b.2 Disease',
-        'b3': 'b.3 Death',
+        b3: 'b.3 Death',
         'b.3': 'b.3 Death',
-        'b4': 'b.4 Disability',
+        b4: 'b.4 Disability',
         'b.4': 'b.4 Disability',
-        'b5': 'b.5 Poor academic performance',
+        b5: 'b.5 Poor academic performance',
         'b.5': 'b.5 Poor academic performance',
-        'b6': 'b.6 Disinterest/lack of ambitions',
+        b6: 'b.6 Disinterest/lack of ambitions',
         'b.6': 'b.6 Disinterest/lack of ambitions',
-        'b7': 'b.7 Hunger/Malnutrition',
+        b7: 'b.7 Hunger/Malnutrition',
         'b.7': 'b.7 Hunger/Malnutrition',
-        
+
         // Category C - School Environment
-        'c1': 'c.1 Teacher Factor',
+        c1: 'c.1 Teacher Factor',
         'c.1': 'c.1 Teacher Factor',
-        'c2': 'c.2 Physical condition of classroom',
+        c2: 'c.2 Physical condition of classroom',
         'c.2': 'c.2 Physical condition of classroom',
-        'c3': 'c.3 Peer Factor',
+        c3: 'c.3 Peer Factor',
         'c.3': 'c.3 Peer Factor',
-        
+
         // Category D - External Factors
-        'd1': 'd.1 Distance from home to school',
+        d1: 'd.1 Distance from home to school',
         'd.1': 'd.1 Distance from home to school',
-        'd2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
+        d2: 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
         'd.2': 'd.2 Armed conflict (incl. Tribal wars & clan feuds)',
-        'd3': 'd.3 Calamities/disaster',
+        d3: 'd.3 Calamities/disaster',
         'd.3': 'd.3 Calamities/disaster',
-        'd4': 'd.4 Work-Related',
+        d4: 'd.4 Work-Related',
         'd.4': 'd.4 Work-Related',
-        'd5': 'd.5 Transferred/work',
+        d5: 'd.5 Transferred/work',
         'd.5': 'd.5 Transferred/work'
     };
-    
+
     if (student.dropout_reason) {
         const code = student.dropout_reason.toLowerCase().trim();
         return reasonMap[code] || student.dropout_reason;
@@ -835,7 +837,8 @@ const saveStudent = async () => {
         if (student.value.id) {
             // Update existing student
             console.log('Updating existing student with ID:', student.value.id);
-            response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            response = await fetch(`${apiUrl}/api/students/${student.value.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -847,7 +850,8 @@ const saveStudent = async () => {
         } else {
             // Create new student
             console.log('Creating new student');
-            response = await fetch('http://127.0.0.1:8000/api/students', {
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            response = await fetch(`${apiUrl}/api/students`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -988,7 +992,7 @@ function editStudent(studentData) {
     if (student.value.gradeLevel) {
         updateStudentSections();
     }
-    
+
     studentDialog.value = true;
 }
 
@@ -1012,12 +1016,10 @@ function openStatusChangeDialog(studentData) {
 const saveStatusChange = async () => {
     try {
         if (!selectedStudentForStatus.value) return;
-        
+
         // Format the effective date properly
-        const effectiveDate = statusEffectiveDate.value instanceof Date 
-            ? statusEffectiveDate.value.toISOString().split('T')[0]
-            : new Date(statusEffectiveDate.value).toISOString().split('T')[0];
-        
+        const effectiveDate = statusEffectiveDate.value instanceof Date ? statusEffectiveDate.value.toISOString().split('T')[0] : new Date(statusEffectiveDate.value).toISOString().split('T')[0];
+
         const updateData = {
             ...selectedStudentForStatus.value,
             current_status: newStudentStatus.value,
@@ -1027,7 +1029,8 @@ const saveStatusChange = async () => {
             status_effective_date: effectiveDate
         };
 
-        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudentForStatus.value.id}`, {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/students/${selectedStudentForStatus.value.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -1065,7 +1068,8 @@ const saveStatusChange = async () => {
 const deleteStudent = async () => {
     try {
         // Delete from database first
-        const response = await fetch(`http://127.0.0.1:8000/api/students/${student.value.id}`, {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/students/${student.value.id}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
@@ -1223,8 +1227,8 @@ function generateTempId() {
             <meta http-equiv="Expires" content="0">
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { 
-                    font-family: 'Arial', sans-serif; 
+                body {
+                    font-family: 'Arial', sans-serif;
                     background: #f0f2f5;
                     padding: 20px;
                     min-height: 100vh;
@@ -1232,14 +1236,14 @@ function generateTempId() {
                     justify-content: center;
                     align-items: center;
                 }
-                
-                .card-wrapper { 
-                    display: flex; 
-                    gap: 30px; 
+
+                .card-wrapper {
+                    display: flex;
+                    gap: 30px;
                     justify-content: center;
                     align-items: center;
                 }
-                
+
                 .id-card {
                     width: 320px;
                     height: 600px;
@@ -1248,14 +1252,14 @@ function generateTempId() {
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                     position: relative;
                 }
-                
+
                 /* FRONT SIDE */
                 .front {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     position: relative;
                     overflow: hidden;
                 }
-                
+
                 .front::before {
                     content: '';
                     position: absolute;
@@ -1266,7 +1270,7 @@ function generateTempId() {
                     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 320'%3E%3Cpath fill='%23ffffff' fill-opacity='0.1' d='M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E") no-repeat bottom;
                     background-size: cover;
                 }
-                
+
                 .front::after {
                     content: '';
                     position: absolute;
@@ -1277,7 +1281,7 @@ function generateTempId() {
                     background: rgba(255,255,255,0.05);
                     border-radius: 50%;
                 }
-                
+
                 .school-logo {
                     position: absolute;
                     top: 20px;
@@ -1292,26 +1296,26 @@ function generateTempId() {
                     justify-content: center;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .school-logo img {
                     width: 40px;
                     height: 40px;
                     object-fit: contain;
                 }
-                
+
                 .school-header {
                     text-align: center;
                     padding: 20px 20px 30px;
                     color: white;
                 }
-                
+
                 .school-name {
                     font-size: 18px;
                     font-weight: bold;
                     margin-top: 75px;
                     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                 }
-                
+
                 .student-photo {
                     width: 100px;
                     height: 100px;
@@ -1322,7 +1326,7 @@ function generateTempId() {
                     margin: 15px auto;
                     box-shadow: 0 6px 20px rgba(0,0,0,0.3);
                 }
-                
+
                 .student-name {
                     color: white;
                     font-size: 20px;
@@ -1331,14 +1335,14 @@ function generateTempId() {
                     margin: 10px 0 5px;
                     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
                 }
-                
+
                 .name-label {
                     color: rgba(255,255,255,0.8);
                     font-size: 11px;
                     text-align: center;
                     margin-bottom: 15px;
                 }
-                
+
                 .qr-code {
                     width: 160px;
                     height: 160px;
@@ -1349,7 +1353,7 @@ function generateTempId() {
                     margin: 15px auto;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .student-info {
                     background: rgba(255,255,255,0.95);
                     margin: 0 20px 15px;
@@ -1358,7 +1362,7 @@ function generateTempId() {
                     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     clear: both;
                 }
-                
+
                 .info-label {
                     color: #2a5298;
                     font-size: 10px;
@@ -1366,46 +1370,46 @@ function generateTempId() {
                     margin-bottom: 1px;
                     text-transform: uppercase;
                 }
-                
+
                 .info-value {
                     color: #333;
                     font-size: 12px;
                     font-weight: 600;
                     line-height: 1.2;
                 }
-                
+
                 /* BACK SIDE */
                 .back {
                     background: #f8f9fa;
                     color: #333;
                 }
-                
+
                 .deped-header {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     color: white;
                     padding: 20px;
                     text-align: center;
                 }
-                
+
                 .deped-logo {
                     font-size: 24px;
                     font-weight: bold;
                     margin-bottom: 5px;
                 }
-                
+
                 .deped-subtitle {
                     font-size: 12px;
                     opacity: 0.9;
                 }
-                
+
                 .back-content {
                     padding: 25px 20px;
                 }
-                
+
                 .info-section {
                     margin-bottom: 20px;
                 }
-                
+
                 .section-title {
                     color: #2a5298;
                     font-weight: bold;
@@ -1413,7 +1417,7 @@ function generateTempId() {
                     margin-bottom: 8px;
                     text-transform: uppercase;
                 }
-                
+
                 .info-box {
                     background: white;
                     padding: 10px;
@@ -1423,7 +1427,7 @@ function generateTempId() {
                     line-height: 1.4;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                 }
-                
+
                 .signature-area {
                     text-align: center;
                     margin: 25px 0;
@@ -1432,20 +1436,20 @@ function generateTempId() {
                     border-radius: 8px;
                     border: 2px dashed #ddd;
                 }
-                
+
                 .signature-line {
                     border-bottom: 2px solid #333;
                     width: 120px;
                     margin: 0 auto 8px;
                     height: 25px;
                 }
-                
+
                 .signature-label {
                     font-size: 11px;
                     font-weight: bold;
                     color: #666;
                 }
-                
+
                 .validity-box {
                     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                     color: white;
@@ -1456,20 +1460,20 @@ function generateTempId() {
                     font-size: 13px;
                     margin-bottom: 10px;
                 }
-                
+
                 .non-transferable {
                     text-align: center;
                     font-size: 10px;
                     color: #666;
                     font-style: italic;
                 }
-                
+
                 /* Buttons */
                 .no-print {
                     text-align: center;
                     margin-top: 30px;
                 }
-                
+
                 .btn {
                     background: linear-gradient(135deg, #2a5298, #1e3c72);
                     color: white;
@@ -1482,28 +1486,28 @@ function generateTempId() {
                     transition: all 0.3s ease;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 }
-                
+
                 .btn:hover {
                     transform: translateY(-2px);
                     box-shadow: 0 6px 16px rgba(0,0,0,0.3);
                 }
-                
+
                 /* Print Styles */
                 @media print {
                     * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-                    body { 
-                        background: white !important; 
-                        padding: 0 !important; 
+                    body {
+                        background: white !important;
+                        padding: 0 !important;
                         margin: 0 !important;
                     }
-                    .card-wrapper { 
-                        gap: 15px; 
+                    .card-wrapper {
+                        gap: 15px;
                         page-break-inside: avoid;
                         display: flex !important;
                         flex-direction: row !important;
                     }
-                    .id-card { 
-                        box-shadow: none !important; 
+                    .id-card {
+                        box-shadow: none !important;
                         page-break-inside: avoid;
                         break-inside: avoid;
                     }
@@ -1533,32 +1537,32 @@ function generateTempId() {
                     <div class="school-logo">
                         <img src="/demo/images/logo.png" alt="School Logo" />
                     </div>
-                    
+
                     <div class="school-header">
                         <div class="school-name">Naawan Central School</div>
                     </div>
-                    
+
                     <img src="${student.photo ? (student.photo.startsWith('data:') ? student.photo : `http://localhost:8000/${student.photo}`) : 'https://via.placeholder.com/120x120?text=Photo'}" class="student-photo" />
-                    
+
                     <div class="student-name">${student.name.toUpperCase()}</div>
                     <div class="name-label">NAME</div>
-                    
+
                     <img src="${qrSrc}" class="qr-code" />
-                    
+
                     <div class="student-info">
                         <div class="info-label">LRN:</div>
                         <div class="info-value">${student.studentId || student.lrn}</div>
                     </div>
-                    
+
                 </div>
-                
+
                 <!-- BACK SIDE -->
                 <div class="id-card back">
                     <div class="deped-header">
                         <div class="deped-logo">DepED</div>
                         <div class="deped-subtitle">DEPARTMENT OF EDUCATION</div>
                     </div>
-                    
+
                     <div class="back-content">
                         <div class="info-section">
                             <div class="section-title">Emergency Contact</div>
@@ -1567,38 +1571,38 @@ function generateTempId() {
                                 <strong>PHONE:</strong> ${student.contact || '484-421-377'}
                             </div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">Allergies/Medical Conditions:</div>
                             <div class="info-box">${student.medicalConditions || 'PEANUT ALLERGY'}</div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">Home Address:</div>
                             <div class="info-box">${student.address || '1244 HORSESHOE LANE NEWARK, PA 19714'}</div>
                         </div>
-                        
+
                         <div class="info-section">
                             <div class="section-title">School Year:</div>
                             <div class="info-box">${new Date().getFullYear()}-${new Date().getFullYear() + 1}</div>
                         </div>
-                        
+
                         <div class="signature-area">
                             <div class="signature-line"></div>
                             <div class="signature-label">SIGNATURE</div>
                         </div>
-                        
+
                         <div class="validity-box">
                             VALIDITY PERIOD: AY ${new Date().getFullYear()}-${new Date().getFullYear() + 1}
                         </div>
-                        
+
                         <div class="non-transferable">
                             THIS ID CARD IS NON-TRANSFERABLE
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <div class="no-print">
                 <button class="btn" onclick="window.print()">Print</button>
                 <button class="btn" onclick="window.close()">Close</button>
@@ -1658,7 +1662,8 @@ async function handlePhotoUpload(event) {
             console.log('Updating student photo for ID:', selectedStudent.value.id);
 
             // Save to database
-            const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiUrl}/api/students/${selectedStudent.value.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1750,7 +1755,8 @@ async function saveInlineProfile() {
 
         // Update student in backend database
         console.log('Updating student with ID:', selectedStudent.value.id);
-        const response = await fetch(`http://127.0.0.1:8000/api/students/${selectedStudent.value.id}`, {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/students/${selectedStudent.value.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -1779,7 +1785,8 @@ async function saveInlineProfile() {
 
         // Update QR code if LRN changed and new QR code path is provided
         if (updatedStudent.qr_code_path && selectedStudent.value.lrn) {
-            const qrPath = `http://127.0.0.1:8000/${updatedStudent.qr_code_path}`;
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const qrPath = `${apiUrl}/${updatedStudent.qr_code_path}`;
             qrCodes.value[selectedStudent.value.lrn] = qrPath;
 
             // Update the student's QR code path in the table
@@ -2188,22 +2195,14 @@ onMounted(() => {
                     <Column header="Status" style="width: 100px">
                         <template #body="slotProps">
                             <div class="flex align-items-center gap-2">
-                                <Tag 
-                                    :value="getStudentStatusDisplay(slotProps.data)" 
-                                    :severity="getStudentStatusSeverity(slotProps.data)" 
-                                />
-                                <Button
-                                    icon="pi pi-pencil"
-                                    class="p-button-rounded p-button-text p-button-sm p-button-info"
-                                    @click="openStatusChangeDialog(slotProps.data)"
-                                    title="Change Student Status"
-                                />
+                                <Tag :value="getStudentStatusDisplay(slotProps.data)" :severity="getStudentStatusSeverity(slotProps.data)" />
+                                <Button icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm p-button-info" @click="openStatusChangeDialog(slotProps.data)" title="Change Student Status" />
                             </div>
                         </template>
                     </Column>
                     <Column header="Reason" style="min-width: 200px; max-width: 300px">
                         <template #body="slotProps">
-                            <div class="text-sm" style="white-space: normal; word-wrap: break-word;">
+                            <div class="text-sm" style="white-space: normal; word-wrap: break-word">
                                 {{ getStudentReason(slotProps.data) || 'N/A' }}
                             </div>
                         </template>
@@ -2982,7 +2981,6 @@ onMounted(() => {
             </div>
         </Dialog>
 
-
         <!-- Status Change Dialog -->
         <Dialog v-model:visible="statusChangeDialog" modal header="Change Student Status" :style="{ width: '500px' }">
             <div class="p-4">
@@ -2990,12 +2988,12 @@ onMounted(() => {
                     <h4 class="mb-2">Student: {{ selectedStudentForStatus?.name }}</h4>
                     <p class="text-sm text-gray-600">Current Status: {{ getStudentStatusDisplay(selectedStudentForStatus) }}</p>
                 </div>
-                
+
                 <div class="field mb-4">
                     <label for="newStatus" class="block text-sm font-medium mb-2">New Status</label>
-                    <Dropdown 
+                    <Dropdown
                         id="newStatus"
-                        v-model="newStudentStatus" 
+                        v-model="newStudentStatus"
                         :options="[
                             { label: 'Active', value: 'active' },
                             { label: 'Dropped Out', value: 'dropped_out' },
@@ -3009,30 +3007,17 @@ onMounted(() => {
                         class="w-full"
                     />
                 </div>
-                
+
                 <div class="field mb-4">
                     <label for="effectiveDate" class="block text-sm font-medium mb-2">Effective Date</label>
-                    <Calendar 
-                        id="effectiveDate"
-                        v-model="statusEffectiveDate" 
-                        dateFormat="yy-mm-dd" 
-                        :showIcon="true" 
-                        class="w-full"
-                        placeholder="Select effective date"
-                    />
+                    <Calendar id="effectiveDate" v-model="statusEffectiveDate" dateFormat="yy-mm-dd" :showIcon="true" class="w-full" placeholder="Select effective date" />
                 </div>
-                
+
                 <div class="field mb-4">
                     <label for="statusReason" class="block text-sm font-medium mb-2">Notes</label>
-                    <Textarea 
-                        id="statusReason"
-                        v-model="statusChangeReason" 
-                        rows="3" 
-                        placeholder="Enter reason for status change..."
-                        class="w-full"
-                    />
+                    <Textarea id="statusReason" v-model="statusChangeReason" rows="3" placeholder="Enter reason for status change..." class="w-full" />
                 </div>
-                
+
                 <div class="flex justify-end space-x-2 mt-4">
                     <Button label="Cancel" class="p-button-text" @click="statusChangeDialog = false" />
                     <Button label="Save Changes" icon="pi pi-check" class="p-button-primary" @click="saveStatusChange" />
@@ -3601,7 +3586,6 @@ onMounted(() => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-
 /* Improved table layout without horizontal scroll */
 .modern-datatable {
     border-radius: 8px;
@@ -3895,6 +3879,3 @@ onMounted(() => {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 </style>
-
-
-

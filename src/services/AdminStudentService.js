@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 
 class AdminStudentService {
     constructor() {
@@ -8,7 +8,7 @@ class AdminStudentService {
             baseURL: API_BASE_URL,
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                Accept: 'application/json'
             }
         });
 
@@ -66,17 +66,16 @@ class AdminStudentService {
         }
     }
 
-
     /**
      * Get available student statuses
      */
     getAvailableStatuses() {
         return {
-            'active': { label: 'Active', color: 'text-green-600 bg-green-100', icon: '✅' },
-            'dropped_out': { label: 'Dropped Out', color: 'text-red-600 bg-red-100', icon: '❌' },
-            'transferred_out': { label: 'Transferred Out', color: 'text-blue-600 bg-blue-100', icon: '🔄' },
-            'suspended': { label: 'Suspended', color: 'text-orange-600 bg-orange-100', icon: '⏸️' },
-            'medical_leave': { label: 'Medical Leave', color: 'text-purple-600 bg-purple-100', icon: '🏥' }
+            active: { label: 'Active', color: 'text-green-600 bg-green-100', icon: '✅' },
+            dropped_out: { label: 'Dropped Out', color: 'text-red-600 bg-red-100', icon: '❌' },
+            transferred_out: { label: 'Transferred Out', color: 'text-blue-600 bg-blue-100', icon: '🔄' },
+            suspended: { label: 'Suspended', color: 'text-orange-600 bg-orange-100', icon: '⏸️' },
+            medical_leave: { label: 'Medical Leave', color: 'text-purple-600 bg-purple-100', icon: '🏥' }
         };
     }
 
@@ -85,10 +84,10 @@ class AdminStudentService {
      */
     getReasonCategories() {
         return {
-            'suspended': 'Suspended',
-            'medical_reasons': 'Medical Reasons',
-            'moving_away': 'Moving Away',
-            'others': 'Others'
+            suspended: 'Suspended',
+            medical_reasons: 'Medical Reasons',
+            moving_away: 'Moving Away',
+            others: 'Others'
         };
     }
 
@@ -154,12 +153,12 @@ class AdminStudentService {
      */
     formatStudentName(student) {
         if (!student) return 'Unknown Student';
-        
+
         const parts = [];
         if (student.firstName) parts.push(student.firstName);
         if (student.middleName) parts.push(student.middleName);
         if (student.lastName) parts.push(student.lastName);
-        
+
         return parts.length > 0 ? parts.join(' ') : student.name || 'Unknown Student';
     }
 
@@ -168,12 +167,12 @@ class AdminStudentService {
      */
     getDaysSinceStatusChange(statusChangeDate) {
         if (!statusChangeDate) return null;
-        
+
         const changeDate = new Date(statusChangeDate);
         const now = new Date();
         const diffTime = Math.abs(now - changeDate);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         return diffDays;
     }
 
@@ -182,17 +181,17 @@ class AdminStudentService {
      */
     formatStatusChangeDate(statusChangeDate) {
         if (!statusChangeDate) return 'Unknown';
-        
+
         const date = new Date(statusChangeDate);
         const now = new Date();
         const diffTime = Math.abs(now - date);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         if (diffDays === 0) return 'Today';
         if (diffDays === 1) return 'Yesterday';
         if (diffDays <= 7) return `${diffDays} days ago`;
         if (diffDays <= 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
-        
+
         return date.toLocaleDateString();
     }
 }

@@ -130,11 +130,12 @@ class AdminTeacherCacheService {
      */
     async preloadTeacherAssignments(api, teacherIds) {
         console.log(`🔄 Preloading assignments for ${teacherIds.length} teachers...`);
-        
-        const promises = teacherIds.map(teacherId => 
+
+        const promises = teacherIds.map((teacherId) =>
             this.withLoadingState(`teacher_assignments_${teacherId}`, async () => {
                 try {
-                    const response = await fetch(`http://127.0.0.1:8000/api/teachers/${teacherId}/assignments`);
+                    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                    const response = await fetch(`${apiUrl}/api/teachers/${teacherId}/assignments`);
                     return response.ok ? await response.json() : [];
                 } catch (error) {
                     console.warn(`Failed to preload assignments for teacher ${teacherId}:`, error);

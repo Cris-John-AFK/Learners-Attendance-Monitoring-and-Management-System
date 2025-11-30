@@ -169,15 +169,16 @@ const isAllSelected = computed(() => {
 async function loadTeachers() {
     loading.value = true;
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/school-quarters/${quarterId}/teachers`);
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/school-quarters/${quarterId}/teachers`);
         const data = await response.json();
-        
+
         console.log('🔍 API Response:', data);
         console.log('🔍 Response type:', typeof data);
         console.log('🔍 Is array:', Array.isArray(data));
-        
+
         teachers.value = data;
-        
+
         console.log('✅ Loaded teachers with quarter access:', teachers.value.length);
         console.log('👥 Teachers:', teachers.value);
     } catch (error) {
@@ -192,7 +193,8 @@ async function loadTeachers() {
 async function loadAvailableTeachers() {
     try {
         // Fetch all teachers from the system
-        const response = await fetch('http://127.0.0.1:8000/api/teachers');
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/teachers`);
         const data = await response.json();
 
         // Format teachers for table display
@@ -257,19 +259,20 @@ async function addTeacher() {
         // Loop through selected teachers and grant access to each
         let successCount = 0;
         let errorCount = 0;
-        
+
         for (const teacher of selectedTeachers.value) {
             try {
-                const response = await fetch(`http://127.0.0.1:8000/api/school-quarters/${quarterId}/teachers`, {
+                const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                const response = await fetch(`${apiUrl}/api/school-quarters/${quarterId}/teachers`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         teacher_id: teacher.id
                     })
                 });
-                
+
                 if (response.ok) {
                     successCount++;
                 } else {
@@ -290,7 +293,7 @@ async function addTeacher() {
                 life: 3000
             });
         }
-        
+
         if (errorCount > 0) {
             toast.add({
                 severity: 'warn',
@@ -325,7 +328,8 @@ function confirmRemove(teacher) {
 async function removeTeacher() {
     removing.value = true;
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/school-quarters/${quarterId}/teachers/${teacherToRemove.value.id}`, {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/school-quarters/${quarterId}/teachers/${teacherToRemove.value.id}`, {
             method: 'DELETE'
         });
 

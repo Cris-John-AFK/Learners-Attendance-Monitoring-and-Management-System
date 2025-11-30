@@ -1,21 +1,18 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
 
 export default {
     /**
      * Get students for teacher's learner status management
-     * @param {number} teacherId 
+     * @param {number} teacherId
      * @param {string} viewType - 'section', 'subject', or 'all'
      */
     async getStudentsForTeacher(teacherId, viewType = 'section') {
         try {
-            const response = await axios.get(
-                `${API_URL}/teacher/${teacherId}/learner-status/students`,
-                {
-                    params: { view_type: viewType }
-                }
-            );
+            const response = await axios.get(`${API_URL}/teacher/${teacherId}/learner-status/students`, {
+                params: { view_type: viewType }
+            });
             return response.data;
         } catch (error) {
             console.error('Error fetching students:', error);
@@ -25,19 +22,16 @@ export default {
 
     /**
      * Update student enrollment status
-     * @param {number} teacherId 
-     * @param {number} studentId 
+     * @param {number} teacherId
+     * @param {number} studentId
      * @param {object} statusData - { new_status, reason, reason_category, effective_date, notes }
      */
     async updateStudentStatus(teacherId, studentId, statusData) {
         try {
-            const response = await axios.put(
-                `${API_URL}/teacher/${teacherId}/learner-status/students/${studentId}/status`,
-                {
-                    teacher_id: teacherId,
-                    ...statusData
-                }
-            );
+            const response = await axios.put(`${API_URL}/teacher/${teacherId}/learner-status/students/${studentId}/status`, {
+                teacher_id: teacherId,
+                ...statusData
+            });
             return response.data;
         } catch (error) {
             console.error('Error updating student status:', error);
@@ -47,14 +41,12 @@ export default {
 
     /**
      * Get status change history for a student
-     * @param {number} teacherId 
-     * @param {number} studentId 
+     * @param {number} teacherId
+     * @param {number} studentId
      */
     async getStudentStatusHistory(teacherId, studentId) {
         try {
-            const response = await axios.get(
-                `${API_URL}/teacher/${teacherId}/learner-status/students/${studentId}/history`
-            );
+            const response = await axios.get(`${API_URL}/teacher/${teacherId}/learner-status/students/${studentId}/history`);
             return response.data;
         } catch (error) {
             console.error('Error fetching status history:', error);
@@ -74,7 +66,7 @@ export default {
                     reasons: [
                         { value: 'a1', label: 'a.1 Had to take care of siblings' },
                         { value: 'a2', label: 'a.2 Early marriage/pregnancy' },
-                        { value: 'a3', label: 'a.3 Parents\' attitude toward schooling' },
+                        { value: 'a3', label: "a.3 Parents' attitude toward schooling" },
                         { value: 'a4', label: 'a.4 Family problems' }
                     ]
                 },
@@ -119,7 +111,7 @@ export default {
                     reasons: [
                         { value: 'a1', label: 'a.1 Had to take care of siblings' },
                         { value: 'a2', label: 'a.2 Early marriage/pregnancy' },
-                        { value: 'a3', label: 'a.3 Parents\' attitude toward schooling' },
+                        { value: 'a3', label: "a.3 Parents' attitude toward schooling" },
                         { value: 'a4', label: 'a.4 Family problems' }
                     ]
                 },

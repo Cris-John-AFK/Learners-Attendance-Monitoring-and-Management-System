@@ -236,12 +236,13 @@ const loadReportData = async () => {
         const year = selectedMonth.value.getFullYear();
         const month = String(selectedMonth.value.getMonth() + 1).padStart(2, '0'); // +1 because JS months are 0-indexed
         const monthStr = `${year}-${month}`; // YYYY-MM format
-        
+
         console.log('📅 Loading SF2 data for:', monthStr, '(Selected:', selectedMonth.value.toLocaleDateString(), ')');
-        const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`);
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await axios.get(`${apiUrl}/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`);
 
         console.log('📊 API Response:', response.data);
-        
+
         if (response.data.success) {
             reportData.value = response.data.data;
             console.log('✅ Report data loaded:', {
@@ -249,14 +250,14 @@ const loadReportData = async () => {
                 days: reportData.value?.days_in_month?.length || 0,
                 month: reportData.value?.month_name
             });
-            
+
             // Debug: Check first student's attendance data
             if (reportData.value?.students?.length > 0) {
                 const firstStudent = reportData.value.students[0];
                 console.log('🔍 First student:', firstStudent.name);
                 console.log('🔍 Attendance data keys:', Object.keys(firstStudent.attendance_data || {}));
                 console.log('🔍 Sample attendance entries:', firstStudent.attendance_data);
-                
+
                 // Check the structure of one attendance entry
                 const firstDate = Object.keys(firstStudent.attendance_data || {})[0];
                 if (firstDate) {
@@ -315,8 +316,9 @@ const downloadExcel = async () => {
         const year = selectedMonth.value.getFullYear();
         const month = String(selectedMonth.value.getMonth() + 1).padStart(2, '0');
         const monthStr = `${year}-${month}`;
-        
-        const response = await axios.get(`http://127.0.0.1:8000/api/teacher/reports/sf2/download/${sectionId.value}/${monthStr}`, {
+
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await axios.get(`${apiUrl}/api/teacher/reports/sf2/download/${sectionId.value}/${monthStr}`, {
             responseType: 'blob'
         });
 
@@ -354,7 +356,8 @@ const submitToAdmin = async () => {
         const monthStr = selectedMonth.value.toISOString().slice(0, 7);
 
         // Use the simple working endpoint
-        const response = await axios.post('http://127.0.0.1:8000/api/sf2/submit', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await axios.post(`${apiUrl}/api/sf2/submit`, {
             section_id: parseInt(sectionId.value),
             month: monthStr,
             teacher_id: 2 // Maria Santos ID
@@ -600,12 +603,10 @@ const openEditDialog = (student, date, day) => {
 
     // Get current status and display value
     const currentStatusData = student.attendance_data?.[date];
-    
+
     // Extract status string from object (backend returns {status: "present", remarks: null})
-    const currentStatus = typeof currentStatusData === 'object' && currentStatusData?.status 
-        ? currentStatusData.status 
-        : currentStatusData;
-    
+    const currentStatus = typeof currentStatusData === 'object' && currentStatusData?.status ? currentStatusData.status : currentStatusData;
+
     console.log('🔍 Opening edit dialog:', {
         student: student.name,
         date: date,
@@ -614,9 +615,9 @@ const openEditDialog = (student, date, day) => {
         extractedStatus: currentStatus,
         statusType: typeof currentStatus
     });
-    
+
     let displayValue = '';
-    
+
     // Convert status to display symbol
     switch (currentStatus) {
         case 'present':
@@ -732,7 +733,7 @@ const saveAttendanceEdit = async () => {
     });
 
     closeEditDialog();
-    
+
     // Reload report data to reflect changes from backend and update all related components
     await loadReportData();
 };
@@ -1405,27 +1406,43 @@ onMounted(() => {
                 <div class="flex flex-col gap-4">
                     <label class="text-base font-semibold text-gray-700">Select Status:</label>
                     <div class="grid grid-cols-2 gap-3">
-                        <button 
-                            @click="editAttendanceValue = '✓'; saveAttendanceEdit()" 
-                            class="bg-green-100 hover:bg-green-200 text-green-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                        <button
+                            @click="
+                                editAttendanceValue = '✓';
+                                saveAttendanceEdit();
+                            "
+                            class="bg-green-100 hover:bg-green-200 text-green-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2"
+                        >
                             <span class="text-2xl">✓</span>
                             <span>Present</span>
                         </button>
-                        <button 
-                            @click="editAttendanceValue = '✗'; saveAttendanceEdit()" 
-                            class="bg-red-100 hover:bg-red-200 text-red-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                        <button
+                            @click="
+                                editAttendanceValue = '✗';
+                                saveAttendanceEdit();
+                            "
+                            class="bg-red-100 hover:bg-red-200 text-red-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2"
+                        >
                             <span class="text-2xl">✗</span>
                             <span>Absent</span>
                         </button>
-                        <button 
-                            @click="editAttendanceValue = 'L'; saveAttendanceEdit()" 
-                            class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                        <button
+                            @click="
+                                editAttendanceValue = 'L';
+                                saveAttendanceEdit();
+                            "
+                            class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2"
+                        >
                             <span class="text-2xl">L</span>
                             <span>Late</span>
                         </button>
-                        <button 
-                            @click="editAttendanceValue = 'E'; saveAttendanceEdit()" 
-                            class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2">
+                        <button
+                            @click="
+                                editAttendanceValue = 'E';
+                                saveAttendanceEdit();
+                            "
+                            class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-6 py-4 rounded-lg font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center gap-2"
+                        >
                             <span class="text-2xl">E</span>
                             <span>Excused</span>
                         </button>

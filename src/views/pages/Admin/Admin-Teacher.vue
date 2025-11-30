@@ -554,7 +554,8 @@ const assignSection = async (teacher) => {
 
     try {
         // Get teacher's current assignments to determine their type
-        const assignmentsResponse = await fetch(`http://127.0.0.1:8000/api/teachers/${teacher.id}/assignments`);
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const assignmentsResponse = await fetch(`${apiUrl}/api/teachers/${teacher.id}/assignments`);
         let teacherAssignments = [];
 
         if (assignmentsResponse.ok) {
@@ -1782,7 +1783,7 @@ const isSubjectAlreadyAssigned = (subject) => {
         // CRITICAL: Check both subject AND section match
         // Only return true if BOTH the subject AND section are the same
         const sectionMatches = Number(assignmentSectionId) === Number(currentSectionId);
-        
+
         if (!sectionMatches) {
             // Different section, so this subject is available for the current section
             return false;

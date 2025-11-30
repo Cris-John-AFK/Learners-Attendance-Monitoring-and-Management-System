@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api'; // Adjust this to your Laravel backend URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api';
 
 export default {
     /**
@@ -11,7 +11,7 @@ export default {
             const params = {
                 teacher_id: teacherId
             };
-            
+
             // Include subject_id to make seating subject-specific
             if (subjectId) {
                 params.subject_id = subjectId;
@@ -20,7 +20,7 @@ export default {
             const response = await axios.get(`${API_BASE_URL}/student-management/sections/${sectionId}/seating-arrangement`, {
                 params
             });
-            
+
             return response.data;
         } catch (error) {
             console.error('Error fetching seating arrangement:', error);
@@ -39,7 +39,7 @@ export default {
                 teacher_id: teacherId,
                 seating_layout: seatingLayout
             });
-            
+
             return response.data;
         } catch (error) {
             console.error('Error saving seating arrangement:', error);
@@ -57,7 +57,7 @@ export default {
                     teacher_id: teacherId
                 }
             });
-            
+
             return response.data;
         } catch (error) {
             console.error('Error fetching students:', error);

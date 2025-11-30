@@ -14,19 +14,19 @@ return new class extends Migration
     public function up()
     {
         echo "🚀 Starting Smart Performance Indexes Migration...\n";
-        
+
         // Helper function to check if index exists
         $indexExists = function($tableName, $indexName) {
             $result = DB::select("
-                SELECT 1 FROM pg_indexes 
-                WHERE schemaname = 'public' 
-                AND tablename = ? 
+                SELECT 1 FROM pg_indexes
+                WHERE schemaname = 'public'
+                AND tablename = ?
                 AND indexname = ?
             ", [$tableName, $indexName]);
-            
+
             return count($result) > 0;
         };
-        
+
         // Helper function to safely create index
         $safeCreateIndex = function($tableName, $indexName, $columns, $description) use ($indexExists) {
             if (!$indexExists($tableName, $indexName)) {
@@ -45,23 +45,23 @@ return new class extends Migration
                 echo "ℹ️  Exists: {$indexName} - {$description}\n";
             }
         };
-        
+
         echo "\n📊 Creating Performance Indexes...\n";
         echo "-" . str_repeat("-", 50) . "\n";
-        
+
         // 1. CRITICAL QR CODE PERFORMANCE INDEXES
         echo "\n🎯 QR Code System Indexes:\n";
         $safeCreateIndex('student_qr_codes', 'idx_student_qr_codes_data_safe', 'qr_code_data', 'QR code lookups (CRITICAL for scanning)');
         $safeCreateIndex('student_qr_codes', 'idx_student_qr_codes_student_safe', 'student_id', 'Student QR lookups');
         $safeCreateIndex('student_qr_codes', 'idx_student_qr_codes_active_safe', 'is_active', 'Active QR codes filtering');
-        
+
         // 2. TEACHER ASSIGNMENT INDEXES
         echo "\n👨‍🏫 Teacher Assignment Indexes:\n";
         $safeCreateIndex('teacher_section_subject', 'idx_tss_teacher_safe', 'teacher_id', 'Teacher assignments (HIGH impact)');
         $safeCreateIndex('teacher_section_subject', 'idx_tss_section_safe', 'section_id', 'Section assignments');
         $safeCreateIndex('teacher_section_subject', 'idx_tss_subject_safe', 'subject_id', 'Subject assignments');
         $safeCreateIndex('teacher_section_subject', 'idx_tss_active_safe', 'is_active', 'Active assignments filtering');
-        
+
         // 3. ATTENDANCE SYSTEM INDEXES
         echo "\n📋 Attendance System Indexes:\n";
         $safeCreateIndex('attendances', 'idx_attendances_date_safe', 'date', 'Date-based attendance queries (HIGH impact)');
@@ -69,13 +69,13 @@ return new class extends Migration
         $safeCreateIndex('attendances', 'idx_attendances_teacher_safe', 'teacher_id', 'Teacher attendance records');
         $safeCreateIndex('attendances', 'idx_attendances_section_safe', 'section_id', 'Section attendance');
         $safeCreateIndex('attendances', 'idx_attendances_status_safe', 'status', 'Attendance status filtering');
-        
+
         // 4. STUDENT MANAGEMENT INDEXES
         echo "\n👨‍🎓 Student Management Indexes:\n";
         $safeCreateIndex('student_details', 'idx_student_details_student_id_safe', 'student_id', 'Student ID lookups');
-        $safeCreateIndex('student_details', 'idx_student_details_active_safe', 'isActive', 'Active students filtering');
+        $safeCreateIndex('student_details', 'idx_student_details_active_safe', '"isActive"', 'Active students filtering');
         $safeCreateIndex('student_details', 'idx_student_details_lrn_safe', 'lrn', 'LRN lookups');
-        
+
         // 5. GUARDHOUSE SYSTEM INDEXES (if table exists)
         if (Schema::hasTable('guardhouse_attendance')) {
             echo "\n🏛️ Guardhouse System Indexes:\n";
@@ -84,7 +84,7 @@ return new class extends Migration
             $safeCreateIndex('guardhouse_attendance', 'idx_guardhouse_type_safe', 'record_type', 'Check-in/out filtering');
             $safeCreateIndex('guardhouse_attendance', 'idx_guardhouse_qr_safe', 'qr_code_data', 'QR code verification');
         }
-        
+
         // 6. ATTENDANCE SESSIONS INDEXES (if table exists)
         if (Schema::hasTable('attendance_sessions')) {
             echo "\n📅 Attendance Sessions Indexes:\n";
@@ -93,7 +93,7 @@ return new class extends Migration
             $safeCreateIndex('attendance_sessions', 'idx_attendance_sessions_section_safe', 'section_id', 'Section sessions');
             $safeCreateIndex('attendance_sessions', 'idx_attendance_sessions_status_safe', 'status', 'Session status filtering');
         }
-        
+
         // 7. ATTENDANCE RECORDS INDEXES (if table exists)
         if (Schema::hasTable('attendance_records')) {
             echo "\n📝 Attendance Records Indexes:\n";
@@ -101,13 +101,13 @@ return new class extends Migration
             $safeCreateIndex('attendance_records', 'idx_attendance_records_student_safe', 'student_id', 'Student attendance records');
             $safeCreateIndex('attendance_records', 'idx_attendance_records_status_safe', 'attendance_status_id', 'Status-based filtering');
         }
-        
+
         // 8. SECTION MANAGEMENT INDEXES
         echo "\n🏫 Section Management Indexes:\n";
         $safeCreateIndex('sections', 'idx_sections_curriculum_grade_safe', 'curriculum_grade_id', 'Curriculum grade lookups');
         $safeCreateIndex('sections', 'idx_sections_homeroom_teacher_safe', 'homeroom_teacher_id', 'Homeroom teacher assignments');
         $safeCreateIndex('sections', 'idx_sections_active_safe', 'is_active', 'Active sections filtering');
-        
+
         // 9. STUDENT ENROLLMENT INDEXES
         if (Schema::hasTable('student_section')) {
             echo "\n📚 Student Enrollment Indexes:\n";
@@ -115,13 +115,13 @@ return new class extends Migration
             $safeCreateIndex('student_section', 'idx_student_section_section_safe', 'section_id', 'Section enrollments');
             $safeCreateIndex('student_section', 'idx_student_section_active_safe', 'is_active', 'Active enrollments');
         }
-        
+
         // 10. COMPOSITE INDEXES (Most Important)
         echo "\n🔗 Composite Indexes (Advanced Performance):\n";
         $safeCreateIndex('teacher_section_subject', 'idx_tss_composite_safe', ['teacher_id', 'section_id', 'is_active'], 'Teacher-section assignments');
         $safeCreateIndex('attendances', 'idx_attendances_student_date_safe', ['student_id', 'date'], 'Student daily attendance');
         $safeCreateIndex('student_qr_codes', 'idx_qr_data_active_safe', ['qr_code_data', 'is_active'], 'Active QR code validation');
-        
+
         echo "\n🎉 Smart Performance Indexes Migration Complete!\n";
         echo "📈 Expected Performance Improvements:\n";
         echo "   • QR Code Scanning: 70-90% faster\n";
@@ -137,7 +137,7 @@ return new class extends Migration
     public function down()
     {
         echo "🔄 Removing Performance Indexes...\n";
-        
+
         // Helper function to safely drop index
         $safeDropIndex = function($indexName) {
             try {
@@ -147,7 +147,7 @@ return new class extends Migration
                 echo "⚠️  Error dropping {$indexName}: {$e->getMessage()}\n";
             }
         };
-        
+
         // Drop all the indexes we created (with _safe suffix)
         $indexesToDrop = [
             'idx_student_qr_codes_data_safe',
@@ -186,11 +186,11 @@ return new class extends Migration
             'idx_attendances_student_date_safe',
             'idx_qr_data_active_safe'
         ];
-        
+
         foreach ($indexesToDrop as $index) {
             $safeDropIndex($index);
         }
-        
+
         echo "✅ Performance indexes removal complete!\n";
     }
 };

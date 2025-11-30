@@ -2,10 +2,11 @@ import axios from 'axios';
 
 class TeacherAuthService {
     constructor() {
-        this.baseURL = 'http://localhost:8000/api/teachers';
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        this.baseURL = apiBaseUrl + '/api/teachers';
         this.teacherKey = 'teacher_data';
         this.tokenKey = 'teacher_token';
-        
+
         // Clear old authentication data on initialization (only once)
         if (!sessionStorage.getItem('auth_cleaned')) {
             TeacherAuthService.clearOldAuthData();
@@ -28,7 +29,7 @@ class TeacherAuthService {
 
             if (response.data.success) {
                 const { teacher, user, assignments, token } = response.data.data;
-                
+
                 // Store authentication data with timestamp
                 const authData = {
                     teacher,
@@ -36,10 +37,10 @@ class TeacherAuthService {
                     assignments,
                     loginTime: new Date().toISOString()
                 };
-                
+
                 // Store teacher data and token with tab-specific keys
                 TeacherAuthService.setAuthData(authData, token);
-                
+
                 console.log('Auth data stored successfully for tab:', TeacherAuthService.getTabId());
                 return {
                     success: true,
@@ -51,7 +52,6 @@ class TeacherAuthService {
                 success: false,
                 message: response.data.message || 'Login failed'
             };
-
         } catch (error) {
             console.error('🚨 Login error:', error);
             console.error('🚨 Error response:', error.response?.data);
@@ -71,14 +71,14 @@ class TeacherAuthService {
             const tabId = TeacherAuthService.getTabId();
             const teacherKey = `teacher_data_${tabId}`;
             const tokenKey = `teacher_token_${tabId}`;
-            
+
             // Remove tab-specific data
             localStorage.removeItem(teacherKey);
             localStorage.removeItem(tokenKey);
             sessionStorage.removeItem('tab_id');
-            
+
             delete axios.defaults.headers.common['Authorization'];
-            
+
             console.log('Logged out from tab:', tabId);
         } catch (error) {
             console.error('Logout error:', error);
@@ -91,7 +91,7 @@ class TeacherAuthService {
     async getProfile() {
         try {
             const response = await axios.get(`${this.baseURL}/profile`);
-            
+
             if (response.data.success) {
                 return {
                     success: true,
@@ -103,16 +103,15 @@ class TeacherAuthService {
                 success: false,
                 message: response.data.message || 'Failed to get profile'
             };
-
         } catch (error) {
             console.error('Profile error:', error);
-            
+
             // If API call fails due to authentication, clear stored data
             if (error.response?.status === 401 || error.response?.status === 403) {
                 console.log('API authentication failed, clearing stored data');
                 this.logout();
             }
-            
+
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to get profile'
@@ -126,9 +125,9 @@ class TeacherAuthService {
     isAuthenticated() {
         const token = this.getToken();
         const teacherData = this.getTeacherData();
-        
+
         const isAuth = !!(token && teacherData);
-        
+
         return isAuth;
     }
 
@@ -141,7 +140,7 @@ class TeacherAuthService {
         if (unifiedToken) {
             return unifiedToken;
         }
-        
+
         // Fallback to tab-specific token
         const tabId = TeacherAuthService.getTabId();
         const tokenKey = `teacher_token_${tabId}`;
@@ -158,7 +157,7 @@ class TeacherAuthService {
             if (unifiedData) {
                 return JSON.parse(unifiedData);
             }
-            
+
             // Fallback to tab-specific data
             const tabId = TeacherAuthService.getTabId();
             const teacherKey = `teacher_data_${tabId}`;
@@ -178,7 +177,7 @@ class TeacherAuthService {
         if (!teacherData || !teacherData.assignments) {
             return [];
         }
-        
+
         // Found assignments
         return teacherData.assignments;
     }
@@ -201,14 +200,14 @@ class TeacherAuthService {
         }
 
         // Group assignments by subject, collecting all sections for each subject
-        assignments.forEach(assignment => {
+        assignments.forEach((assignment) => {
             const subjectId = assignment.subject_id;
-            
+
             // Skip homeroom assignments (subject_id = null)
             if (!subjectId || homeroomSeen.has(subjectId)) {
                 return;
             }
-            
+
             // Extract subject name
             let subjectName = 'Unknown Subject';
             if (assignment.subject_name) {
@@ -216,7 +215,7 @@ class TeacherAuthService {
             } else if (assignment.subject && assignment.subject.name) {
                 subjectName = assignment.subject.name;
             }
-            
+
             // Extract grade name
             let gradeName = 'Unknown';
             if (assignment.grade_name) {
@@ -226,19 +225,19 @@ class TeacherAuthService {
             } else if (assignment.section && assignment.section.grade) {
                 gradeName = assignment.section.grade.name;
             }
-            
+
             // Clean grade name
             if (gradeName.startsWith('Grade ')) {
                 gradeName = gradeName.replace('Grade ', '');
             }
-            
+
             // Extract section info
             const sectionName = assignment.section_name || (assignment.section && assignment.section.name) || 'Unknown Section';
             const sectionId = assignment.section_id || (assignment.section && assignment.section.id);
-            
+
             // Create unique key for subject+section combination
             const key = `${subjectId}_${sectionId}`;
-            
+
             if (!subjectSectionMap.has(key)) {
                 subjectSectionMap.set(key, {
                     id: subjectId,
@@ -291,16 +290,16 @@ class TeacherAuthService {
         const tabId = this.getTabId();
         const teacherKey = `teacher_data_${tabId}`;
         const tokenKey = `teacher_token_${tabId}`;
-        
+
         localStorage.setItem(teacherKey, JSON.stringify(teacherData));
         localStorage.setItem(tokenKey, token);
         localStorage.setItem('current_teacher_tab', tabId);
-        
+
         // Set axios default header for future requests
         if (axios.defaults.headers) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         }
-        
+
         // Auth data stored
     }
 
@@ -324,7 +323,7 @@ class TeacherAuthService {
         localStorage.removeItem('teacher_data');
         localStorage.removeItem('teacher_token');
         localStorage.removeItem('current_teacher_tab');
-        
+
         // Cleared old data
     }
 

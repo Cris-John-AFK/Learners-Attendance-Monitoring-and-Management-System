@@ -320,7 +320,8 @@ const batchLoadQRCodes = async (studentList) => {
 
         // Single API call for ALL QR codes
         const authToken = TeacherAuthServiceDefault.getToken();
-        const response = await fetch('http://localhost:8000/api/qr-codes/bulk', {
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/qr-codes/bulk`, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${authToken}`,
