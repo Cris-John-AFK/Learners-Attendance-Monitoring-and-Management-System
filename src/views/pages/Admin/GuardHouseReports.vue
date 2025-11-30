@@ -1,7 +1,7 @@
 <template>
     <div class="guardhouse-reports-container">
         <Toast />
-        
+
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">
@@ -9,24 +9,22 @@
                 GuardHouse Reports
             </h1>
             <div class="header-actions">
-                <Button 
-                    :label="scannerEnabled ? 'Disable Scanner' : 'Enable Scanner'" 
-                    :icon="scannerEnabled ? 'pi pi-lock' : 'pi pi-lock-open'"
-                    :class="scannerEnabled ? 'p-button-danger' : 'p-button-success'"
-                    @click="toggleScanner"
-                />
-                <Button 
-                    label="Archive Current Session" 
-                    icon="pi pi-save"
-                    class="p-button-warning"
-                    @click="archiveCurrentSession"
-                    :disabled="!hasActiveRecords"
-                />
+                <Button :label="scannerEnabled ? 'Disable Scanner' : 'Enable Scanner'" :icon="scannerEnabled ? 'pi pi-lock' : 'pi pi-lock-open'" :class="scannerEnabled ? 'p-button-danger' : 'p-button-success'" @click="toggleScanner" />
+                <Button label="Archive Current Session" icon="pi pi-save" class="p-button-warning" @click="archiveCurrentSession" :disabled="!hasActiveRecords" />
             </div>
         </div>
 
         <!-- Live Feed Section -->
         <div class="live-feed-section">
+            <!-- Search Bar -->
+            <div class="search-bar-container">
+                <div class="search-container">
+                    <i class="pi pi-search search-icon"></i>
+                    <InputText v-model="liveSearchQuery" placeholder="Search students by name, ID, grade, or section..." class="search-input" />
+                    <Button v-if="liveSearchQuery" icon="pi pi-times" class="p-button-text p-button-sm clear-search-btn" @click="liveSearchQuery = ''" title="Clear search" />
+                </div>
+            </div>
+
             <div class="feed-grid">
                 <!-- Check-In Feed -->
                 <div class="feed-column">
@@ -38,16 +36,12 @@
                         <Badge :value="checkInCount" severity="success" />
                     </div>
                     <div class="feed-content">
-                        <div v-if="checkInRecords.length === 0" class="empty-state">
+                        <div v-if="filteredCheckInRecords.length === 0" class="empty-state">
                             <i class="pi pi-inbox"></i>
-                            <p>No check-ins yet today</p>
+                            <p>{{ liveSearchQuery ? 'No matching check-ins found' : 'No check-ins yet today' }}</p>
                         </div>
                         <TransitionGroup name="list" tag="div" v-else>
-                            <div 
-                                v-for="record in checkInRecords" 
-                                :key="record.id"
-                                class="feed-item check-in-item"
-                            >
+                            <div v-for="record in filteredCheckInRecords" :key="record.id" class="feed-item check-in-item">
                                 <div class="student-info">
                                     <div class="student-avatar">
                                         {{ getInitials(record.student_name) }}
@@ -55,9 +49,7 @@
                                     <div class="student-details">
                                         <h4>{{ record.student_name }}</h4>
                                         <p>{{ record.student_id }}</p>
-                                        <span class="meta-info">
-                                            Grade {{ record.grade_level }} - {{ record.section }}
-                                        </span>
+                                        <span class="meta-info"> Grade {{ record.grade_level }} - {{ record.section }} </span>
                                     </div>
                                 </div>
                                 <div class="time-info">
@@ -79,16 +71,12 @@
                         <Badge :value="checkOutCount" severity="warning" />
                     </div>
                     <div class="feed-content">
-                        <div v-if="checkOutRecords.length === 0" class="empty-state">
+                        <div v-if="filteredCheckOutRecords.length === 0" class="empty-state">
                             <i class="pi pi-inbox"></i>
-                            <p>No check-outs yet today</p>
+                            <p>{{ liveSearchQuery ? 'No matching check-outs found' : 'No check-outs yet today' }}</p>
                         </div>
                         <TransitionGroup name="list" tag="div" v-else>
-                            <div 
-                                v-for="record in checkOutRecords" 
-                                :key="record.id"
-                                class="feed-item check-out-item"
-                            >
+                            <div v-for="record in filteredCheckOutRecords" :key="record.id" class="feed-item check-out-item">
                                 <div class="student-info">
                                     <div class="student-avatar">
                                         {{ getInitials(record.student_name) }}
@@ -96,9 +84,7 @@
                                     <div class="student-details">
                                         <h4>{{ record.student_name }}</h4>
                                         <p>{{ record.student_id }}</p>
-                                        <span class="meta-info">
-                                            Grade {{ record.grade_level }} - {{ record.section }}
-                                        </span>
+                                        <span class="meta-info"> Grade {{ record.grade_level }} - {{ record.section }} </span>
                                     </div>
                                 </div>
                                 <div class="time-info">
@@ -161,12 +147,7 @@
             </div>
 
             <div v-else class="session-cards">
-                <div 
-                    v-for="session in archivedSessions" 
-                    :key="session.session_id"
-                    class="session-card"
-                    @click="toggleSessionDetails(session.session_id)"
-                >
+                <div v-for="session in archivedSessions" :key="session.session_id" class="session-card" @click="toggleSessionDetails(session.session_id)">
                     <div class="card-header">
                         <div class="session-date">
                             <i class="pi pi-calendar"></i>
@@ -177,7 +158,7 @@
                             <i :class="expandedSessions.includes(session.session_id) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
                         </div>
                     </div>
-                    
+
                     <div class="card-meta">
                         <span>Archived: {{ formatDateTime(session.archived_at) }}</span>
                     </div>
@@ -188,29 +169,18 @@
                             <i class="pi pi-spin pi-spinner"></i>
                             Loading records...
                         </div>
-                        
+
                         <div v-else-if="sessionRecords[session.session_id]" class="session-content">
                             <!-- Search and Filter Controls -->
                             <div class="session-filters">
                                 <div class="filter-row">
                                     <div class="search-container">
                                         <i class="pi pi-search search-icon"></i>
-                                        <InputText 
-                                            v-model="sessionSearchQueries[session.session_id]"
-                                            placeholder="Search by name, ID, grade, or section..."
-                                            class="search-input"
-                                        />
+                                        <InputText v-model="sessionSearchQueries[session.session_id]" placeholder="Search by name, ID, grade, or section..." class="search-input" />
                                     </div>
                                     <div class="filter-controls">
-                                        <Dropdown 
-                                            v-model="sessionFilters[session.session_id].grade"
-                                            :options="getSessionFilterOptions(session.session_id).grades"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            placeholder="Grade"
-                                            class="filter-dropdown"
-                                        />
-                                        <Dropdown 
+                                        <Dropdown v-model="sessionFilters[session.session_id].grade" :options="getSessionFilterOptions(session.session_id).grades" optionLabel="label" optionValue="value" placeholder="Grade" class="filter-dropdown" />
+                                        <Dropdown
                                             v-model="sessionFilters[session.session_id].section"
                                             :options="getSessionFilterOptions(session.session_id).sections"
                                             optionLabel="label"
@@ -218,47 +188,24 @@
                                             placeholder="Section"
                                             class="filter-dropdown"
                                         />
-                                        <Dropdown 
-                                            v-model="sessionFilters[session.session_id].recordType"
-                                            :options="recordTypeOptions"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            placeholder="Type"
-                                            class="filter-dropdown"
-                                        />
-                                        <Button 
-                                            icon="pi pi-times"
-                                            class="p-button-text p-button-sm clear-filters-btn"
-                                            @click="clearSessionFilters(session.session_id)"
-                                            title="Clear all filters"
-                                        />
+                                        <Dropdown v-model="sessionFilters[session.session_id].recordType" :options="recordTypeOptions" optionLabel="label" optionValue="value" placeholder="Type" class="filter-dropdown" />
+                                        <Button icon="pi pi-times" class="p-button-text p-button-sm clear-filters-btn" @click="clearSessionFilters(session.session_id)" title="Clear all filters" />
                                     </div>
                                 </div>
                                 <div class="filter-summary">
-                                    <span class="total-records">
-                                        Showing {{ getFilteredSessionRecords(session.session_id).length }} of {{ sessionRecords[session.session_id].length }} records
-                                    </span>
+                                    <span class="total-records"> Showing {{ getFilteredSessionRecords(session.session_id).length }} of {{ sessionRecords[session.session_id].length }} records </span>
                                 </div>
                             </div>
 
                             <!-- Data Table -->
-                            <DataTable 
-                                :value="getFilteredSessionRecords(session.session_id)" 
-                                :paginator="true" 
-                                :rows="5"
-                                responsiveLayout="scroll"
-                                class="session-records-table"
-                            >
+                            <DataTable :value="getFilteredSessionRecords(session.session_id)" :paginator="true" :rows="5" responsiveLayout="scroll" class="session-records-table">
                                 <Column field="student_id" header="Student ID" />
                                 <Column field="student_name" header="Name" />
                                 <Column field="grade_level" header="Grade" />
                                 <Column field="section" header="Section" />
                                 <Column field="record_type" header="Type">
                                     <template #body="slotProps">
-                                        <Tag 
-                                            :value="slotProps.data.record_type" 
-                                            :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'"
-                                        />
+                                        <Tag :value="slotProps.data.record_type" :severity="slotProps.data.record_type === 'check-in' ? 'success' : 'warning'" />
                                     </template>
                                 </Column>
                                 <Column field="timestamp" header="Time">
@@ -296,6 +243,7 @@ const API_BASE_URL = 'http://localhost:8000/api';
 const scannerEnabled = ref(true);
 const checkInRecords = ref([]);
 const checkOutRecords = ref([]);
+const liveSearchQuery = ref('');
 const archivedSessions = ref([]);
 const sessionRecords = ref({});
 const sessionFilters = ref({});
@@ -313,19 +261,43 @@ let pollingInterval = null;
 let timeInterval = null;
 
 // Computed
-const checkInCount = computed(() => checkInRecords.value.length);
-const checkOutCount = computed(() => checkOutRecords.value.length);
+const filteredCheckInRecords = computed(() => {
+    if (!liveSearchQuery.value) return checkInRecords.value;
+
+    const query = liveSearchQuery.value.toLowerCase();
+    return checkInRecords.value.filter(
+        (record) =>
+            (record.student_name && record.student_name.toLowerCase().includes(query)) ||
+            (record.student_id && record.student_id.toString().includes(query)) ||
+            (record.grade_level && record.grade_level.toLowerCase().includes(query)) ||
+            (record.section && record.section.toLowerCase().includes(query))
+    );
+});
+
+const filteredCheckOutRecords = computed(() => {
+    if (!liveSearchQuery.value) return checkOutRecords.value;
+
+    const query = liveSearchQuery.value.toLowerCase();
+    return checkOutRecords.value.filter(
+        (record) =>
+            (record.student_name && record.student_name.toLowerCase().includes(query)) ||
+            (record.student_id && record.student_id.toString().includes(query)) ||
+            (record.grade_level && record.grade_level.toLowerCase().includes(query)) ||
+            (record.section && record.section.toLowerCase().includes(query))
+    );
+});
+
+const checkInCount = computed(() => filteredCheckInRecords.value.length);
+const checkOutCount = computed(() => filteredCheckOutRecords.value.length);
 const totalStudentsToday = computed(() => {
     const uniqueStudents = new Set();
-    [...checkInRecords.value, ...checkOutRecords.value].forEach(record => {
+    [...checkInRecords.value, ...checkOutRecords.value].forEach((record) => {
         uniqueStudents.add(record.student_id);
     });
     return uniqueStudents.size;
 });
 
-const hasActiveRecords = computed(() => 
-    checkInRecords.value.length > 0 || checkOutRecords.value.length > 0
-);
+const hasActiveRecords = computed(() => checkInRecords.value.length > 0 || checkOutRecords.value.length > 0);
 
 // Filter options
 const recordTypeOptions = [
@@ -349,20 +321,20 @@ const getInitials = (name) => {
 const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: true 
+        hour12: true
     });
 };
 
 const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
     });
 };
 
@@ -376,9 +348,9 @@ const formatDateForFilter = (date) => {
 const formatDateTime = (dateTimeStr) => {
     if (!dateTimeStr) return '';
     const date = new Date(dateTimeStr);
-    return date.toLocaleString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
@@ -417,66 +389,67 @@ const getFilteredSessionRecords = (sessionId) => {
     const records = sessionRecords.value[sessionId] || [];
     const filters = sessionFilters.value[sessionId] || {};
     const searchQuery = sessionSearchQueries.value[sessionId] || '';
-    
+
     let filtered = records;
-    
+
     // Apply search filter
     if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(record => 
-            (record.student_name && record.student_name.toLowerCase().includes(query)) ||
-            (record.student_id && record.student_id.toString().includes(query)) ||
-            (record.grade_level && record.grade_level.toLowerCase().includes(query)) ||
-            (record.section && record.section.toLowerCase().includes(query))
+        filtered = filtered.filter(
+            (record) =>
+                (record.student_name && record.student_name.toLowerCase().includes(query)) ||
+                (record.student_id && record.student_id.toString().includes(query)) ||
+                (record.grade_level && record.grade_level.toLowerCase().includes(query)) ||
+                (record.section && record.section.toLowerCase().includes(query))
         );
     }
-    
+
     // Apply grade filter
     if (filters.grade) {
-        filtered = filtered.filter(record => record.grade_level === filters.grade);
+        filtered = filtered.filter((record) => record.grade_level === filters.grade);
     }
-    
+
     // Apply section filter
     if (filters.section) {
-        filtered = filtered.filter(record => record.section === filters.section);
+        filtered = filtered.filter((record) => record.section === filters.section);
     }
-    
+
     // Apply record type filter
     if (filters.recordType) {
-        filtered = filtered.filter(record => record.record_type === filters.recordType);
+        filtered = filtered.filter((record) => record.record_type === filters.recordType);
     }
-    
+
     return filtered;
 };
 
 // Get filter options for a session
 const getSessionFilterOptions = (sessionId) => {
     const records = sessionRecords.value[sessionId] || [];
-    
-    const grades = [...new Set(records.map(r => r.grade_level).filter(Boolean))].sort();
-    const sections = [...new Set(records.map(r => r.section).filter(Boolean))].sort();
-    
+
+    const grades = [...new Set(records.map((r) => r.grade_level).filter(Boolean))].sort();
+    const sections = [...new Set(records.map((r) => r.section).filter(Boolean))].sort();
+
     return {
-        grades: [{ label: 'All Grades', value: '' }, ...grades.map(grade => ({ label: grade, value: grade }))],
-        sections: [{ label: 'All Sections', value: '' }, ...sections.map(section => ({ label: section, value: section }))]
+        grades: [{ label: 'All Grades', value: '' }, ...grades.map((grade) => ({ label: grade, value: grade }))],
+        sections: [{ label: 'All Sections', value: '' }, ...sections.map((section) => ({ label: section, value: section }))]
     };
 };
 
 // Toggle session details
 const toggleSessionDetails = async (sessionId) => {
     const index = expandedSessions.value.indexOf(sessionId);
-    
+
     if (index > -1) {
         // Collapse
         expandedSessions.value.splice(index, 1);
     } else {
         // Expand and load records
         expandedSessions.value.push(sessionId);
-        
+
         if (!sessionRecords.value[sessionId]) {
             await loadSessionRecords(sessionId);
         }
-        
+
         // Initialize filters for this session
         initializeSessionFilters(sessionId);
     }
@@ -486,11 +459,11 @@ const toggleSessionDetails = async (sessionId) => {
 const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryCount = 0) => {
     loadingSessionRecords.value[sessionId] = true;
     let shouldStopLoading = true;
-    
+
     try {
         const filters = sessionFilters.value[sessionId] || {};
         const searchQuery = sessionSearchQueries.value[sessionId] || '';
-        
+
         const params = {
             page: page,
             limit: 50, // Load 50 records per page
@@ -499,12 +472,12 @@ const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryC
             section: filters.section || '',
             record_type: filters.recordType || ''
         };
-        
+
         const response = await queueApiRequest(
             () => axios.get(`${API_BASE_URL}/guardhouse/session-records/${sessionId}`, { params }),
             'normal' // Normal priority for session records
         );
-        
+
         if (response.data.success) {
             if (resetData || page === 1) {
                 // Reset data for new search/filter or first page
@@ -514,24 +487,21 @@ const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryC
                 if (!sessionRecords.value[sessionId]) {
                     sessionRecords.value[sessionId] = [];
                 }
-                sessionRecords.value[sessionId] = [
-                    ...sessionRecords.value[sessionId],
-                    ...response.data.records
-                ];
+                sessionRecords.value[sessionId] = [...sessionRecords.value[sessionId], ...response.data.records];
             }
-            
+
             // Store pagination info
             sessionPagination.value[sessionId] = response.data.pagination;
         }
     } catch (error) {
         console.error('Error loading session records:', error);
-        
+
         // Handle 429 (Too Many Requests) with retry logic
         if (error.response?.status === 429 && retryCount < 3) {
             const retryDelay = (retryCount + 1) * 2;
             console.warn(`Rate limited loading session ${sessionId}, retrying in ${retryDelay} seconds...`);
             shouldStopLoading = false; // Don't stop loading, we're retrying
-            
+
             // Show a brief toast for the first retry
             if (retryCount === 0) {
                 toast.add({
@@ -541,21 +511,19 @@ const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryC
                     life: 2000
                 });
             }
-            
+
             setTimeout(() => {
                 loadSessionRecords(sessionId, page, resetData, retryCount + 1);
             }, retryDelay * 1000); // Exponential backoff: 2s, 4s, 6s
             return;
         }
-        
+
         // Only show error toast if it's not a rate limit issue or we've exhausted retries
         if (error.response?.status !== 429 || retryCount >= 3) {
             toast.add({
                 severity: 'error',
                 summary: 'Error',
-                detail: error.response?.status === 429 ? 
-                    'Server is busy, please try again later' : 
-                    'Failed to load session records',
+                detail: error.response?.status === 429 ? 'Server is busy, please try again later' : 'Failed to load session records',
                 life: 3000
             });
         }
@@ -569,11 +537,11 @@ const loadSessionRecords = async (sessionId, page = 1, resetData = false, retryC
 
 const updateCurrentTime = () => {
     const now = new Date();
-    currentTime.value = now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
+    currentTime.value = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
         second: '2-digit',
-        hour12: true 
+        hour12: true
     });
 };
 
@@ -584,14 +552,14 @@ const fetchLiveData = async () => {
             () => axios.get(`${API_BASE_URL}/guardhouse/live-feed`),
             'normal' // Normal priority for live data
         );
-        
+
         if (response.data.success) {
             checkInRecords.value = response.data.check_ins || [];
             checkOutRecords.value = response.data.check_outs || [];
         }
     } catch (error) {
         console.error('Error fetching live data:', error);
-        
+
         // Only show error for non-rate-limiting issues
         if (error.response?.status !== 429) {
             toast.add({
@@ -610,7 +578,7 @@ const toggleScanner = async () => {
         const response = await axios.post(`${API_BASE_URL}/guardhouse/toggle-scanner`, {
             enabled: !scannerEnabled.value
         });
-        
+
         if (response.data.success) {
             scannerEnabled.value = !scannerEnabled.value;
             toast.add({
@@ -634,24 +602,21 @@ const toggleScanner = async () => {
 // Archive current session
 const archiveCurrentSession = async () => {
     try {
-        const records = [
-            ...checkInRecords.value.map(r => ({ ...r, record_type: 'check-in' })),
-            ...checkOutRecords.value.map(r => ({ ...r, record_type: 'check-out' }))
-        ];
-        
+        const records = [...checkInRecords.value.map((r) => ({ ...r, record_type: 'check-in' })), ...checkOutRecords.value.map((r) => ({ ...r, record_type: 'check-out' }))];
+
         const response = await axios.post(`${API_BASE_URL}/guardhouse/archive-session`, {
             session_date: formatDateForFilter(new Date()),
             records: records
         });
-        
+
         if (response.data.success) {
             // Clear current records
             checkInRecords.value = [];
             checkOutRecords.value = [];
-            
+
             // Reload archived records
             await loadArchivedRecords();
-            
+
             toast.add({
                 severity: 'success',
                 summary: 'Session Archived',
@@ -678,7 +643,7 @@ const loadArchivedRecords = async () => {
             () => axios.get(`${API_BASE_URL}/guardhouse/archived-sessions`),
             'high' // High priority for initial data load
         );
-        
+
         if (response.data.success) {
             archivedSessions.value = response.data.sessions || [];
             console.log('Loaded archived sessions:', archivedSessions.value.length);
@@ -717,17 +682,13 @@ const loadAllDataParallel = async () => {
     try {
         console.log('🚀 Loading all data in parallel...');
         const startTime = performance.now();
-        
+
         // Execute all API calls in parallel for maximum speed
-        const [liveDataResult, archivedResult, scannerResult] = await Promise.allSettled([
-            fetchLiveData(),
-            loadArchivedRecords(), 
-            loadScannerStatus()
-        ]);
-        
+        const [liveDataResult, archivedResult, scannerResult] = await Promise.allSettled([fetchLiveData(), loadArchivedRecords(), loadScannerStatus()]);
+
         const endTime = performance.now();
         console.log(`⚡ All data loaded in ${(endTime - startTime).toFixed(1)}ms`);
-        
+
         // Log any failures
         if (liveDataResult.status === 'rejected') {
             console.error('Live data failed:', liveDataResult.reason);
@@ -738,7 +699,6 @@ const loadAllDataParallel = async () => {
         if (scannerResult.status === 'rejected') {
             console.error('Scanner status failed:', scannerResult.reason);
         }
-        
     } catch (error) {
         console.error('Error in parallel loading:', error);
     }
@@ -749,10 +709,10 @@ onMounted(() => {
     // Fast parallel initial load
     loadAllDataParallel();
     updateCurrentTime();
-    
+
     // Start polling for live data only (reduced frequency to avoid 429 errors)
     pollingInterval = setInterval(fetchLiveData, 30000); // Poll every 30 seconds
-    
+
     // Start time updates
     timeInterval = setInterval(updateCurrentTime, 1000);
 });
@@ -803,6 +763,51 @@ onUnmounted(() => {
 /* Live Feed Section */
 .live-feed-section {
     margin-bottom: 2rem;
+}
+
+/* Search Bar */
+.search-bar-container {
+    margin-bottom: 1.5rem;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.search-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
+}
+
+.search-icon {
+    color: #6c757d;
+    font-size: 1.1rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+.clear-search-btn {
+    color: #6c757d;
+    padding: 0.5rem;
+}
+
+.clear-search-btn:hover {
+    color: #e74c3c;
 }
 
 .feed-grid {
@@ -1175,21 +1180,21 @@ onUnmounted(() => {
     .feed-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .stats-bar {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .filter-row {
         flex-direction: column;
         align-items: stretch;
         gap: 0.75rem;
     }
-    
+
     .search-container {
         min-width: auto;
     }
-    
+
     .filter-controls {
         justify-content: center;
     }
@@ -1200,12 +1205,12 @@ onUnmounted(() => {
         flex-direction: column;
         gap: 1rem;
     }
-    
+
     .filter-controls {
         flex-direction: column;
         width: 100%;
     }
-    
+
     .search-input {
         width: 100%;
     }

@@ -983,14 +983,6 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
         return '';
     }
 
-    // Debug logging for attendance data
-    console.log('Getting attendance mark for:', {
-        student: student.firstName + ' ' + student.lastName,
-        day: day,
-        attendance_data: student.attendance_data,
-        available_dates: student.attendance_data ? Object.keys(student.attendance_data) : 'No attendance data'
-    });
-
     // Check if student has attendance_data for the specific day
     if (student.attendance_data) {
         // Try different date formats that might be used
@@ -1023,27 +1015,34 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
         }
 
         if (status) {
-            const statusLower = status.toLowerCase();
-            console.log('Found status:', statusLower, 'for day:', day);
+            // Handle both string and object status formats
+            // Status can be a string like "present" or an object like {status: "present", remarks: null}
+            let statusValue = status;
+            if (typeof status === 'object' && status !== null && status.status) {
+                statusValue = status.status;
+            }
 
-            switch (statusLower) {
-                case 'present':
-                    return '✓';
-                case 'absent':
-                    return '✗';
-                case 'late':
-                case 'tardy':
-                    return 'L';
-                case 'excused':
-                    return 'E';
-                default:
-                    console.log('Unknown status:', statusLower);
-                    return '✗'; // Default to absent for unknown status
+            // Only proceed if we have a string value
+            if (typeof statusValue === 'string') {
+                const statusLower = statusValue.toLowerCase();
+
+                switch (statusLower) {
+                    case 'present':
+                        return '✓';
+                    case 'absent':
+                        return '✗';
+                    case 'late':
+                    case 'tardy':
+                        return 'L';
+                    case 'excused':
+                        return 'E';
+                    default:
+                        return '✗'; // Default to absent for unknown status
+                }
             }
         }
     }
 
-    console.log('No attendance data found for day:', day, 'defaulting to absent');
     // Default to absent if no attendance data found
     return '✗';
 };
@@ -1212,6 +1211,118 @@ const getTotalPresent = (student) => {
 // Get total late count for a student
 const getTotalLate = (student) => {
     return countAttendanceMarks(student, 'late');
+};
+
+// Calculate Average Daily Attendance for Male students
+const getMaleAverageDailyAttendance = () => {
+    const maleStudents = getMaleStudents();
+    if (maleStudents.length === 0) return 0;
+
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    if (nonEmptyDays.length === 0) return 0;
+
+    let totalAttendance = 0;
+    nonEmptyDays.forEach((schoolDay) => {
+        maleStudents.forEach((student) => {
+            const mark = getAttendanceMark(student, schoolDay.date, false);
+            if (mark === '✓') {
+                totalAttendance++;
+            }
+        });
+    });
+
+    return Math.round((totalAttendance / (maleStudents.length * nonEmptyDays.length)) * 100);
+};
+
+// Calculate Average Daily Attendance for Female students
+const getFemaleAverageDailyAttendance = () => {
+    const femaleStudents = getFemaleStudents();
+    if (femaleStudents.length === 0) return 0;
+
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    if (nonEmptyDays.length === 0) return 0;
+
+    let totalAttendance = 0;
+    nonEmptyDays.forEach((schoolDay) => {
+        femaleStudents.forEach((student) => {
+            const mark = getAttendanceMark(student, schoolDay.date, false);
+            if (mark === '✓') {
+                totalAttendance++;
+            }
+        });
+    });
+
+    return Math.round((totalAttendance / (femaleStudents.length * nonEmptyDays.length)) * 100);
+};
+
+// Calculate Combined Average Daily Attendance
+const getCombinedAverageDailyAttendance = () => {
+    const maleStudents = getMaleStudents();
+    const femaleStudents = getFemaleStudents();
+    const allStudents = [...maleStudents, ...femaleStudents];
+    if (allStudents.length === 0) return 0;
+
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    if (nonEmptyDays.length === 0) return 0;
+
+    let totalAttendance = 0;
+    nonEmptyDays.forEach((schoolDay) => {
+        allStudents.forEach((student) => {
+            const mark = getAttendanceMark(student, schoolDay.date, false);
+            if (mark === '✓') {
+                totalAttendance++;
+            }
+        });
+    });
+
+    return Math.round((totalAttendance / (allStudents.length * nonEmptyDays.length)) * 100);
+};
+
+// Calculate Percentage of Attendance for the month for Male students
+const getMaleAttendancePercentage = () => {
+    const maleStudents = getMaleStudents();
+    if (maleStudents.length === 0) return 0;
+
+    const totalMalePresent = getMaleTotalPresent();
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    const totalPossibleAttendance = maleStudents.length * nonEmptyDays.length;
+
+    if (totalPossibleAttendance === 0) return 0;
+    return Math.round((totalMalePresent / totalPossibleAttendance) * 100);
+};
+
+// Calculate Percentage of Attendance for the month for Female students
+const getFemaleAttendancePercentage = () => {
+    const femaleStudents = getFemaleStudents();
+    if (femaleStudents.length === 0) return 0;
+
+    const totalFemalePresent = getFemaleTotalPresent();
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    const totalPossibleAttendance = femaleStudents.length * nonEmptyDays.length;
+
+    if (totalPossibleAttendance === 0) return 0;
+    return Math.round((totalFemalePresent / totalPossibleAttendance) * 100);
+};
+
+// Calculate Combined Percentage of Attendance for the month
+const getCombinedAttendancePercentage = () => {
+    const maleStudents = getMaleStudents();
+    const femaleStudents = getFemaleStudents();
+    const allStudents = [...maleStudents, ...femaleStudents];
+    if (allStudents.length === 0) return 0;
+
+    const totalPresent = getCombinedTotalPresent();
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    const totalPossibleAttendance = allStudents.length * nonEmptyDays.length;
+
+    if (totalPossibleAttendance === 0) return 0;
+    return Math.round((totalPresent / totalPossibleAttendance) * 100);
 };
 
 // Update filter counts for UI display
@@ -3250,15 +3361,15 @@ onUnmounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Average Daily Attendance</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleAverageDailyAttendance() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleAverageDailyAttendance() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getCombinedAverageDailyAttendance() }}%</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Percentage of Attendance for the month</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
-                                    <td class="border border-gray-800 p-1 text-center">0%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getCombinedAttendancePercentage() }}%</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Number of students absent for 5 consecutive days or more</td>
