@@ -2,7 +2,7 @@ import axios from 'axios';
 import { reactive } from 'vue';
 
 // Define the API base URL
-const API_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
+const API_URL = (import.meta.env.VITE_API_BASE_URL || '') + '/api';
 
 // Create a reactive state
 const state = reactive({

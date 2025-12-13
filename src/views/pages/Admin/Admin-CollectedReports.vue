@@ -155,7 +155,7 @@ const disabilityTypes = [
 // Load sections from database
 const loadSectionsFromDatabase = async () => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/sections', {
+        const response = await fetch('/api/sections', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -214,7 +214,7 @@ const loadSectionsFromDatabase = async () => {
 // Load grades from database
 const loadGradesFromDatabase = async () => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/grades', {
+        const response = await fetch('/api/grades', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -417,7 +417,7 @@ const loadStudents = async () => {
         loading.value = true;
 
         // Fetch submitted SF2 reports from Laravel API
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
         const response = await fetch(`${apiUrl}/api/sf2/submitted`, {
             method: 'GET',
             headers: {
@@ -504,7 +504,7 @@ const viewSF2Report = async (reportData) => {
         });
 
         // Fetch the actual SF2 report data from backend
-        const sectionId = reportData.section_id || reportData.id;
+        let sectionId = reportData.section_id || reportData.id;
         let month = reportData.month || reportData.month_name;
 
         // Convert month name to YYYY-MM format if needed
@@ -558,7 +558,7 @@ const viewSF2Report = async (reportData) => {
 
         // First, try to get the submitted report to see what section ID was actually used
         try {
-            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
             const submittedResponse = await fetch(`${apiUrl}/api/sf2/submitted`);
             if (submittedResponse.ok) {
                 const submittedReports = await submittedResponse.json();
@@ -579,7 +579,7 @@ const viewSF2Report = async (reportData) => {
             console.error('Error fetching submitted reports:', error);
         }
 
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
         console.log('Final API URL:', `${apiUrl}/api/teacher/reports/sf2/data/${sectionId}/${month}`);
         console.log('=== ADMIN CALLING SAME API AS TEACHER ===');
         console.log('If teacher uses section ID 2 for Matatag, admin should also use section ID 2');
@@ -795,7 +795,7 @@ const downloadSF2Report = async (reportData) => {
         }
 
         // Construct the download URL
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
         const downloadUrl = `${apiUrl}/api/teacher/reports/sf2/download/${reportData.section_id}/${month}`;
 
         // Create a temporary link and trigger download

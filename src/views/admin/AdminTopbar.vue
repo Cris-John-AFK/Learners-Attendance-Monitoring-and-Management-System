@@ -81,7 +81,7 @@ const logout = async () => {
 const loadSubmittedReports = async () => {
     try {
         console.log('🔄 Loading submitted reports...');
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
         const response = await fetch(`${apiUrl}/api/admin/reports/submitted`);
         const data = await response.json();
 

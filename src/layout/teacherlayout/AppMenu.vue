@@ -148,7 +148,7 @@ onMounted(async () => {
 
         // Load assignments directly from API (same as attendance records)
         try {
-            const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
             const response = await fetch(`${apiUrl}/api/teachers/${teacherId}/assignments`);
             const assignments = await response.json();
             const assignmentsArray = Array.isArray(assignments) ? assignments : assignments.assignments || [];

@@ -134,7 +134,7 @@ class AdminTeacherCacheService {
         const promises = teacherIds.map((teacherId) =>
             this.withLoadingState(`teacher_assignments_${teacherId}`, async () => {
                 try {
-                    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                    const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
                     const response = await fetch(`${apiUrl}/api/teachers/${teacherId}/assignments`);
                     return response.ok ? await response.json() : [];
                 } catch (error) {

@@ -48,6 +48,8 @@ class AttendanceHeatmapController extends Controller
                     $startDate = $endDate->copy()->subMonths(1);
                     break;
             }
+            
+            Log::info("Heatmap date range: {$startDate->toDateString()} to {$endDate->toDateString()} (period: {$period})");
 
             // Get attendance records with reasons and student locations
             $query = DB::table('attendance_records as ar')
@@ -59,7 +61,6 @@ class AttendanceHeatmapController extends Controller
                 ->whereIn('ast.code', ['L', 'E']) // Late and Excused only
                 ->whereNotNull('ar.reason_id')
                 ->whereBetween('ases.session_date', [$startDate, $endDate])
-                ->where('areason.is_active', true)
                 // Filter out dropped/transferred students
                 ->where(function($query) {
                     $query->whereIn('sd.enrollment_status', ['active', 'enrolled', 'transferred_in'])
@@ -95,8 +96,15 @@ class AttendanceHeatmapController extends Controller
                 'sd.name',
                 'ases.session_date'
             ])
-            ->orderBy('occurrence_count', 'desc')
+            ->orderByRaw('COUNT(*) DESC')
             ->get();
+            
+            Log::info("Heatmap query returned " . count($records) . " grouped records");
+            if (count($records) > 0) {
+                // Log sample session dates to debug
+                $sampleDates = $records->pluck('session_date')->unique()->take(5)->toArray();
+                Log::info("Sample session dates in results: " . json_encode($sampleDates));
+            }
 
             // Process data for heatmap visualization
             $heatmapData = [

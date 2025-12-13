@@ -1,5 +1,6 @@
 // vite.config.js
 import { PrimeVueResolver } from '@primevue/auto-import-resolver';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath, URL } from 'node:url';
 import Components from 'unplugin-vue-components/vite';
@@ -8,6 +9,7 @@ import { defineConfig } from 'vite';
 // https://vitejs.dev/config/
 export default defineConfig({
     plugins: [
+        basicSsl(),
         vue(),
         Components({
             resolvers: [PrimeVueResolver()]
@@ -22,10 +24,16 @@ export default defineConfig({
         include: ['vue-qrcode-reader']
     },
     server: {
+        host: true,
+        https: true,
+        headers: {
+            'Cache-Control': 'no-store'
+        },
         proxy: {
             '/api': {
-                target: 'http://192.168.163.170:8000',
-                changeOrigin: true
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+                secure: false
             }
         }
     }

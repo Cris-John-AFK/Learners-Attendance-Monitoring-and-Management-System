@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '') + '/api';
 
 class AttendanceHeatmapService {
     /**
@@ -147,7 +147,7 @@ class AttendanceHeatmapService {
             xLabels: locations.map((l) => l.location),
             yLabels: reasons.map((r) => r.reason),
             reasonTypes,
-            maxValue: Math.max(...matrix.map((m) => m.v))
+            maxValue: Math.max(5, ...matrix.map((m) => m.v))
         };
     }
 
@@ -177,6 +177,9 @@ class AttendanceHeatmapService {
                     scales: {
                         x: {
                             beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            },
                             title: {
                                 display: true,
                                 text: 'Number of Incidents'
@@ -210,6 +213,9 @@ class AttendanceHeatmapService {
                         },
                         y: {
                             beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            },
                             title: {
                                 display: true,
                                 text: 'Number of Incidents'
@@ -237,6 +243,9 @@ class AttendanceHeatmapService {
                         },
                         y: {
                             beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            },
                             title: {
                                 display: true,
                                 text: 'Number of Incidents'

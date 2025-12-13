@@ -121,55 +121,6 @@
                 </div>
             </div>
 
-            <!-- Quick Actions Section -->
-            <div class="quick-actions">
-                <h2 class="section-title">Quick Actions</h2>
-                <div class="actions-grid">
-                    <router-link to="/admin-teacher" class="action-card">
-                        <div class="action-icon">
-                            <i class="pi pi-users"></i>
-                        </div>
-                        <div class="action-content">
-                            <h3 class="action-title">Manage Teachers</h3>
-                            <p class="action-description">Add, edit, and assign teachers</p>
-                        </div>
-                        <i class="pi pi-arrow-right action-arrow"></i>
-                    </router-link>
-
-                    <router-link to="/admin-student" class="action-card">
-                        <div class="action-icon">
-                            <i class="pi pi-user"></i>
-                        </div>
-                        <div class="action-content">
-                            <h3 class="action-title">Manage Students</h3>
-                            <p class="action-description">Student enrollment and records</p>
-                        </div>
-                        <i class="pi pi-arrow-right action-arrow"></i>
-                    </router-link>
-
-                    <router-link to="/curriculum" class="action-card">
-                        <div class="action-icon">
-                            <i class="pi pi-book"></i>
-                        </div>
-                        <div class="action-content">
-                            <h3 class="action-title">Curriculum</h3>
-                            <p class="action-description">Manage curriculum and subjects</p>
-                        </div>
-                        <i class="pi pi-arrow-right action-arrow"></i>
-                    </router-link>
-
-                    <router-link to="/admin-collected-reports" class="action-card">
-                        <div class="action-icon">
-                            <i class="pi pi-chart-bar"></i>
-                        </div>
-                        <div class="action-content">
-                            <h3 class="action-title">Reports</h3>
-                            <p class="action-description">View system reports</p>
-                        </div>
-                        <i class="pi pi-arrow-right action-arrow"></i>
-                    </router-link>
-                </div>
-            </div>
         </div>
     </div>
 </template>
@@ -494,88 +445,7 @@ onMounted(() => {
     font-weight: 500;
 }
 
-/* Quick Actions Section */
-.quick-actions {
-    background: white;
-    border-radius: 1rem;
-    padding: 1rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-    margin-top: 0.75rem;
-    flex-shrink: 0;
-}
 
-.section-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #1f2937;
-    margin: 0 0 0.75rem 0;
-}
-
-.actions-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.5rem;
-}
-
-.action-card {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    text-decoration: none;
-    color: inherit;
-    transition: all 0.2s;
-    background: #f9fafb;
-}
-
-.action-card:hover {
-    border-color: #667eea;
-    background: #f0f4ff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-}
-
-.action-icon {
-    width: 2rem;
-    height: 2rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 0.375rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.875rem;
-    flex-shrink: 0;
-}
-
-.action-content {
-    flex: 1;
-}
-
-.action-title {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #1f2937;
-    margin: 0 0 0.125rem 0;
-}
-
-.action-description {
-    color: #6b7280;
-    font-size: 0.75rem;
-    margin: 0;
-}
-
-.action-arrow {
-    color: #9ca3af;
-    font-size: 0.875rem;
-    flex-shrink: 0;
-}
-
-.action-card:hover .action-arrow {
-    color: #667eea;
-}
 
 @media (max-width: 768px) {
     .admin-dashboard {

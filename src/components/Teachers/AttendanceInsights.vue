@@ -127,19 +127,9 @@
             </div>
         </Dialog>
 
-        <!-- Success Stories -->
-        <div class="success-section" v-if="improvingStudents.length > 0">
-            <h4 class="section-title">
-                <i class="pi pi-chart-line"></i>
-                Improving Students
-            </h4>
-            <div class="success-cards">
-                <div v-for="student in improvingStudents" :key="student.student_id" class="success-card">
-                    <div class="student-name">{{ student.first_name }} {{ student.last_name }}</div>
-                    <div class="improvement-text">{{ student.improvementNote }}</div>
-                </div>
-            </div>
-        </div>
+        <!-- Success Stories - Collapsible -->
+        <!-- Success Stories - Collapsible with Glassmorphism -->
+
 
         <!-- Create Individual Plan Dialog -->
         <Dialog v-model:visible="showPlanDialog" modal header="Create Individual Attendance Plan" style="width: 50rem">
@@ -337,11 +327,18 @@ const progressData = ref({
 
 // Helper functions (defined first to be used in computed properties)
 function getRiskLevel(student) {
-    // Use ONLY recent_absences for consistency with dashboard cards
+    // 1. Check passed severity if available (Primary Source of Truth from Dashboard)
+    if (student.severity) return student.severity;
+
+    // 2. Fallback calculation (match TeacherDashboard logic)
     const recentAbsences = student.recent_absences || 0;
+    const totalAbsences = student.total_absences || 0;
+
+    if (totalAbsences >= 18) return 'critical';
+    if (totalAbsences >= 10) return 'at_risk'; // High Risk (mapped to 'high'/'at_risk')
 
     if (recentAbsences >= 5) return 'critical';
-    if (recentAbsences >= 3) return 'high';
+    if (recentAbsences >= 3) return 'high'; // 'high' is used in this component instead of 'at_risk'
     if (recentAbsences >= 1) return 'low';
     return 'normal';
 }
@@ -386,11 +383,20 @@ function calculateConsecutiveAbsences(student) {
 
 // Computed properties for student categorization
 const criticalStudents = computed(() => {
-    return props.students.filter((student) => student.recent_absences >= 5);
+    return props.students.filter((student) => {
+        if (student.severity) return student.severity === 'critical';
+        // Fallback
+        return (student.total_absences || 0) >= 18 || (student.recent_absences || 0) >= 5;
+    });
 });
 
 const warningStudents = computed(() => {
-    return props.students.filter((student) => student.recent_absences >= 3 && student.recent_absences < 5);
+    return props.students.filter((student) => {
+        if (student.severity) return student.severity === 'at_risk' || student.severity === 'high';
+        // Fallback
+        return ((student.total_absences || 0) >= 10 && (student.total_absences || 0) < 18) || 
+               ((student.recent_absences || 0) >= 3 && (student.recent_absences || 0) < 5);
+    });
 });
 
 const consecutiveAbsenceStudents = computed(() => {
@@ -424,19 +430,7 @@ const studentsNeedingAttention = computed(() => {
     return filtered;
 });
 
-const improvingStudents = computed(() => {
-    // Students who had high absences but are now improving
-    return props.students
-        .filter((student) => {
-            const hadIssues = student.total_absences >= 5;
-            const improving = student.recent_absences < 2;
-            return hadIssues && improving;
-        })
-        .map((student) => ({
-            ...student,
-            improvementNote: `Reduced from ${student.total_absences} total absences to only ${student.recent_absences} recent absences`
-        }));
-});
+
 
 function getRiskIcon(riskLevel) {
     const icons = {
@@ -2477,5 +2471,167 @@ function scrollDown() {
     color: #64748b;
     padding-left: 0.25rem;
     border-left: 1px solid #e2e8f0;
+}
+</style>
+
+<style scoped>
+/* Improving Students Premium Collapsible Style */
+.improving-container {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(52, 211, 153, 0.03) 100%);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 0;
+    margin-bottom: 1.5rem;
+    box-shadow:
+        0 4px 16px rgba(16, 185, 129, 0.08),
+        0 1px 4px rgba(0, 0, 0, 0.04),
+        inset 0 1px 1px rgba(255, 255, 255, 0.8);
+    border: 1.5px solid rgba(16, 185, 129, 0.2);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.improving-container.collapsed {
+    padding-bottom: 0;
+}
+
+/* Animated gradient border */
+.improving-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #10b981 100%);
+    background-size: 200% 100%;
+    animation: gradient-shift 3s ease infinite;
+    border-radius: 16px 16px 0 0;
+}
+
+.improving-container:hover {
+    box-shadow:
+        0 12px 40px rgba(16, 185, 129, 0.18),
+        0 4px 12px rgba(16, 185, 129, 0.12),
+        inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    border-color: rgba(16, 185, 129, 0.35);
+    transform: translateY(-2px);
+}
+
+.improving-header {
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: background 0.3s ease;
+}
+
+.improving-header:hover {
+    background: rgba(16, 185, 129, 0.06);
+}
+
+.improving-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #065f46;
+    letter-spacing: 0.01em;
+}
+
+.icon-wrapper {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #059669;
+}
+
+.icon-wrapper i {
+    font-size: 1rem;
+}
+
+.count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    box-shadow: 0 2px 5px rgba(16, 185, 129, 0.3);
+}
+
+.toggle-icon {
+    font-size: 0.9rem;
+    color: #059669;
+    background: rgba(16, 185, 129, 0.1);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.improving-container:hover .toggle-icon {
+    background: #10b981;
+    color: white;
+}
+
+.improving-content {
+    padding: 0 1rem 1rem 1rem;
+    animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.show-more-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.5rem;
+    border-top: 1px dashed rgba(16, 185, 129, 0.3);
+    padding-top: 0.75rem;
+}
+
+.show-more-link {
+    background: none;
+    border: none;
+    color: #059669;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.show-more-link:hover {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.show-more-link i {
+    font-size: 0.7rem;
 }
 </style>

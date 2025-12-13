@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 
-const API_BASE_URL = (typeof import !== 'undefined' && import.meta?.env?.VITE_API_BASE_URL) ? import.meta.env.VITE_API_BASE_URL + '/api' : 'http://localhost:8000/api';
+const API_BASE_URL = (typeof import !== 'undefined' && import.meta?.env?.VITE_API_BASE_URL) ? import.meta.env.VITE_API_BASE_URL + '/api' : '/api';
 
 export const useNotificationStore = defineStore('notifications', {
     state: () => ({

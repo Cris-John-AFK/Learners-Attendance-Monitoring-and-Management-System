@@ -11,6 +11,7 @@
         "lint": "eslint --fix . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
     },
     "dependencies": {
+        "@popperjs/core": "^2.11.8",
         "@primevue/themes": "^4.2.5",
         "@zxing/browser": "^0.1.5",
         "apexcharts": "^4.5.0",
@@ -36,6 +37,7 @@
     "devDependencies": {
         "@primevue/auto-import-resolver": "^4.3.1",
         "@rushstack/eslint-patch": "^1.8.0",
+        "@vitejs/plugin-basic-ssl": "^2.1.0",
         "@vitejs/plugin-vue": "^4.6.2",
         "@vue/eslint-config-prettier": "^9.0.0",
         "autoprefixer": "^10.4.19",

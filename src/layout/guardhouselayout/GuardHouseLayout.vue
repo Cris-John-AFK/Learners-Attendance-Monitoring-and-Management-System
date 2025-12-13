@@ -63,7 +63,7 @@ const timeInterval = ref(null);
 // Check scanner status from admin
 const checkScannerStatus = async () => {
     try {
-        const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/guardhouse/scanner-status`);
+        const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || ''}/api/guardhouse/scanner-status`);
         if (response.data.success) {
             const adminScannerEnabled = response.data.scanner_enabled;
             
@@ -2302,13 +2302,6 @@ const logout = async () => {
     }
 }
 
-/* Main Content Layout */
-.main-content-columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr; /* Two equal columns */
-    gap: 1.5rem;
-}
-
 /* Responsive Adjustments */
 @media (max-width: 1024px) {
     .dashboard-header {
@@ -2341,13 +2334,38 @@ const logout = async () => {
     }
 
     .main-content-columns {
+        display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1rem;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-bottom: 1rem;
     }
 
     .left-column,
     .right-column {
         width: 100%;
+        overflow: visible;
+        flex-shrink: 0;
+    }
+
+    .left-column {
+        order: 1; /* Scanner at top on mobile */
+    }
+
+    .right-column {
+        order: 2; /* Feed below scanner on mobile */
+        min-height: 300px;
+    }
+
+    .scanner-container {
+        width: 100%;
+        max-width: 300px;
+        height: 250px;
+    }
+
+    .student-preview {
+        margin-top: 1rem;
     }
 
     .scanner-actions {
@@ -2489,25 +2507,73 @@ const logout = async () => {
 }
 
 @media (max-width: 768px) {
+    .dashboard-header {
+        flex-wrap: wrap;
+        padding: 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .header-left {
+        flex: 1 1 100%;
+        justify-content: center;
+        order: 1;
+    }
+
+    .header-center {
+        flex: 1 1 100%;
+        order: 2;
+    }
+
+    .header-right {
+        flex: 1 1 100%;
+        justify-content: center;
+        order: 3;
+    }
+
     .dashboard-header h1 {
-        font-size: 1rem;
-        line-height: 1.2;
+        font-size: 0.875rem;
+        line-height: 1.3;
+        text-align: center;
+    }
+
+    .school-logo {
+        height: 35px;
     }
 
     .date-time .date {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
     }
 
     .date-time .time {
         font-size: 1rem;
     }
 
+    .logout-button {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        min-height: 40px;
+    }
+
+    .dashboard-container {
+        padding: 0.75rem;
+    }
+
     .scanner-container {
-        height: 250px;
+        width: 100%;
+        max-width: 280px;
+        height: 220px;
+    }
+
+    .section-header h2 {
+        font-size: 1rem;
+    }
+
+    .section-header h2 i {
+        font-size: 1.2rem;
     }
 
     .student-preview {
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .student-info h3 {
@@ -2519,70 +2585,202 @@ const logout = async () => {
     }
 
     .attendance-table {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
+    }
+
+    .attendance-feed {
+        max-height: 400px;
+        overflow-y: auto;
     }
 
     .visitor-toggle-container {
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .guest-dialog {
         width: 95% !important;
-        margin: 1rem;
+        margin: 0.5rem;
+    }
+
+    .dashboard-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 0.75rem;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 100;
+    }
+
+    .dashboard-content {
+        padding-bottom: 80px; /* Space for fixed footer */
+    }
+
+    /* Verification Modal Mobile Styles */
+    .verification-content {
+        padding: 0.5rem;
+        overflow-y: auto;
+    }
+
+    .verification-header {
+        margin-bottom: 0.3rem;
+    }
+
+    .verification-header h3 {
+        font-size: 0.75rem;
+    }
+
+    .student-display {
+        padding: 0.5rem;
+        margin-bottom: 0.4rem;
+        min-height: auto;
+        gap: 0.5rem;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        position: relative;
+        overflow: visible;
+    }
+
+    .photo-container {
+        width: 45px !important;
+        height: 45px !important;
+        min-width: 45px !important;
+        min-height: 45px !important;
+        max-width: 45px !important;
+        max-height: 45px !important;
+        flex-shrink: 0;
+        position: relative;
+        border-radius: 50%;
+        overflow: hidden;
+    }
+
+    .student-photo {
+        width: 45px !important;
+        height: 45px !important;
+        min-width: 45px !important;
+        min-height: 45px !important;
+        max-width: 45px !important;
+        max-height: 45px !important;
+        object-fit: cover;
+        position: relative;
+        border-radius: 50%;
+    }
+
+    .student-name {
+        font-size: 0.8rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .info-grid {
+        gap: 0.15rem;
+    }
+
+    .info-item {
+        padding: 0;
+    }
+
+    .info-item .label,
+    .info-item .value {
+        font-size: 0.6rem;
+    }
+
+    .countdown-section {
+        margin-bottom: 0.4rem;
+    }
+
+    .countdown-circle {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 0.3rem;
+    }
+
+    .countdown-number {
+        font-size: 0.9rem;
+    }
+
+    .countdown-label {
+        font-size: 0.4rem;
+    }
+
+    .verification-text {
+        font-size: 0.65rem;
+    }
+
+    .action-buttons {
+        gap: 0.4rem;
+    }
+
+    .action-buttons button {
+        padding: 0.6rem 0.5rem;
+        font-size: 0.7rem;
+        min-height: 36px;
+    }
+
+    .action-buttons button i {
+        font-size: 0.8rem;
     }
 }
 
 @media (max-width: 480px) {
     .dashboard-header {
-        padding: 0.75rem;
+        padding: 0.5rem;
+        gap: 0.25rem;
     }
 
-    .dashboard-header h1 {
-        font-size: 0.875rem;
-        line-height: 1.2;
+    .header-left h1 {
+        display: none; /* Hide title on very small screens */
     }
 
     .school-logo {
-        width: 30px;
-        height: 30px;
+        height: 28px;
+        width: auto;
     }
 
     .date-time .date {
-        font-size: 0.625rem;
+        font-size: 0.6rem;
     }
 
     .date-time .time {
         font-size: 0.875rem;
     }
 
-    .guard-info {
-        font-size: 0.625rem;
-    }
-
-    .guard-name {
-        font-size: 0.75rem;
-    }
-
-    .guard-id {
-        font-size: 0.625rem;
-    }
-
     .logout-button {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.625rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+        min-height: 32px;
+        gap: 0.4rem;
+    }
+
+    .dashboard-container {
+        padding: 0.5rem;
+    }
+
+    .section-header {
+        margin-bottom: 0.5rem;
     }
 
     .section-header h2 {
         font-size: 0.875rem;
     }
 
+    .section-header h2 i {
+        font-size: 1rem;
+    }
+
+    .scanner-actions {
+        gap: 0.5rem;
+    }
+
     .action-button,
     .visitor-toggle-button,
     .guest-register-button {
-        padding: 0.625rem 0.875rem;
-        font-size: 0.625rem;
-        min-height: 35px;
-        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.7rem;
+        min-height: 36px;
+        border-radius: 0.5rem;
+        gap: 0.4rem;
 
         i {
             font-size: 0.875rem;
@@ -2590,23 +2788,25 @@ const logout = async () => {
     }
 
     .filter-button {
-        padding: 0.5rem;
-        font-size: 0.625rem;
-        min-height: 35px;
-        border-radius: 0.375rem;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.65rem;
+        min-height: 32px;
+        border-radius: 0.4rem;
 
         i {
-            font-size: 0.875rem;
+            font-size: 0.8rem;
         }
     }
 
     .search-input {
-        padding: 0.625rem;
+        padding: 0.5rem;
         font-size: 0.75rem;
     }
 
     .scanner-container {
-        height: 200px;
+        width: 100%;
+        max-width: 240px;
+        height: 180px;
     }
 
     .student-preview {
@@ -2652,6 +2852,77 @@ const logout = async () => {
 
     .footer-stats {
         gap: 0.5rem;
+    }
+
+    /* Extra compact verification for small phones */
+    .verification-content {
+        padding: 0.4rem;
+    }
+
+    .verification-header h3 {
+        font-size: 0.7rem;
+    }
+
+    .student-display {
+        padding: 0.4rem;
+        margin-bottom: 0.3rem;
+        gap: 0.4rem;
+    }
+
+    .photo-container {
+        width: 35px !important;
+        height: 35px !important;
+        min-width: 35px !important;
+        min-height: 35px !important;
+        max-width: 35px !important;
+        max-height: 35px !important;
+        flex-shrink: 0;
+        border-radius: 50%;
+        overflow: hidden;
+    }
+
+    .student-photo {
+        width: 35px !important;
+        height: 35px !important;
+        min-width: 35px !important;
+        min-height: 35px !important;
+        max-width: 35px !important;
+        max-height: 35px !important;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    .student-name {
+        font-size: 0.7rem;
+    }
+
+    .info-item .label,
+    .info-item .value {
+        font-size: 0.55rem;
+    }
+
+    .countdown-circle {
+        width: 35px;
+        height: 35px;
+        margin-bottom: 0.2rem;
+    }
+
+    .countdown-number {
+        font-size: 0.8rem;
+    }
+
+    .countdown-label {
+        display: none;
+    }
+
+    .verification-text {
+        font-size: 0.6rem;
+    }
+
+    .action-buttons button {
+        padding: 0.5rem 0.4rem;
+        font-size: 0.65rem;
+        min-height: 32px;
     }
 }
 

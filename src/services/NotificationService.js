@@ -4,7 +4,7 @@ class NotificationService {
         this.listeners = [];
         this.currentTeacherId = null;
         this.teacherAssignments = null;
-        this.baseURL = import.meta?.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL + '/api' : 'http://localhost:8000/api';
+        this.baseURL = import.meta?.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL + '/api' : '/api';
         this.refreshInterval = null;
         // Load notifications asynchronously
         this.loadNotifications().catch(console.error);

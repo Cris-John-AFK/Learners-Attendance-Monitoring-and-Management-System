@@ -9,7 +9,6 @@ import StudentAttendanceService from '@/services/StudentAttendanceService.js';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Chart from 'primevue/chart';
-import Checkbox from 'primevue/checkbox';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
@@ -119,6 +118,28 @@ const heatmapViewOptions = [
 const heatmapView = ref('heatmap');
 const MAX_HEATMAP_ROWS = 10;
 const MAX_HEATMAP_COLUMNS = 10;
+
+// Computed: Heatmap date range display based on selected period
+const heatmapDateRange = computed(() => {
+    const endDate = new Date();
+    let startDate = new Date();
+    
+    switch (chartView.value) {
+        case 'day':
+            startDate.setDate(endDate.getDate() - 7);
+            break;
+        case 'week':
+            startDate.setDate(endDate.getDate() - 28); // 4 weeks
+            break;
+        case 'month':
+        default:
+            startDate.setMonth(endDate.getMonth() - 1);
+            break;
+    }
+    
+    const formatDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+});
 const HEATMAP_ROW_HEIGHT = 28;
 const HEATMAP_ROW_GAP = 6;
 const HEATMAP_HEADER_HEIGHT = 44;
@@ -205,6 +226,37 @@ const currentYear = ref(new Date().getFullYear());
 // Calendar data for student profiles
 const calendarData = ref([]);
 const absentDays = ref([]);
+
+// Computed: Monthly attendance statistics based on current calendar data
+const monthlyAttendanceStats = computed(() => {
+    if (!calendarData.value || calendarData.value.length === 0) {
+        return { rate: 0, sessions: 0, present: 0, absent: 0, late: 0, excused: 0 };
+    }
+    
+    // Count days with attendance records (sessions)
+    const daysWithData = calendarData.value.filter(day => day.status !== null && day.status !== undefined);
+    const totalSessions = daysWithData.length;
+    
+    if (totalSessions === 0) {
+        return { rate: 0, sessions: 0, present: 0, absent: 0, late: 0, excused: 0 };
+    }
+    
+    // Count by status
+    let present = 0, absent = 0, late = 0, excused = 0;
+    daysWithData.forEach(day => {
+        const status = (day.status || '').toUpperCase();
+        if (status === 'PRESENT') present++;
+        else if (status === 'ABSENT') absent++;
+        else if (status === 'LATE') late++;
+        else if (status === 'EXCUSED') excused++;
+    });
+    
+    // Attendance Rate = (Present + Late + Excused) / Total Sessions * 100
+    const attendedDays = present + late + excused;
+    const rate = Math.round((attendedDays / totalSessions) * 100);
+    
+    return { rate, sessions: totalSessions, present, absent, late, excused };
+});
 
 // Calendar subject filter (independent from main subject selection)
 const calendarSubjectFilter = ref(null);
@@ -500,15 +552,26 @@ function getFirstDayOfMonth() {
 }
 
 // Calculate severity based on absence count (matches Attendance Insights EXACTLY)
-function calculateSeverity(absences) {
-    if (absences >= CRITICAL_THRESHOLD) {
-        return 'critical'; // 5+ absences = Critical Risk
-    } else if (absences >= AT_RISK_THRESHOLD) {
-        return 'at_risk'; // 3-4 absences = High Risk
-    } else if (absences > 0) {
-        return 'low'; // 1-2 absences = Low Risk
+// Calculate severity based on absence count (matches Attendance Insights EXACTLY)
+function calculateSeverity(recentAbsences, totalAbsences = 0) {
+    // 1. Check Total Absences (Global Risk)
+    if (totalAbsences >= 18) {
+        return 'critical'; // Exceeded limit (Dropped/Failed)
     }
-    return 'good'; // 0 absences = Normal (Perfect attendance)
+    if (totalAbsences >= 10) {
+        return 'at_risk'; // Warning zone
+    }
+
+    // 2. Check Recent Absences (Trend Risk)
+    if (recentAbsences >= CRITICAL_THRESHOLD) {
+        return 'critical'; // 5+ recent absences
+    } else if (recentAbsences >= AT_RISK_THRESHOLD) {
+        return 'at_risk'; // 3-4 recent absences
+    } else if (recentAbsences > 0) {
+        return 'low'; // 1-2 recent absences
+    }
+    
+    return 'good'; // Normal
 }
 
 // Get severity display label (matches Attendance Insights)
@@ -874,7 +937,7 @@ function processIndexedData(indexedData) {
             section: student.section_name || student.section || `Section ${student.section_id || student.sectionId}`,
             absences: student.total_absences || 0,
             recent_absences: student.recent_absences || 0,
-            severity: calculateSeverity(student.recent_absences || 0),
+            severity: calculateSeverity(student.recent_absences || 0, student.total_absences || 0),
             attendanceRate: student.attendance_rate || 100,
             totalPresent: student.total_present || 0,
             totalLate: student.total_late || 0
@@ -1045,7 +1108,7 @@ async function loadSingleSectionData(sectionId, subjectId) {
                         absences: summaryStudent?.total_absences || student.total_absences || 0,
                         total_absences: summaryStudent?.total_absences || student.total_absences || 0, // Add for component compatibility
                         recent_absences: recentAbsences,
-                        severity: calculateSeverity(recentAbsences),
+                        severity: calculateSeverity(recentAbsences, summaryStudent?.total_absences || student.total_absences || 0),
                         attendanceRate: summaryStudent?.attendance_rate || student.attendance_rate || 0,
                         attendance_rate: summaryStudent?.attendance_rate || student.attendance_rate || 0, // Add for component compatibility
                         totalPresent: summaryStudent?.total_present || student.total_present || 0,
@@ -1172,7 +1235,7 @@ async function loadSingleSectionData(sectionId, subjectId) {
                 total_absences: student.total_absences || 0,
                 recent_absences: student.recent_absences || 0,
                 consecutive_absences: student.consecutive_absences || 0,
-                severity: calculateSeverity(student.recent_absences || 0),
+                severity: calculateSeverity(student.recent_absences || 0, student.total_absences || 0),
                 attendanceRate: student.attendance_rate || 100,
                 totalPresent: student.total_present || 0,
                 totalLate: student.total_late || 0
@@ -1245,7 +1308,7 @@ async function loadAllSubjectsData() {
                     section: student.section_name || student.section || 'Unknown Section',
                     absences: student.total_absences || student.absence_count || 0,
                     recent_absences: student.recent_absences || 0,
-                    severity: calculateSeverity(student.recent_absences || 0),
+                    severity: calculateSeverity(student.recent_absences || 0, student.total_absences || student.absence_count || 0),
                     attendanceRate: student.attendance_rate || 100,
                     totalPresent: student.total_present || 0,
                     totalLate: student.total_late || 0
@@ -2008,6 +2071,10 @@ async function onChartViewChange() {
     if (chartType.value === 'heatmap') {
         await loadHeatmapData();
     }
+    // If heatmap is showing, reload it with new period
+    if (chartType.value === 'heatmap') {
+        await loadHeatmapData();
+    }
 }
 
 // Handle chart type change (trends vs heatmap)
@@ -2035,6 +2102,8 @@ async function loadHeatmapData() {
             period: chartView.value,
             subjectId: selectedSubject.value?.id || null
         };
+        
+        console.log('🔍 Heatmap API request options:', options);
 
         const response = await AttendanceHeatmapService.getAttendanceReasonsHeatmap(currentTeacher.value.id, options);
 
@@ -2472,14 +2541,14 @@ async function showStudentProfile(student) {
 
                             <!-- Enhanced Filters Section -->
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                <!-- View Type Selector -->
-                                <div>
+                            <!-- View Type Selector - Hidden when heatmap is selected -->
+                                <div v-if="chartType !== 'heatmap'">
                                     <label class="block text-xs font-medium text-gray-700 mb-1">View Type</label>
                                     <SelectButton v-model="viewType" :options="viewTypeOptions" optionLabel="label" optionValue="value" class="text-xs w-full" @change="onViewTypeChange" />
                                 </div>
 
-                                <!-- Subject Filter (Always Visible) -->
-                                <div>
+                                <!-- Subject Filter - Hidden when heatmap is selected -->
+                                <div v-if="chartType !== 'heatmap'">
                                     <label class="block text-xs font-medium text-gray-700 mb-1"> <i class="pi pi-book text-xs mr-1"></i>Subject Filter </label>
                                     <Dropdown v-model="selectedSubject" :options="availableSubjects" optionLabel="name" class="w-full text-sm" :disabled="!availableSubjects?.length" placeholder="Select a subject">
                                         <template #value="{ value }">
@@ -2558,6 +2627,17 @@ async function showStudentProfile(student) {
 
                                 <div v-else-if="heatmapData" class="space-y-6">
                                     <!-- Heatmap Summary Stats -->
+                                    <div class="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-2">
+                                                <i class="pi pi-calendar text-indigo-600"></i>
+                                                <span class="text-sm font-medium text-gray-700">Data Period:</span>
+                                                <span class="text-sm font-semibold text-indigo-700">{{ heatmapDateRange }}</span>
+                                            </div>
+                                            <span class="text-xs text-gray-500">{{ chartView === 'day' ? 'Last 7 days' : chartView === 'week' ? 'Last 4 weeks' : 'Last month' }}</span>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                         <div class="bg-yellow-50 rounded-lg p-3 text-center">
                                             <div class="text-2xl font-bold text-yellow-600">{{ heatmapData.summary.total_late_incidents }}</div>
@@ -2656,18 +2736,44 @@ async function showStudentProfile(student) {
                                                 </div>
                                             </div>
 
-                                            <div class="heatmap-legend flex justify-center items-center gap-3 text-xs">
-                                                <span class="text-gray-600">Low</span>
-                                                <div class="legend-gradient"></div>
-                                                <span class="text-gray-600">High</span>
-                                                <div class="flex gap-4 ml-4">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="legend-dot late"></span>
-                                                        <span>Late</span>
+                                            <div class="heatmap-legend-container mt-6 border-t border-gray-100 pt-4">
+                                                <div class="flex flex-col sm:flex-row justify-center gap-8">
+                                                    <!-- Late Legend -->
+                                                    <div class="legend-group">
+                                                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block text-center">Late Incidents</span>
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-yellow-200 bg-[rgb(255,243,205)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">1-2</span>
+                                                            </div>
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-orange-200 bg-[rgb(255,180,60)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">3-4</span>
+                                                            </div>
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-orange-300 bg-[rgb(202,63,17)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">5+</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="legend-dot excused"></span>
-                                                        <span>Excused</span>
+
+                                                    <!-- Excused Legend -->
+                                                    <div class="legend-group">
+                                                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block text-center">Excused Incidents</span>
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-blue-100 bg-[rgb(240,249,255)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">1-2</span>
+                                                            </div>
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-blue-200 bg-[rgb(99,194,255)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">3-4</span>
+                                                            </div>
+                                                            <div class="flex flex-col items-center">
+                                                                <div class="w-8 h-6 rounded border border-blue-300 bg-[rgb(17,86,161)]"></div>
+                                                                <span class="text-[10px] text-gray-500 mt-1">5+</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2745,18 +2851,9 @@ async function showStudentProfile(student) {
 
                     <div class="flex flex-col gap-4 mt-4 sm:mt-0">
                         <!-- Search Bar -->
-                        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                        <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                             <div class="p-inputgroup w-full sm:w-80">
                                 <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
-                            </div>
-
-                            <!-- Show Issues Toggle -->
-                            <div class="flex items-center p-3 rounded-lg border transition-all duration-200" :class="showOnlyAbsenceIssues ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'">
-                                <Checkbox v-model="showOnlyAbsenceIssues" :binary="true" id="showIssues" class="mr-3" />
-                                <label for="showIssues" class="text-sm font-medium cursor-pointer text-gray-700">
-                                    Show only students with issues
-                                    <span v-if="showOnlyAbsenceIssues" class="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">Active</span>
-                                </label>
                             </div>
                         </div>
 
@@ -2820,8 +2917,8 @@ async function showStudentProfile(student) {
                                             <i
                                                 class="mr-2 text-sm"
                                                 :class="{
-                                                    'pi pi-check-circle text-green-500': slotProps.value === 'good',
-                                                    'pi pi-info-circle text-blue-500': slotProps.value === 'low',
+                                                    'pi pi-info-circle text-blue-500': slotProps.value === 'good',
+                                                    'pi pi-check-circle text-green-500': slotProps.value === 'low',
                                                     'pi pi-exclamation-triangle text-yellow-500': slotProps.value === 'at_risk',
                                                     'pi pi-exclamation-circle text-red-500': slotProps.value === 'critical'
                                                 }"
@@ -2835,8 +2932,8 @@ async function showStudentProfile(student) {
                                             <i
                                                 class="mr-2 text-sm"
                                                 :class="{
-                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'good',
-                                                    'pi pi-info-circle text-blue-500': slotProps.option.value === 'low',
+                                                    'pi pi-info-circle text-blue-500': slotProps.option.value === 'good',
+                                                    'pi pi-check-circle text-green-500': slotProps.option.value === 'low',
                                                     'pi pi-exclamation-triangle text-yellow-500': slotProps.option.value === 'at_risk',
                                                     'pi pi-exclamation-circle text-red-500': slotProps.option.value === 'critical'
                                                 }"
@@ -2868,7 +2965,7 @@ async function showStudentProfile(student) {
                             <i
                                 v-if="slotProps.data.severity !== 'good'"
                                 :class="{
-                                    'pi pi-info-circle text-blue-500': slotProps.data.severity === 'low',
+                                    'pi pi-check-circle text-green-500': slotProps.data.severity === 'low',
                                     'pi pi-exclamation-triangle text-yellow-500': slotProps.data.severity === 'at_risk',
                                     'pi pi-exclamation-circle text-red-500': slotProps.data.severity === 'critical'
                                 }"
@@ -2885,8 +2982,8 @@ async function showStudentProfile(student) {
                                     shape="circle"
                                     class="mr-2"
                                     :class="{
-                                        'bg-green-100 text-green-600': slotProps.data.severity === 'good',
-                                        'bg-blue-100 text-blue-600': slotProps.data.severity === 'low',
+                                        'bg-blue-100 text-blue-600': slotProps.data.severity === 'good',
+                                        'bg-green-100 text-green-600': slotProps.data.severity === 'low',
                                         'bg-yellow-100 text-yellow-600': slotProps.data.severity === 'at_risk',
                                         'bg-red-100 text-red-600': slotProps.data.severity === 'critical'
                                     }"
@@ -2928,7 +3025,7 @@ async function showStudentProfile(student) {
                     <Column header="Status" style="width: 140px">
                         <template #body="slotProps">
                             <Tag
-                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'at_risk' ? 'warning' : slotProps.data.severity === 'low' ? 'info' : 'success'"
+                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'at_risk' ? 'warning' : slotProps.data.severity === 'low' ? 'success' : 'info'"
                                 :value="getSeverityLabel(slotProps.data.severity)"
                                 class="px-3 py-1.5 text-sm font-medium rounded-full"
                             />
@@ -2968,8 +3065,9 @@ async function showStudentProfile(student) {
                             <div
                                 class="flex items-center justify-center w-12 h-12 rounded-full mr-3"
                                 :class="{
-                                    'bg-green-100 text-green-800': selectedStudent.severity === 'normal',
-                                    'bg-yellow-100 text-yellow-800': selectedStudent.severity === 'warning',
+                                    'bg-blue-100 text-blue-800': selectedStudent.severity === 'good' || selectedStudent.severity === 'normal',
+                                    'bg-green-100 text-green-800': selectedStudent.severity === 'low',
+                                    'bg-yellow-100 text-yellow-800': selectedStudent.severity === 'at_risk' || selectedStudent.severity === 'warning',
                                     'bg-red-100 text-red-800': selectedStudent.severity === 'critical'
                                 }"
                             >
@@ -2979,12 +3077,13 @@ async function showStudentProfile(student) {
                                 <p
                                     class="font-medium"
                                     :class="{
-                                        'text-green-600': selectedStudent.severity === 'normal',
-                                        'text-yellow-600': selectedStudent.severity === 'warning',
+                                        'text-blue-600': selectedStudent.severity === 'good' || selectedStudent.severity === 'normal',
+                                        'text-green-600': selectedStudent.severity === 'low',
+                                        'text-yellow-600': selectedStudent.severity === 'at_risk' || selectedStudent.severity === 'warning',
                                         'text-red-600': selectedStudent.severity === 'critical'
                                     }"
                                 >
-                                    {{ selectedStudent.severity === 'normal' ? 'Good' : selectedStudent.severity === 'warning' ? 'Warning' : 'Critical' }}
+                                    {{ getSeverityLabel(selectedStudent.severity) }}
                                 </p>
                                 <p class="text-xs text-gray-500">Absence level</p>
                             </div>
@@ -2993,11 +3092,11 @@ async function showStudentProfile(student) {
 
                     <div class="bg-gray-50 p-4 rounded-xl shadow-sm">
                         <p class="text-gray-500 text-sm mb-1 flex items-center gap-2">
-                            Attendance Rate
+                            Monthly Attendance Rate
                             <i
                                 class="pi pi-info-circle text-blue-500 cursor-help text-xs"
                                 v-tooltip.top="{
-                                    value: 'Formula: (Days Present + Late + Excused) ÷ Total School Days × 100%',
+                                    value: `Based on ${monthlyAttendanceStats.sessions} sessions in ${months[currentMonth]?.label || ''} ${currentYear}.<br/>Formula: (Present + Late + Excused) ÷ Sessions × 100%`,
                                     escape: false
                                 }"
                             ></i>
@@ -3007,24 +3106,31 @@ async function showStudentProfile(student) {
                                 <div
                                     class="absolute inset-0 flex items-center justify-center text-lg font-bold"
                                     :class="{
-                                        'text-green-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 85,
-                                        'text-yellow-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 85 && Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 70,
-                                        'text-red-600': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 70
+                                        'text-green-600': monthlyAttendanceStats.rate >= 85,
+                                        'text-yellow-600': monthlyAttendanceStats.rate < 85 && monthlyAttendanceStats.rate >= 70,
+                                        'text-red-600': monthlyAttendanceStats.rate < 70
                                     }"
                                 >
-                                    {{ Math.round(((20 - selectedStudent.absences) / 20) * 100) }}%
+                                    {{ monthlyAttendanceStats.rate }}%
                                 </div>
-                                <!-- Would add a circular progress bar component here in a real implementation -->
                             </div>
-                            <ProgressBar
-                                :value="Math.round(((20 - selectedStudent.absences) / 20) * 100)"
-                                class="h-2 flex-1"
-                                :class="{
-                                    'attendance-good': Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 85,
-                                    'attendance-warning': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 85 && Math.round(((20 - selectedStudent.absences) / 20) * 100) >= 70,
-                                    'attendance-poor': Math.round(((20 - selectedStudent.absences) / 20) * 100) < 70
-                                }"
-                            />
+                            <div class="flex-1">
+                                <ProgressBar
+                                    :value="Math.max(0, monthlyAttendanceStats.rate)"
+                                    class="h-2 mb-1"
+                                    :class="{
+                                        'attendance-good': monthlyAttendanceStats.rate >= 85,
+                                        'attendance-warning': monthlyAttendanceStats.rate < 85 && monthlyAttendanceStats.rate >= 70,
+                                        'attendance-poor': monthlyAttendanceStats.rate < 70
+                                    }"
+                                />
+                                <p class="text-xs text-gray-500">
+                                    Based on {{ monthlyAttendanceStats.sessions }} session{{ monthlyAttendanceStats.sessions !== 1 ? 's' : '' }}
+                                    <span v-if="monthlyAttendanceStats.sessions > 0" class="text-gray-400">
+                                        ({{ monthlyAttendanceStats.present }}P / {{ monthlyAttendanceStats.absent }}A / {{ monthlyAttendanceStats.late }}L)
+                                    </span>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3166,7 +3272,7 @@ async function showStudentProfile(student) {
                     </div>
                     <div v-else class="flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-500 italic">
                         <i class="pi pi-check-circle text-green-500 mr-2"></i>
-                        No absence records found for this student in this subject.
+                        No absence records found for this student in this subject for the selected month.
                     </div>
                 </div>
             </div>

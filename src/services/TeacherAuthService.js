@@ -2,7 +2,7 @@ import axios from 'axios';
 
 class TeacherAuthService {
     constructor() {
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
         this.baseURL = apiBaseUrl + '/api/teachers';
         this.teacherKey = 'teacher_data';
         this.tokenKey = 'teacher_token';

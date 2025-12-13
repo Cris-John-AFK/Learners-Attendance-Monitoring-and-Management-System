@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define API base URL and export it
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 export const API_BASE_URL = apiBaseUrl + '/api';
 
 // Create axios instance with the correct backend URL
