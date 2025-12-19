@@ -27,9 +27,15 @@ class SimpleSF2Controller extends Controller
                 'teacher_id' => $teacherId
             ]);
 
-            // Get section info directly (no joins needed)
+            // Get section info with grade level lookup
             $section = DB::table('sections')
-                ->where('id', $sectionId)
+                ->leftJoin('curriculum_grade', 'sections.curriculum_grade_id', '=', 'curriculum_grade.id')
+                ->leftJoin('grades', 'curriculum_grade.grade_id', '=', 'grades.id')
+                ->where('sections.id', $sectionId)
+                ->select(
+                    'sections.*',
+                    'grades.name as linked_grade_name'
+                )
                 ->first();
                 
             if (!$section) {
@@ -39,8 +45,8 @@ class SimpleSF2Controller extends Controller
                 ], 404);
             }
             
-            // Use section's grade_level field directly
-            $gradeName = $section->grade_level ?? 'Grade 1';
+            // Determine grade level: Linked Grade > Section String > Default
+            $gradeName = $section->linked_grade_name ?? $section->grade_level ?? 'Grade 1';
 
             // Get teacher info
             $teacher = DB::table('teachers')->where('id', $teacherId)->first();
@@ -61,13 +67,17 @@ class SimpleSF2Controller extends Controller
             $monthName = Carbon::createFromFormat('Y-m', $month)->format('F Y');
 
             if ($existingSubmission) {
-                // Update existing submission
+                // Update existing submission with ALL current data
                 DB::table('submitted_sf2_reports')
                     ->where('id', $existingSubmission->id)
                     ->update([
                         'status' => 'submitted',
                         'submitted_at' => now(),
-                        'updated_at' => now()
+                        'updated_at' => now(),
+                        // FIX: Update grade_level and section_name in case they were wrong or changed
+                        'grade_level' => $gradeName,
+                        'section_name' => $section->name,
+                        'submitted_by' => $teacherId
                     ]);
                 
                 $submissionId = $existingSubmission->id;

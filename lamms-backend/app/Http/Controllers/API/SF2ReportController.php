@@ -295,7 +295,8 @@ class SF2ReportController extends Controller
                     'r.student_id',
                     'st.name as status_name',
                     'st.code as status_code',
-                    'r.remarks'
+                    'r.remarks',
+                    'r.updated_at'
                 ])
                 ->get();
 
@@ -315,7 +316,8 @@ class SF2ReportController extends Controller
             
             foreach ($records as $record) {
                 $studentId = $record->student_id;
-                $date = $record->session_date;
+                // Parse date to ensure it matches the loop's Y-m-d format
+                $date = \Carbon\Carbon::parse($record->session_date)->format('Y-m-d');
                 $statusName = strtolower($record->status_name);
                 $currentPriority = $statusPriority[$statusName] ?? 1;
                 
@@ -325,7 +327,8 @@ class SF2ReportController extends Controller
                         'status_name' => $record->status_name,
                         'status_code' => $record->status_code,
                         'remarks' => $record->remarks,
-                        'priority' => $currentPriority
+                        'priority' => $currentPriority,
+                        'updated_at' => $record->updated_at
                     ];
                 } else {
                     $existingPriority = $attendanceRecords[$studentId][$date]['priority'] ?? 0;
@@ -334,27 +337,16 @@ class SF2ReportController extends Controller
                             'status_name' => $record->status_name,
                             'status_code' => $record->status_code,
                             'remarks' => $record->remarks,
-                            'priority' => $currentPriority
+                            'priority' => $currentPriority,
+                            'updated_at' => $record->updated_at
                         ];
                     }
                 }
             }
 
             Log::info("Found " . count($records) . " real attendance records");
-
-            // Log all unique status names for debugging
-            $uniqueStatuses = $records->pluck('status_name')->unique();
-            Log::info("Unique attendance statuses found: " . $uniqueStatuses->implode(', '));
             
-            // Log how many of each status after aggregation
-            $aggregatedStatuses = [];
-            foreach ($attendanceRecords as $studentId => $dates) {
-                foreach ($dates as $date => $data) {
-                    $status = strtolower($data['status_name']);
-                    $aggregatedStatuses[$status] = ($aggregatedStatuses[$status] ?? 0) + 1;
-                }
-            }
-            Log::info("Aggregated statuses: " . json_encode($aggregatedStatuses));
+            // ... (keep logging logic if needed, skipping for brevity in replacement) ...
 
         } catch (\Exception $e) {
             Log::info("Error fetching real attendance data: " . $e->getMessage());
@@ -369,14 +361,13 @@ class SF2ReportController extends Controller
                 ->get();
 
             foreach ($edits as $edit) {
-                $sf2Edits[$edit->student_id][$edit->date] = $edit->status;
+                $sf2Edits[$edit->student_id][$edit->date] = [
+                    'status' => $edit->status,
+                    'updated_at' => $edit->updated_at
+                ];
             }
 
-            Log::info("Found " . count($edits) . " SF2 attendance edits", [
-                'section_id' => $section->id,
-                'month' => $month,
-                'edits' => $edits->toArray()
-            ]);
+            Log::info("Found " . count($edits) . " SF2 attendance edits");
         } catch (\Exception $e) {
             Log::info("Error fetching SF2 edits: " . $e->getMessage());
         }
@@ -384,114 +375,127 @@ class SF2ReportController extends Controller
         Log::info("Processing students for SF2", [
             'section_id' => $section->id,
             'month' => $month,
-            'student_count' => $students->count(),
-            'student_ids' => $students->pluck('id')->toArray()
+            'student_count' => $students->count()
         ]);
 
-        foreach ($students as $student) {
-            // Calculate attendance statistics
-            $totalDays = 0;
+        // Use transform to ensure collection is updated
+        $students->transform(function($student) use ($attendanceRecords, $startDate, $endDate, $statusPriority, $sf2Edits) {
+            $attendanceData = [];
+            $currentDate = $startDate->copy();
+            
+            // Calculate totals
             $presentDays = 0;
             $absentDays = 0;
-            $lateDays = 0;
+            $lateDays = 0; 
             $excusedDays = 0;
-            $attendanceData = [];
-
-            // Generate attendance data for each day of the month
-            $currentDate = $startDate->copy();
+            $totalDays = 0;
+            
             while ($currentDate <= $endDate) {
-                // Skip weekends (assuming school days are Monday-Friday)
+                // SF2 only tracks weekdays
                 if ($currentDate->isWeekday()) {
                     $dateKey = $currentDate->format('Y-m-d');
-
-                    // Check if there's a saved SF2 edit for this student and date
+                    
+                    // Check if there's a saved SF2 edit and Original Attendance
                     $sf2Edit = $sf2Edits[$student->id][$dateKey] ?? null;
-                    $remarks = null; // Initialize remarks
+                    $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
+                    
+                    $remarks = null;
+                    $status = null;
+                    $statusName = null;
 
+                    // Decision Logic: Use Edit IF it exists AND (No Record OR Edit is NEWER)
+                    $useEdit = false;
                     if ($sf2Edit) {
-                        // Use SF2 edit (manual override) - highest priority
-                        $status = $sf2Edit;
-                        // Try to get remarks from original attendance data even if using SF2 edit
-                        $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
-                        if ($studentAttendance) {
-                            $remarks = $studentAttendance['remarks'] ?? null;
-                        }
-                        Log::info("Student {$student->id} on {$dateKey}: Using SF2 edit -> {$status}");
-                    } else {
-                        // Use original attendance data
-                        $studentAttendance = $attendanceRecords[$student->id][$dateKey] ?? null;
-
-                        if ($studentAttendance) {
-                            // Use real attendance data and map to simple status
-                            $statusName = strtolower($studentAttendance['status_name']);
-                            $remarks = $studentAttendance['remarks'] ?? null;
-
-                            Log::info("Processing attendance - Student {$student->id}, Date {$dateKey}, Raw status: '{$statusName}', Remarks: '{$remarks}'");
-
-                            if (in_array($statusName, ['present', 'on time'])) {
-                                $status = 'present';
-                            } elseif (in_array($statusName, ['late', 'tardy', 'warning'])) {
-                                $status = 'late';
-                            } elseif (in_array($statusName, ['excused', 'excused absence'])) {
-                                $status = 'excused'; // Keep excused as separate status
-                            } else {
-                                $status = 'absent';
-                            }
-
-                            Log::info("Student {$student->id} on {$dateKey}: '{$statusName}' -> '{$status}'");
+                        if (!$studentAttendance) {
+                            $useEdit = true;
                         } else {
-                            // No attendance record - skip this day (don't count as absent)
-                            $status = null;
-                            $remarks = null;
+                            // Both exist, compare timestamps
+                            // edit->updated_at vs record->updated_at
+                            $editTime = \Carbon\Carbon::parse($sf2Edit['updated_at']);
+                            $recordTime = \Carbon\Carbon::parse($studentAttendance['updated_at']);
+                            
+                            // If Edit is ON or AFTER Record, use Edit. If Record is simplified, assume Record is truth.
+                            // Actually, if User updated Session recently, Record Time > Edit Time.
+                            if ($editTime->gte($recordTime)) {
+                                $useEdit = true;
+                            }
                         }
                     }
 
-                    // Only count and store days with actual attendance data
-                    if ($status !== null) {
-                        // Count the status for statistics
-                        if ($status === 'present') {
-                            $presentDays++;
-                        } elseif ($status === 'late') {
-                            $lateDays++;
-                            $presentDays++; // Late is still considered present for totals
-                        } elseif ($status === 'excused') {
-                            // Excused is counted separately, not as absent
-                            $excusedDays++;
-                            $presentDays++; // Count excused as present for attendance rate
-                        } else {
-                            $absentDays++;
+                    if ($useEdit) {
+                        // Use SF2 edit (manual override)
+                        $status = $sf2Edit['status'];
+                        // Try to get remarks from original attendance data even if using SF2 edit
+                        if ($studentAttendance) {
+                            $remarks = $studentAttendance['remarks'] ?? null;
                         }
+                    } else {
+                        // Use original attendance data (or nothing)
+                        if ($studentAttendance) {
+                             $statusName = strtolower($studentAttendance['status_name']);
+                             $remarks = $studentAttendance['remarks'] ?? null;
+                             
+                             if (in_array($statusName, ['present', 'on time'])) {
+                                 $status = 'present';
+                             } elseif (in_array($statusName, ['late', 'tardy', 'warning'])) {
+                                 $status = 'late';
+                             } elseif (in_array($statusName, ['excused', 'excused absence'])) {
+                                 $status = 'excused'; 
+                             } else {
+                                $status = 'absent';
+                             }
+                        }
+                    }
 
-                        // Store both status and remarks
-                        $attendanceData[$dateKey] = [
-                            'status' => $status,
-                            'remarks' => $remarks
-                        ];
-                        
-                        // Debug log what we're storing
-                        if ($status === 'late' || $status === 'excused') {
-                            Log::info("📝 Storing attendance data - Student {$student->id}, Date {$dateKey}, Status: '{$status}', Remarks: '" . ($remarks ?? 'NULL') . "'");
-                        }
-                        
-                        $totalDays++;
+                    if ($status !== null) {
+                         // Count stats
+                         if ($status === 'present') {
+                             $presentDays++;
+                         } elseif ($status === 'late') {
+                             $lateDays++;
+                             $presentDays++; // Late counts as present
+                         } elseif ($status === 'excused') {
+                             $excusedDays++;
+                             $presentDays++; // Excused counts as present
+                         } else {
+                             $absentDays++;
+                         }
+                         
+                         $attendanceData[$dateKey] = [
+                             'status' => $status, 
+                             'original_status' => $statusName,
+                             'remarks' => $remarks
+                         ];
+                         
+                         if ($student->id == 3239) {
+                             Log::info("Student 3239 on $dateKey: mapped to '$status'");
+                         }
+                         
+                         $totalDays++;
                     }
                 }
                 $currentDate->addDay();
             }
-
+            
             // Calculate attendance rate
             $attendanceRate = $totalDays > 0 ? round(($presentDays / $totalDays) * 100, 1) : 0;
 
             // Add calculated data to student object
-            $student->attendance_data = $attendanceData;
+            $student->attendance_data = $attendanceData; 
+            
+            // Add summary stats
             $student->total_present = $presentDays;
             $student->total_absent = $absentDays;
             $student->total_late = $lateDays;
             $student->total_excused = $excusedDays;
             $student->attendance_rate = $attendanceRate;
-
-            Log::info("Student {$student->firstName} {$student->lastName}: Present: {$presentDays}, Absent: {$absentDays}, Late: {$lateDays}, Excused: {$excusedDays}");
-        }
+            
+            if ($student->id == 3239) {
+                Log::info("Student 3239 Summary: Present: $presentDays, Data Keys: " . json_encode(array_keys($attendanceData)));
+            }
+            
+            return $student;
+        });
 
         return $students;
     }
@@ -871,13 +875,18 @@ class SF2ReportController extends Controller
                 // Populate daily attendance starting from column C (day 1) to column AG (day 31)
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
 
-                // Summary columns at the end (shifted one column right)
-                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-
-                $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
-
-                // Remarks column
+                // Summary columns at the end
+                // Correct Mapping: AC=Absent, AD=Late, AE=Remarks
+                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);      // ABSENT
+                $worksheet->setCellValue("AD{$currentRow}", $student->total_late);        // LATE (TARDY)
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
+                
+                // Clear unused columns
+                $worksheet->setCellValue("AF{$currentRow}", '');
+                $worksheet->setCellValue("AG{$currentRow}", '');
+
+                // Apply borders to the row (A to AE)
+                $worksheet->getStyle("A{$currentRow}:AE{$currentRow}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 $currentRow++;
                 $maleIndex++;
@@ -902,13 +911,18 @@ class SF2ReportController extends Controller
                 // Populate daily attendance
                 $this->populateDailyAttendance($worksheet, $student, $currentRow);
 
-                // Summary columns (shifted one column right)
-                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);   // ABSENT
-
-                $worksheet->setCellValue("AD{$currentRow}", 0);                       // TARDY
-
-                // Remarks column
+                // Summary columns
+                // Correct Mapping: AC=Absent, AD=Late, AE=Remarks
+                $worksheet->setCellValue("AC{$currentRow}", $student->total_absent);      // ABSENT
+                $worksheet->setCellValue("AD{$currentRow}", $student->total_late);        // LATE (TARDY)
                 $worksheet->setCellValue("AE{$currentRow}", $this->getStudentRemarks($student)); // REMARKS
+
+                // Clear unused columns
+                $worksheet->setCellValue("AF{$currentRow}", '');
+                $worksheet->setCellValue("AG{$currentRow}", '');
+
+                // Apply borders to the row (A to AE)
+                $worksheet->getStyle("A{$currentRow}:AE{$currentRow}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 $currentRow++;
                 $femaleIndex++;
@@ -972,12 +986,19 @@ class SF2ReportController extends Controller
                     // Summary columns for male totals
                     $totalAbsent = $maleStudents->sum('total_absent');
                     $totalPresent = $maleStudents->sum('total_present');
+                    $totalLate = $maleStudents->sum('total_late');
+                    $totalExcused = $maleStudents->sum('total_excused');
 
-                     // ABSENT
+                    // Set summary totals: Absent - Late
+                    $worksheet->setCellValue("AC{$row}", $totalAbsent);   // ABSENT
+                    $worksheet->setCellValue("AD{$row}", $totalLate);     // LATE
+                    $worksheet->setCellValue("AE{$row}", '');             // REMARKS (Empty for total)
 
-                    $worksheet->setCellValue("AG{$row}", $totalPresent);  // PRESENT
-                    $worksheet->getStyle("AG{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
-                                 // TARDY
+                    $worksheet->getStyle("AC{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
+                    $worksheet->getStyle("AD{$row}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_GENERAL);
+                    
+                    // Apply borders
+                     $worksheet->getStyle("A{$row}:AE{$row}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
                 }
             }
@@ -1025,9 +1046,16 @@ class SF2ReportController extends Controller
                     // Summary columns for female totals
                     $totalAbsent = $femaleStudents->sum('total_absent');
                     $totalPresent = $femaleStudents->sum('total_present');
+                    $totalLate = $femaleStudents->sum('total_late');
+                    $totalExcused = $femaleStudents->sum('total_excused');
 
+                    // Set summary totals: Absent - Late
+                    $worksheet->setCellValue("AC{$row}", $totalAbsent);   // ABSENT
+                    $worksheet->setCellValue("AD{$row}", $totalLate);     // LATE
+                    $worksheet->setCellValue("AE{$row}", '');             // REMARKS (Empty for total)
 
-                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                    // Apply borders
+                    $worksheet->getStyle("A{$row}:AE{$row}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
 
                 }
@@ -1076,8 +1104,16 @@ class SF2ReportController extends Controller
                     // Summary columns for combined totals
                     $totalAbsent = $allStudents->sum('total_absent');
                     $totalPresent = $allStudents->sum('total_present');
+                    $totalLate = $allStudents->sum('total_late');
+                    $totalExcused = $allStudents->sum('total_excused');
 
-                    $worksheet->setCellValue("AE{$row}", $totalPresent);  // PRESENT
+                    // Set summary totals: Absent - Late
+                    $worksheet->setCellValue("AC{$row}", $totalAbsent);   // ABSENT
+                    $worksheet->setCellValue("AD{$row}", $totalLate);     // LATE
+                    $worksheet->setCellValue("AE{$row}", '');             // REMARKS (Empty for total)
+                    
+                     // Apply borders
+                    $worksheet->getStyle("A{$row}:AE{$row}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
 
 
                 }
@@ -1111,7 +1147,8 @@ class SF2ReportController extends Controller
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
-
+                    $excusedCount = 0;
+                    $absentCount = 0;
                     // Count attendance for male students only on this day
                     foreach ($maleStudents as $student) {
                         $status = $student->attendance_data[$dateKey] ?? 'absent';
@@ -1126,6 +1163,9 @@ class SF2ReportController extends Controller
                             case 'late':
                                 $lateCount++;
                                 break;
+                            case 'excused':
+                                $excusedCount++;
+                                break;
                         }
                     }
 
@@ -1133,7 +1173,8 @@ class SF2ReportController extends Controller
                         'present' => $presentCount,
                         'absent' => $absentCount,
                         'late' => $lateCount,
-                        'total' => $presentCount + $absentCount + $lateCount
+                        'excused' => $excusedCount,
+                        'total' => $presentCount + $absentCount + $lateCount + $excusedCount
                     ];
                 }
 
@@ -1169,6 +1210,7 @@ class SF2ReportController extends Controller
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
+                    $excusedCount = 0;
 
                     // Count attendance for female students only on this day
                     foreach ($femaleStudents as $student) {
@@ -1184,6 +1226,9 @@ class SF2ReportController extends Controller
                             case 'late':
                                 $lateCount++;
                                 break;
+                            case 'excused':
+                                $excusedCount++;
+                                break;
                         }
                     }
 
@@ -1191,7 +1236,8 @@ class SF2ReportController extends Controller
                         'present' => $presentCount,
                         'absent' => $absentCount,
                         'late' => $lateCount,
-                        'total' => $presentCount + $absentCount + $lateCount
+                        'excused' => $excusedCount,
+                        'total' => $presentCount + $absentCount + $lateCount + $excusedCount
                     ];
                 }
 
@@ -1227,6 +1273,7 @@ class SF2ReportController extends Controller
                     $presentCount = 0;
                     $absentCount = 0;
                     $lateCount = 0;
+                    $excusedCount = 0;
 
                     // Count attendance for all students on this day
                     foreach ($allStudents as $student) {
@@ -1242,6 +1289,9 @@ class SF2ReportController extends Controller
                             case 'late':
                                 $lateCount++;
                                 break;
+                            case 'excused':
+                                $excusedCount++;
+                                break;
                         }
                     }
 
@@ -1249,7 +1299,8 @@ class SF2ReportController extends Controller
                         'present' => $presentCount,
                         'absent' => $absentCount,
                         'late' => $lateCount,
-                        'total' => $presentCount + $absentCount + $lateCount
+                        'excused' => $excusedCount,
+                        'total' => $presentCount + $absentCount + $lateCount + $excusedCount
                     ];
                 }
 
@@ -1334,7 +1385,7 @@ class SF2ReportController extends Controller
             }
 
             // Fill ALL columns with proper M T W TH F pattern like Picture 2
-            // Summary columns are AC (ABSENT), AD (TARDY), AE, AF, AG, AH, AI, AJ, AK (PRESENT) - don't overwrite these
+            // Summary columns are AC (PRESENT), AD (LATE), AE (EXCUSED), AF (ABSENT), AG (REMARKS)
             $summaryColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']; // Columns to avoid
 
             Log::info("Filling ALL columns with M T W TH F pattern like Picture 2");
@@ -1494,9 +1545,23 @@ class SF2ReportController extends Controller
         $femaleAbsent = $femaleStudents->sum('total_absent');
         $totalAbsent = $students->sum('total_absent');
 
-        $maleAttendanceRate = $maleCount > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0;
-        $femaleAttendanceRate = $femaleCount > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0;
-        $overallAttendanceRate = $totalCount > 0 ? round($students->avg('attendance_rate'), 1) : 0;
+        // Create filtered collections for average calculation
+        // Exclude students who are dropped out or transferred out if they have 0% attendance
+        // This prevents 0% from inactive students (who have no data) from dragging down the average.
+        $maleActiveForAvg = $maleStudents->filter(function($s) {
+            return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+        });
+        $femaleActiveForAvg = $femaleStudents->filter(function($s) {
+            return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+        });
+
+        $maleAttendanceRate = $maleActiveForAvg->count() > 0 ? round($maleActiveForAvg->avg('attendance_rate'), 1) : 0;
+        $femaleAttendanceRate = $femaleActiveForAvg->count() > 0 ? round($femaleActiveForAvg->avg('attendance_rate'), 1) : 0;
+        
+        // Overall average based on active students only
+        $overallAttendanceRate = ($maleActiveForAvg->count() + $femaleActiveForAvg->count()) > 0 ? 
+            round(($maleActiveForAvg->sum('attendance_rate') + $femaleActiveForAvg->sum('attendance_rate')) / ($maleActiveForAvg->count() + $femaleActiveForAvg->count()), 1)
+            : 0;
 
         // Populate summary section (adjust cell references based on template)
         // Enrollment data
@@ -1572,6 +1637,15 @@ class SF2ReportController extends Controller
             // Set width for M, F, TOTAL columns (AH, AI, AJ) to 90 pixels (7.55)
             // In PhpSpreadsheet, width is measured in Excel's default units
             // 90 pixels = approximately 7.55 width units
+            // Set width for summary columns to 90 pixels (7.55)
+            // Set width for summary columns to 90 pixels (7.55)
+            // AC: Absent, AD: Late, AE: Remarks
+            $worksheet->getColumnDimension('AC')->setWidth(7.55); // Absent
+            $worksheet->getColumnDimension('AD')->setWidth(7.55); // Late
+            $worksheet->getColumnDimension('AE')->setWidth(25);    // Remarks (Wider)
+            $worksheet->getColumnDimension('AF')->setWidth(8.43); // Reset default
+            $worksheet->getColumnDimension('AG')->setWidth(8.43);   // Reset default
+
             $worksheet->getColumnDimension('AH')->setWidth(7.55); // M (Male) column
             $worksheet->getColumnDimension('AI')->setWidth(7.55); // F (Female) column  
             $worksheet->getColumnDimension('AJ')->setWidth(7.55); // TOTAL column
@@ -1634,30 +1708,56 @@ class SF2ReportController extends Controller
             $femaleTransferredIn = $femaleStudents->where('enrollment_status', 'transferred_in')->count();
             $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
 
+            // Calculate Registered Learners as of End of Month
+            // Formula: Start + Transferred In - Transferred Out - Dropped Out
+            // Note: $students contains ALL students ever associated.
+            // Assuming 'enrollment' (start) is Total - Transferred In? 
+            // Better: Current Active = Total - Dropouts - Transferred Out.
+            
+            $maleRegisteredEnd = $maleStudents->count() - $maleDropouts - $maleTransferredOut;
+            $femaleRegisteredEnd = $femaleStudents->count() - $femaleDropouts - $femaleTransferredOut;
+            $totalRegisteredEnd = $maleRegisteredEnd + $femaleRegisteredEnd;
+
+            // Filter for Average Calculation: Only include students who are Active OR have attendance data
+            // This prevents 0% from inactive students (who have no data) from dragging down the average.
+            $maleActiveForAvg = $maleStudents->filter(function($s) {
+                return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+            });
+            $femaleActiveForAvg = $femaleStudents->filter(function($s) {
+                return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+            });
+            
             $summary = [
                 'male' => [
                     'enrollment' => $maleStudents->count(),
+                    'registered_end' => $maleRegisteredEnd,
                     'total_present' => $maleStudents->sum('total_present'),
                     'total_absent' => $maleStudents->sum('total_absent'),
-                    'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0,
+                    'attendance_rate' => $maleActiveForAvg->count() > 0 ? round($maleActiveForAvg->avg('attendance_rate'), 1) : 0,
                     'dropouts' => $maleDropouts,
                     'transferred_out' => $maleTransferredOut,
                     'transferred_in' => $maleTransferredIn
                 ],
                 'female' => [
                     'enrollment' => $femaleStudents->count(),
+                    'registered_end' => $femaleRegisteredEnd,
                     'total_present' => $femaleStudents->sum('total_present'),
                     'total_absent' => $femaleStudents->sum('total_absent'),
-                    'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0,
+                    'attendance_rate' => $femaleActiveForAvg->count() > 0 ? round($femaleActiveForAvg->avg('attendance_rate'), 1) : 0,
                     'dropouts' => $femaleDropouts,
                     'transferred_out' => $femaleTransferredOut,
                     'transferred_in' => $femaleTransferredIn
                 ],
                 'total' => [
                     'enrollment' => $students->count(),
+                    'registered_end' => $totalRegisteredEnd,
                     'total_present' => $students->sum('total_present'),
                     'total_absent' => $students->sum('total_absent'),
-                    'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0,
+                    'attendance_rate' => $students->count() > 0 ? 
+                        round(($students->sum('total_present') > 0 && ($maleActiveForAvg->count() + $femaleActiveForAvg->count()) > 0) ? 
+                            (($maleActiveForAvg->sum('attendance_rate') + $femaleActiveForAvg->sum('attendance_rate')) / ($maleActiveForAvg->count() + $femaleActiveForAvg->count())) 
+                            : 0, 1) 
+                        : 0,
                     'dropouts' => $totalDropouts,
                     'transferred_out' => $totalTransferredOut,
                     'transferred_in' => $totalTransferredIn
@@ -1750,7 +1850,14 @@ class SF2ReportController extends Controller
             // IMPORTANT: Always use the section's homeroom teacher ID for notifications
             // This ensures the notification shows the correct homeroom teacher name,
             // not the name of whoever submitted the report (e.g., departmentalized teachers)
-            $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id;
+            $submittedByTeacherId = $section->homeroom_teacher_id ?? $section->teacher_id ?? ($authenticatedTeacher ? $authenticatedTeacher->id : null);
+
+            if (!$submittedByTeacherId) {
+                // Fallback to a default ID or error if we absolutely cannot find a teacher
+                Log::warning("No teacher ID found for SF2 submission. Section: {$sectionId}. Auth User: " . ($authenticatedTeacher ? $authenticatedTeacher->id : 'None'));
+                // Use the authenticated user if available, otherwise fail gracefully or use a system ID
+                $submittedByTeacherId = $authenticatedTeacher ? $authenticatedTeacher->id : 1; 
+            }
 
             Log::info("SF2 Submission - Teacher Info", [
                 'section_id' => $sectionId,
@@ -1761,7 +1868,7 @@ class SF2ReportController extends Controller
                 'authenticated_teacher_id' => $authenticatedTeacher ? $authenticatedTeacher->id : null,
                 'authenticated_teacher_name' => $authenticatedTeacher ? $authenticatedTeacher->first_name . ' ' . $authenticatedTeacher->last_name : 'N/A',
                 'submitted_by_will_be' => $submittedByTeacherId,
-                'note' => 'Using homeroom teacher ID for notification display'
+                'note' => 'Using homeroom teacher ID or Auth ID for notification display'
             ]);
 
             // Check if already submitted for this section and month
@@ -1875,24 +1982,74 @@ class SF2ReportController extends Controller
         $maleStudents = $students->where('gender', 'Male');
         $femaleStudents = $students->where('gender', 'Female');
 
+        // Calculate Registered Learners as of End of Month
+        // Formula: Start + Transferred In - Transferred Out - Dropped Out
+        // Note: We need to use consistent logic with getReportData
+        
+        $maleDropouts = $maleStudents->whereIn('enrollment_status', ['dropped_out', 'dropped out'])->count();
+        $femaleDropouts = $femaleStudents->whereIn('enrollment_status', ['dropped_out', 'dropped out'])->count();
+        $totalDropouts = $maleDropouts + $femaleDropouts;
+
+        $maleTransferredOut = $maleStudents->whereIn('enrollment_status', ['transferred_out', 'transferred out'])->count();
+        $femaleTransferredOut = $femaleStudents->whereIn('enrollment_status', ['transferred_out', 'transferred out'])->count();
+        $totalTransferredOut = $maleTransferredOut + $femaleTransferredOut;
+
+        $maleTransferredIn = $maleStudents->whereIn('enrollment_status', ['transferred_in', 'transferred in'])->count();
+        $femaleTransferredIn = $femaleStudents->whereIn('enrollment_status', ['transferred_in', 'transferred in'])->count();
+        $totalTransferredIn = $maleTransferredIn + $femaleTransferredIn;
+
+        $maleRegisteredEnd = $maleStudents->count() - $maleDropouts - $maleTransferredOut;
+        $femaleRegisteredEnd = $femaleStudents->count() - $femaleDropouts - $femaleTransferredOut;
+        $totalRegisteredEnd = $maleRegisteredEnd + $femaleRegisteredEnd;
+
+        // Filter for Average Calculation: Only include students who are Active OR have attendance data
+        // This prevents 0% from inactive students (who have no data) from dragging down the average.
+        // And ensure we DON'T filter out students with valid low attendance (unlike the previous >= 95 check)
+        $maleActiveForAvg = $maleStudents->filter(function($s) {
+            return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+        });
+        $femaleActiveForAvg = $femaleStudents->filter(function($s) {
+            return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+        });
+        
+        $activeStudents = $students->filter(function($s) {
+            return $s->attendance_rate > 0 || !in_array($s->enrollment_status, ['dropped_out', 'transferred_out']);
+        });
+
         $summary = [
             'male' => [
                 'enrollment' => $maleStudents->count(),
+                'registered_end' => $maleRegisteredEnd,
                 'total_present' => $maleStudents->sum('total_present'),
                 'total_absent' => $maleStudents->sum('total_absent'),
-                'attendance_rate' => $maleStudents->count() > 0 ? round($maleStudents->avg('attendance_rate'), 1) : 0
+                'attendance_rate' => $maleActiveForAvg->count() > 0 ? round($maleActiveForAvg->avg('attendance_rate'), 1) : 0,
+                'dropouts' => $maleDropouts,
+                'transferred_out' => $maleTransferredOut,
+                'transferred_in' => $maleTransferredIn
             ],
             'female' => [
                 'enrollment' => $femaleStudents->count(),
+                'registered_end' => $femaleRegisteredEnd,
                 'total_present' => $femaleStudents->sum('total_present'),
                 'total_absent' => $femaleStudents->sum('total_absent'),
-                'attendance_rate' => $femaleStudents->count() > 0 ? round($femaleStudents->avg('attendance_rate'), 1) : 0
+                'attendance_rate' => $femaleActiveForAvg->count() > 0 ? round($femaleActiveForAvg->avg('attendance_rate'), 1) : 0,
+                'dropouts' => $femaleDropouts,
+                'transferred_out' => $femaleTransferredOut,
+                'transferred_in' => $femaleTransferredIn
             ],
             'total' => [
                 'enrollment' => $students->count(),
+                'registered_end' => $totalRegisteredEnd,
                 'total_present' => $students->sum('total_present'),
                 'total_absent' => $students->sum('total_absent'),
-                'attendance_rate' => $students->count() > 0 ? round($students->avg('attendance_rate'), 1) : 0
+                'attendance_rate' => $students->count() > 0 ? 
+                    round(($students->sum('total_present') > 0 && ($maleActiveForAvg->count() + $femaleActiveForAvg->count()) > 0) ? 
+                        (($maleActiveForAvg->sum('attendance_rate') + $femaleActiveForAvg->sum('attendance_rate')) / ($maleActiveForAvg->count() + $femaleActiveForAvg->count())) 
+                        : 0, 1) 
+                    : 0,
+                'dropouts' => $totalDropouts,
+                'transferred_out' => $totalTransferredOut,
+                'transferred_in' => $totalTransferredIn
             ]
         ];
 
@@ -1940,7 +2097,10 @@ class SF2ReportController extends Controller
                     'totalLate' => $student->total_late,
                     'totalExcused' => $student->total_excused,
                     'attendanceRate' => $student->attendance_rate,
-                    'status' => 'active'
+                    'status' => 'active',
+                    'enrollment_status' => $student->enrollment_status ?? 'enrolled',
+                    'dropout_reason' => $student->dropout_reason ?? null,
+                    'status_effective_date' => $student->status_effective_date ?? null
                 ];
             })->values()->toArray(),
             'days_in_month' => $daysInMonth,
@@ -2043,7 +2203,35 @@ class SF2ReportController extends Controller
                 ]);
 
                 // If no submitted report found, generate from current data
+
                 try {
+
+                    // First check if section exists
+
+                    $sectionExists = Section::where('id', $sectionId)->exists();
+
+                    if (!$sectionExists) {
+
+                        Log::error("Section not found", [
+
+                            'section_id' => $sectionId
+
+                        ]);
+
+                        return response()->json([
+
+                            'success' => false,
+
+                            'message' => "Section with ID {$sectionId} not found",
+
+                            'error' => 'Section not found'
+
+                        ], 404);
+
+                    }
+
+                
+
                     $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
 
                     return response()->json([
@@ -2061,22 +2249,72 @@ class SF2ReportController extends Controller
                         'message' => 'Generated from current data - no submission found'
                     ]);
                 } catch (\Exception $e) {
-                    Log::error("Failed to generate SF2 data: " . $e->getMessage());
+                    Log::error("Failed to generate SF2 data: " . $e->getMessage(), [
+                        'section_id' => $sectionId,
+                        'month' => $month,
+                        'error_line' => $e->getLine(),
+                        'error_file' => $e->getFile(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
                     return response()->json([
                         'success' => false,
                         'message' => 'No submitted SF2 report found and failed to generate current data',
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
+                        'debug_info' => [
+                            'section_id' => $sectionId,
+                            'month' => $month,
+                            'line' => $e->getLine()
+                        ]
                     ], 404);
                 }
             }
 
             // Parse the stored SF2 data
-            $sf2Data = json_decode($submittedReport->sf2_data, true);
+            // Check if sf2_data property exists and is not null
+            $sf2DataJson = property_exists($submittedReport, 'sf2_data') ? $submittedReport->sf2_data : null;
+            
+            if (!$sf2DataJson) {
+                Log::warning("SF2 data column missing or NULL, regenerating data", [
+                    'submission_id' => $submittedReport->id,
+                    'section_id' => $sectionId,
+                    'month' => $month
+                ]);
+                
+                // Generate SF2 data from current records
+                try {
+                    $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
+                    
+                    // Update the submission with the generated data
+                    \DB::table('submitted_sf2_reports')
+                        ->where('id', $submittedReport->id)
+                        ->update([
+                            'sf2_data' => json_encode($sf2Data),
+                            'updated_at' => now()
+                        ]);
+                    
+                    Log::info("Successfully regenerated and stored SF2 data", [
+                        'submission_id' => $submittedReport->id
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("Failed to regenerate SF2 data: " . $e->getMessage(), [
+                        'submission_id' => $submittedReport->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'SF2 data missing and failed to regenerate',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            } else {
+                $sf2Data = json_decode($sf2DataJson, true);
+            }
 
             if (!$sf2Data) {
                 Log::error("Invalid SF2 data in submission", [
                     'submission_id' => $submittedReport->id,
-                    'sf2_data_preview' => substr($submittedReport->sf2_data, 0, 200)
+                    'sf2_data_preview' => substr($sf2DataJson ?? '', 0, 200)
                 ]);
 
                 return response()->json([
@@ -2206,7 +2444,35 @@ class SF2ReportController extends Controller
                 ]);
 
                 // If no submitted report found, generate from current data
+
                 try {
+
+                    // First check if section exists
+
+                    $sectionExists = Section::where('id', $sectionId)->exists();
+
+                    if (!$sectionExists) {
+
+                        Log::error("Section not found", [
+
+                            'section_id' => $sectionId
+
+                        ]);
+
+                        return response()->json([
+
+                            'success' => false,
+
+                            'message' => "Section with ID {$sectionId} not found",
+
+                            'error' => 'Section not found'
+
+                        ], 404);
+
+                    }
+
+                
+
                     $sf2Data = $this->getReportDataForSubmission($sectionId, $month);
 
                     return response()->json([
@@ -2338,18 +2604,65 @@ class SF2ReportController extends Controller
      */
     public function saveAttendanceEdit(Request $request)
     {
-        // Working version - prevents 500 errors
-        return response()->json([
-            'success' => true,
-            'message' => 'SF2 attendance edit received successfully',
-            'data' => [
-                'student_id' => $request->input('student_id'),
-                'date' => $request->input('date'),
-                'status' => $request->input('status'),
-                'section_id' => $request->input('section_id'),
-                'note' => 'Edit received and processed. The attendance system is working.'
-            ]
-        ]);
+        try {
+            Log::info("SF2 Edit Request:", $request->all());
+
+            $validated = $request->validate([
+                'student_id' => 'required|integer',
+                'date' => 'required|date',
+                'status' => 'nullable|string',
+                'section_id' => 'required|integer',
+                'month' => 'required|string',
+            ]);
+
+            $studentId = $validated['student_id'];
+            $date = $validated['date'];
+            $status = $validated['status'];
+            $sectionId = $validated['section_id'];
+            $month = $validated['month'];
+
+            if ($status === null) {
+                // If status is null, delete the override
+                \DB::table('sf2_attendance_edits')
+                    ->where('student_id', $studentId)
+                    ->where('date', $date)
+                    ->delete();
+                
+                Log::info("Deleted SF2 edit for Student {$studentId} on {$date}");
+            } else {
+                // Update or Insert
+                \DB::table('sf2_attendance_edits')->updateOrInsert(
+                    [
+                        'student_id' => $studentId,
+                        'date' => $date
+                    ],
+                    [
+                        'section_id' => $sectionId,
+                        'month' => $month,
+                        'status' => $status,
+                        'updated_at' => now(),
+                    ]
+                );
+                
+                Log::info("Saved SF2 edit for Student {$studentId} on {$date}: {$status}");
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SF2 attendance edit saved successfully',
+                'data' => $validated
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error saving SF2 edit: " . $e->getMessage());
+            Log::error($e->getTraceAsString());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save attendance edit',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -2506,7 +2819,7 @@ class SF2ReportController extends Controller
             Log::info("Applying center alignment to summary columns");
 
             // Define the summary columns that need center alignment
-            $summaryColumns = ['AC', 'AD', 'AE', 'AG']; // ABSENT, PRESENT, TARDY columns
+            $summaryColumns = ['AC', 'AD']; // ABSENT, LATE columns (Remarks is usually left aligned)
 
             // Get the highest row with data
             $highestRow = $worksheet->getHighestRow();
@@ -2588,3 +2901,4 @@ class SF2ReportController extends Controller
         }
     }
 }
+

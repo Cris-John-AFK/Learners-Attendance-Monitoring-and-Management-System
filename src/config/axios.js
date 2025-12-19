@@ -22,7 +22,7 @@ const api = axios.create({
 const responseCache = new Map();
 const CACHE_TTL = 300000; // 5 minutes
 const CRITICAL_PATHS = ['/api/sections', '/api/teachers', '/api/subjects']; // Paths that need special handling
-const NO_CACHE_PATHS = ['/api/teachers', '/api/attendance-sessions', '/teachers/', '/attendance-sessions']; // Paths that should never be cached
+const NO_CACHE_PATHS = ['/api/teachers', '/api/attendance-sessions', '/teachers/', '/attendance-sessions', '/reports/sf2', 'sf2/data']; // Paths that should never be cached
 
 // Request deduplication - prevent duplicate concurrent requests
 const pendingRequests = new Map();

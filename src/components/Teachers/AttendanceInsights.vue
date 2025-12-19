@@ -1372,7 +1372,7 @@ const groupedStudents = computed(() => {
 
         if (riskLevel === 'critical') {
             groups.critical.push(student);
-        } else if (riskLevel === 'high') {
+        } else if (riskLevel === 'high' || riskLevel === 'at_risk') {
             groups.high.push(student);
         } else if (riskLevel === 'low') {
             groups.low.push(student);

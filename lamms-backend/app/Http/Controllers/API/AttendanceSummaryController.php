@@ -122,10 +122,18 @@ class AttendanceSummaryController extends Controller
                     ->whereNotNull('ases.teacher_id')
                     ->whereBetween('ases.session_date', [$startDate, $endDate]);
 
-                // CRITICAL: Filter by subject for subject-specific view
-                if ($viewType === 'subject' && $subjectId) {
-                    $attendanceQuery->where('ases.subject_id', $subjectId);
+
+                // CRITICAL: Filter by subject ONLY for subject-specific view
+                // DON'T filter by subject for 'all_students' view - we want ALL attendance records
+                if ($viewType === 'subject') {
+                    if ($subjectId) {
+                        $attendanceQuery->where('ases.subject_id', $subjectId);
+                    } else {
+                        // Homeroom: subject_id IS NULL
+                        $attendanceQuery->whereNull('ases.subject_id');
+                    }
                 }
+
 
                 $counts = $attendanceQuery->select([
                     DB::raw('COUNT(CASE WHEN ast.code = \'P\' THEN 1 END) as total_present'),

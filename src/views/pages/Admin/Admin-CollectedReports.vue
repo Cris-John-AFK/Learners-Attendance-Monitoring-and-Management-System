@@ -564,8 +564,11 @@ const viewSF2Report = async (reportData) => {
                 const submittedReports = await submittedResponse.json();
                 console.log('All submitted reports:', submittedReports);
 
+                // Extract the data array from the API response
+                const reportsArray = submittedReports.data || submittedReports;
+
                 // Find the matching report
-                const matchingReport = submittedReports.find(
+                const matchingReport = reportsArray.find(
                     (report) => (report.section_name === reportData.section || report.section_name === reportData.section_name) && (report.month_name === reportData.month || report.month_name === reportData.month_name)
                 );
 
@@ -597,7 +600,16 @@ const viewSF2Report = async (reportData) => {
                 usingSubmittedData = true;
                 console.log('Using submitted SF2 data (exact teacher submission)');
             } else {
-                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                // Try to get the error response body
+                let errorMessage = `HTTP error! status: ${response.status} - ${response.statusText}`;
+                try {
+                    const errorData = await response.json();
+                    console.error('Backend error response:', errorData);
+                    errorMessage = errorData.message || errorData.error || errorMessage;
+                } catch (e) {
+                    console.error('Could not parse error response');
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -839,6 +851,37 @@ const getTotalStudents = () => {
     return getMaleStudents().length + getFemaleStudents().length;
 };
 
+const getRegisteredMaleStudents = () => {
+    // Filter out dropouts and students who have NO PRESENCE (absent all month or no data)
+    // This matches the Teacher's Report which only includes active, attending students
+    const schoolDays = getSchoolDays();
+    return getMaleStudents().filter(s => {
+        if (s.enrollment_status === 'dropped_out' || s.enrollment_status === 'transferred_out') return false;
+        
+        // Require at least one Present, Late, or Excused mark
+        // Students with only Absent marks or empty data are excluded from stats
+        return schoolDays.some(day => {
+            if (day.isEmpty) return false;
+            const mark = getAttendanceMark(s, day.date, false);
+            return ['✓', 'L', 'E'].includes(mark);
+        });
+    });
+};
+
+const getRegisteredFemaleStudents = () => {
+    const schoolDays = getSchoolDays();
+    return getFemaleStudents().filter(s => {
+        if (s.enrollment_status === 'dropped_out' || s.enrollment_status === 'transferred_out') return false;
+        
+        // Require at least one Present, Late, or Excused mark
+        return schoolDays.some(day => {
+            if (day.isEmpty) return false;
+            const mark = getAttendanceMark(s, day.date, false);
+            return ['✓', 'L', 'E'].includes(mark);
+        });
+    });
+};
+
 // Generate remarks text for student based on status
 const getStudentRemarks = (student) => {
     if (!student) return '-';
@@ -1039,14 +1082,14 @@ const getAttendanceMark = (student, day, isEmpty = false) => {
                     case 'excused':
                         return 'E';
                     default:
-                        return '✗'; // Default to absent for unknown status
+                        return '-'; // Default to dash for unknown status
                 }
             }
         }
     }
 
-    // Default to absent if no attendance data found
-    return '✗';
+    // Default to dash if no attendance data found
+    return '-';
 };
 
 // Helper function to get total value for empty columns
@@ -1058,7 +1101,7 @@ const getTotalForDay = (isEmpty = false) => {
 const getMalePresentForDay = (day, isEmpty = false) => {
     if (isEmpty) return '';
 
-    const maleStudents = getMaleStudents();
+    const maleStudents = getRegisteredMaleStudents();
     let presentCount = 0;
 
     maleStudents.forEach((student) => {
@@ -1075,7 +1118,7 @@ const getMalePresentForDay = (day, isEmpty = false) => {
 const getFemalePresentForDay = (day, isEmpty = false) => {
     if (isEmpty) return '';
 
-    const femaleStudents = getFemaleStudents();
+    const femaleStudents = getRegisteredFemaleStudents();
     let presentCount = 0;
 
     femaleStudents.forEach((student) => {
@@ -1104,7 +1147,7 @@ const getCombinedPresentForDay = (day, isEmpty = false) => {
 
 // Calculate total present count for male students (for monthly total)
 const getMaleTotalPresent = () => {
-    const maleStudents = getMaleStudents();
+    const maleStudents = getRegisteredMaleStudents();
     let totalPresent = 0;
 
     const schoolDays = getSchoolDays();
@@ -1124,7 +1167,7 @@ const getMaleTotalPresent = () => {
 
 // Calculate total present count for female students (for monthly total)
 const getFemaleTotalPresent = () => {
-    const femaleStudents = getFemaleStudents();
+    const femaleStudents = getRegisteredFemaleStudents();
     let totalPresent = 0;
 
     const schoolDays = getSchoolDays();
@@ -1168,12 +1211,33 @@ const formatMonthDisplay = (monthValue) => {
     return `${monthValue.toUpperCase()} 2025`;
 };
 
+// Helper to get Valid School Days (applying threshold)
+const getValidSchoolDays = () => {
+    const schoolDays = getSchoolDays();
+    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
+    
+    const allStudents = [...getRegisteredMaleStudents(), ...getRegisteredFemaleStudents()];
+    if (allStudents.length === 0) return nonEmptyDays;
+
+    // Filter days where attendance was actually taken (Threshold: 15%)
+    return nonEmptyDays.filter(day => {
+        const studentsWithDataCount = allStudents.filter(student => {
+             const mark = getAttendanceMark(student, day.date, false);
+             return mark && mark !== '-' && mark !== ''; 
+        }).length;
+        
+        const threshold = Math.max(1, Math.ceil(allStudents.length * 0.15));
+        return studentsWithDataCount >= threshold;
+    });
+};
+
 // Count actual attendance marks for a student
 const countAttendanceMarks = (student, markType) => {
     if (!student) return 0;
 
     let count = 0;
-    const schoolDays = getSchoolDays();
+    // Use VALID School Days only (ignores rogue days)
+    const schoolDays = getValidSchoolDays();
 
     // Count marks only in non-empty columns
     schoolDays.forEach((schoolDay) => {
@@ -1216,82 +1280,67 @@ const getTotalLate = (student) => {
 };
 
 // Calculate Average Daily Attendance for Male students
-const getMaleAverageDailyAttendance = () => {
-    const maleStudents = getMaleStudents();
-    if (maleStudents.length === 0) return 0;
-
+// Helper to count days that actually have attendance data (ignoring empty days and rogue marks)
+// Calculate Average Daily Attendance for Male students
+// Helper to count days that actually have attendance data (ignoring empty days and rogue marks)
+const getDaysWithDataCount = () => {
+    const validDays = getValidSchoolDays();
     const schoolDays = getSchoolDays();
     const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    if (nonEmptyDays.length === 0) return 0;
+    
+    // Fallback to 1 to avoid division by zero
+    return validDays.length > 0 ? validDays.length : (nonEmptyDays.length > 0 ? nonEmptyDays.length : 1);
+};
 
+// Calculate Average Daily Attendance for Male students
+const getMaleAverageDailyAttendance = () => {
+    const maleStudents = getRegisteredMaleStudents();
+    if (maleStudents.length === 0) return 0;
+
+    const daysCount = getDaysWithDataCount();
     let totalAttendance = 0;
-    nonEmptyDays.forEach((schoolDay) => {
-        maleStudents.forEach((student) => {
-            const mark = getAttendanceMark(student, schoolDay.date, false);
-            if (mark === '✓') {
-                totalAttendance++;
-            }
-        });
-    });
+    
+    // Re-calculate total present based on the same days filter? 
+    // Actually getMaleTotalPresent sums ALL presents. 
+    // If we only count daysWithData, we assume presents only occur on daysWithData.
+    // Which is true by definition.
+    const totalPresent = getMaleTotalPresent();
 
-    return Math.round((totalAttendance / (maleStudents.length * nonEmptyDays.length)) * 100);
+    return Math.round(totalPresent / daysCount);
 };
 
 // Calculate Average Daily Attendance for Female students
 const getFemaleAverageDailyAttendance = () => {
-    const femaleStudents = getFemaleStudents();
+    const femaleStudents = getRegisteredFemaleStudents();
     if (femaleStudents.length === 0) return 0;
 
-    const schoolDays = getSchoolDays();
-    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    if (nonEmptyDays.length === 0) return 0;
+    const daysCount = getDaysWithDataCount();
+    const totalPresent = getFemaleTotalPresent();
 
-    let totalAttendance = 0;
-    nonEmptyDays.forEach((schoolDay) => {
-        femaleStudents.forEach((student) => {
-            const mark = getAttendanceMark(student, schoolDay.date, false);
-            if (mark === '✓') {
-                totalAttendance++;
-            }
-        });
-    });
-
-    return Math.round((totalAttendance / (femaleStudents.length * nonEmptyDays.length)) * 100);
+    return Math.round(totalPresent / daysCount);
 };
 
 // Calculate Combined Average Daily Attendance
 const getCombinedAverageDailyAttendance = () => {
-    const maleStudents = getMaleStudents();
-    const femaleStudents = getFemaleStudents();
+    const maleStudents = getRegisteredMaleStudents();
+    const femaleStudents = getRegisteredFemaleStudents();
     const allStudents = [...maleStudents, ...femaleStudents];
     if (allStudents.length === 0) return 0;
 
-    const schoolDays = getSchoolDays();
-    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    if (nonEmptyDays.length === 0) return 0;
+    const daysCount = getDaysWithDataCount();
+    const totalPresent = getCombinedTotalPresent();
 
-    let totalAttendance = 0;
-    nonEmptyDays.forEach((schoolDay) => {
-        allStudents.forEach((student) => {
-            const mark = getAttendanceMark(student, schoolDay.date, false);
-            if (mark === '✓') {
-                totalAttendance++;
-            }
-        });
-    });
-
-    return Math.round((totalAttendance / (allStudents.length * nonEmptyDays.length)) * 100);
+    return Math.round(totalPresent / daysCount);
 };
 
 // Calculate Percentage of Attendance for the month for Male students
 const getMaleAttendancePercentage = () => {
-    const maleStudents = getMaleStudents();
+    const maleStudents = getRegisteredMaleStudents();
     if (maleStudents.length === 0) return 0;
 
     const totalMalePresent = getMaleTotalPresent();
-    const schoolDays = getSchoolDays();
-    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    const totalPossibleAttendance = maleStudents.length * nonEmptyDays.length;
+    const daysCount = getDaysWithDataCount();
+    const totalPossibleAttendance = maleStudents.length * daysCount;
 
     if (totalPossibleAttendance === 0) return 0;
     return Math.round((totalMalePresent / totalPossibleAttendance) * 100);
@@ -1299,13 +1348,12 @@ const getMaleAttendancePercentage = () => {
 
 // Calculate Percentage of Attendance for the month for Female students
 const getFemaleAttendancePercentage = () => {
-    const femaleStudents = getFemaleStudents();
+    const femaleStudents = getRegisteredFemaleStudents();
     if (femaleStudents.length === 0) return 0;
 
     const totalFemalePresent = getFemaleTotalPresent();
-    const schoolDays = getSchoolDays();
-    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    const totalPossibleAttendance = femaleStudents.length * nonEmptyDays.length;
+    const daysCount = getDaysWithDataCount();
+    const totalPossibleAttendance = femaleStudents.length * daysCount;
 
     if (totalPossibleAttendance === 0) return 0;
     return Math.round((totalFemalePresent / totalPossibleAttendance) * 100);
@@ -1313,15 +1361,12 @@ const getFemaleAttendancePercentage = () => {
 
 // Calculate Combined Percentage of Attendance for the month
 const getCombinedAttendancePercentage = () => {
-    const maleStudents = getMaleStudents();
-    const femaleStudents = getFemaleStudents();
-    const allStudents = [...maleStudents, ...femaleStudents];
+    const allStudents = [...getRegisteredMaleStudents(), ...getRegisteredFemaleStudents()];
     if (allStudents.length === 0) return 0;
 
     const totalPresent = getCombinedTotalPresent();
-    const schoolDays = getSchoolDays();
-    const nonEmptyDays = schoolDays.filter((day) => !day.isEmpty);
-    const totalPossibleAttendance = allStudents.length * nonEmptyDays.length;
+    const daysCount = getDaysWithDataCount();
+    const totalPossibleAttendance = allStudents.length * daysCount;
 
     if (totalPossibleAttendance === 0) return 0;
     return Math.round((totalPresent / totalPossibleAttendance) * 100);
@@ -3351,9 +3396,9 @@ onUnmounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Registered Learner as of End of the month</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleStudents().length }}</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleStudents().length }}</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getTotalStudents() }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getRegisteredMaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getRegisteredFemaleStudents().length }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ getRegisteredMaleStudents().length + getRegisteredFemaleStudents().length }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Percentage of Enrollment as of end of the month</td>
@@ -3363,15 +3408,15 @@ onUnmounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Average Daily Attendance</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleAverageDailyAttendance() }}%</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleAverageDailyAttendance() }}%</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getCombinedAverageDailyAttendance() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.male?.attendance_rate || getMaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.female?.attendance_rate || getFemaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.total?.attendance_rate || getCombinedAttendancePercentage() }}%</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Percentage of Attendance for the month</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getMaleAttendancePercentage() }}%</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getFemaleAttendancePercentage() }}%</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ getCombinedAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.male?.attendance_rate || getMaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.female?.attendance_rate || getFemaleAttendancePercentage() }}%</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ sf2ReportData?.summary?.total?.attendance_rate || getCombinedAttendancePercentage() }}%</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Number of students absent for 5 consecutive days or more</td>

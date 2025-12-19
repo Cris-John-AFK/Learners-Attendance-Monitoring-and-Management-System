@@ -147,8 +147,8 @@
                         <tr>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Present</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Late</th>
-                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
                             <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Excused</th>
+                            <th class="border-2 border-gray-900 bg-gray-100 p-1 text-center text-xs font-bold">Absent</th>
                         </tr>
                     </thead>
                     <tbody v-if="!loading && students.length > 0">
@@ -166,8 +166,8 @@
                             </td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(calculateAttendanceRate(student))">
                                 {{ calculateAttendanceRate(student) }}%<br />
                                 <span class="text-xs font-normal text-gray-600">(out of {{ calculateTotalSessions(student) }} sessions)</span>
@@ -191,8 +191,8 @@
                             </td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'present') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'late') }}</td>
-                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'excused') }}</td>
+                            <td class="border border-gray-900 p-1 text-center text-sm">{{ calculateStudentTotal(student, 'absent') }}</td>
                             <td class="border border-gray-900 p-1 text-center text-sm font-bold" :class="getAttendanceRateClass(calculateAttendanceRate(student))">
                                 {{ calculateAttendanceRate(student) }}%<br />
                                 <span class="text-xs font-normal text-gray-600">(out of {{ calculateTotalSessions(student) }} sessions)</span>
@@ -206,9 +206,9 @@
                         <tr class="bg-gray-100">
                             <td colspan="2" class="border-2 border-gray-900 p-2 text-center font-bold">TOTAL</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalPresent }}</td>
-                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalAbsent }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalLate }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalExcused }}</td>
+                            <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ totalAbsent }}</td>
                             <td class="border-2 border-gray-900 p-1 text-center font-bold">{{ averageAttendanceRate }}%</td>
                             <td class="border-2 border-gray-900 p-1"></td>
                             <td class="border-2 border-gray-900 p-1 no-print"></td>
@@ -707,11 +707,21 @@ const getStudentRemarks = (student) => {
 const averageAttendanceRate = computed(() => {
     if (students.value.length === 0) return 0;
 
-    const totalAttendanceRate = students.value.reduce((sum, student) => {
+    // Filter students to exclude dropped out/transferred out students with 0% attendance
+    const activeStudentsForAvg = students.value.filter(student => {
+        const rate = calculateAttendanceRate(student);
+        // Include if rate > 0 OR if status is NOT dropped/transferred
+        // This means we exclude only those who are dropped/transferred AND have 0% attendance
+        return rate > 0 || !['dropped_out', 'transferred_out'].includes(student.enrollment_status);
+    });
+
+    if (activeStudentsForAvg.length === 0) return 0;
+
+    const totalAttendanceRate = activeStudentsForAvg.reduce((sum, student) => {
         return sum + calculateAttendanceRate(student);
     }, 0);
 
-    return Math.round(totalAttendanceRate / students.value.length);
+    return Math.round(totalAttendanceRate / activeStudentsForAvg.length);
 });
 
 // Fetch teacher's sections
@@ -778,7 +788,7 @@ const loadAttendanceData = async () => {
 
         for (const monthInfo of months) {
             try {
-                const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                const baseUrl = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
                 const apiUrl = `${baseUrl}/api/teacher/reports/sf2/data/${sectionId.value}/${monthInfo.monthStr}`;
                 console.log('🌐 Loading:', apiUrl);
 

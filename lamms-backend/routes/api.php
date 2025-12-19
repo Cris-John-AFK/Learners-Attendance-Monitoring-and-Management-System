@@ -35,6 +35,40 @@ Route::get('/health-check', function() {
     ]);
 });
 
+// Temporary route to refresh SF2 calculations
+Route::get('/refresh-sf2-calculations', function() {
+    try {
+        $report = \App\Models\SubmittedSF2Report::where('month', '2025-12')
+            ->where('section_id', 1) // Adjust section_id as needed
+            ->first();
+        
+        if ($report) {
+            $controller = new \App\Http\Controllers\API\SF2ReportController();
+            $reflection = new \ReflectionClass($controller);
+            $method = $reflection->getMethod('getReportDataForSubmission');
+            $method->setAccessible(true);
+            
+            $newData = $method->invoke($controller, $report->section_id, $report->month);
+            $report->sf2_data = $newData;
+            $report->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'SF2 calculations refreshed',
+                'attendance_rates' => [
+                    'male' => $newData['summary']['male']['attendance_rate'] ?? 'N/A',
+                    'female' => $newData['summary']['female']['attendance_rate'] ?? 'N/A',
+                    'total' => $newData['summary']['total']['attendance_rate'] ?? 'N/A'
+                ]
+            ]);
+        }
+        
+        return response()->json(['success' => false, 'message' => 'Report not found'], 404);
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
 // ========================================
 // UNIFIED AUTHENTICATION ROUTES
 // ========================================
@@ -96,12 +130,34 @@ Route::prefix('teachers')->group(function () {
     Route::post('/{teacher}/sections', [TeacherController::class, 'assignSection']);
 });
 
-// Test route
+// Test route (and DB Fixer)
 Route::get('/test', function() {
-    return response()->json([
-        'message' => 'Laravel API is working!',
-        'database' => config('database.connections.pgsql.database')
-    ]);
+    try {
+        $hasColumn = \Illuminate\Support\Facades\Schema::hasColumn('submitted_sf2_reports', 'sf2_data');
+        $message = "Column exists";
+        
+        if (!$hasColumn) {
+            // Try to add it manually
+            \Illuminate\Support\Facades\DB::statement("ALTER TABLE submitted_sf2_reports ADD COLUMN sf2_data LONGTEXT NULL AFTER submitted_by");
+            $hasColumnAfter = \Illuminate\Support\Facades\Schema::hasColumn('submitted_sf2_reports', 'sf2_data');
+            $message = $hasColumnAfter ? "Column added successfully" : "Failed to add column";
+            
+            // Mark migration as run to avoid future errors
+            \Illuminate\Support\Facades\DB::table('migrations')->insertOrIgnore([
+                'migration' => '2025_12_15_233956_add_sf2_data_to_submitted_sf2_reports_table',
+                'batch' => 999
+            ]);
+        }
+
+        return response()->json([
+            'message' => $message,
+            'has_sf2_data' => $hasColumn,
+            'final_status' => \Illuminate\Support\Facades\Schema::hasColumn('submitted_sf2_reports', 'sf2_data'),
+            'database' => config('database.connections.pgsql.database')
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+    }
 });
 
 // Test section route

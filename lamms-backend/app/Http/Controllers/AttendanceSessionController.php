@@ -23,10 +23,17 @@ class AttendanceSessionController extends Controller
             $sectionId = $request->query('section_id');
             $subjectId = $request->query('subject_id');
 
+            // Date filtering parameters
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
+            // Log caching parameters
             Log::info("AttendanceSessionController - Getting students", [
                 'teacher_id' => $teacherId,
                 'section_id' => $sectionId,
-                'subject_id' => $subjectId
+                'subject_id' => $subjectId,
+                'start_date' => $startDate,
+                'end_date' => $endDate
             ]);
 
             Log::info("🔍 DEBUGGING: About to execute student query with filtering");
@@ -48,6 +55,14 @@ class AttendanceSessionController extends Controller
                 ->value('name');
 
             Log::info("Section name retrieved", ['section_id' => $sectionId, 'section_name' => $sectionName]);
+
+            // Construct date filter logic for SQL
+            $dateFilterSql = '';
+            if ($startDate && $endDate) {
+                $dateFilterSql = "AND ases.session_date BETWEEN '$startDate' AND '$endDate'";
+            } elseif ($startDate) {
+                $dateFilterSql = "AND ases.session_date >= '$startDate'";
+            }
 
             // Get all active students in the section - ONLY from pivot table
             // EXCLUDE dropped out, transferred out, withdrawn, and deceased students
@@ -87,7 +102,8 @@ class AttendanceSessionController extends Controller
                              INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id
                              WHERE ar.student_id = sd.id 
                              AND ast.code = \'A\'
-                             ' . ($subjectId && $subjectId !== 'null' ? 'AND ases.subject_id = ' . intval($subjectId) : 'AND ases.subject_id IS NULL') . ') as total_absences'),
+                             ' . ($subjectId && $subjectId !== 'null' ? 'AND ases.subject_id = ' . intval($subjectId) : 'AND ases.subject_id IS NULL') . '
+                             ' . $dateFilterSql . ') as total_absences'),
                     DB::raw('(SELECT COUNT(*) FROM attendance_records ar
                              INNER JOIN attendance_sessions ases ON ar.attendance_session_id = ases.id
                              INNER JOIN attendance_statuses ast ON ar.attendance_status_id = ast.id

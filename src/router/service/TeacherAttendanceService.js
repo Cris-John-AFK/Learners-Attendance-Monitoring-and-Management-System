@@ -4,15 +4,18 @@ export const TeacherAttendanceService = {
     /**
      * Get students for a specific teacher's section and subject
      */
-    async getStudentsForTeacherSubject(teacherId, sectionId, subjectId) {
+    async getStudentsForTeacherSubject(teacherId, sectionId, subjectId, params = {}) {
         try {
+            const queryParams = {
+                teacher_id: teacherId,
+                section_id: sectionId,
+                subject_id: subjectId,
+                _t: Date.now(), // Cache busting parameter
+                ...params // Spread additional parameters like start_date, end_date
+            };
+
             const response = await api.get('/api/attendance-sessions/students', {
-                params: {
-                    teacher_id: teacherId,
-                    section_id: sectionId,
-                    subject_id: subjectId,
-                    _t: Date.now() // Cache busting parameter
-                }
+                params: queryParams
             });
             console.log('Students API response:', response.data);
             return response.data;
@@ -173,9 +176,9 @@ export const TeacherAttendanceService = {
     /**
      * Get teacher's attendance sessions
      */
-    async getTeacherAttendanceSessions(teacherId) {
+    async getTeacherAttendanceSessions(teacherId, params = {}) {
         try {
-            const response = await api.get(`/api/teachers/${teacherId}/attendance-sessions`);
+            const response = await api.get(`/api/teachers/${teacherId}/attendance-sessions`, { params });
             return response.data;
         } catch (error) {
             console.error('Error loading teacher attendance sessions:', error);

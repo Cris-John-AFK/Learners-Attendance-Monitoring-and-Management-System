@@ -210,7 +210,7 @@ const MIN_REFRESH_INTERVAL = 60000; // Minimum 1 minute between refreshes
 // Attendance view options
 const viewTypeOptions = [
     { label: 'Subject-Specific', value: 'subject' },
-    { label: 'All Students', value: 'all_students' }
+    { label: 'All Subjects', value: 'all_students' }
 ];
 const viewType = ref('subject');
 
@@ -554,7 +554,7 @@ function getFirstDayOfMonth() {
 // Calculate severity based on absence count (matches Attendance Insights EXACTLY)
 // Calculate severity based on absence count (matches Attendance Insights EXACTLY)
 function calculateSeverity(recentAbsences, totalAbsences = 0) {
-    // 1. Check Total Absences (Global Risk)
+    // 1. Check Total Absences (Global Risk) - for critical thresholds only
     if (totalAbsences >= 18) {
         return 'critical'; // Exceeded limit (Dropped/Failed)
     }
@@ -562,16 +562,17 @@ function calculateSeverity(recentAbsences, totalAbsences = 0) {
         return 'at_risk'; // Warning zone
     }
 
-    // 2. Check Recent Absences (Trend Risk)
+    // 2. Check Recent Absences (PERIOD-SPECIFIC Trend Risk)
+    // This ensures "Students Requiring Attention" only shows issues from the current period
     if (recentAbsences >= CRITICAL_THRESHOLD) {
         return 'critical'; // 5+ recent absences
     } else if (recentAbsences >= AT_RISK_THRESHOLD) {
         return 'at_risk'; // 3-4 recent absences
-    } else if (recentAbsences > 0) {
-        return 'low'; // 1-2 recent absences
+    } else if (recentAbsences > 0 || totalAbsences > 0) {
+        return 'low'; // 1-2 recent absences OR any total absence (ensures consistency)
     }
     
-    return 'good'; // Normal
+    return 'good'; // No issues (Perfect Attendance)
 }
 
 // Get severity display label (matches Attendance Insights)
@@ -797,49 +798,96 @@ async function loadTeacherSubjects() {
         console.log('Teacher assignments response:', assignmentsResponse);
 
         const tempSubjects = [];
+        let rawAssignments = [];
 
-        if (assignmentsResponse && assignmentsResponse.assignments) {
-            // Process each section assignment
-            assignmentsResponse.assignments.forEach((sectionAssignment) => {
-                const sectionName = sectionAssignment.section_name;
-                const sectionId = sectionAssignment.section_id;
+        // Normalize response structure
+        if (Array.isArray(assignmentsResponse)) {
+            rawAssignments = assignmentsResponse;
+        } else if (assignmentsResponse && assignmentsResponse.assignments) {
+            rawAssignments = assignmentsResponse.assignments;
+        }
 
-                // Process each subject in this section
-                sectionAssignment.subjects.forEach((subject) => {
-                    tempSubjects.push({
-                        id: subject.subject_id,
-                        name: subject.subject_name,
-                        grade: `Grade 3`, // Default grade for now
+        if (rawAssignments.length > 0) {
+            // Check first item to determine structure (Nested vs Flat)
+            const firstItem = rawAssignments[0];
+            const isNested = firstItem.subjects && Array.isArray(firstItem.subjects);
 
-                        sectionName: sectionName,
-                        role: subject.role,
-                        isPrimary: subject.is_primary,
-                        originalSubject: {
+            if (isNested) {
+                // Handle Nested Structure (Grouped by Section)
+                rawAssignments.forEach((sectionAssignment) => {
+                    const sectionName = sectionAssignment.section_name || sectionAssignment.section?.name || 'Unknown Section';
+                    const sectionId = sectionAssignment.section_id || sectionAssignment.section?.id;
+                    const gradeLevel = sectionAssignment.grade_level || sectionAssignment.section?.grade_level || sectionAssignment.section?.grade || 'Grade 3';
+
+                    sectionAssignment.subjects.forEach((subject) => {
+                        tempSubjects.push({
                             id: subject.subject_id,
                             name: subject.subject_name,
+                            grade: gradeLevel,
+                            sectionName: sectionName,
+                            role: subject.role,
+                            isPrimary: subject.is_primary,
+                            originalSubject: {
+                                id: subject.subject_id,
+                                name: subject.subject_name,
+                                sectionId: sectionId
+                            }
+                        });
+                    });
+                });
+            } else {
+                // Handle Flat Structure (List of Assignments)
+                rawAssignments.forEach((assignment) => {
+                    // Skip homeroom if present in this list (usually distinct)
+                    if (assignment.subject_name === 'Homeroom') return;
+
+                    const sectionName = assignment.section?.name || assignment.section_name || 'Unknown Section';
+                    const sectionId = assignment.section?.id || assignment.section_id;
+                    const gradeLevel = assignment.grade_name || assignment.grade_level || assignment.section?.grade_level || 'Grade Level Unknown';
+
+                    tempSubjects.push({
+                        id: assignment.subject_id || assignment.subject?.id,
+                        name: assignment.subject_name || assignment.subject?.name,
+                        grade: gradeLevel,
+                        sectionName: sectionName,
+                        role: assignment.role,
+                        isPrimary: assignment.is_primary,
+                        originalSubject: {
+                            id: assignment.subject_id || assignment.subject?.id,
+                            name: assignment.subject_name || assignment.subject?.name,
                             sectionId: sectionId
                         }
                     });
                 });
-            });
+            }
         }
 
         teacherSubjects.value = tempSubjects;
 
         // Format subjects for dropdown
-        availableSubjects.value = teacherSubjects.value.map((subject) => ({
+        const formattedSubjects = teacherSubjects.value.map((subject) => ({
             id: subject.id,
-            name: `${subject.name} (${subject.grade})`, // Show both subject name and grade level
+            name: `${subject.name} - ${subject.sectionName}`, // Format: "Math - Section A"
             grade: subject.grade,
             sectionId: subject.sectionId,
             sectionName: subject.sectionName,
             originalSubject: subject.originalSubject
         }));
 
-        console.log('Available subjects from teacher assignments:', availableSubjects.value);
+        // Add "All Subjects" option at the beginning
+        formattedSubjects.unshift({
+            id: null, // null ID indicates "All Subjects"
+            name: 'All Subjects',
+            grade: 'All Levels',
+            sectionId: null
+        });
+
+        availableSubjects.value = formattedSubjects;
+
+        console.log('Available subjects parsed:', availableSubjects.value);
 
         // Set default selected subject (first in the list)
-        if (availableSubjects.value.length > 0) {
+        if (availableSubjects.value.length > 0 && !selectedSubject.value) {
             selectedSubject.value = availableSubjects.value[0];
         }
     } catch (error) {
@@ -866,6 +914,13 @@ function handleFallbackData() {
         grade: subject.grade,
         originalSubject: subject
     }));
+
+    // Add "All Subjects" option to fallback data too
+    availableSubjects.value.unshift({
+        id: null,
+        name: 'All Subjects',
+        grade: 'All Levels'
+    });
 
     if (availableSubjects.value.length > 0) {
         selectedSubject.value = availableSubjects.value[0];
@@ -958,9 +1013,17 @@ function processIndexedData(indexedData) {
 async function loadAttendanceData() {
     if (!currentTeacher.value) return;
 
-    // Handle "All Subjects" selection - load from all sections
+    // CRITICAL FIX: Check viewType FIRST before checking subject dropdown
+    // If viewType is 'all_students', load ALL students regardless of subject dropdown
+    if (viewType.value === 'all_students') {
+        console.log('📚 View Type is "All Subjects" - loading all students from all sections');
+        await loadAllSubjectsData();
+        return;
+    }
+
+    // Handle "All Subjects" selection from dropdown - load from all sections
     if (selectedSubject.value && selectedSubject.value.id === null) {
-        console.log('Loading "All Subjects" attendance data');
+        console.log('Loading "All Subjects" attendance data from dropdown');
         await loadAllSubjectsData();
         return;
     }
@@ -1199,8 +1262,34 @@ async function loadSingleSectionData(sectionId, subjectId) {
             return;
         }
 
+        // Calculate date range for filtering derived from currentMonth (ref)
+        // If currentMonth is not set, default to current month
+        const targetDate = currentMonth.value ? new Date(currentMonth.value) : new Date();
+        const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+        const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+
+        // Format dates as YYYY-MM-DD
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const dateFilterParams = {
+            start_date: formatDate(startOfMonth),
+            end_date: formatDate(endOfMonth)
+        };
+
+        console.log('📅 Filtering students by date:', dateFilterParams);
+
         // Get students first (required)
-        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(params.teacherId, params.sectionId, params.subjectId);
+        const studentsResponse = await TeacherAttendanceService.getStudentsForTeacherSubject(
+            params.teacherId, 
+            params.sectionId, 
+            params.subjectId,
+            dateFilterParams // Pass the date filter
+        );
 
         // Try to get summary (optional)
         let summaryResponse = null;
@@ -1301,24 +1390,32 @@ async function loadAllSubjectsData() {
         if (summaryResponse.success && summaryResponse.data) {
             // For "All Subjects", we get students from the summary response
             if (summaryResponse.data.students) {
-                studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => ({
-                    id: student.student_id || student.id,
-                    name: student.name || `${student.first_name} ${student.last_name}`,
-                    gradeLevel: student.grade_name || student.curriculum_grade?.grade_name || 'Unknown',
-                    section: student.section_name || student.section || 'Unknown Section',
-                    absences: student.total_absences || student.absence_count || 0,
-                    recent_absences: student.recent_absences || 0,
-                    severity: calculateSeverity(student.recent_absences || 0, student.total_absences || student.absence_count || 0),
-                    attendanceRate: student.attendance_rate || 100,
-                    totalPresent: student.total_present || 0,
-                    totalLate: student.total_late || 0
-                }));
+                studentsWithAbsenceIssues.value = summaryResponse.data.students.map((student) => {
+                    // WORKAROUND: Calculate period-specific absences from the student's summary data
+                    // instead of using backend's recent_absences which is not period-aware
+                    const periodAbsences = (student.total_absent_in_period || student.recent_absences || 0);
+                    
+                    return {
+                        ...student, // Preserve all original properties for components that need them (like AttendanceInsights)
+                        id: student.student_id || student.id,
+                        name: student.name || `${student.first_name} ${student.last_name}`,
+                        gradeLevel: student.grade_name || student.curriculum_grade?.grade_name || 'Unknown',
+                        section: student.section_name || student.section || 'Unknown Section',
+                        absences: student.total_absences || student.absence_count || 0,
+                        total_absences: student.total_absences || student.absence_count || 0, // Ensure compatible field name
+                        recent_absences: periodAbsences,
+                        severity: calculateSeverity(periodAbsences, student.total_absences || student.absence_count || 0),
+                        attendanceRate: student.attendance_rate || 100,
+                        totalPresent: student.total_present || 0,
+                        totalLate: student.total_late || 0
+                    };
+                });
             } else {
                 studentsWithAbsenceIssues.value = [];
             }
 
             // Calculate warning and critical counts from processed student data
-            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'warning').length;
+            const warningCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'at_risk' || s.severity === 'low').length;
             const criticalCount = studentsWithAbsenceIssues.value.filter((s) => s.severity === 'critical').length;
 
             attendanceSummary.value = {
@@ -1326,10 +1423,25 @@ async function loadAllSubjectsData() {
                 averageAttendance: summaryResponse.data.average_attendance || 0,
                 studentsWithWarning: warningCount,
                 studentsWithCritical: criticalCount,
-                students: summaryResponse.data.students || []
+                students: studentsWithAbsenceIssues.value // Use the processed students with correct severity and period-aware recent_absences
             };
 
             console.log('✅ All Subjects data loaded. Students:', studentsWithAbsenceIssues.value.length);
+            console.log('📊 First 3 students with recent_absences:', 
+                studentsWithAbsenceIssues.value.slice(0, 3).map(s => ({
+                    name: s.name,
+                    recent_absences: s.recent_absences,
+                    total_absences: s.absences,
+                    severity: s.severity
+                }))
+            );
+            console.log('📊 Students with issues (severity !== good):', 
+                studentsWithAbsenceIssues.value.filter(s => s.severity !== 'good').map(s => ({
+                    name: s.name,
+                    recent_absences: s.recent_absences,
+                    severity: s.severity
+                }))
+            );
         }
     } catch (error) {
         console.error('Error loading All Subjects data:', error);
@@ -2098,32 +2210,44 @@ async function loadHeatmapData() {
     try {
         console.log('🔥 Loading heatmap data...');
 
+        // CRITICAL FIX: Respect viewType setting
+        // If viewType is 'all_students', pass null to get data from ALL sections
+        const heatmapSubjectId = viewType.value === 'all_students' ? null : (selectedSubject.value?.id || null);
+
         const options = {
             period: chartView.value,
-            subjectId: selectedSubject.value?.id || null
+            subjectId: heatmapSubjectId
         };
         
         console.log('🔍 Heatmap API request options:', options);
+        console.log('🔍 ViewType:', viewType.value, '- SubjectId:', heatmapSubjectId);
 
         const response = await AttendanceHeatmapService.getAttendanceReasonsHeatmap(currentTeacher.value.id, options);
 
-        if (response.success && response.data) {
+        if (response && response.success && response.data) {
             heatmapData.value = response.data;
-
-            // Process data for charts
+            
+            // Process the raw heatmap data into chart-ready format
             const processedData = AttendanceHeatmapService.processHeatmapForChart(response);
+            
             if (processedData) {
-                heatmapChartData.value = processedData;
-
-                // Set chart options
+                heatmapChartData.value = {
+                    heatmapMatrix: processedData.heatmapMatrix,
+                    reasonsChart: processedData.reasonsChart,
+                    locationChart: processedData.locationChart,
+                    timelineChart: processedData.timelineChart
+                };
                 heatmapChartOptions.value = {
                     reasons: AttendanceHeatmapService.getChartOptions('reasons'),
                     location: AttendanceHeatmapService.getChartOptions('location'),
                     timeline: AttendanceHeatmapService.getChartOptions('timeline')
                 };
+                
+                console.log('✅ Heatmap data loaded and processed successfully', processedData);
+            } else {
+                console.warn('Failed to process heatmap data');
+                heatmapData.value = null;
             }
-
-            console.log('✅ Heatmap data loaded successfully');
         } else {
             console.warn('No heatmap data received');
             heatmapData.value = null;
@@ -2259,7 +2383,7 @@ const filteredStudents = computed(() => {
 
     // Apply absence issues filter
     if (showOnlyAbsenceIssues.value) {
-        filtered = filtered.filter((student) => student.severity !== 'normal');
+        filtered = filtered.filter((student) => student.severity !== 'good');
     }
 
     return filtered;
@@ -2792,9 +2916,9 @@ async function showStudentProfile(student) {
                                                 <span>Excused incidents</span>
                                             </div>
                                         </div>
-                                        <Chart v-if="heatmapView === 'reasons'" type="bar" :data="heatmapChartData.reasonsChart" :options="heatmapChartOptions.reasons" style="height: 100%; width: 100%" />
-                                        <Chart v-else-if="heatmapView === 'locations'" type="bar" :data="heatmapChartData.locationChart" :options="heatmapChartOptions.location" style="height: 100%; width: 100%" />
-                                        <Chart v-else-if="heatmapView === 'timeline'" type="line" :data="heatmapChartData.timelineChart" :options="heatmapChartOptions.timeline" style="height: 100%; width: 100%" />
+                                        <Chart v-if="heatmapView === 'reasons' && heatmapChartData?.reasonsChart" type="bar" :data="heatmapChartData.reasonsChart" :options="heatmapChartOptions.reasons" style="height: 100%; width: 100%" />
+                                        <Chart v-else-if="heatmapView === 'locations' && heatmapChartData?.locationChart" type="bar" :data="heatmapChartData.locationChart" :options="heatmapChartOptions.location" style="height: 100%; width: 100%" />
+                                        <Chart v-else-if="heatmapView === 'timeline' && heatmapChartData?.timelineChart" type="line" :data="heatmapChartData.timelineChart" :options="heatmapChartOptions.timeline" style="height: 100%; width: 100%" />
                                     </div>
                                 </div>
 
@@ -3011,8 +3135,8 @@ async function showStudentProfile(student) {
                             <div
                                 class="flex items-center justify-center w-10 h-10 rounded-full"
                                 :class="{
-                                    'bg-green-100 text-green-800': slotProps.data.severity === 'good',
-                                    'bg-blue-100 text-blue-800': slotProps.data.severity === 'low',
+                                    'bg-blue-100 text-blue-800': slotProps.data.severity === 'good',
+                                    'bg-green-100 text-green-800': slotProps.data.severity === 'low',
                                     'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'at_risk',
                                     'bg-red-100 text-red-800': slotProps.data.severity === 'critical'
                                 }"
@@ -3024,11 +3148,17 @@ async function showStudentProfile(student) {
 
                     <Column header="Status" style="width: 140px">
                         <template #body="slotProps">
-                            <Tag
-                                :severity="slotProps.data.severity === 'critical' ? 'danger' : slotProps.data.severity === 'at_risk' ? 'warning' : slotProps.data.severity === 'low' ? 'success' : 'info'"
-                                :value="getSeverityLabel(slotProps.data.severity)"
-                                class="px-3 py-1.5 text-sm font-medium rounded-full"
-                            />
+                            <span
+                                class="px-3 py-1 text-xs font-semibold rounded-full inline-block text-center min-w-[5rem]"
+                                :class="{
+                                    'bg-blue-50 text-blue-600': slotProps.data.severity === 'good' || slotProps.data.severity === 'normal',
+                                    'bg-green-100 text-green-700': slotProps.data.severity === 'low',
+                                    'bg-yellow-100 text-yellow-800': slotProps.data.severity === 'at_risk',
+                                    'bg-red-100 text-red-700': slotProps.data.severity === 'critical'
+                                }"
+                            >
+                                {{ getSeverityLabel(slotProps.data.severity) }}
+                            </span>
                         </template>
                     </Column>
 

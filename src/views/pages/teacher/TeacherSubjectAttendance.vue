@@ -9,6 +9,7 @@ import AttendanceSessionService from '@/services/AttendanceSessionService';
 import NotificationService from '@/services/NotificationService';
 import SeatingService from '@/services/SeatingService';
 import TeacherAuthService from '@/services/TeacherAuthService';
+import Badge from 'primevue/badge';
 import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
 import RadioButton from 'primevue/radiobutton';
@@ -91,6 +92,36 @@ const currentSectionName = computed(() => {
 
 // Function to ensure date is always current
 const ensureCurrentDate = () => {
+    // Check for preserved session date from localStorage (saved before session completion)
+    const preservedDate = localStorage.getItem('preserved_session_date');
+
+    if (preservedDate) {
+        try {
+            const { date, timestamp } = JSON.parse(preservedDate);
+            const savedTime = new Date(timestamp).getTime();
+            const now = new Date().getTime();
+
+            // Only use preserved date if it's recent (less than 1 minute old)
+            // This prevents sticking to an old date if the user navigated away differently
+            if (now - savedTime < 60000) {
+                const restoredDate = new Date(date);
+                // Ensure time component is zeroed out
+                restoredDate.setHours(0, 0, 0, 0);
+                
+                if (!isNaN(restoredDate.getTime())) {
+                    currentDate.value = restoredDate;
+                    console.log('✅ Restored preserved date:', currentDateString.value);
+                    localStorage.removeItem('preserved_session_date'); // Clear after use
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('Error restoring preserved date:', e);
+        }
+        // Cleanup invalid/expired data
+        localStorage.removeItem('preserved_session_date');
+    }
+
     const today = new Date();
     // Set to today's date, removing time component
     today.setHours(0, 0, 0, 0);
@@ -146,11 +177,7 @@ const quickActionsPosition = ref({ top: 0, left: 0 });
 const isCompletingSession = ref(false);
 const sessionCompletionProgress = ref(0);
 
-// Floating panel states
-const panelPosition = ref({ x: 20, y: 100 }); // Initial position
-const isMinimized = ref(false);
-const isDraggingPanel = ref(false);
-const dragOffset = ref({ x: 0, y: 0 });
+
 
 // Seating plan configuration
 const rows = ref(9);
@@ -1055,84 +1082,7 @@ const autoAssignStudents = (method = null) => {
     showAssignmentOptions.value = false;
 };
 
-// Floating Panel Drag Functions
-let dragAnimationFrame = null;
-let pendingDragUpdate = null;
 
-const startDragPanel = (event) => {
-    // Only allow dragging from the header, not from buttons or content
-    if (event.target.closest('.panel-btn')) {
-        return; // Don't drag when clicking buttons
-    }
-
-    // Only drag if clicking on the header itself
-    if (!event.target.closest('.floating-panel-header')) {
-        return;
-    }
-
-    isDraggingPanel.value = true;
-    const panelElement = event.currentTarget.closest('.floating-students-panel');
-    const rect = panelElement.getBoundingClientRect();
-    dragOffset.value = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top
-    };
-
-    document.addEventListener('mousemove', dragPanel, { passive: true });
-    document.addEventListener('mouseup', stopDragPanel);
-    event.preventDefault();
-};
-
-const dragPanel = (event) => {
-    if (!isDraggingPanel.value) return;
-
-    // Store the latest mouse position
-    pendingDragUpdate = {
-        x: event.clientX - dragOffset.value.x,
-        y: event.clientY - dragOffset.value.y
-    };
-
-    // Use requestAnimationFrame to batch updates and avoid lag
-    if (!dragAnimationFrame) {
-        dragAnimationFrame = requestAnimationFrame(() => {
-            if (pendingDragUpdate) {
-                const newX = pendingDragUpdate.x;
-                const newY = pendingDragUpdate.y;
-
-                // Keep panel within viewport bounds
-                const panelWidth = 320;
-                const panelHeight = isMinimized.value ? 50 : 400;
-                const maxX = window.innerWidth - panelWidth;
-                const maxY = window.innerHeight - panelHeight;
-
-                panelPosition.value = {
-                    x: Math.max(0, Math.min(newX, maxX)),
-                    y: Math.max(0, Math.min(newY, maxY))
-                };
-
-                pendingDragUpdate = null;
-            }
-            dragAnimationFrame = null;
-        });
-    }
-};
-
-const stopDragPanel = () => {
-    isDraggingPanel.value = false;
-    document.removeEventListener('mousemove', dragPanel);
-    document.removeEventListener('mouseup', stopDragPanel);
-
-    // Cancel any pending animation frame
-    if (dragAnimationFrame) {
-        cancelAnimationFrame(dragAnimationFrame);
-        dragAnimationFrame = null;
-    }
-    pendingDragUpdate = null;
-};
-
-const toggleMinimize = () => {
-    isMinimized.value = !isMinimized.value;
-};
 
 // Get student initials
 const getStudentInitials = (student) => {
@@ -2606,6 +2556,18 @@ const completeAttendanceSession = async () => {
             life: 3000
         });
         return;
+    }
+
+    // Persist the current date before session completion triggers a reload/re-init
+    if (currentDate.value) {
+        localStorage.setItem(
+            'preserved_session_date',
+            JSON.stringify({
+                date: currentDateString.value, // Save as string to be safe
+                timestamp: new Date().getTime()
+            })
+        );
+        console.log('💾 Preserved session date for reload:', currentDateString.value);
     }
 
     // 🚨 CRITICAL FIX: Update seat plan with QR scan results BEFORE completing session
@@ -5366,10 +5328,6 @@ const titleRef = ref(null);
                                 <label for="teacherDesk" class="ml-1">Teacher's Desk</label>
                             </div>
 
-                            <div class="flex align-items-center">
-                                <Checkbox v-model="showStudentIds" :binary="true" inputId="studentIds" />
-                                <label for="studentIds" class="ml-1">Student IDs</label>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -5495,54 +5453,58 @@ const titleRef = ref(null);
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Floating Game-Style Unassigned Students Panel -->
-        <div v-if="isEditMode" class="floating-students-panel" :style="{ left: panelPosition.x + 'px', top: panelPosition.y + 'px' }">
-            <div class="floating-panel-header" @mousedown="startDragPanel" style="cursor: move">
-                <div class="panel-title">
-                    <i class="pi pi-users"></i>
-                    <span>Unassigned Students</span>
-                </div>
-                <div class="panel-controls">
-                    <button class="panel-btn minimize-btn" @click="toggleMinimize">
-                        <i :class="isMinimized ? 'pi pi-window-maximize' : 'pi pi-window-minimize'"></i>
-                    </button>
-                </div>
-            </div>
+            
+            <!-- Right side: Unassigned Students Panel -->
+            <div class="side-panel" v-if="isEditMode">
+                <div class="unassigned-panel bg-white border rounded-lg shadow-sm p-4 mr-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="font-bold text-gray-800 flex items-center gap-2">
+                            <i class="pi pi-users text-blue-600"></i>
+                            <span>Unassigned Students</span>
+                        </div>
+                        <Badge :value="filteredUnassignedStudents.length" severity="info" />
+                    </div>
 
-            <div v-if="!isMinimized" class="floating-panel-content">
-                <div class="search-container">
-                    <span class="p-input-icon-left w-full">
-                        <i class="pi pi-search" />
-                        <InputText v-model="searchQuery" placeholder="Search students..." class="w-full" />
-                    </span>
-                </div>
+                    <div class="mb-4">
+                        <span class="p-input-icon-left w-full">
+                            <i class="pi pi-search" />
+                            <InputText v-model="searchQuery" placeholder="Search students..." class="w-full p-inputtext-sm" />
+                        </span>
+                    </div>
 
-                <div v-if="filteredUnassignedStudents.length === 0" class="empty-state">
-                    <i class="pi pi-check-circle"></i>
-                    <p v-if="unassignedStudents.length === 0">All students assigned!</p>
-                    <p v-else>No matches found</p>
-                </div>
+                    <div v-if="filteredUnassignedStudents.length === 0" class="text-center py-8 text-gray-500 bg-gray-50 rounded-lg flex flex-col items-center justify-center h-48">
+                        <i class="pi pi-check-circle text-4xl text-green-500 mb-2"></i>
+                        <p v-if="unassignedStudents.length === 0" class="font-medium">All students assigned!</p>
+                        <p v-else>No matches found</p>
+                    </div>
 
-                <div v-else class="floating-students-list">
-                    <div v-for="student in sortedUnassignedStudents" :key="student.id" class="floating-student-card" draggable="true" @dragstart="dragStudent(student)">
-                        <div class="student-avatar">
-                            <div class="student-initials">
+                    <div v-else class="unassigned-students-list space-y-2 pr-1 custom-scrollbar">
+                        <div 
+                            v-for="student in sortedUnassignedStudents" 
+                            :key="student.id" 
+                            class="p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all cursor-move flex items-center gap-3 group hover:border-blue-400"
+                            draggable="true" 
+                            @dragstart="dragStudent(student)"
+                        >
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm">
                                 {{ getStudentInitials(student) }}
                             </div>
-                        </div>
-                        <div class="student-details">
-                            <div class="student-name">{{ student.name }}</div>
-                            <div v-if="showStudentIds" class="student-id">ID: {{ student.id }}</div>
-                        </div>
-                        <div class="drag-handle">
-                            <i class="pi pi-arrows-alt"></i>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-sm text-gray-800 truncate group-hover:text-blue-700 transition-colors">{{ student.name }}</div>
+                                <div v-if="showStudentIds" class="text-xs text-gray-500 truncate flex items-center gap-1">
+                                    <i class="pi pi-id-card text-[10px]"></i>
+                                    {{ student.studentId }}
+                                </div>
+                            </div>
+                            <i class="pi pi-bars text-gray-300 group-hover:text-blue-400"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
+
 
         <!-- Template Save Dialog -->
         <Dialog v-model:visible="showTemplateSaveDialog" header="Save as Template" :modal="true" :style="{ width: '450px' }" :closeOnEscape="true" :dismissableMask="true">
@@ -5826,7 +5788,7 @@ const titleRef = ref(null);
             :visible="showCompletionModal"
             :subject-name="completedSessionData?.subject_name || subjectName"
             :section-name="completedSessionData?.section_name || currentSectionName"
-            :session-date="new Date().toLocaleDateString()"
+            :session-date="currentDate ? currentDate.toLocaleDateString() : new Date().toLocaleDateString()"
             :session-data="completedSessionData"
             @close="handleModalClose"
             @view-details="handleViewDetails"
@@ -7402,5 +7364,56 @@ const titleRef = ref(null);
 .auto-fill-button:disabled {
     animation: none;
     opacity: 0.6;
+}
+
+/* Edit Layout - Flexbox for Main Content + Sidebar */
+.edit-layout {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.edit-layout .main-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.side-panel {
+    width: 320px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}
+
+.unassigned-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+}
+
+.unassigned-students-list {
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
+}
+
+/* Custom scrollbar for unassigned list */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 </style>

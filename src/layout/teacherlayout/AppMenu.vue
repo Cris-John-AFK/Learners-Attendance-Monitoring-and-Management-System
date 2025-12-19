@@ -27,7 +27,7 @@ const model = ref([
         separator: true
     },
     {
-        label: 'Attendanc',
+        label: 'Attendance',
         items: []
     },
     {

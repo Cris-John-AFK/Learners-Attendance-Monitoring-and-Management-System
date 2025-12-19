@@ -1,8 +1,11 @@
 <script setup>
+import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
+import TeacherAuthService from '@/services/TeacherAuthService';
 import axios from 'axios';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -16,8 +19,10 @@ const toast = useToast();
 const loading = ref(true);
 const reportData = ref(null);
 const selectedMonth = ref(new Date());
-const sectionId = ref(route.params.sectionId || null);
+const sectionId = ref(route.params.sectionId ? parseInt(route.params.sectionId) : null);
 const submitting = ref(false);
+const teacherSections = ref([]);
+const currentTeacherId = ref(null);
 
 // Edit mode state
 const isEditMode = ref(false);
@@ -217,19 +222,14 @@ const combinedTotalPresent = computed(() => {
 const loadReportData = async () => {
     loading.value = true;
     try {
-        // If no sectionId, get it from teacher's homeroom section
+        if (!sectionId.value && teacherSections.value.length > 0) {
+             // Default to first section if available
+             sectionId.value = teacherSections.value[0].id;
+        }
+
         if (!sectionId.value) {
-            const teacherData = JSON.parse(localStorage.getItem('teacher_data') || '{}');
-
-            // Try to get homeroom section from teacher data
-            const homeroomSection = teacherData.teacher?.homeroom_section || teacherData.homeroom_section || teacherData.assignments?.find((a) => a.is_primary)?.section;
-
-            if (homeroomSection) {
-                sectionId.value = homeroomSection.id || homeroomSection.section_id;
-                console.log('📚 Using teacher homeroom section:', sectionId.value);
-            } else {
-                throw new Error('No section assigned to teacher');
-            }
+            console.warn('No section selected for SF2 report');
+            return;
         }
 
         // Format month using LOCAL timezone (not UTC) to avoid off-by-one month errors
@@ -239,7 +239,10 @@ const loadReportData = async () => {
 
         console.log('📅 Loading SF2 data for:', monthStr, '(Selected:', selectedMonth.value.toLocaleDateString(), ')');
         const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-        const response = await axios.get(`${apiUrl}/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`);
+        // Add cache busting timestamp to force fresh data after edits
+        const response = await axios.get(`${apiUrl}/api/teacher/reports/sf2/data/${sectionId.value}/${monthStr}`, {
+            params: { _t: Date.now() }
+        });
 
         console.log('📊 API Response:', response.data);
 
@@ -353,15 +356,14 @@ const downloadExcel = async () => {
 const submitToAdmin = async () => {
     submitting.value = true;
     try {
-        const monthStr = selectedMonth.value.toISOString().slice(0, 7);
+        // Format month using LOCAL timezone (not UTC) to avoid off-by-one month errors
+        const year = selectedMonth.value.getFullYear();
+        const month = String(selectedMonth.value.getMonth() + 1).padStart(2, '0');
+        const monthStr = `${year}-${month}`;
 
-        // Use the simple working endpoint
+        // Use the robust endpoint that saves the exact data snapshot
         const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-        const response = await axios.post(`${apiUrl}/api/sf2/submit`, {
-            section_id: parseInt(sectionId.value),
-            month: monthStr,
-            teacher_id: 2 // Maria Santos ID
-        });
+        const response = await axios.post(`${apiUrl}/api/teacher/reports/sf2/submit/${sectionId.value}/${monthStr}`);
 
         if (response.data.success) {
             toast.add({
@@ -380,7 +382,7 @@ const submitToAdmin = async () => {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: error.response?.data?.message || 'Failed to submit SF2 report to admin',
+            detail: error.response?.data?.message || 'Failed to submit SF2 report to admin. Please try again.',
             life: 3000
         });
     } finally {
@@ -460,16 +462,16 @@ const getStudentRemarks = (student) => {
     return '-';
 };
 
-// Get attendance mark for display - hide marks for future dates
+// Get attendance mark for display - hide marks for future dates only if no status
 const getAttendanceMark = (status, dateString = null) => {
-    // If date is in the future, return empty (will show slash only)
-    if (dateString && isFutureDate(dateString)) {
+    // If date is in the future AND no status, return empty
+    if (dateString && isFutureDate(dateString) && !status) {
         return '';
     }
 
     switch (status) {
         case 'present':
-            return ''; // Blank for present (only green background)
+            return '✓';
         case 'absent':
             return '✗';
         case 'late':
@@ -485,23 +487,23 @@ const getAttendanceMark = (status, dateString = null) => {
 
 // Get attendance mark color class based on the mark symbol
 const getAttendanceColorClass = (mark, dateString = null) => {
-    // If date is in the future, no special class (will show default slash)
-    if (dateString && isFutureDate(dateString)) {
+    // If date is in the future AND mark is dash/empty, no special class
+    if (dateString && isFutureDate(dateString) && (mark === '-' || mark === '')) {
         return '';
     }
 
     switch (mark) {
         case '': // Blank means present
         case '✓':
-            return 'attendance-present';
+            return 'attendance-present text-green-600 font-bold';
         case '✗':
-            return 'attendance-absent';
+            return 'attendance-absent text-red-600 font-bold';
         case 'L':
-            return 'attendance-late';
+            return 'attendance-late text-yellow-600 font-bold';
         case 'E':
-            return 'attendance-excused';
+            return 'attendance-excused text-blue-600 font-bold';
         case 'D':
-            return 'attendance-dropout';
+            return 'attendance-dropout text-purple-600 font-bold';
         default:
             return '';
     }
@@ -540,6 +542,30 @@ const calculateAbsentCount = (student) => {
     });
 
     return absentCount;
+};
+
+// Calculate total tardy days for a student
+const calculateTardyCount = (student) => {
+    if (!student.attendance_data) return 0;
+
+    let tardyCount = 0;
+    Object.entries(student.attendance_data).forEach(([date, entry]) => {
+        // Handle both object format {status, remarks} and string format
+        const status = typeof entry === 'object' ? entry.status : entry;
+        const statusLower = String(status).toLowerCase();
+        
+        // Only count tardiness for dates that have already occurred, or if explicitly set
+        // Count both 'late' and 'tardy'
+        if ((statusLower === 'late' || statusLower === 'tardy') && (!isFutureDate(date) || (typeof entry === 'object' && entry.status))) {
+            tardyCount++;
+        }
+    });
+
+    if (tardyCount > 0) {
+        console.log(`SF2: Tardy count for ${student.name}: ${tardyCount}`);
+    }
+
+    return tardyCount;
 };
 
 // Get day of week abbreviation
@@ -586,6 +612,11 @@ const goBack = () => {
 
 // Watch for month changes
 const onMonthChange = () => {
+    loadReportData();
+};
+
+// Watch for section changes
+const onSectionChange = () => {
     loadReportData();
 };
 
@@ -685,7 +716,8 @@ const saveAttendanceEdit = async () => {
             date: date,
             status: status,
             section_id: sectionId.value,
-            month: selectedMonth.value.toISOString().slice(0, 7) // YYYY-MM format
+            // Use local date for month ensuring consistency with loadReportData
+            month: `${selectedMonth.value.getFullYear()}-${String(selectedMonth.value.getMonth() + 1).padStart(2, '0')}`
         });
 
         console.log('SF2 edit saved successfully');
@@ -833,8 +865,77 @@ watch(selectedMonth, (newMonth, oldMonth) => {
 });
 
 // Initialize component
-onMounted(() => {
-    loadReportData();
+// Load teacher sections
+const loadTeacherSections = async () => {
+    try {
+        // Get teacher ID
+        const teacherData = TeacherAuthService.getTeacherData();
+        if (teacherData && teacherData.teacher) {
+            currentTeacherId.value = teacherData.teacher.id;
+        } else {
+            console.warn('Could not determine teacher ID');
+             // Fallback
+             currentTeacherId.value = 2; // Default fallback
+        }
+
+        console.log('Loading sections for teacher:', currentTeacherId.value);
+        const response = await TeacherAttendanceService.getTeacherAssignments(currentTeacherId.value);
+        
+        const sections = [];
+        const seenSectionIds = new Set();
+
+        const processSection = (sectionName, sectionId) => {
+             if (sectionId && !seenSectionIds.has(sectionId)) {
+                sections.push({
+                    id: sectionId,
+                    name: sectionName || 'Unknown Section',
+                    label: sectionName || 'Unknown Section'
+                });
+                seenSectionIds.add(sectionId);
+            }
+        };
+
+        // Normalize response
+        let assignments = [];
+        if (Array.isArray(response)) {
+            assignments = response;
+        } else if (response && response.assignments) {
+            assignments = response.assignments;
+        }
+
+        // Extract unique sections
+        assignments.forEach(item => {
+            // Check for nested structure (section assignment)
+            if (item.section_name && item.subjects) {
+                 processSection(item.section_name, item.section_id);
+            } 
+            // Check for flat structure
+            else {
+                 const secId = item.section_id || item.section?.id;
+                 const secName = item.section_name || item.section?.name;
+                 processSection(secName, secId);
+            }
+        });
+
+        teacherSections.value = sections;
+        console.log('Loaded teacher sections:', sections);
+
+        // If no section selected, select first one
+        if (!sectionId.value && sections.length > 0) {
+            sectionId.value = sections[0].id;
+        }
+        
+    } catch (error) {
+        console.error('Error loading teacher sections:', error);
+    }
+};
+
+// Initialize component
+onMounted(async () => {
+    await loadTeacherSections();
+    if (sectionId.value) {
+        loadReportData();
+    }
 });
 </script>
 
@@ -850,6 +951,18 @@ onMounted(() => {
             </div>
 
             <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium">Section:</label>
+                    <Dropdown 
+                        v-model="sectionId" 
+                        :options="teacherSections" 
+                        optionLabel="label" 
+                        optionValue="id" 
+                        placeholder="Select Section" 
+                        class="w-48 text-sm"
+                        @change="onSectionChange"
+                    />
+                </div>
                 <div class="flex items-center gap-2">
                     <label class="text-sm font-medium">Month:</label>
                     <Calendar v-model="selectedMonth" view="month" dateFormat="MM yy" @date-select="onMonthChange" class="w-32" />
@@ -1061,7 +1174,7 @@ onMounted(() => {
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs">{{ calculateTardyCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Male Daily Totals Row -->
@@ -1139,7 +1252,7 @@ onMounted(() => {
                                 </td>
                             </template>
                             <td class="border border-gray-900 p-0.5 text-center text-xs" style="border-left: 2px solid #000">{{ calculateAbsentCount(student) }}</td>
-                            <td class="border border-gray-900 p-0.5 text-center text-xs">0</td>
+                            <td class="border border-gray-900 p-0.5 text-center text-xs">{{ calculateTardyCount(student) }}</td>
                             <td class="border border-gray-900 p-0.5 text-left text-xs" style="border-right: 2px solid #000; font-size: 9px; line-height: 1.1">{{ getStudentRemarks(student) }}</td>
                         </tr>
                         <!-- Female Daily Totals Row -->
@@ -1296,9 +1409,9 @@ onMounted(() => {
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Registered Learner as of end of the month</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.enrollment }}</td>
-                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.enrollment }}</td>
-                                    <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.enrollment }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.male.registered_end }}</td>
+                                    <td class="border border-gray-800 p-1 text-center">{{ reportData.summary.female.registered_end }}</td>
+                                    <td class="border border-gray-800 p-1 text-center font-bold">{{ reportData.summary.total.registered_end }}</td>
                                 </tr>
                                 <tr>
                                     <td class="border border-gray-800 p-1">Percentage of Enrollment as of end of the month</td>

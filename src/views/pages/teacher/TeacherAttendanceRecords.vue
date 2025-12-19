@@ -112,6 +112,7 @@ const searchQuery = ref('');
 const attendanceRecords = ref([]);
 const subjects = ref([]);
 const selectedSubject = ref(null);
+const sectionSubjectsMap = ref(new Map()); // Map section ID to subjects
 // Default to last 7 days for faster loading (instead of full month)
 const today = new Date();
 const sevenDaysAgo = new Date(today);
@@ -934,183 +935,142 @@ const initializeComponent = async () => {
             );
 
             console.log(`Loaded ${assignments.length} assignments from cache`);
-
-            if (assignments.length > 0) {
-                // Use the homeroomSection from preload function
-                if (homeroomSection) {
-                    // Set the single homeroom section for this teacher
-                    const sectionAssignment = assignments.find((assignment) => assignment.section_id === homeroomSection.id);
-                    console.log('🔍 Section assignment found:', sectionAssignment);
-                    console.log('🔍 All assignments for debugging:', assignments);
-
-                    // Extract subjects from all assignments for this teacher (not just homeroom)
-                    const allSubjects = [];
-                    assignments.forEach((assignment) => {
-                        if (assignment.subjects && Array.isArray(assignment.subjects)) {
-                            allSubjects.push(...assignment.subjects);
-                        } else if (assignment.subject_name) {
-                            // Skip homeroom subjects - only include real academic subjects
-                            if (assignment.subject_name.toLowerCase() !== 'homeroom') {
-                                allSubjects.push({
-                                    id: assignment.subject_id || assignment.id,
-                                    name: assignment.subject_name
-                                });
-                            }
-                        }
-                    });
-
-                    console.log('🔍 Extracted subjects from assignments:', allSubjects);
-
-                    teacherSections.value = [
-                        {
-                            id: homeroomSection.id,
-                            name: homeroomSection.name,
-                            homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
-                            subjects: allSubjects
-                        }
-                    ];
-
-                    // Auto-select the homeroom section (no dropdown needed)
-                    selectedSection.value = teacherSections.value[0];
-                    console.log('Auto-selected homeroom section:', selectedSection.value.name);
-                    console.log('🔍 Section subjects:', selectedSection.value.subjects);
-                } else {
-                    console.warn('No homeroom section found for teacher:', teacherId.value);
-                    teacherSections.value = [];
-                }
-
-                // All teacher sections for search (keep all assignments for comprehensive search)
-                allTeacherSections.value = assignments.map((assignment) => ({
-                    id: assignment.section_id,
-                    name: assignment.section_name,
-                    subjects: assignment.subjects || []
-                }));
-            } else {
-                console.error('No assignments found for authenticated teacher');
-                toast.add({
-                    severity: 'warn',
-                    summary: 'No Data',
-                    detail: 'No section assignments found for your account.',
-                    life: 5000
-                });
-                return;
-            }
+            processAssignments(assignments);
         } catch (error) {
-            console.error('Error loading teacher assignments:', error);
-
-            // Fallback: Try to load data without caching service
-            console.log('🔄 Fallback: Loading data without caching...');
-            try {
-                const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-                const response = await axios.get(`${apiUrl}/api/teachers/${teacherId.value}/assignments`);
-                const assignments = Array.isArray(response.data) ? response.data : response.data.assignments || [];
-                const allSections = sectionsResponse.data.sections || sectionsResponse.data || [];
-
-                if (assignments.length > 0) {
-                    // Find homeroom section
-                    const homeroomSection = allSections.find((section) => section.homeroom_teacher_id === parseInt(teacherId.value));
-
-                    if (homeroomSection) {
-                        // Extract subjects from all assignments for this teacher
-                        const allSubjects = [];
-                        assignments.forEach((assignment) => {
-                            if (assignment.subjects && Array.isArray(assignment.subjects)) {
-                                allSubjects.push(...assignment.subjects);
-                            } else if (assignment.subject_name) {
-                                // Skip homeroom subjects - only include real academic subjects
-                                if (assignment.subject_name.toLowerCase() !== 'homeroom') {
-                                    allSubjects.push({
-                                        id: assignment.subject_id || assignment.id,
-                                        name: assignment.subject_name
-                                    });
-                                }
-                            }
-                        });
-
-                        teacherSections.value = [
-                            {
-                                id: homeroomSection.id,
-                                name: homeroomSection.name,
-                                homeroom_teacher_id: homeroomSection.homeroom_teacher_id,
-                                subjects: allSubjects
-                            }
-                        ];
-
-                        selectedSection.value = teacherSections.value[0];
-                        console.log('✅ Fallback: Auto-selected homeroom section:', selectedSection.value.name);
-                        console.log('✅ Fallback: Section subjects:', selectedSection.value.subjects);
-                    }
-
-                    allTeacherSections.value = assignments.map((assignment) => ({
-                        id: assignment.section_id,
-                        name: assignment.section_name,
-                        subjects: assignment.subjects || []
-                    }));
-                } else {
-                    throw new Error('No assignments found');
-                }
-            } catch (fallbackError) {
-                console.error('❌ Fallback also failed:', fallbackError);
-                toast.add({
-                    severity: 'warn',
-                    summary: 'No Sections Found',
-                    detail: 'No sections are assigned to any teacher. Please check the database setup.',
-                    life: 5000
-                });
-                teacherSections.value = [];
-                allTeacherSections.value = [];
+            console.error('Error loading teacher assignments with cache:', error);
+            
+             // Fallback: Load directly
+            const response = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
+            let assignments = [];
+            
+             if (Array.isArray(response)) {
+                assignments = response;
+            } else if (response && response.assignments) {
+                assignments = response.assignments;
             }
+             
+             // Process assignments
+             processAssignments(assignments);
+             return;
         }
-
-        // Extract unique subjects from homeroom sections
-        const subjectMap = new Map();
-        teacherSections.value.forEach((section) => {
-            section.subjects?.forEach((subject) => {
-                // Additional filtering to exclude homeroom and ensure valid subjects
-                if (subject && subject.name && subject.name.toLowerCase() !== 'homeroom' && !subjectMap.has(subject.id)) {
-                    subjectMap.set(subject.id, subject);
-                }
-            });
-        });
-
-        const uniqueSubjects = Array.from(subjectMap.values());
-        console.log('Unique subjects found:', uniqueSubjects);
-
-        // Set subjects - only real academic subjects
-        subjects.value = uniqueSubjects;
-
-        // Auto-select the first real subject (not "All Subjects")
-        if (subjects.value.length > 0) {
-            selectedSubject.value = subjects.value[0];
-            console.log('Auto-selected subject:', selectedSubject.value.name);
-        }
-
-        // Load available dates for the selected section if it exists
-        if (selectedSection.value) {
-            await loadAvailableDates();
-        }
-
-        // Load initial data if both section and subject are selected
-        if (selectedSection.value && selectedSubject.value) {
-            await loadAttendanceRecords();
-        }
-
-        // Mark initialization as complete - allow watchers to fire now
-        isInitializing = false;
-        console.log('✅ Component initialization complete, watchers enabled');
+        
     } catch (error) {
-        console.error('Error loading teacher data:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load teacher assignments',
-            life: 3000
-        });
-        isInitializing = false; // Enable watchers even on error
+        console.error('Fatal error initializing component:', error);
     } finally {
         loading.value = false;
+        isInitializing = false;
     }
 };
+
+const processAssignments = (assignments) => {
+    const sectionsMap = new Map();
+    const subMap = new Map();
+
+    assignments.forEach(assignment => {
+        // Handle nested structure (Section with Subjects)
+        if (assignment.subjects && Array.isArray(assignment.subjects)) {
+             const secId = assignment.section_id || assignment.id;
+             const secName = assignment.section_name || assignment.name;
+             const grade = assignment.grade_level || 'Unknown';
+             
+             if (!sectionsMap.has(secId)) {
+                 sectionsMap.set(secId, {
+                     id: secId,
+                     name: secName,
+                     grade_level: grade,
+                     label: `${secName} (${grade})`
+                 });
+             }
+             
+             // Add subjects
+             const currentSubjects = subMap.get(secId) || [];
+             assignment.subjects.forEach(sub => {
+                 if (!currentSubjects.find(s => s.id === sub.id)) {
+                     currentSubjects.push({
+                         id: sub.id,
+                         name: sub.name || sub.subject_name
+                     });
+                 }
+             });
+             subMap.set(secId, currentSubjects);
+        } 
+        // Handle flat structure
+        else {
+            const secId = assignment.section_id || assignment.section?.id;
+            const secName = assignment.section_name || assignment.section?.name;
+             if (secId) {
+                  if (!sectionsMap.has(secId)) {
+                     sectionsMap.set(secId, {
+                         id: secId,
+                         name: secName || 'Unknown',
+                         grade_level: assignment.grade_level || 'Unknown',
+                         label: `${secName || 'Unknown'} (${assignment.grade_level || ''})`
+                     });
+                 }
+                 
+                 const subId = assignment.subject_id || assignment.id;
+                 const subName = assignment.subject_name || assignment.name;
+                 
+                 if (subId && subName) {
+                     const currentSubjects = subMap.get(secId) || [];
+                     if (!currentSubjects.find(s => s.id === subId)) {
+                         currentSubjects.push({ id: subId, name: subName });
+                     }
+                     subMap.set(secId, currentSubjects);
+                 }
+             }
+        }
+    });
+
+    teacherSections.value = Array.from(sectionsMap.values());
+    sectionSubjectsMap.value = subMap;
+    
+    console.log('Processed sections:', teacherSections.value);
+    console.log('Processed subjects map:', subMap);
+
+    // Auto select first section
+    if (teacherSections.value.length > 0 && !selectedSection.value) {
+        selectedSection.value = teacherSections.value[0];
+        updateSubjectsForSection();
+    }
+};
+
+const updateSubjectsForSection = () => {
+    if (!selectedSection.value) return;
+    
+    const sectionId = selectedSection.value.id;
+    const sectionSubjects = sectionSubjectsMap.value.get(sectionId) || [];
+    
+    // Filter out "Homeroom" if needed, or keep it. User said "display all students and subjects correctly".
+    // Usually Homeroom is not an attendance subject in the same way, but let's keep it if it's there.
+    
+    subjects.value = sectionSubjects;
+    
+    // Auto select first subject
+    if (subjects.value.length > 0) {
+        // Try to keep previously selected subject if it exists in this section
+        if (selectedSubject.value) {
+            const exists = subjects.value.find(s => s.id === selectedSubject.value.id);
+            if (exists) {
+                selectedSubject.value = exists;
+            } else {
+                selectedSubject.value = subjects.value[0];
+            }
+        } else {
+            selectedSubject.value = subjects.value[0];
+        }
+    } else {
+        selectedSubject.value = null;
+    }
+};
+
+// Handle section change
+const onSectionChange = () => {
+    updateSubjectsForSection();
+    // Watcher will trigger data reload
+};
+
+
 
 // Load teacher data and sections on component mount
 onMounted(() => {
@@ -1250,7 +1210,7 @@ const getAttendanceStatusClass = (status) => {
         case 'Late':
             return 'bg-yellow-500';
         case 'Excused':
-            return 'bg-purple-500';
+            return 'bg-blue-500';
         case 'Mixed':
             return 'bg-orange-500';
         default:
@@ -1431,7 +1391,8 @@ const openSF2Report = () => {
 
     // Navigate to Daily Attendance page (SF2 Daily Attendance Report)
     router.push({
-        name: 'teacher-daily-attendance'
+        name: 'teacher-daily-attendance',
+        params: { sectionId: selectedSection.value.id }
     });
 };
 </script>
@@ -1454,8 +1415,7 @@ const openSF2Report = () => {
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="field">
                     <label for="section" class="block mb-2 font-medium text-gray-900">Section</label>
-                    <InputText id="section" :value="`🏠 ${selectedSection?.name || 'Loading...'} (Homeroom)`" readonly class="w-full" style="background-color: #f8f9fa; cursor: default" />
-                    <small class="text-gray-500">Your assigned homeroom section</small>
+                    <Dropdown id="section" v-model="selectedSection" :options="teacherSections" optionLabel="label" placeholder="Select Section" class="w-full" @change="onSectionChange" />
                 </div>
 
                 <div class="field">
@@ -1829,7 +1789,7 @@ const openSF2Report = () => {
 
 .status-excused {
     background-color: rgba(147, 51, 234, 0.1);
-    color: rgb(126, 34, 206);
+    color: rgb(34, 37, 206);
 }
 
 .status-none {

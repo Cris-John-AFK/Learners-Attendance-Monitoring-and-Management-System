@@ -29,7 +29,8 @@ class AttendanceRecord extends Model
         'is_verified',
         'verified_by_teacher_id',
         'verified_at',
-        'verification_notes'
+        'verification_notes',
+        'is_current_version'
     ];
 
     protected $casts = [

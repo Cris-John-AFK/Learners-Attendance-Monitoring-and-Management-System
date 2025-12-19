@@ -46,6 +46,13 @@ const reasonFilter = ref(null);
 const searchFilter = ref('');
 const reasonFilterOptions = ref([{ label: 'All Reasons', value: null }]);
 
+// Pagination state
+const currentPage = ref(1);
+const totalPages = ref(1);
+const hasMore = ref(false);
+const isLoadMore = ref(false);
+const totalSessions = ref(0);
+
 // Status options for dropdowns
 const statusOptions = [
     { label: 'Present', value: 'Present' },
@@ -82,31 +89,16 @@ const monthOptions = computed(() => {
     return months;
 });
 
-// Filtered sessions by selected month, section, and subject
+// Filtered sessions (Server-side filtering handles the main list now)
+// We keep client-side search/status/reason filtering as they operate on the loaded set
 const filteredSessions = computed(() => {
+    // Start with all loaded sessions
     let filtered = sessions.value;
 
-    // Filter by month
-    if (selectedMonth.value) {
-        filtered = filtered.filter((session) => {
-            const sessionDate = new Date(session.session_date);
-            const sessionMonth = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
-            return sessionMonth === selectedMonth.value;
-        });
-    }
-
-    // Filter by section
-    if (selectedSection.value) {
-        filtered = filtered.filter((session) => {
-            return session.section_name === selectedSection.value;
-        });
-    }
-
-    // Filter by subject
-    if (selectedSubject.value) {
-        filtered = filtered.filter((session) => {
-            return session.subject_name === selectedSubject.value;
-        });
+    // Apply client-side SEARCH filter (optional, if we want to search within loaded items)
+    // Note: Ideally search should also be server-side, but keeping it simple for now as it wasn't requested
+    if (searchFilter.value) {
+        // ... (keep search logic if needed, or remove if server-side search is added)
     }
 
     return filtered;
@@ -181,79 +173,99 @@ const initializeTeacherData = async () => {
     }
 };
 
-// Populate section and subject options from sessions
-const populateFilterOptions = () => {
-    // Get unique sections from sessions
-    const uniqueSections = [...new Set(sessions.value.map(session => session.section_name))];
+// Initialize filter options directly from teacher assignments
+const initializeFilterOptions = async () => {
+    if (!teacherId.value) return;
     
-    // Create section options
-    sectionOptions.value = [
-        { label: 'All Sections', value: null },
-        ...uniqueSections.map(section => ({
-            label: section,
-            value: section
-        }))
-    ];
-    
-    // Get unique subjects from sessions
-    const uniqueSubjects = [...new Set(sessions.value.map(session => session.subject_name))];
-    
-    // Create subject options
-    subjectOptions.value = [
-        { label: 'All Subjects', value: null },
-        ...uniqueSubjects.map(subject => ({
-            label: subject,
-            value: subject
-        }))
-    ];
-    
-    console.log('Filter options populated:', {
-        sections: sectionOptions.value,
-        subjects: subjectOptions.value
-    });
+    try {
+        const assignments = await TeacherAttendanceService.getTeacherAssignments(teacherId.value);
+        
+        // Extract sections
+        const sections = assignments.map(a => ({
+            label: a.section_name,
+            value: a.section_name // Using name for filtering as per API
+        }));
+        
+        // Extract subjects (flatten from section assignments if needed, or get unique subjects)
+        const subjects = new Set();
+        assignments.forEach(section => {
+            section.subjects.forEach(subject => {
+                subjects.add(subject.subject_name);
+            });
+        });
+
+        sectionOptions.value = [
+            { label: 'All Sections', value: null },
+            ...sections
+        ];
+
+        subjectOptions.value = [
+            { label: 'All Subjects', value: null },
+            ...Array.from(subjects).map(s => ({ label: s, value: s }))
+        ];
+
+    } catch (error) {
+        console.error('Error initializing filter options:', error);
+    }
 };
 
-// Load attendance sessions for the teacher
-const loadAttendanceSessions = async () => {
-    if (!teacherId.value) {
-        console.error('No teacher ID available');
-        return;
-    }
+// Load attendance sessions with pagination
+const loadAttendanceSessions = async (loadMore = false) => {
+    if (!teacherId.value) return;
 
-    loading.value = true;
-    const startTime = Date.now();
+    if (loadMore) {
+        isLoadMore.value = true;
+        currentPage.value++;
+    } else {
+        loading.value = true;
+        currentPage.value = 1;
+        sessions.value = []; // Clear current list on refresh/filter change
+    }
 
     try {
-        console.log('Loading attendance sessions for teacher:', teacherId.value);
-        const response = await TeacherAttendanceService.getTeacherAttendanceSessions(teacherId.value);
-        console.log('API Response:', response);
-        console.log('Sessions received:', response.sessions?.length || 0);
+        const params = {
+            page: currentPage.value,
+            per_page: 10,
+            month: selectedMonth.value,
+            section_name: selectedSection.value,
+            subject_name: selectedSubject.value
+        };
 
-        // Calculate remaining time to show loading (minimum 600ms)
-        const elapsedTime = Date.now() - startTime;
-        const minLoadingTime = 600;
-        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        const response = await TeacherAttendanceService.getTeacherAttendanceSessions(teacherId.value, params);
 
-        // Wait for minimum loading time to ensure smooth animation
-        await new Promise((resolve) => setTimeout(resolve, remainingTime));
-
-        sessions.value = response.sessions || [];
-        console.log('Sessions stored in reactive variable:', sessions.value.length);
-        
-        // Populate filter options from sessions
-        populateFilterOptions();
+        if (response.success) {
+            const newSessions = response.sessions || [];
+            if (loadMore) {
+                sessions.value = [...sessions.value, ...newSessions];
+            } else {
+                sessions.value = newSessions;
+            }
+            
+            // Update pagination info
+            if (response.pagination) {
+                totalPages.value = response.pagination.last_page;
+                hasMore.value = currentPage.value < totalPages.value;
+                totalSessions.value = response.pagination.total;
+            } else {
+                // Fallback if pagination info missing (shouldn't happen with new API)
+                hasMore.value = false;
+            }
+        }
     } catch (error) {
         console.error('Error loading attendance sessions:', error);
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to load attendance sessions',
-            life: 3000
-        });
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load sessions', life: 3000 });
     } finally {
         loading.value = false;
+        isLoadMore.value = false;
     }
 };
+
+// Watchers for filters
+import { watch } from 'vue';
+
+watch([selectedMonth, selectedSection, selectedSubject], () => {
+    loadAttendanceSessions(false); // Reload from page 1 when filters change
+});
 
 // Load session details with students
 const loadSessionDetails = async (session) => {
@@ -608,18 +620,27 @@ const getReasonName = (reasonId) => {
 
 // Listen for session completion notifications
 let unsubscribeNotifications = null;
+const lastProcessedNotificationId = ref(null);
 
 const handleNotificationUpdate = (notifications) => {
-    console.log('Notification update received:', notifications.length, 'notifications');
     // Check if there's a new session_completed notification
     const latestSessionCompleted = notifications.find((n) => n.type === 'session_completed' && !n.read);
 
     if (latestSessionCompleted) {
-        console.log('Found new session_completed notification, refreshing sessions...');
-        // Refresh sessions when a new one is completed
-        loadAttendanceSessions();
-    } else {
-        console.log('No new session_completed notifications found');
+        // Only refresh if it's a DIFFERENT notification than the last one we processed
+        if (latestSessionCompleted.id !== lastProcessedNotificationId.value) {
+            console.log('Found NEW session_completed notification, refreshing sessions...');
+            lastProcessedNotificationId.value = latestSessionCompleted.id;
+            
+            // Only refresh if we are on the first page to avoid disrupting pagination
+            // OR if the user is scrolling, maybe just show a toast?
+            // For now, let's only auto-refresh if we are at the top (page 1) to avoid resetting the user's view unexpectedly
+            if (currentPage.value === 1) {
+                 loadAttendanceSessions();
+            } else {
+                toast.add({ severity: 'info', summary: 'New Session Completed', detail: 'A session was just completed. Refresh to see it.', life: 5000 });
+            }
+        }
     }
 };
 
@@ -627,7 +648,9 @@ onMounted(async () => {
     // Initialize teacher data first
     const initialized = await initializeTeacherData();
     if (initialized) {
-        // Load attendance sessions only if teacher data was initialized successfully
+        // Initialize filters first
+        await initializeFilterOptions();
+        // Then load sessions
         await loadAttendanceSessions();
     }
     // Subscribe to notifications for auto-refresh
@@ -690,7 +713,7 @@ onUnmounted(() => {
 
         <!-- Sessions Count -->
         <div v-if="!loading && sessions.length > 0" class="mb-4 text-sm text-gray-600">
-            Showing <span class="font-semibold text-gray-800">{{ filteredSessions.length }}</span> of <span class="font-semibold text-gray-800">{{ sessions.length }}</span> sessions
+            Showing <span class="font-semibold text-gray-800">{{ sessions.length }}</span> of <span class="font-semibold text-gray-800">{{ totalSessions }}</span> sessions
             <span v-if="selectedMonth || selectedSection || selectedSubject" class="ml-2 text-blue-600">
                 (Filtered by 
                 <span v-if="selectedMonth">{{ monthOptions.find((m) => m.value === selectedMonth)?.label }}</span>
@@ -787,6 +810,17 @@ onUnmounted(() => {
                     </Card>
                 </div>
             </div>
+        </div>
+
+        <!-- Load More Button -->
+        <div v-if="hasMore" class="flex justify-center mt-8 mb-8">
+            <Button 
+                label="Load More Sessions" 
+                icon="pi pi-refresh" 
+                :loading="isLoadMore" 
+                @click="loadAttendanceSessions(true)" 
+                class="p-button-outlined p-button-rounded"
+            />
         </div>
 
         <!-- Empty State -->

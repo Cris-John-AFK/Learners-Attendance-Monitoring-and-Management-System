@@ -4,9 +4,9 @@
  * Provides instant subject switching with cached data
  */
 
-import CacheService from '@/services/CacheService';
 import { TeacherAttendanceService } from '@/router/service/TeacherAttendanceService';
 import { AttendanceSummaryService } from '@/services/AttendanceSummaryService';
+import CacheService from '@/services/CacheService';
 
 class AttendanceIndexingService {
     // Cache TTL for different data types
@@ -122,9 +122,9 @@ class AttendanceIndexingService {
                 }),
                 
                 // Load trends for different periods
-                AttendanceSummaryService.getAttendanceTrends(teacherId, 'week', actualViewType, actualSubjectId),
-                AttendanceSummaryService.getAttendanceTrends(teacherId, 'month', actualViewType, actualSubjectId),
-                AttendanceSummaryService.getAttendanceTrends(teacherId, 'day', actualViewType, actualSubjectId)
+                AttendanceSummaryService.getAttendanceTrends(teacherId, { period: 'week', viewType: actualViewType, subjectId: actualSubjectId }),
+                AttendanceSummaryService.getAttendanceTrends(teacherId, { period: 'month', viewType: actualViewType, subjectId: actualSubjectId }),
+                AttendanceSummaryService.getAttendanceTrends(teacherId, { period: 'day', viewType: actualViewType, subjectId: actualSubjectId })
             ]);
 
             // Process and structure the data

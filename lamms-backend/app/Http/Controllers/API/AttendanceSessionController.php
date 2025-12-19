@@ -195,7 +195,8 @@ class AttendanceSessionController extends Controller
                             'marking_method' => $attendanceData['marking_method'] ?? 'manual',
                             'marked_from_ip' => request()->ip(),
                             'reason_id' => $attendanceData['reason_id'] ?? null,
-                            'reason_notes' => $attendanceData['reason_notes'] ?? null
+                            'reason_notes' => $attendanceData['reason_notes'] ?? null,
+                            'is_current_version' => true // Ensure this is flagged as the current version
                         ]
                     );
 
@@ -286,7 +287,8 @@ class AttendanceSessionController extends Controller
                 'arrival_time' => $request->arrival_time ?? now()->format('H:i:s'),
                 'marking_method' => 'qr_scan',
                 'marked_from_ip' => request()->ip(),
-                'location_data' => $request->location_data
+                'location_data' => $request->location_data,
+                'is_current_version' => true // Ensure this is flagged as the current version
             ]);
 
             return response()->json([
@@ -1037,9 +1039,17 @@ class AttendanceSessionController extends Controller
     /**
      * Get teacher's attendance sessions
      */
-    public function getTeacherAttendanceSessions($teacherId)
+    /**
+     * Get teacher's attendance sessions (Paginated)
+     */
+    public function getTeacherAttendanceSessions(Request $request, $teacherId)
     {
         try {
+            $perPage = $request->input('per_page', 10);
+            $month = $request->input('month');
+            $sectionName = $request->input('section_name'); // Expect name or ID, handled below
+            $subjectName = $request->input('subject_name');
+
             // Get the sections that this teacher is assigned to
             $assignedSectionIds = DB::table('teacher_section_subject')
                 ->where('teacher_id', $teacherId)
@@ -1048,35 +1058,75 @@ class AttendanceSessionController extends Controller
                 ->unique()
                 ->toArray();
 
-            // Get sessions for the teacher's assigned sections only
-            $sessions = AttendanceSession::with(['section', 'subject'])
-                ->whereIn('section_id', $assignedSectionIds)
-                ->orderBy('session_date', 'desc')
-                ->orderBy('session_start_time', 'desc')
-                ->get()
-                ->map(function ($session) {
-                    // Get attendance counts
-                    $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)->get();
-                    $statusCounts = $attendanceRecords->groupBy('attendance_status_id')->map->count();
+            // Start query
+            $query = AttendanceSession::with(['section', 'subject'])
+                ->whereIn('section_id', $assignedSectionIds);
 
-                    return [
-                        'id' => $session->id,
-                        'session_date' => $session->session_date,
-                        'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
-                        'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
-                        'subject_name' => $session->subject->name ?? 'Unknown Subject',
-                        'section_name' => $session->section->name ?? 'Unknown Section',
-                        'total_students' => $attendanceRecords->count(),
-                        'present_count' => $statusCounts->get(1, 0), // Present status ID = 1
-                        'absent_count' => $statusCounts->get(2, 0),  // Absent status ID = 2
-                        'late_count' => $statusCounts->get(3, 0),    // Late status ID = 3
-                        'excused_count' => $statusCounts->get(4, 0), // Excused status ID = 4
-                    ];
+            // Apply Month Filter (Y-m format)
+            if ($month) {
+                // Parse Y-m and filter by year and month
+                $parts = explode('-', $month);
+                if (count($parts) === 2) {
+                    $year = $parts[0];
+                    $monthNum = $parts[1];
+                    $query->whereYear('session_date', $year)
+                          ->whereMonth('session_date', $monthNum);
+                }
+            }
+
+            // Apply Section Filter
+            if ($sectionName && $sectionName !== 'null') {
+                 $query->whereHas('section', function($q) use ($sectionName) {
+                     $q->where('name', $sectionName);
+                 });
+            }
+
+            // Apply Subject Filter
+            if ($subjectName && $subjectName !== 'null') {
+                $query->whereHas('subject', function($q) use ($subjectName) {
+                    $q->where('name', $subjectName);
                 });
+            }
+
+            // Order by date desc
+            $paginator = $query->orderBy('session_date', 'desc')
+                ->orderBy('session_start_time', 'desc')
+                ->paginate($perPage);
+
+            // Transform data
+            $sessions = $paginator->getCollection()->map(function ($session) {
+                // Get attendance counts efficiently
+                // We can use withCount in the main query for better performance later, 
+                // but keeping it simple for now to minimize risk
+                $attendanceRecords = AttendanceRecord::where('attendance_session_id', $session->id)->get();
+                $statusCounts = $attendanceRecords->groupBy('attendance_status_id')->map->count();
+
+                return [
+                    'id' => $session->id,
+                    'session_date' => $session->session_date,
+                    'start_time' => $session->session_start_time ? \Carbon\Carbon::parse($session->session_start_time)->format('H:i:s') : null,
+                    'end_time' => $session->session_end_time ? \Carbon\Carbon::parse($session->session_end_time)->format('H:i:s') : null,
+                    'subject_name' => $session->subject->name ?? 'Unknown Subject',
+                    'section_name' => $session->section->name ?? 'Unknown Section',
+                    'total_students' => $attendanceRecords->count(),
+                    'present_count' => $statusCounts->get(1, 0), // Present status ID = 1
+                    'absent_count' => $statusCounts->get(2, 0),  // Absent status ID = 2
+                    'late_count' => $statusCounts->get(3, 0),    // Late status ID = 3
+                    'excused_count' => $statusCounts->get(4, 0), // Excused status ID = 4
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'sessions' => $sessions
+                'sessions' => $sessions,
+                'pagination' => [
+                    'total' => $paginator->total(),
+                    'per_page' => $paginator->perPage(),
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                    'from' => $paginator->firstItem(),
+                    'to' => $paginator->lastItem()
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching teacher attendance sessions: ' . $e->getMessage());
