@@ -7,15 +7,15 @@ if (isset($_GET['ping'])) {
     exit;
 }
 
-// DEBUG: Check BEFORE we modify anything
-if (isset($_SERVER['QUERY_STRING']) && strpos($_SERVER['QUERY_STRING'], 'debug_routing') !== false) {
+// DEBUG: Standalone path check
+if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/debug-server') !== false) {
     header('Content-Type: application/json');
     echo json_encode([
-        'ORIGINAL_REQUEST_URI' => $_SERVER['REQUEST_URI'],
-        'ORIGINAL_SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
+        'REQUEST_URI' => $_SERVER['REQUEST_URI'],
+        'SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
         'PHP_SELF' => $_SERVER['PHP_SELF'],
-        'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
-        'GET_PARAMS' => $_GET,
+        'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? 'Not Set',
+        'SERVER_VARS' => $_SERVER,
     ]);
     exit;
 }
