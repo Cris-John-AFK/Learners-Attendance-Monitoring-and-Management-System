@@ -7,6 +7,14 @@ if (isset($_GET['ping'])) {
     exit;
 }
 
+// Fix for Vercel: Strip /api prefix from REQUEST_URI
+// Vercel passes the full path like /api/auth/login
+// But Laravel's RouteServiceProvider also adds /api prefix
+// So we need to strip it here to avoid /api/api/auth/login
+if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') === 0) {
+    $_SERVER['REQUEST_URI'] = substr($_SERVER['REQUEST_URI'], 4); // Remove '/api'
+}
+
 // Fix for Vercel routing where SCRIPT_NAME includes /api/index.php
 // This causes Laravel to incorrectly strip the 'api' prefix from the request URI
 if (isset($_SERVER['SCRIPT_NAME']) && strpos($_SERVER['SCRIPT_NAME'], '/api/index.php') !== false) {
