@@ -14,7 +14,11 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return response()->json(['message' => 'LAMMS API is working!']);
+    Artisan::call('route:clear');
+    return response()->json([
+        'message' => 'LAMMS API is working!',
+        'routes_cleared' => true
+    ]);
 });
 
 Route::get('/debug-path', function() {
