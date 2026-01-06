@@ -6,5 +6,17 @@ if (isset($_SERVER['SCRIPT_NAME']) && strpos($_SERVER['SCRIPT_NAME'], '/api/inde
     $_SERVER['SCRIPT_NAME'] = '/index.php';
 }
 
+// DEBUG: Temporary check to see what Vercel sends
+if (isset($_GET['debug_routing'])) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'REQUEST_URI' => $_SERVER['REQUEST_URI'],
+        'SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
+        'PHP_SELF' => $_SERVER['PHP_SELF'],
+        'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
+    ]);
+    exit;
+}
+
 // Forward Vercel requests to normal index.php
 require __DIR__ . '/../public/index.php';
