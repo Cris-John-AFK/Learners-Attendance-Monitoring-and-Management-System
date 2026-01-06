@@ -17,6 +17,15 @@ Route::get('/', function () {
     return response()->json(['message' => 'LAMMS API is working!']);
 });
 
+Route::get('/debug-path', function() {
+    return response()->json([
+        'path' => request()->path(),
+        'url' => request()->url(),
+        'fullUrl' => request()->fullUrl(),
+        'method' => request()->method(),
+    ]);
+});
+
 /**
  * Direct non-API routes that should be CORS-enabled
  * These routes are needed because some frontend code is making requests directly to these URLs
