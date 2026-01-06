@@ -8,13 +8,14 @@ if (isset($_GET['ping'])) {
 }
 
 // DEBUG: Check BEFORE we modify anything
-if (isset($_GET['debug_routing'])) {
+if (isset($_SERVER['QUERY_STRING']) && strpos($_SERVER['QUERY_STRING'], 'debug_routing') !== false) {
     header('Content-Type: application/json');
     echo json_encode([
         'ORIGINAL_REQUEST_URI' => $_SERVER['REQUEST_URI'],
         'ORIGINAL_SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
         'PHP_SELF' => $_SERVER['PHP_SELF'],
         'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
+        'GET_PARAMS' => $_GET,
     ]);
     exit;
 }
