@@ -14,20 +14,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    Artisan::call('route:clear');
-    return response()->json([
-        'message' => 'LAMMS API Vercel Debug Fix 999',
-        'routes_cleared' => true
-    ]);
-});
-
-Route::get('/debug-path', function() {
-    return response()->json([
-        'path' => request()->path(),
-        'url' => request()->url(),
-        'fullUrl' => request()->fullUrl(),
-        'method' => request()->method(),
-    ]);
+    return response()->json(['message' => 'LAMMS API is working!']);
 });
 
 /**
