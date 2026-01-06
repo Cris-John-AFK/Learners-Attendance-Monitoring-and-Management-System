@@ -7,6 +7,18 @@ if (isset($_GET['ping'])) {
     exit;
 }
 
+// DEBUG: Check BEFORE we modify anything
+if (isset($_GET['debug_routing'])) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'ORIGINAL_REQUEST_URI' => $_SERVER['REQUEST_URI'],
+        'ORIGINAL_SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
+        'PHP_SELF' => $_SERVER['PHP_SELF'],
+        'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
+    ]);
+    exit;
+}
+
 // Fix for Vercel: Strip /api prefix from REQUEST_URI
 // Vercel passes the full path like /api/auth/login
 // But Laravel's RouteServiceProvider also adds /api prefix
@@ -28,18 +40,6 @@ if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') =
 // This causes Laravel to incorrectly strip the 'api' prefix from the request URI
 if (isset($_SERVER['SCRIPT_NAME']) && strpos($_SERVER['SCRIPT_NAME'], '/api/index.php') !== false) {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
-}
-
-// DEBUG: Temporary check to see what Vercel sends
-if (isset($_GET['debug_routing'])) {
-    header('Content-Type: application/json');
-    echo json_encode([
-        'REQUEST_URI' => $_SERVER['REQUEST_URI'],
-        'SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
-        'PHP_SELF' => $_SERVER['PHP_SELF'],
-        'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
-    ]);
-    exit;
 }
 
 // Forward Vercel requests to normal index.php
