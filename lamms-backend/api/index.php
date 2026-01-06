@@ -3,7 +3,16 @@
 // IMMEDIATE TEST: Verify this file is being reached
 if (isset($_GET['ping'])) {
     header('Content-Type: application/json');
-    echo json_encode(['status' => 'api/index.php is alive!', 'timestamp' => time()]);
+    echo json_encode([
+        'status' => 'api/index.php is alive!', 
+        'timestamp' => time(),
+        'debug_info' => [
+            'REQUEST_URI' => $_SERVER['REQUEST_URI'],
+            'SCRIPT_NAME' => $_SERVER['SCRIPT_NAME'],
+            'PHP_SELF' => $_SERVER['PHP_SELF'],
+            'QUERY_STRING' => $_SERVER['QUERY_STRING'] ?? '',
+        ]
+    ]);
     exit;
 }
 
